@@ -1,6 +1,6 @@
 //{{NO_DEPENDENCIES}}
 // Microsoft Developer Studio generated include file.
-// Used by jwpce-ce.rc
+// Used by jwpce-pocketpc.rc
 //
 #define IDS_ABOUT_TEXT                  1
 #define IDS_ABOUT_TITLE                 2
@@ -246,7 +246,9 @@
 #define IDS_DS_ERROREMPTY               242
 #define IDS_DS_DOESNOTEXIST             243
 #define IDS_DD_CLASSICAL                244
+#define IDR_MAINMENU                    244
 #define IDS_DD_CANNOTOPEN               245
+#define IDR_MAINMENU2                   245
 #define IDS_DD_MATCHREJECT              246
 #define IDS_DD_MATCH                    247
 #define IDS_DD_DICTINDEX                248
@@ -298,7 +300,6 @@
 #define IDS_IL_ONEILL                   294
 #define IDS_IL_FREQUENCY                295
 #define IDS_IL_RESERVED                 296
-#define IDS_STRING296                   296
 #define IDS_KI_BLANK                    296
 #define IDS_IL_DEROO                    297
 #define IDS_IL_ONEILLEK                 298
@@ -356,9 +357,33 @@
 #define IDS_LH_FOOTER                   350
 #define IDS_LM_CM                       351
 #define IDS_LM_INCH                     352
+#define IDS_IL_READWRITE                353
+#define IDS_IL_TUTTLECARD               354
+#define IDS_IL_KANJIWAY                 355
+#define IDS_IL_KANJICONTEXT             356
+#define IDS_IL_BUSYPEOPLE               357
+#define IDS_IL_COMPACTKANJI             358
+#define IDS_KI_READWRITE                359
+#define IDS_KI_TUTTLECARD               360
+#define IDS_KI_KANJIWAY                 361
+#define IDS_KI_KANJICONTEXT             362
+#define IDS_KI_BUSYPEOPLE               363
+#define IDS_KI_COMPACTGUIDE             364
+#define IDS_KI_BUSYFORMAT               365
+#define IDS_CP_AUTO                     366
+#define IDS_CP_EASTEUROPE               367
+#define IDS_CP_CYRILLIC                 368
+#define IDS_CP_USA                      369
+#define IDS_CP_GREEK                    370
+#define IDS_CP_TURKISH                  371
+#define IDS_CP_HEBREW                   372
+#define IDS_CP_ARABIC                   373
+#define IDS_CP_BALTIC                   374
+#define IDS_CP_VIETNAMESE               375
 #define IDA_MAINACCEL                   800
 #define IDM_MAINMENU                    820
 #define IDM_POPUP                       821
+#define IDR_BUTTONBAR                   822
 #define IDB_CURSOR                      841
 #define IDB_RADICALS                    842
 #define IDB_STROKES                     843
@@ -430,6 +455,7 @@
 #define IDD_ADDCOLORKANJI               947
 #define IDD_INFOCONFIG                  948
 #define IDD_HISTORY                     949
+#define IDSEARCH                        999
 #define IDC_CKALL                       1000
 #define IDC_CKEXCLUDE                   1001
 #define IDC_CKINCLUDE                   1002
@@ -659,6 +685,7 @@
 #define IDC_OABUFFER                    1417
 #define IDC_OASEARCHOPEN                1418
 #define IDC_OAHISTORY                   1419
+#define IDC_OACODEPAGE                  1420
 #define IDC_SRSEARCH                    1430
 #define IDC_SRREPLACE                   1431
 #define IDC_SRCASE                      1432
@@ -870,6 +897,16 @@
 #define IDC_ICITEM18                    2519
 #define IDC_ICITEM19                    2520
 #define IDC_ICITEM20                    2521
+#define IDC_ICITEM21                    2522
+#define IDC_ICITEM22                    2523
+#define IDC_ICITEM23                    2524
+#define IDC_ICITEM24                    2525
+#define IDC_ICITEM25                    2526
+#define IDC_ICITEM26                    2527
+#define IDC_ICITEM27                    2528
+#define IDC_ICITEM28                    2529
+#define IDC_ICITEM29                    2530
+#define IDC_ICITEM30                    2531
 #define IDM_FILE_NEW                    10001
 #define IDM_FILE_OPEN                   10002
 #define IDM_FILE_REVERT                 10003
@@ -942,14 +979,27 @@
 #define IDM_KANJI_APPENDKANJILIST       40069
 #define IDM_KANJI_OPENKANJILIST         40070
 #define IDM_UTILITIES_CHARINFO          40071
+#define ID_FILE                         40072
+#define IDS_CAP_FILE                    40074
+#define ID_EDIT                         40075
+#define IDS_CAP_EDIT                    40077
+#define ID_KAN                          40078
+#define IDS_CAP_KAN                     40080
+#define ID_UTIL                         40081
+#define IDS_CAP_UTIL                    40083
+#define ID_WIN                          40084
+#define IDS_CAP_WIN                     40086
+#define ID_HELPX                        40088
+#define IDS_CAP_HELP                    40089
+#define IDS_CAP_MENUITEM40090           40091
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        244
-#define _APS_NEXT_COMMAND_VALUE         40072
-#define _APS_NEXT_CONTROL_VALUE         2344
+#define _APS_NEXT_RESOURCE_VALUE        247
+#define _APS_NEXT_COMMAND_VALUE         40092
+#define _APS_NEXT_CONTROL_VALUE         2346
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

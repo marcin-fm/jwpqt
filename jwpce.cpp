@@ -1,7 +1,9 @@
 //===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
-//  All rights reserved.                                             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2004, 2005             //
+//                                                                   //
+//  JWPce is free sotware distributed under the terms of the         //
+//  GNU General Public License.                                      //
 //                                                                   //
 //===================================================================//
 
@@ -31,6 +33,7 @@
 #include "jwp_misc.h"
 #include "jwp_prnt.h"
 #include "jwp_stat.h"
+#include "jwp_wnce.h"
 #include "shlobj.h"
 
 #ifndef WINCE
@@ -41,14 +44,16 @@
 #include <commdlg.h>
 #include <limits.h>
 
-#ifdef WINCE_PPC
-  #include <C:\Program Files\Windows CE Tools\wce300\ms pocket pc\include\Aygshell.h>
-//  #include <C:\Program Files\Windows CE Tools\wce211\ms palm size pc\include\Aygshell.h>
-#endif
-
 #ifdef WINCE
 static void do_commandbar (void);
 #endif WINCE
+
+#ifdef WINCE_POCKETPC
+HWND menu_bar;
+HWND button_bar;
+HMENU hmenu2;
+SHACTIVATEINFO activateinfo;
+#endif WINCE_POCKETPC
 
 //
 //  Window procedure for the window.
@@ -77,7 +82,7 @@ static LRESULT CALLBACK JWP_mode_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
 //  the version ID to build a full value.  These letter codes indicate the type of 
 //  platform that the DLL is intended to support.
 //
-#if   defined(WINCE_PPC)
+#if  (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
   #define LANGUAGE_CODE 'P'
 #elif defined(WINCE_HPC)
   #define LANGUAGE_CODE 'H'
@@ -168,7 +173,7 @@ struct cfg default_config = {
     false,                                  //  byte  vertical;               // vertical printing
     false,                                  //  byte  landscape;              // Landscape page
   },
-  { TEXT("Ariel")     ,0  ,true,false },    //  struct cfg_font ascii_font;   // Ascii system font.
+  { TEXT("Arial")     ,0  ,true,false },    //  struct cfg_font ascii_font;   // Ascii system font.
   { TEXT("k16x16.f00"),16 ,true,false },    //  struct cfg_font sys_font;     // System font used for text and a few other places.
   { TEXT("k16x16.f00"),16 ,true,false },    //  struct cfg_font list_font;    // Font for lists.
   { TEXT("k16x16.f00"),16 ,true,false },    //  struct cfg_font edit_font;    // Font used for Japanese edit constrols.
@@ -216,7 +221,7 @@ struct cfg default_config = {
     0,BUTTON_RADLOOKUP,BUTTON_BUSHULOOKUP,BUTTON_BSLOOKUP,BUTTON_SKIPLOOKUP,BUTTON_HSLOOKUP,BUTTON_FCLOOKUP,BUTTON_READLOOKUP,BUTTON_INDEXLOOKUP,
     0,BUTTON_PAGELAYOUT,BUTTON_OPTIONS,0,0
   },
-#ifndef WINCE_PPC
+#if (!defined(WINCE_PPC) && !defined(WINCE_POCKETPC))
   {                                         //  byte  kanji_info[60];         // Character Information dialog items
     INFO_TYPE,INFO_JIS,INFO_SHIFTJIS,INFO_UNICODE,INFO_STROKE,INFO_GRADE,INFO_NELSON,INFO_HALPERN,INFO_SPAHN,INFO_FOURCORNERS,INFO_MOROHASHI,INFO_PINYIN,INFO_KOREAN,
     INFO_FREQUENCY,INFO_HENSHALL,INFO_GAKKEN,INFO_HEISIG,INFO_ONEILL,INFO_DEROO,INFO_KANJILEARN,
@@ -333,6 +338,11 @@ struct cfg default_config = {
 //  Fill
 //
   false,                                    //  byte  nokanjibar;             // Diables the kanji bar.
+  CODEPAGE_AUTO,                            //  short code_page;              // Code page used for translations
+//
+//  Fill
+//
+  0,                                        //  short fill1
   { 0 }                                                                       // Filler for later expansion.
 };
 
@@ -1128,6 +1138,7 @@ void JWP_config::set (struct cfg *new_config) {
 //
 //  If new font delete old font and reinitialize.
 //
+  initialize_cp    ();
   initialize_fonts ();
 //
 //  Setup the display and all the other features.
@@ -1363,7 +1374,7 @@ static BOOL CALLBACK dialog_choosecolor (HWND hwnd,UINT msg,WPARAM wParam,LPARAM
            case IDC_CCGREEN:
            case IDC_CCBLUE: {
                   int r,g,b;
-                  input_check (wParam);
+                  input_check (hwnd,wParam);
                   r = GetDlgItemInt(hwnd,IDC_CCRED  ,NULL,false);
                   g = GetDlgItemInt(hwnd,IDC_CCGREEN,NULL,false);
                   b = GetDlgItemInt(hwnd,IDC_CCBLUE ,NULL,false);
@@ -1422,10 +1433,10 @@ static COLORREF get_color (HWND hwnd,COLORREF color) {
 static BOOL CALLBACK options_general (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lParam) {
   switch (msg) {
     case WM_INITDIALOG:
-#ifdef WINCE_PPC
+#if    (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
          CheckDlgButton (hwnd,IDC_OGPAGEFILE    ,cfg->page_mode_file);
          CheckDlgButton (hwnd,IDC_OGPAGELIST    ,cfg->page_mode_list);
-#endif WINCE_PPC
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
          CheckDlgButton (hwnd,IDC_OGRESTOREPOS  ,cfg->usedims);
          CheckDlgButton (hwnd,IDC_OGRELOADFILES ,cfg->reload_files);
          CheckDlgButton (hwnd,IDC_OGCONFIRMEXIT ,cfg->confirm_exit);
@@ -1453,10 +1464,10 @@ static BOOL CALLBACK options_general (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lP
          }
          break;
     case WM_GETDLGVALUES:
-#ifdef WINCE_PPC
+#if    (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
          cfg->page_mode_file  = IsDlgButtonChecked(hwnd,IDC_OGPAGEFILE    );
          cfg->page_mode_list  = IsDlgButtonChecked(hwnd,IDC_OGPAGELIST    );
-#endif WINCE_PPC
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
          cfg->usedims         = IsDlgButtonChecked(hwnd,IDC_OGRESTOREPOS  );
          cfg->reload_files    = IsDlgButtonChecked(hwnd,IDC_OGRELOADFILES );
          cfg->confirm_exit    = IsDlgButtonChecked(hwnd,IDC_OGCONFIRMEXIT );
@@ -1715,7 +1726,7 @@ static int CALLBACK enum_jfonts (ENUMLOGFONT *lpelf,NEWTEXTMETRIC *lpntm,int Fon
   if (!cfg->all_fonts && (lpelf->elfLogFont.lfCharSet != SHIFTJIS_CHARSET)) return (true);
   SendDlgItemMessage ((HWND) lParam,IDC_OFFONTNAME,CB_ADDSTRING,0,(LPARAM) lpelf->elfLogFont.lfFaceName);
   return (true);
-} 
+}  
 
 //--------------------------------
 //
@@ -1950,28 +1961,38 @@ static BOOL CALLBACK options_misc (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lPara
 //      IDC_OAFONTCACHE       Font cache size.
 //      IDC_OACACHEDISPLAY    Cache display font.
 //
+#define PAGES (sizeof(page_names)/sizeof(short))
+
 static BOOL CALLBACK options_advanced (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lParam) {
+  static short code_pages[] = { CODEPAGE_AUTO,CODEPAGE_EASTEUROPE,CODEPAGE_CYRILLIC,CODEPAGE_USA,CODEPAGE_GREEK,CODEPAGE_TURKISH,CODEPAGE_HEBREW,CODEPAGE_ARABIC,CODEPAGE_BALTIC,CODEPAGE_VIETNAMESE };
+  static short page_names[] = { IDS_CP_AUTO  ,IDS_CP_EASTEUROPE  ,IDS_CP_CYRILLIC  ,IDS_CP_USA  ,IDS_CP_GREEK  ,IDS_CP_TURKISH  ,IDS_CP_HEBREW  ,IDS_CP_ARABIC  ,IDS_CP_BALTIC  ,IDS_CP_VIETNAMESE   };
+  int i;
   switch (msg) {
     case WM_INITDIALOG:
-         SetDlgItemInt  (hwnd,IDC_OAALLOCSIZE       ,cfg->alloc       ,false);
-         SetDlgItemInt  (hwnd,IDC_OACONVERTSIZE     ,cfg->convert_size,false);
-         SetDlgItemInt  (hwnd,IDC_OAUNDOLEVELS      ,cfg->undo_number ,false);
-         SetDlgItemInt  (hwnd,IDC_OAFONTCACHE       ,cfg->font_cache  ,false);
-         SetDlgItemInt  (hwnd,IDC_OAHISTORY         ,cfg->history_size,false);
-         SetDlgItemInt  (hwnd,IDC_OABUFFER          ,cfg->dict_buffer ,false);
-         CheckDlgButton (hwnd,IDC_OACACHEDISPLAY    ,cfg->cache_displayfont);
-         CheckDlgButton (hwnd,IDC_OACACHEINFO       ,cfg->cache_info);
-         CheckDlgButton (hwnd,IDC_OASEARCHOPEN      ,cfg->keep_find);
+         for (i = 0; i < PAGES; i++) SendDlgItemMessage (hwnd,IDC_OACODEPAGE,CB_ADDSTRING,0,(LPARAM) get_string(page_names[i]));
+         for (i = 0; (i < PAGES) && (code_pages[i] != cfg->code_page); i++);
+         if (i == PAGES) i = 0;
+         SendDlgItemMessage (hwnd,IDC_OACODEPAGE,CB_SETCURSEL,i,0);
+         SetDlgItemInt      (hwnd,IDC_OAALLOCSIZE       ,cfg->alloc       ,false);
+         SetDlgItemInt      (hwnd,IDC_OACONVERTSIZE     ,cfg->convert_size,false);
+         SetDlgItemInt      (hwnd,IDC_OAUNDOLEVELS      ,cfg->undo_number ,false);
+         SetDlgItemInt      (hwnd,IDC_OAFONTCACHE       ,cfg->font_cache  ,false);
+         SetDlgItemInt      (hwnd,IDC_OAHISTORY         ,cfg->history_size,false);
+         SetDlgItemInt      (hwnd,IDC_OABUFFER          ,cfg->dict_buffer ,false);
+         CheckDlgButton     (hwnd,IDC_OACACHEDISPLAY    ,cfg->cache_displayfont);
+         CheckDlgButton     (hwnd,IDC_OACACHEINFO       ,cfg->cache_info);
+         CheckDlgButton     (hwnd,IDC_OASEARCHOPEN      ,cfg->keep_find);
          return (true);
-#ifdef WINCE_PPC
+#if (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
     case WM_COMMAND: 
          INPUT_CHECK (IDC_OAALLOCSIZE);
          INPUT_CHECK (IDC_OACONVERTSIZE);
          INPUT_CHECK (IDC_OAUNDOLEVELS);
          INPUT_CHECK (IDC_OAFONTCACHE);
          INPUT_CHECK (IDC_OAHISTORY);
+         INPUT_CHECK (IDC_OABUFFER);
          break;
-#endif WINCE_PPC
+#endif (defined(WINCE_PPC) || (defined(WINCE_POCKETPC))
     case WM_GETDLGVALUES:
          cfg->alloc             = get_int(hwnd,IDC_OAALLOCSIZE  ,16  ,1024   ,cfg->alloc       );
          cfg->convert_size      = get_int(hwnd,IDC_OACONVERTSIZE,10  ,2000   ,cfg->convert_size);
@@ -1982,6 +2003,7 @@ static BOOL CALLBACK options_advanced (HWND hwnd,UINT msg,WPARAM wParam,LPARAM l
          cfg->cache_displayfont = IsDlgButtonChecked(hwnd,IDC_OACACHEDISPLAY);
          cfg->cache_info        = IsDlgButtonChecked(hwnd,IDC_OACACHEINFO);
          cfg->keep_find         = IsDlgButtonChecked(hwnd,IDC_OASEARCHOPEN);
+         cfg->code_page         = code_pages[SendDlgItemMessage(hwnd,IDC_OACODEPAGE,CB_GETCURSEL,0,0)];
          return (true);
   }
   return (false);
@@ -2054,7 +2076,7 @@ int WINAPI WinMain (HINSTANCE hInstance,HINSTANCE hPrevInstance,TCHAR *szCmdLine
 //
 //  For PPC's check to see if another version of JWPce is running.
 //
-#ifdef WINCE_PPC
+#if (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
   HANDLE mutex;
   mutex = CreateMutex(NULL,false,TEXT("JWPce-Mutex"));
   if (ERROR_ALREADY_EXISTS == GetLastError()) {
@@ -2064,7 +2086,7 @@ int WINAPI WinMain (HINSTANCE hInstance,HINSTANCE hPrevInstance,TCHAR *szCmdLine
     }
     return (0);
   }
-#endif WINCE_PPC
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
 //
 //  Activate the COM libararies
 //
@@ -2134,7 +2156,18 @@ int WINAPI WinMain (HINSTANCE hInstance,HINSTANCE hPrevInstance,TCHAR *szCmdLine
 //
 //  Intialize main window.
 //
-#ifdef WINCE
+#if   defined(WINCE_POCKETPC)
+  main_window = CreateWindowEx(0,WINCLASS_MAIN,WINCLASS_MAIN,WS_VISIBLE,0,0,CW_USEDEFAULT,CW_USEDEFAULT,NULL,NULL,instance,NULL);
+  ShowWindow   (main_window,SW_SHOW);
+  UpdateWindow (main_window);
+  do_commandbar   ();
+  memset (&activateinfo,0,sizeof(activateinfo));
+  activateinfo.cbSize = sizeof(activateinfo);
+  input_panel (main_window,true);
+  SetForegroundWindow (main_window);                // Necessary because CE does not restore JWPce to top after configuration message!
+int working;
+
+#elif defined(WINCE)
   if (!(main_window = CreateWindowEx(WS_EX_CONTEXTHELP,WINCLASS_MAIN,TEXT("JWPce-Main Window"),WS_VISIBLE,0,0,CW_USEDEFAULT,CW_USEDEFAULT,null,null,hInstance,null))) terminate (IDS_TERM_WINDOW);
   ShowWindow          (main_window,SW_SHOW);
   UpdateWindow        (main_window);
@@ -2152,7 +2185,8 @@ int WINAPI WinMain (HINSTANCE hInstance,HINSTANCE hPrevInstance,TCHAR *szCmdLine
 //
 //  Intialize everybody else.
 //
-  do_clipboard (WM_CREATE,0);
+  do_clipboard  (WM_CREATE,0);
+  initialize_cp ();
   if (initialize_fonts())            terminate (IDS_TERM_INITIALIZE,get_string(IDS_TERM_FONTS));
   if (jwp_stat.initialize(wclass))   terminate (IDS_TERM_INITIALIZE,get_string(IDS_TERM_STATUS));
   if (jwp_conv.initialize(wclass))   terminate (IDS_TERM_INITIALIZE,get_string(IDS_TERM_KANAKANJI));
@@ -2161,7 +2195,6 @@ int WINAPI WinMain (HINSTANCE hInstance,HINSTANCE hPrevInstance,TCHAR *szCmdLine
   if (initialize_info(wclass))       terminate (IDS_TERM_INITIALIZE,get_string(IDS_TERM_INFO));
   if (initialize_radlookup(wclass))  terminate (IDS_TERM_INITIALIZE,get_string(IDS_TERM_LOOKUP));
   initialize_printer (&jwp_config.cfg.page);
-  initialize_cp      ();
 //
 //  Readjust the status line in case the user puts the status bar on top
 //  of the kanji bar.
@@ -2184,9 +2217,9 @@ int WINAPI WinMain (HINSTANCE hInstance,HINSTANCE hPrevInstance,TCHAR *szCmdLine
       }
     }
   }
-#ifdef WINCE_PPC                    // Cleanup for PPC task blocking.
+#if    (defined(WINCE_PPC) || defined(WINCE_POCKETPC))      // Cleanup for PPC task blocking.
   if (mutex) CloseHandle (mutex);
-#endif WINCE_PPC
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
   CoUninitialize ();                // Cleanup COM interface.
   return (msg.wParam);
 }
@@ -2198,24 +2231,8 @@ int WINAPI WinMain (HINSTANCE hInstance,HINSTANCE hPrevInstance,TCHAR *szCmdLine
 
 static LRESULT CALLBACK winproc_main (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam) {
   int ctrl,shift;
-//SHACTIVATEINFO sai;
-int working4;
+  static int block = false;
   switch (iMsg) {
-#if 0
-    case WM_SETTINGCHANGE:
-if (SPI_SETSIPINFO == wParam){
-  memset(&sai, 0, sizeof(SHACTIVATEINFO));
-  SHHandleWMSettingChange(hwnd, wParam, lParam, &sai);
-}
-return (0);         
-    case WM_ACTIVATE:
-if (SPI_SETSIPINFO == wParam){
-  memset(&sai, 0, sizeof(SHACTIVATEINFO));
-  SHHandleWMActivate(hwnd, wParam, lParam, &sai, 0);
-}
-int working3;
-return (0);
-#endif
 //
 //  Standard, when the user moves, or changes size we adjust the windows.
 //
@@ -2276,12 +2293,12 @@ return (0);
 //  Handle the caret (man is Windows strange -- the operating system should do this).
 //
     case WM_SETFOCUS:
-         input_restore ();
+         INPUT_RESTORE ();
          file_list.add (NULL);
          if (jwp_file) jwp_file->caret_on ();
          return (0);
     case WM_KILLFOCUS:
-         input_status ();
+         INPUT_STATUS ();
          if (jwp_file) jwp_file->caret_off ();
          return (0);
 //
@@ -2299,11 +2316,25 @@ return (0);
 //  These are all the special keys (home, F5, Ctrl+K, etc.)  These 
 //  are passed to the event handler in jwp_file.cpp.
 //
+#if    (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
+int dont_really_like_the_blockout_but_it_works;
+    case WM_KEYUP:
+         if (wParam == VK_F23) { block = false; jwp_file->do_key (wParam,false,false); }
+         return (0);
+    case WM_KEYDOWN:
+         if (wParam == VK_F23) { block = true; return (0); }
+         if (block) return (0);
+         shift = (GetKeyState(VK_SHIFT)   < 0);
+         ctrl  = (GetKeyState(VK_CONTROL) < 0);
+         jwp_file->do_key (wParam,ctrl,shift);
+         return (0);
+#else  (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
     case WM_KEYDOWN:
          shift = (GetKeyState(VK_SHIFT)   < 0);
          ctrl  = (GetKeyState(VK_CONTROL) < 0);
          jwp_file->do_key (wParam,ctrl,shift);
          return (0);
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
 //
 //  Wheel mouse support.
 //
@@ -2379,9 +2410,27 @@ return (0);
 //  If we are a PPC we need to check for changes in the input pannel.  We use this to change
 //  the size of the display if the input panel is open or closed.
 //
-int working2;
-#ifdef WINCE_PPC
-#if 1
+#if defined(WINCE_POCKETPC)
+    case WM_CREATE:
+         int     cx,cy,dy;
+         SIPINFO si;
+         memset (&si,0,sizeof(si));
+         si.cbSize = sizeof(si);
+         SHSipInfo (SPI_GETSIPINFO,0,&si,false);
+         cx = si.rcVisibleDesktop.right - si.rcVisibleDesktop.left;
+         cy = si.rcVisibleDesktop.bottom - si.rcVisibleDesktop.top;
+         dy = GetSystemMetrics(SM_CYCAPTION)+GetSystemMetrics(SM_CYFIXEDFRAME);
+         if (!(si.fdwFlags & SIPF_ON) || ((si.fdwFlags & SIPF_ON) && !(si.fdwFlags & SIPF_DOCKED)))
+         cy -= dy;
+         SetWindowPos (hwnd,NULL,0,dy,cx,cy,SWP_NOZORDER);
+         return (0);
+    case WM_SETTINGCHANGE:
+         SHHandleWMSettingChange (hwnd,wParam,lParam,&activateinfo);
+         return (0);
+    case WM_ACTIVATE:
+         SHHandleWMActivate (hwnd,wParam,lParam,&activateinfo,0);
+         return (0);
+#elif defined(WINCE_PPC)
     case WM_CREATE:
          wParam = SPI_SETSIPINFO;
     case WM_SETTINGCHANGE: 
@@ -2393,8 +2442,7 @@ int working2;
            MoveWindow (hwnd,si.rcVisibleDesktop.left,si.rcVisibleDesktop.top,si.rcVisibleDesktop.right-si.rcVisibleDesktop.left+1,si.rcVisibleDesktop.bottom-si.rcVisibleDesktop.top+1,true);
            return (0);
          }
-#endif
-#else  WINCE_PPC
+#else WINCE / WIN
     case WM_CREATE:
          return (0);
 #endif WINCE_PPC
@@ -2685,11 +2733,11 @@ break;
     case IDM_UTILITIES_INSTALL:
          do_install (true);
          break;
-#ifdef WINCE_PPC
+#if (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
     case IDM_UTILITIES_TOGGLE:              // False menu event.  This is generated by the toggle button
          do_commandbar ();                  //   on the PPC's button bar.  This casues the menu bar and 
          break;                             //   button bar to toggle.
-#endif WINCE_PPC
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
 #ifndef WINCE
     case IDM_UTILITIES_CUSTOMIZE:           // Customize the toolbar
          jwp_tool.customize ();
@@ -2761,16 +2809,16 @@ void do_commandbar () {
 //  Setup the tool tips.
 //
   TCHAR *ptr;
-  int    i = 1;                                                     // Set this here because we use it below
-  ptr = get_string(IDS_TOOL_TIPS);                                  // Get tool tips coded data.
-  if (tip_data = (TCHAR *) malloc(sizeof(TCHAR)*lstrlen(ptr))) {    // Allocate storage.  If not possible we just forget the tips.
-    lstrcpy (tip_data,ptr);                                         // Copy tips to the data array.
-    for (ptr = tip_data; i <= NUMBER_TIPS; i++) {                   // Move through array.
-      tips[i] = ptr;                                                // Save pointer
-      while (*ptr && (*ptr != '\t')) ptr++;                         // Find next tab (marks end of tip)
-      if (!*ptr) break;                                             // Off the end of the 
-      *ptr = 0;                                                     // Change tab to end of string
-      ptr++;                                                        // On to next tip.
+  int    i = 1;                                                         // Set this here because we use it below
+  ptr = get_string(IDS_TOOL_TIPS);                                      // Get tool tips coded data.
+  if (tip_data = (TCHAR *) malloc(sizeof(TCHAR)*(1+lstrlen(ptr)))) {    // Allocate storage.  If not possible we just forget the tips.
+    lstrcpy (tip_data,ptr);                                             // Copy tips to the data array.
+    for (ptr = tip_data; i <= NUMBER_TIPS; i++) {                       // Move through array.
+      tips[i] = ptr;                                                    // Save pointer
+      while (*ptr && (*ptr != '\t')) ptr++;                             // Find next tab (marks end of tip)
+      if (!*ptr) break;                                                 // Off the end of the 
+      *ptr = 0;                                                         // Change tab to end of string
+      ptr++;                                                            // On to next tip.
     }
   }
 //
@@ -2864,6 +2912,47 @@ void do_commandbar () {
 }
 
 #endif WINCE_PPC
+
+//--------------------------------
+//
+//  Windows CE PocketPC toolbar routine.  This rotuine sets up the command bar for PPCs.
+//
+#ifdef WINCE_POCKETPC
+
+void do_commandbar () {
+  static short is_command = false;
+  static short created    = false;
+  if (!created) {
+    SHMENUBARINFO mbi;
+    memset (&mbi,0,sizeof(mbi));
+    mbi.cbSize     = sizeof(mbi);
+    mbi.hwndParent = main_window;
+    mbi.hInstRes   = language;
+    mbi.nToolBarId = IDR_MAINMENU;
+    if (SHCreateMenuBar(&mbi)) menu_bar = mbi.hwndMB;
+    hmenu = (HMENU) SendMessage (menu_bar,SHCMBM_GETMENU,0,0);
+    CommandBar_AddBitmap (menu_bar,HINST_COMMCTRL,IDB_STD_SMALL_COLOR,15,0,0);
+    CommandBar_AddBitmap (menu_bar,instance,IDB_PPCTOOLS,5,0,0);
+    memset (&mbi,0,sizeof(mbi));
+    mbi.cbSize     = sizeof(mbi);
+    mbi.hwndParent = main_window;
+    mbi.hInstRes   = language;
+    mbi.nToolBarId = IDR_BUTTONBAR;
+    if (SHCreateMenuBar(&mbi)) button_bar = mbi.hwndMB;
+    hmenu2 = (HMENU) SendMessage (button_bar,SHCMBM_GETMENU,0,0);
+    CommandBar_AddBitmap (button_bar,HINST_COMMCTRL,IDB_STD_SMALL_COLOR,15,0,0);
+    CommandBar_AddBitmap (button_bar,instance,IDB_PPCTOOLS,5,0,0);
+    created = true;
+
+int possibly_move_this_back_over_by_CreateWindow;
+  }
+  is_command = !is_command;
+  CommandBar_Show (menu_bar  , is_command);
+  CommandBar_Show (button_bar,!is_command);
+  return;
+}
+
+#endif WINCE_POCKETPC
 
 
 

@@ -1,7 +1,9 @@
 //===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
-//  All rights reserved.                                             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2004, 2005             //
+//                                                                   //
+//  JWPce is free sotware distributed under the terms of the         //
+//  GNU General Public License.                                      //
 //                                                                   //
 //===================================================================//
 
@@ -181,7 +183,7 @@ private:
 //  set the kanji is not in the list.
 //
 
-#define MAX_KANJI   6355                            // Number of kanji in the JIS character set.
+#define MAX_KANJI   6450                            // Max number of kanji we allow in the list.
 
 class COLOR_kanji {
 public:
@@ -218,11 +220,13 @@ extern class COLOR_kanji color_kanji;
 //
 //  Exported routines.
 //
-extern void        free_fonts       (void);                 // Cleanup routine to close all open fonts.
-extern KANJI_font *get_bigfont      (RECT *rect);           // Routine to get the big font.
-extern KANJI_font *get_jistfont     (void);                 // Get font for use in the JIS table
-extern KANJI_font *get_printfont    (HDC hdc,int vertical); // Routine to get a printer font of a given height.
-extern int         initialize_fonts (void);                 // Setup the fonts system and intiailize.
+extern void        ascii_draw       (HDC hdc,int x,int y,int ch);   // Draw an ASCII (or extended ASCII character)
+extern int         ascii_width      (HDC hdc,int ch);               // Get width of ASCII character.
+extern void        free_fonts       (void);                         // Cleanup routine to close all open fonts.
+extern KANJI_font *get_bigfont      (RECT *rect);                   // Routine to get the big font.
+extern KANJI_font *get_jistfont     (void);                         // Get font for use in the JIS table
+extern KANJI_font *get_printfont    (HDC hdc,int vertical);         // Routine to get a printer font of a given height.
+extern int         initialize_fonts (void);                         // Setup the fonts system and intiailize.
 
 #endif jwp_font_h
 

@@ -1,7 +1,9 @@
 //===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
-//  All rights reserved.                                             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2004, 2005             //
+//                                                                   //
+//  JWPce is free sotware distributed under the terms of the         //
+//  GNU General Public License.                                      //
 //                                                                   //
 //===================================================================//
 
@@ -1081,8 +1083,6 @@ int JWP_font::open (TCHAR *name,int size,int cache,HDC hdc,int vert) {
 //
   LOGFONT    lf;
   HFONT      tfont;
-  TCHAR      string[2];
-  SIZE       s;
   int        i;
   memset  (&lf,0,sizeof(lf));
   lstrcpy (lf.lfFaceName,jwp_config.cfg.ascii_font.name);
@@ -1094,9 +1094,7 @@ int JWP_font::open (TCHAR *name,int size,int cache,HDC hdc,int vert) {
   hdc = GetDC (main_window);
   tfont = (HFONT) SelectObject (hdc,ascii);
   for (i = 0; i < 256; i++) {                   // Get width occupied by each ASCII
-    string[0] = i;                              //   character.
-    GetTextExtentPoint32 (hdc,string,1,&s);
-    widths[i] = (short) s.cx;
+    widths[i] = (short) ascii_width(hdc,i);
   }
   SelectObject (hdc,tfont);
   ReleaseDC (main_window,hdc);
@@ -1130,19 +1128,35 @@ HFONT JWP_font::open_ascii (tchar *face) {
 class COLOR_kanji color_kanji;
 static HWND adddel_dialog = NULL;
 
-int jis2index (int ch) {
+//--------------------------------
+//
+//  Convert from index number to JIS
+//
+//      ch     -- Index number for kanji.
+//
+//      RETURN -- JIS kanji value.
+//
+static int index2jis (int ch) {
+  int i,j;
+  i = ch/94;
+  j = ch-(i*94);
+  return (0x3021+((i << 8) | j));
+}
+
+//--------------------------------
+//
+//  Convert JIS number in kanji index.
+//
+//      ch     -- JIS character.
+//
+//      RETURN -- Index number.
+//
+static int jis2index (int ch) {
   ch = ch-((int) 0x3021);
   if (ch < 0) return (-1);
   ch = HIBYTE(ch)*94+LOBYTE(ch);
   if (ch > MAX_KANJI) return (-1);
   return (ch);
-}
-
-int index2jis (int ch) {
-  int i,j;
-  i = ch/94;
-  j = ch-(i*94);
-  return (0x3021+((i << 8) | j));
 }
 
 //--------------------------------
@@ -1165,6 +1179,7 @@ static int adddel_proc (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
     case WM_COMMAND:        
          switch (LOWORD(wParam)) { 
            case IDOK:           // Add
+           case IDSEARCH:       // Message from Jedit box.
            case IDC_AKDELETE:   // Delete
                 start  = color_kanji.count();
                 length = JEGetDlgItemText(hwnd,IDC_AKKANJI,&kanji);
@@ -1359,6 +1374,46 @@ void JWP_file::do_kanjilist () {
 
 //--------------------------------
 //
+//  Render an ASCII or extneded ASCII character using the currently selected font.
+//
+//      hdc -- Display context for display.  This must be provied.
+//      x,y -- Location in the display of the lower-left corner of the object.
+//      ch  -- Character to render.
+//  
+void ascii_draw (HDC hdc,int x,int y,int ch) {
+  static TCHAR text[2] = { 0,0 };
+#ifdef WINCE
+  text[0] = (TCHAR) jis2unicode(ch);
+#else  WINCE
+  text[0] = (TCHAR) ch;
+#endif WINCE  
+  TextOut  (hdc,x,y,text,1);
+  return;
+}
+
+//--------------------------------
+//
+//  Determine the pixel width of an ASCII or extended ASCII character.
+//
+//      hdc    -- Display context for display.  This must be provied.
+//      ch     -- Character.  Shold only be ASCII or extended ASCII.
+//      
+//      RETURN -- Width ofcharacter in pixels using the current display
+//  
+int ascii_width (HDC hdc,int ch) {
+  static TCHAR text[2] = { 0,0 };
+  SIZE   s;
+#ifdef WINCE
+  text[0] = (TCHAR) jis2unicode(ch);
+#else  WINCE
+  text[0] = (TCHAR) ch;
+#endif WINCE  
+  GetTextExtentPoint32 (hdc,text,1,&s);
+  return (s.cx);
+}
+
+//--------------------------------
+//
 //  This routine deallocates all kanji fonts.  This is called when we are about to exit and 
 //  when the user changes the font base, since this will require re-evaluating the font 
 //  choics.
@@ -1514,9 +1569,6 @@ int initialize_fonts () {
 
 
 // ### May want to implement a binary search on the color-kanji list.
-
-
-
 
 
 

@@ -1,7 +1,9 @@
 //===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
-//  All rights reserved.                                             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2004, 2005             //
+//                                                                   //
+//  JWPce is free sotware distributed under the terms of the         //
+//  GNU General Public License.                                      //
 //                                                                   //
 //===================================================================//
 
@@ -1319,7 +1321,6 @@ void JWP_file::print_heads (HDC hdc,int head,int y,PrintContext *pc,int *widths,
 #ifndef WINCE
 static int print_line (HDC hdc,KANJI *kanji,int length,int xx,int yy,PrintContext *pc,int *widths,int vertical,int end,int noprint) {
   int ch,i,x;
-  static TCHAR temp[2] = { 0,0 };
   RECT rect;
   rect.top    = yy;                             // Setup for line output
   rect.bottom = rect.top+pc->fheight;           //   vertical parameters for line.
@@ -1334,12 +1335,11 @@ static int print_line (HDC hdc,KANJI *kanji,int length,int xx,int yy,PrintContex
       x += pc->kwidth;
     }
     else if (ch != '\t') {                      //   ASCII character
-
-int j,spaces,x2;
 //
 //  Determine the amount of space that will be added at the end of
 //  the ASCII text, to bring the line to the next kanji location.
 //
+      int j,spaces,x2;
       x2     = x;
       spaces = 2;                               // Two adjustment sapces (begin and end)
       for (j = i; !ISJIS(kanji[j]) && ('\t' != kanji[j]) && (j < length); j++) {
@@ -1364,8 +1364,7 @@ int j,spaces,x2;
       while ((i < length) && !ISJIS(kanji[i]) && ('\t' != kanji[i])) {
         ch = kanji[i];
         if (!noprint) {
-          temp[0] = (TCHAR) ch;                 // Output character
-          TextOut  (hdc,x+xx,yy,temp,1);
+          ascii_draw (hdc,x+xx,yy,ch);         // Output character
         }
         x += widths[ch];                        // Advance location
         if (ch == ' ') {

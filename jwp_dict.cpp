@@ -1,7 +1,9 @@
 //===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
-//  All rights reserved.                                             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2004, 2005             //
+//                                                                   //
+//  JWPce is free sotware distributed under the terms of the         //
+//  GNU General Public License.                                      //
 //                                                                   //
 //  These routines are intended to interface with EDICT, which is    //
 //  a Japanese/English Dictionary developed and copyrighted by       //
@@ -1578,6 +1580,7 @@ int EDIT_userdict::dlg_edituser (HWND hwnd,UINT message,WPARAM wParam,LPARAM lPa
 //  User wants to keep this conversion, so see what is up.
 //
            case IDOK:
+           case IDSEARCH:
 //
 //  Get strings and make sure they are not empty.
 //
@@ -1738,6 +1741,7 @@ int JWP_dict::dlg_userdict (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
          add_dialog (user_dialog = hwnd,false);
          if (!(edit_userdict = new EDIT_userdict())) return (false);
          edit_userdict->init (hwnd,user->memory,IDS_DE_FILETYPE);
+         POCKETPC_DIALOG     (hwnd);
          return (true);
     case WM_DESTROY:
          if (edit_userdict->changed) {
@@ -1990,7 +1994,8 @@ int JWP_dict::dlg_editdict (HWND hwnd,int message,WPARAM wParam,LPARAM lParam) {
            default:
                 break;
          }
-         return (0);
+         POCKETPC_DIALOG (hwnd);
+         return          (0);
 //
 //  Process help messages
 //
@@ -2065,6 +2070,7 @@ int JWP_dict::dlg_editdict (HWND hwnd,int message,WPARAM wParam,LPARAM lParam) {
                 SendMessage (hwnd,WM_INITDIALOG,0,EDITDICT_NAME);
                 return (0);
            case IDOK:
+           case IDSEARCH:
                 dic = get_dictionary(hwnd);
 //
 //  Make sure we have a valid entry.
@@ -2563,7 +2569,7 @@ void JWP_dict::check_primary (byte *ptr) {
 #if   (!defined(WINCE))                             // Define the range for dynamic controls
   #define IDC_DICT_FIRST    IDC_DDCLASSICAL
   #define IDC_DICT_LAST     IDC_DDJASCII
-#elif (!defined(WINCE_PPC))
+#elif (!(defined(WINCE_PPC) || defined(WINCE_POCKETPC)))
   #define IDC_DICT_FIRST    IDC_DDCLASSICAL
   #define IDC_DICT_LAST     IDC_DDPRIORITY
 #else
@@ -2597,7 +2603,7 @@ int JWP_dict::dlg_dictionary (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
          wParam = SendDlgItemMessage (hwnd,IDC_DDSTRING,JE_LOAD,0,(LPARAM) jwp_file);
          SendDlgItemMessage (hwnd,IDC_DDSTRING,JE_SETHIST,IDC_DDHISTORY,(LPARAM) &dict_history);
          SendDlgItemMessage (hwnd,IDC_DDRESULT,JL_SETEXCLUDE,0,SendDlgItemMessage(hwnd,IDC_DDSTRING,JE_GETJWPFILE,0,0));
-         if (wParam && jwp_config.cfg.dict_auto) PostMessage (hwnd,WM_COMMAND,IDOK,0);
+         if (wParam && jwp_config.cfg.dict_auto) PostMessage (hwnd,WM_COMMAND,IDSEARCH,0);
 //
 //  Setup the clipboard tracking
 //
@@ -2605,7 +2611,8 @@ int JWP_dict::dlg_dictionary (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
          enable_clip = false;                           // Suppress first call to clipboard, which is a rsult of us being added to the viewer list.
          clipview    = SetClipboardViewer (hwnd);       // Setup clipboard tracking
 #endif WINCE
-         return (true);
+         POCKETPC_DIALOG (hwnd);
+         return          (true);
 //
 //  Save the state of the dictonary keys.
 //
@@ -2646,7 +2653,7 @@ int JWP_dict::dlg_dictionary (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
            string = (JWP_file *) SendDlgItemMessage(hwnd,IDC_DDSTRING,JE_GETJWPFILE,0,0);
            if (string->edit_clip()) {
              clipsearch = true;                         // Flag this as a clipboard search (disables some errors).
-             PostMessage (hwnd,WM_COMMAND,IDOK,0);
+             PostMessage (hwnd,WM_COMMAND,IDSEARCH,0);
            }
          }
          enable_clip = true;                            // The first call to this routine is because we added to the chain.
@@ -2685,7 +2692,10 @@ int JWP_dict::dlg_dictionary (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
 //
 //  User has intializted a search.
 //
+#ifndef WINCE_POCKETPC
            case IDOK:           // Search
+#endif WINCE_POCKETPC
+           case IDSEARCH:
                 search_dict ();
                 return   (0);
 //
@@ -2733,7 +2743,10 @@ int JWP_dict::dlg_dictionary (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
 //
 //  We may be done.  First check to see if we are searching.  If so,
 //  abort the sarch, but do not exit.
-//                
+//    
+#ifdef WINCE_POCKETPC
+           case IDOK:
+#endif WINCE_POCKETPC
            case IDCANCEL:
                 if (state) {                            // Check to see if we are search, if so
                   state = DICTSTATE_ABORT;              //   abort search but don't exit.
@@ -3100,7 +3113,7 @@ void JWP_dict::get_checkboxes () {
   dict_keys[DICTKEY_END   ].reject = IsDlgButtonChecked(dialog,IDC_DDEND      );
   dict_keys[DICTKEY_BEGIN ].reject = IsDlgButtonChecked(dialog,IDC_DDBEGIN    );
   jwp_config.cfg.dict_advanced     = IsDlgButtonChecked(dialog,IDC_DDADVANCED );
-#ifndef WINCE_PPC
+#if (!(defined(WINCE_PPC) || defined(WINCE_POCKETPC)))
   jwp_config.cfg.dict_classical    = IsDlgButtonChecked(dialog,IDC_DDCLASSICAL);
   jwp_config.cfg.dict_fullascii    = IsDlgButtonChecked(dialog,IDC_DDFULLASCII);
   jwp_config.cfg.dict_primaryfirst = IsDlgButtonChecked(dialog,IDC_DDPRIORITY );
@@ -3111,8 +3124,8 @@ void JWP_dict::get_checkboxes () {
   jwp_config.cfg.dict_showall      = IsDlgButtonChecked(dialog,IDC_DDADVALL   );
   jwp_config.cfg.dict_iadj         = IsDlgButtonChecked(dialog,IDC_DDADVI     );
   jwp_config.cfg.dict_advmark      = IsDlgButtonChecked(dialog,IDC_DDMARK     );
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
 #endif WINCE
-#endif WINCE_PPC
   return;
 }
 
@@ -3196,7 +3209,7 @@ void JWP_dict::search (JWP_file *file) {
   if (active) { 
     if (file->window != GetDlgItem(dialog,IDC_DDSTRING)) {
       if (jwp_config.cfg.dict_auto && SendDlgItemMessage(dialog,IDC_DDSTRING,JE_LOAD,0,(LPARAM) file)) {
-        SendMessage (dialog,WM_COMMAND,IDOK,0);
+        SendMessage (dialog,WM_COMMAND,IDSEARCH,0);
       }
     }
     SetForegroundWindow (dialog); 
@@ -3524,7 +3537,7 @@ void JWP_dict::set_checkboxes () {
   CheckDlgButton (dialog,IDC_DDBEGIN    ,dict_keys[DICTKEY_BEGIN].reject);
   CheckDlgButton (dialog,IDC_DDEND      ,dict_keys[DICTKEY_END  ].reject);
   CheckDlgButton (dialog,IDC_DDADVANCED ,jwp_config.cfg.dict_advanced);
-#ifndef WINCE_PPC
+#if (!(defined(WINCE_PPC) || defined(WINCE_POCKETPC)))
   CheckDlgButton (dialog,IDC_DDCLASSICAL,jwp_config.cfg.dict_classical   );
   CheckDlgButton (dialog,IDC_DDFULLASCII,jwp_config.cfg.dict_fullascii   );
   CheckDlgButton (dialog,IDC_DDPRIORITY ,jwp_config.cfg.dict_primaryfirst);
@@ -3536,7 +3549,7 @@ void JWP_dict::set_checkboxes () {
   CheckDlgButton (dialog,IDC_DDADVI     ,jwp_config.cfg.dict_iadj        );
   CheckDlgButton (dialog,IDC_DDMARK     ,jwp_config.cfg.dict_advmark     );
 #endif WINCE
-#endif WINCE_PPC
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
   return;
 }
 

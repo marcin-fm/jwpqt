@@ -1,7 +1,9 @@
 //===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
-//  All rights reserved.                                             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2004, 2005             //
+//                                                                   //
+//  JWPce is free sotware distributed under the terms of the         //
+//  GNU General Public License.                                      //
 //                                                                   //
 //===================================================================//
 
@@ -23,6 +25,18 @@
 #ifndef jwp_edit_h
 #define jwp_edit_h
 #include "jwp_file.h"
+
+//===================================================================
+//
+//  Edge of controls dimensions
+//
+#if    (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
+  #define WIN_XEDGE     1
+  #define WIN_YEDGE     1
+#else  (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
+  #define WIN_XEDGE     GetSystemMetrics(SM_CXEDGE)
+  #define WIN_YEDGE     GetSystemMetrics(SM_CYEDGE)
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
 
 //===================================================================
 //

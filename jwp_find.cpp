@@ -1,7 +1,9 @@
 //===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
-//  All rights reserved.                                             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2004, 2005             //
+//                                                                   //
+//  JWPce is free sotware distributed under the terms of the         //
+//  GNU General Public License.                                      //
 //                                                                   //
 //===================================================================//
 
@@ -237,6 +239,7 @@ int JWP_search::dlg_search (HWND hwnd,UINT message,int command,int rep,class JWP
 //  User has selected the ok.
 //
            case IDOK:
+           case IDSEARCH:
                 int       i;
                 clear (rep);
                 is_replace = rep;

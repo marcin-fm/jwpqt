@@ -1,7 +1,9 @@
 //===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
-//  All rights reserved.                                             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2004, 2005             //
+//                                                                   //
+//  JWPce is free sotware distributed under the terms of the         //
+//  GNU General Public License.                                      //
 //                                                                   //
 //===================================================================//
 
@@ -94,6 +96,7 @@
                                         //   character (0x2121) to separate enrities.  The 
                                         //   default is to use tabs.
 
+
 //===================================================================
 //
 //  Static data
@@ -138,6 +141,7 @@ static LRESULT CALLBACK JWP_edit_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
   PAINTSTRUCT   ps;
   CREATESTRUCT *create;
   JWP_file     *file;
+  static int    block = false;
   file = (JWP_file *) GetWindowLong(hwnd,0);        // Get our JWP_fiel class object.
   switch (iMsg) {
 //
@@ -146,7 +150,7 @@ static LRESULT CALLBACK JWP_edit_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
 //
     case WM_CREATE:                                 
          create = (CREATESTRUCT *) lParam;
-         MoveWindow (hwnd,create->x,create->y,create->cx,edit_font.height+2*edit_font.vspace+2*GetSystemMetrics(SM_CYEDGE),true);
+         MoveWindow (hwnd,create->x,create->y,create->cx,edit_font.height+2*edit_font.vspace+2*WIN_YEDGE,true);
          file = new JWP_file (hwnd);
          SetWindowLong (hwnd,0,(long) file);    // Save JWP_file object for edit box.
          return (0);
@@ -155,13 +159,13 @@ static LRESULT CALLBACK JWP_edit_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
          delete file;
          return (0);
     case WM_SETFOCUS:                           // Set the focus.
-         input_panel (true);
+         SIP_ON         ();
          file->do_key   (VK_A,true,true);
          file->caret_on ();
          file_list.add  (file);
          return (0);
     case WM_KILLFOCUS:                          // Kill the focus.
-         input_panel (false);
+         SIP_OFF         ();
          jwp_conv.clear  ();
          file->caret_off ();
          return (0);
@@ -195,7 +199,19 @@ static LRESULT CALLBACK JWP_edit_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
 #endif WINCE
     case WM_GETDLGCODE:                         // We need to get input from windows.
          return (DLGC_WANTARROWS | DLGC_WANTALLKEYS | DLGC_WANTCHARS);
+
+
+#if    (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
+    case WM_KEYUP:
+         if (wParam == VK_F23) { block = false; jwp_file->do_key (wParam,false,false); }
+         return (0);
     case WM_KEYDOWN:                            // Vitural keys.
+int dont_really_like_the_blockout_but_it_works;
+         if (wParam == VK_F23) { block = true; return (0); }
+         if (block) return (0);
+#else  (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
+    case WM_KEYDOWN:                            // Vitural keys.
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
          int shift,ctrl;
          shift = (GetKeyState(VK_SHIFT)   < 0);
          ctrl  = (GetKeyState(VK_CONTROL) < 0);
@@ -204,14 +220,14 @@ static LRESULT CALLBACK JWP_edit_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
                 if (ctrl) break;                // Ctrl+TAB is always a tab (lets us put tabs into Japanese edit boxes).
                 SetFocus (GetNextDlgTabItem(GetParent(hwnd),hwnd,shift));   // Move to next last item.
                 return (0);
-#ifdef WINCE_PPC
-           case VK_UP:
+#if (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
+           case VK_UP:                          // For PPC/PocketPC, the up down are used for convert not the history.  This is a more useful formulation.
                 file->do_key (VK_F2,false,false);
                 return (0);
            case VK_DOWN:
                 file->do_key (VK_F3,false,false);
                 return (0);
-#else  WINCE_PPC
+#else  (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
            case VK_UP:                          // Remove this inputs.
                 if (ctrl) break;
                 if (file->history) file->history->up (file);
@@ -220,14 +236,14 @@ static LRESULT CALLBACK JWP_edit_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
                 if (ctrl) break;
                 if (file->history) file->history->down (file);
                 return (0);
-#endif WINCE_PPC
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
            case VK_PRIOR:
            case VK_NEXT:
                 return (0);
            case VK_RETURN:                      // Return has special meaning (invoke dialog event)
                 if (file->sel.type == SELECT_KANJI) file->convert (CONVERT_RIGHT);
                 jwp_conv.clear ();
-                SendMessage (GetParent(hwnd),WM_COMMAND,IDOK,0L);
+                SendMessage (GetParent(hwnd),WM_COMMAND,IDSEARCH,0L);       // Used to be IDOK, but was changed to work with PocketPC, which requires IDOK to close some dialogs.
                 return (0);
            case VK_ESCAPE:                      // Escape has special meaning (abort dialog)
                 jwp_conv.clear ();
@@ -261,7 +277,11 @@ static LRESULT CALLBACK JWP_edit_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
            GetWindowRect (button,&butrect);
            GetWindowRect (hwnd  ,&jecrect);
            GetWindowRect (GetParent(hwnd),&dlgrect);
-           MoveWindow    (button,jecrect.right-dlgrect.left-GetSystemMetrics(SM_CXEDGE)-1,butrect.top-dlgrect.top-GetSystemMetrics(SM_CYCAPTION)-GetSystemMetrics(SM_CYEDGE)-1,butrect.right-butrect.left+1,jecrect.bottom-jecrect.top,true);
+#ifdef WINCE_POCKETPC
+           MoveWindow    (button,jecrect.right-dlgrect.left-WIN_XEDGE-1,butrect.top-dlgrect.top-GetSystemMetrics(SM_CYCAPTION)-WIN_YEDGE,butrect.right-butrect.left+1,jecrect.bottom-jecrect.top,true);
+#else  WINCE_POCKETPC
+           MoveWindow    (button,jecrect.right-dlgrect.left-WIN_XEDGE-1,butrect.top-dlgrect.top-GetSystemMetrics(SM_CYCAPTION)-WIN_YEDGE-1,butrect.right-butrect.left+1,jecrect.bottom-jecrect.top,true);
+#endif WINCE_POCKETPC
          }
          return (0);
     case JE_HISTORYLIST:                        // User hit the history button.
@@ -1163,7 +1183,6 @@ void JWP_list::draw_line (HDC hdc,int line) {
   LIST_line *text;
   COLORREF   oldcolor = NO_CHANGE;
   int        i,x,y;
-  static TCHAR temp[] = { 0,0 };
 //
 //  Generate the background rectangle.
 //
@@ -1205,8 +1224,7 @@ void JWP_list::draw_line (HDC hdc,int line) {
     ch = text->text[i];
     if (ISJIS(ch)) list_font.kanji->draw(hdc,ch,x,y);
     else if (ch != '\t') {
-      temp[0] = (TCHAR) ch;
-      TextOut (hdc,x,y-list_font.height,temp,1);
+      ascii_draw (hdc,x,y-list_font.height,ch);
     }
     x = list_font.hadvance(x,ch);
   }
@@ -1406,10 +1424,11 @@ void JWP_list::insert (int newline,JWP_file *file) {
   KANJI space[1] =  { '\t' };
 #endif FOLLOW_BY_SPACE
   int new_para   = (file->filetype == FILETYPE_EDIT) ? false : jwp_config.cfg.paste_newpara;
-  int need_space = false;       // This indicates that we need to add a spapce before adding 
-                                //   the next line.  If the previous line ends with a space or
-                                //   the next line begins with a space we do not need to add
-                                //   one. 
+  int first      = true;                                        // Inidcates first line.
+  int need_space = false;                                       // This indicates that we need to add a spapce before adding 
+                                                                //   the next line.  If the previous line ends with a space or
+                                                                //   the next line begins with a space we do not need to add
+                                                                //   one. 
   if (!select_count) { MessageBeep (MB_ICONASTERISK); return; } // Nothing found so make a warning
   file->selection_clear();                                      // Clear selection so it dosen't get wipped out
   file->undo_start ();                                          // Allow this to be undone
@@ -1421,10 +1440,11 @@ void JWP_list::insert (int newline,JWP_file *file) {
     if (line->selected) {                                       // Is the line selected?
       j = get_text(i,&text);                                    // Get the line text.
       if (*text == '\t') { text++; j--; s1--; s2--; }           // Text begins with '\t', so skip that
-        else if (need_space && new_para) {                      // If not tab, do we need a new paragraph?
+        else if (!first && new_para) {                          // If not tab, do we need a new paragraph?
           need_space = false;
           file->do_key (VK_RETURN,false,false);                 // Do new paragraph
         }
+      first = false;                                            // Can't be first line anymore.
       if (*text == ' ') need_space = false;                     // Text begins with space so we don't need another
       if (need_space) file->put_string (space,1);               // We need a space, so put one.
       if (!sel_x1) file->put_string (text,j);                   // Put the actual text.

@@ -1,7 +1,9 @@
 //===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
-//  All rights reserved.                                             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2004, 2005             //
+//                                                                   //
+//  JWPce is free sotware distributed under the terms of the         //
+//  GNU General Public License.                                      //
 //                                                                   //
 //  The radical lookup tables used were originally developed by      //
 //  Michael Raine and Derc Yamasaki.                                 //
@@ -112,11 +114,11 @@ static LRESULT CALLBACK JWP_jistable_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPA
 #define CONTROL_MOVE        5                   // Number of cuttons control+cursor key moves.
 
                                                 // Sizes of button objects in pixals (all are square).
-#ifdef WINCE_PPC
+#if    (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
   #define BUTTON_SIZE       20                  // Size of a button
-#else  WINCE_PPC
+#else  (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
   #define BUTTON_SIZE       22                  // Size of a button
-#endif WINCE_PCC
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
 #define BUTTON_JBMSIZE      16                  // Size of a JIS table character.
 #define BUTTON_RBMSIZE      16                  // Size of a radical bitmap
 #define BUTTON_SBMSIZE      16                  // Size of a stroke count bitmap.
@@ -263,12 +265,19 @@ void KANJI_lookup::clear_results () {
 //
 int KANJI_lookup::command (WPARAM wParam) {
   switch (LOWORD(wParam)) {
+#ifndef WINCE_POCKETPC
+    case IDOK:           
+         do_search (true);
+         return    (true);
+#else   WINCE_POCKETPC
+    case IDSEARCH:
+         do_search (true);
+         return    (true);
+    case IDOK:
+#endif  WINCE_POCKETPC
     case IDCANCEL:                       // Done button, so exit.
          DestroyWindow (dialog);
          return (true);
-    case IDOK:                           
-         do_search (true);
-         return    (true);
     case IDC_RLCLEAR:                    // Clear all buttons and list.
          reset    ();
          SetFocus (GetDlgItem(dialog,clear_id));
@@ -405,7 +414,7 @@ int KANJI_lookup::radlist_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPar
          CREATESTRUCT *create;
          create = (CREATESTRUCT *) lParam;
          height = bar_font.height+2*bar_font.vspace+GetSystemMetrics(SM_CYHSCROLL);
-         MoveWindow (hwnd,create->x,create->y,create->cx,height+2*GetSystemMetrics(SM_CYEDGE),true);
+         MoveWindow (hwnd,create->x,create->y,create->cx,height+2*WIN_YEDGE,true);
          adjust (window = hwnd);
          ImmAssociateContext (hwnd,NULL);       // Disable the IME for this window
          return (0);
@@ -413,11 +422,11 @@ int KANJI_lookup::radlist_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPar
          return (DLGC_WANTARROWS | DLGC_WANTCHARS);
     case WM_PAINT:                  // Render
          hdc = BeginPaint (hwnd,&ps);
-         SetTextColor (hdc,GetSysColor(COLOR_WINDOWTEXT));
-         SetBkColor   (hdc,GetSysColor(COLOR_WINDOW));
-         draw         (hdc);
-         EndPaint     (hwnd,&ps);
-         return       (0);
+         SetTextColor     (hdc,GetSysColor(COLOR_WINDOWTEXT));
+         SetBkColor       (hdc,GetSysColor(COLOR_WINDOW));
+         draw             (hdc);
+         EndPaint         (hwnd,&ps);
+         return           (0);
     case WM_HSCROLL:                // Process scroll messages.
          do_scroll (wParam);
          return    (0);
@@ -679,8 +688,8 @@ void KANJIRAD_lookup::do_spinner (NMUPDOWN *ud,int id) {
   }
   i  = GetDlgItemInt (dialog,id,NULL,false);            // Get int value.
   i -= ud->iDelta;                                      // Increment.
-  if (i < 0 ) i = MAX_STROKES;                          // Check bounds
-  if (i > 30) i = 0;
+  if (i < 0          ) i = MAX_STROKES;                 // Check bounds
+  if (i > MAX_STROKES) i = 0;
   if (i && (i < k)) i = (ud->iDelta < 0) ? k : 0;       // Check for dead spot.
   SetDlgItemInt (dialog,id,i,false);                    // Put int value.
   return;
@@ -747,13 +756,13 @@ int KANJIRAD_lookup::radicals_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
          button_y  = (BUTTON_TOTAL/button_x);
          button_v  = create->cy/BUTTON_SIZE;
          if (BUTTON_TOTAL % button_x) button_y++;
-         MoveWindow (hwnd,create->x,create->y,button_x*BUTTON_SIZE+2*GetSystemMetrics(SM_CXEDGE)+GetSystemMetrics(SM_CXVSCROLL),button_v*BUTTON_SIZE+2*GetSystemMetrics(SM_CYEDGE),true);
+         MoveWindow (hwnd,create->x,create->y,button_x*BUTTON_SIZE+2*WIN_XEDGE+GetSystemMetrics(SM_CXVSCROLL),button_v*BUTTON_SIZE+2*WIN_YEDGE,true);
 #else  USE_SCROLL_RADICALS
          button_x = create->cx/BUTTON_SIZE;
          button_y = (BUTTON_TOTAL/button_x);
          if (BUTTON_TOTAL % button_x) button_y++;
          button_v = button_y;
-         MoveWindow (hwnd,create->x,create->y,button_x*BUTTON_SIZE+2*GetSystemMetrics(SM_CXEDGE),button_v*BUTTON_SIZE+2*GetSystemMetrics(SM_CYEDGE),true);
+         MoveWindow (hwnd,create->x,create->y,button_x*BUTTON_SIZE+2*WIN_XEDGE,button_v*BUTTON_SIZE+2*WIN_YEDGE,true);
          ImmAssociateContext (hwnd,NULL);               // Disable the IME for this window
 // ### should correct dialog box size.
 #endif USE_SCROLL_RADICALS
@@ -1264,7 +1273,7 @@ int RADSTROKE_lookup::bushu_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lP
          buttons    = create->cx/BUTTON_SIZE;
          left       = 0;
          cursor     = 0;
-         MoveWindow (hwnd,create->x,create->y,buttons*BUTTON_SIZE+2*GetSystemMetrics(SM_CXEDGE),BUTTON_SIZE+2*GetSystemMetrics(SM_CYEDGE)+GetSystemMetrics(SM_CYHSCROLL),true);
+         MoveWindow (hwnd,create->x,create->y,buttons*BUTTON_SIZE+2*WIN_XEDGE,BUTTON_SIZE+2*WIN_YEDGE+GetSystemMetrics(SM_CYHSCROLL),true);
          ImmAssociateContext (hwnd,NULL);       // Disable the IME for this window
          set_cursor (true);
          return (0);
@@ -1478,7 +1487,7 @@ int RADSTROKE_lookup::dlg_lookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPara
            case IDC_HSRADICAL:
            case IDC_HSOTHER:
            case IDC_HSKANJI:
-                input_check (wParam);
+                input_check (hwnd,wParam);
                 if (HIWORD(wParam) != EN_CHANGE) return (true);
                 break;
            default:
@@ -1696,9 +1705,10 @@ static BOOL CALLBACK dialog_bushulookup (HWND hwnd,UINT message,WPARAM wParam,LP
 int BUSHU_lookup::dlg_bushulookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam) {
   switch (iMsg) {
     case WM_INITDIALOG:                         // Intialize, so chache dialog box pointer.
-         CheckDlgButton (hwnd,IDC_BLNELSON   ,jwp_config.cfg.bushu_nelson   );
-         CheckDlgButton (hwnd,IDC_BLCLASSICAL,jwp_config.cfg.bushu_classical);
-         initialize (hwnd,true,IDC_RLRADICALS);
+         CheckDlgButton  (hwnd,IDC_BLNELSON   ,jwp_config.cfg.bushu_nelson   );
+         CheckDlgButton  (hwnd,IDC_BLCLASSICAL,jwp_config.cfg.bushu_classical);
+         initialize      (hwnd,true,IDC_RLRADICALS);
+         POCKETPC_DIALOG (hwnd);
          return (false);
     case WM_HELP:
          do_help (hwnd,IDH_KANJI_BUSHULOOKUP);
@@ -1722,7 +1732,7 @@ int BUSHU_lookup::dlg_bushulookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPar
                 if (!IsDlgButtonChecked(hwnd,IDC_BLCLASSICAL)) CheckDlgButton (hwnd,IDC_BLNELSON,true);
                 break;
            case IDC_BLSTROKE:
-                input_check (wParam);
+                input_check (hwnd,wParam);
                 if (HIWORD(wParam) != EN_CHANGE) return (true);
                 break;
            default:
@@ -1960,7 +1970,8 @@ int BUSHU2_lookup::dlg_bushulookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPa
          CheckDlgButton     (hwnd,IDC_HSVARIANTS,!jwp_config.cfg.no_variants);
          CheckDlgButton     (hwnd,IDC_BLNELSON   ,jwp_config.cfg.bushu_nelson   );
          CheckDlgButton     (hwnd,IDC_BLCLASSICAL,jwp_config.cfg.bushu_classical);
-         initialize (hwnd,true,IDC_HSRADSTROKE);
+         initialize         (hwnd,true,IDC_HSRADSTROKE);
+         POCKETPC_DIALOG    (hwnd);
          return (false);
     case WM_DESTROY:
          jwp_config.cfg.bushu_nelson    = IsDlgButtonChecked(hwnd,IDC_BLNELSON   );
@@ -1977,12 +1988,13 @@ int BUSHU2_lookup::dlg_bushulookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPa
            i = GetDlgItemInt(hwnd,IDC_HSOTHER    ,NULL,false);
            j = GetDlgItemInt(hwnd,IDC_HSRADSTROKE,NULL,false);
            i -= ud->iDelta;
-           if (i < 0 ) i = MAX_STROKES;
-           if (i > 30) i = 0;
+           if (i < 0          ) i = MAX_STROKES;
+           if (i > MAX_STROKES) i = 0;
            if (i && (i < j)) i = (ud->iDelta < 0) ? j : 0;
            SetDlgItemInt (hwnd,IDC_HSOTHER,i,false);
+           return (true);
          }
-         return (0);
+         break;
     case WM_HELP:
          do_help (hwnd,IDH_KANJI_BSLOOKUP);
          return  (true);
@@ -2145,7 +2157,7 @@ static LRESULT CALLBACK JWP_fcshape_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPAR
     case WM_CREATE:
          CREATESTRUCT *create;
          create = (CREATESTRUCT *) lParam;
-         MoveWindow (hwnd,create->x,create->y,FC_FULLWIDTH+2*GetSystemMetrics(SM_CXEDGE),FC_FULLHEIGHT+2*GetSystemMetrics(SM_CYEDGE),true);
+         MoveWindow (hwnd,create->x,create->y,FC_FULLWIDTH+2*WIN_XEDGE,FC_FULLHEIGHT+2*WIN_YEDGE,true);
          return (0);
 //
 //  We render the display here.  The main display element is stored as a
@@ -2203,8 +2215,9 @@ int FOURCORNER_lookup::dlg_fclookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lP
   switch (iMsg) {
     case WM_INITDIALOG:                         // Intialize, so chache dialog box pointer.
          for (i = IDC_FC1SPIN; i <= IDC_FC5SPIN; i += 2) SendDlgItemMessage (hwnd,i,UDM_SETRANGE,0,MAKELONG(10,0));
-         initialize (hwnd,true,IDC_FC1);
-         return (false);
+         initialize      (hwnd,true,IDC_FC1);
+         POCKETPC_DIALOG (hwnd);
+         return          (false);
     case WM_DESTROY:
          remove_dialog (hwnd);
          delete this;
@@ -2227,7 +2240,7 @@ int FOURCORNER_lookup::dlg_fclookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lP
            case IDC_FC4:
            case IDC_FC5:
                 current = LOWORD(wParam);
-                input_check (wParam);
+                input_check (hwnd,wParam);
                 if (HIWORD(wParam) != EN_CHANGE) {
                   check_value (LOWORD(wParam));
                   return (true);
@@ -2501,8 +2514,9 @@ int HS_lookup::dlg_hslookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam) {
          SendDlgItemMessage (hwnd,IDC_HSOTHERSPIN ,UDM_SETRANGE,0,MAKELONG(MAX_HSSTROKES ,0));
          SendDlgItemMessage (hwnd,IDC_HSKANJISPIN ,UDM_SETRANGE,0,MAKELONG(MAX_HSKANJI   ,0));
          CheckDlgButton     (hwnd,IDC_HSVARIANTS,!jwp_config.cfg.no_variants);
-         initialize (hwnd,true,IDC_HSRADSTROKE);
-         return (false);
+         initialize         (hwnd,true,IDC_HSRADSTROKE);
+         POCKETPC_DIALOG    (hwnd);
+         return             (false);
     case WM_DESTROY:
          remove_dialog (hwnd);
          delete this;
@@ -2643,6 +2657,12 @@ private:
 #define ILTYPE_ONEILLEK     12      // P.G. O'Neill's Essential Kanji (ISBN 0-8348-0222-8). 
 #define ILTYPE_DEROO        13      // Father Joseph De Roo, and published in his book "2001 Kanji"
 #define ILTYPE_FREQ         14      // Frequency-of-use ranking, Jack Halpern
+#define ILTYPE_READWRITE    15      // "A Guide To Reading and Writing Japanese" edited by Florence Sakade. 
+#define ILTYPE_TUTTLECARD   16      // The Tuttle Kanji Cards, compiled by Alexander Kask. 
+#define ILTYPE_KANJIWAY     17      // "The Kanji Way to Japanese Language Power" by Dale Crowley. 
+#define ILTYPE_KANJICONTEXT 18      // "Kanji in Context" by Nishiguchi and Kono. 
+#define ILTYPE_BUSYPEOPLE   19      // "Japanese For Busy People" vols I-III, published by the AJLT. 
+#define ILTYPE_COMPACTKANJI 20      // "Kodansha Compact Kanji Guide". 
 
 //--------------------------------
 //
@@ -2653,7 +2673,8 @@ static int indexes[] = {
 
   IDS_IL_MOROHASHILONG,IDS_IL_MOROHASHISHORT,
 
-  IDS_IL_HALPERNKLD,IDS_IL_SPAHN,IDS_IL_HENSHALL,IDS_IL_GAKKEN,IDS_IL_HEISIG,IDS_IL_ONEILL,IDS_IL_ONEILLEK,IDS_IL_DEROO,IDS_IL_FREQUENCY,
+  IDS_IL_HALPERNKLD,IDS_IL_SPAHN    ,IDS_IL_HENSHALL,IDS_IL_GAKKEN      ,IDS_IL_HEISIG    ,IDS_IL_ONEILL      ,IDS_IL_ONEILLEK,IDS_IL_DEROO,IDS_IL_FREQUENCY,
+  IDS_IL_READWRITE ,IDS_IL_TUTTLECARD,IDS_IL_KANJIWAY,IDS_IL_KANJICONTEXT,IDS_IL_BUSYPEOPLE,IDS_IL_COMPACTKANJI,
 };
 
 static INDEX_lookup *idx_lookup = NULL;     // Global pointer for the skip lookup chart.
@@ -2684,13 +2705,17 @@ static BOOL CALLBACK dialog_indexlookup (HWND hwnd,UINT message,WPARAM wParam,LP
 int INDEX_lookup::dlg_indexlookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam) {
   int i,j;
   switch (iMsg) {
-    case WM_INITDIALOG:                         // Intialize, so chache dialog box pointer.
-         if      (jwp_config.kanji_flags & KIFLAG_EVAR ) j = INDEX_ALL;
-         else if (jwp_config.kanji_flags & KIFLAG_EXTRA) j = INDEX_EXTRA;
-         else                                            j = INDEX_FIXED;
-         for (i = 0; i < j; i++) SendDlgItemMessage (hwnd,IDC_ILTYPE,CB_ADDSTRING,0,(LPARAM) get_string(indexes[i]));
-         if (CB_ERR == SendDlgItemMessage(hwnd,IDC_ILTYPE,CB_SETCURSEL,jwp_config.cfg.index_type,0)) SendDlgItemMessage (hwnd,IDC_ILTYPE,CB_SETCURSEL,0,0);
-         initialize (hwnd,false,IDC_ILINDEX);
+    case WM_INITDIALOG: {                           // Intialize, so chache dialog box pointer.
+           KANJI_info kanji_info;                   // We need this to make sure we know what indexes can be used.
+           kanji_info.open_info(dialog);;           //   Open info file.
+           if      (jwp_config.kanji_flags & KIFLAG_EVAR ) j = INDEX_ALL;
+           else if (jwp_config.kanji_flags & KIFLAG_EXTRA) j = INDEX_EXTRA;
+           else                                            j = INDEX_FIXED;
+           for (i = 0; i < j; i++) SendDlgItemMessage (hwnd,IDC_ILTYPE,CB_ADDSTRING,0,(LPARAM) get_string(indexes[i]));
+           if (CB_ERR == SendDlgItemMessage(hwnd,IDC_ILTYPE,CB_SETCURSEL,jwp_config.cfg.index_type,0)) SendDlgItemMessage (hwnd,IDC_ILTYPE,CB_SETCURSEL,0,0);
+           initialize      (hwnd,false,IDC_ILINDEX);
+           POCKETPC_DIALOG (hwnd);
+         }
          return (false);
     case WM_DESTROY:
          remove_dialog (hwnd);
@@ -2702,6 +2727,9 @@ int INDEX_lookup::dlg_indexlookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPar
          return  (true);
     case WM_COMMAND:
          switch (LOWORD(wParam)) {
+#ifdef WINCE_POCKETPC
+           case IDOK:
+#endif WINCE_POCKETPC
            case IDCANCEL:
                 jwp_config.cfg.index_type = (byte) SendDlgItemMessage(hwnd,IDC_ILTYPE,CB_GETCURSEL,0,0);
                 break;
@@ -2710,7 +2738,7 @@ int INDEX_lookup::dlg_indexlookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPar
                 break;
            case IDC_ILVOL:
            case IDC_ILINDEX:
-                input_check (wParam);
+                input_check (hwnd,wParam);
                 if (HIWORD(wParam) != EN_CHANGE) return (true);
                 break;
            default:
@@ -2736,10 +2764,12 @@ int INDEX_lookup::get_type () {
 //  the Clear Button, it is also used to initialize the dalog box.
 //
 void INDEX_lookup::reset () {
+  int i;
   SetDlgItemText (dialog,IDC_ILINDEX,TEXT(""));
   SetDlgItemText (dialog,IDC_ILVOL  ,TEXT(""));
   clear_results  ();
-  EnableWindow   (GetDlgItem(dialog,IDC_ILVOL),ILTYPE_MD_SHORT == get_type());
+  i = get_type();
+  EnableWindow   (GetDlgItem(dialog,IDC_ILVOL),(i == ILTYPE_MD_SHORT) || (i == ILTYPE_BUSYPEOPLE));
   return;
 }
 
@@ -2748,7 +2778,7 @@ void INDEX_lookup::reset () {
 //  This does the actual search.
 //
 void INDEX_lookup::search () {
-  static byte codes[] = { INFO_FIXED,INFO_FIXED,INFO_FIXED,INFO_FIXED, INFO_EXTEND,INFO_EXTEND, INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL };
+  static byte codes[] = { INFO_FIXED,INFO_FIXED,INFO_FIXED,INFO_FIXED, INFO_EXTEND,INFO_EXTEND, INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL };
   int code,type,index,vol,i,j;
   KANJI_info kanji_info;        // Class used to access the kanji information database
 //
@@ -2758,6 +2788,7 @@ void INDEX_lookup::search () {
   code  = codes[type];
   index = GetDlgItemInt(dialog,IDC_ILINDEX,NULL,false);
   vol   = GetDlgItemInt(dialog,IDC_ILVOL  ,NULL,false);
+  if (type == ILTYPE_BUSYPEOPLE) index = ((vol << 8) | index);          // Busy people is encoded as upper 8 bits is volume, and lower byte is chapter.
 //
 //  Can we get kanji data?
 //
@@ -2816,6 +2847,24 @@ void INDEX_lookup::search () {
              break;
         case ILTYPE_HALPERNKLD:     // Jack Halpern in his Kanji Learners Dictionary, published by Kodansha in 1999
              if (kanji_info.halpern_kld != index) continue;
+             break;
+        case ILTYPE_READWRITE:      // "A Guide To Reading and Writing Japanese" edited by Florence Sakade. 
+             if (kanji_info.readwrite != index) continue;
+             break;
+        case ILTYPE_TUTTLECARD:     // The Tuttle Kanji Cards, compiled by Alexander Kask. 
+             if (kanji_info.tuttlecard != index) continue;
+             break;
+        case ILTYPE_KANJIWAY:       // "The Kanji Way to Japanese Language Power" by Dale Crowley. 
+             if (kanji_info.kanjiway != index) continue;
+             break;
+        case ILTYPE_KANJICONTEXT:   // "Kanji in Context" by Nishiguchi and Kono. 
+             if (kanji_info.kanjicontext != index) continue;
+             break;
+        case ILTYPE_BUSYPEOPLE:     // "Japanese For Busy People" vols I-III, published by the AJLT. 
+             if (kanji_info.busypeople != index) continue;
+             break;
+        case ILTYPE_COMPACTKANJI:   // "Kodansha Compact Kanji Guide". 
+             if (kanji_info.kanjiguide != index) continue;
              break;
       }
       put_kanji (i|j);
@@ -2915,8 +2964,9 @@ static BOOL CALLBACK dialog_radlookup (HWND hwnd,UINT message,WPARAM wParam,LPAR
 int RADICAL_lookup::dlg_radlookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam) {
   switch (iMsg) {
     case WM_INITDIALOG:                         // Intialize, so chache dialog box pointer.
-         initialize (hwnd,true,IDC_RLRADICALS);
-         return (false);
+         initialize      (hwnd,true,IDC_RLRADICALS);
+         POCKETPC_DIALOG (hwnd);
+         return          (false);
     case WM_DESTROY:
          remove_dialog (hwnd);
          delete this;
@@ -2976,7 +3026,7 @@ int RADICAL_lookup::dlg_radlookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPar
                 }
                 break;
            case IDC_RLSTROKE:                   // A number of strokes
-                input_check (wParam);
+                input_check (hwnd,wParam);
                 if (HIWORD(wParam) != EN_CHANGE) return (true);
                 CheckDlgButton (hwnd,IDC_RLANY,GetDlgItemInt(hwnd,IDC_RLSTROKE,NULL,false) == 0);
                 break;
@@ -3330,7 +3380,8 @@ int READING_lookup::dlg_readinglookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
          initialize         (hwnd,false,IDC_RLSTRING);
          SendDlgItemMessage (hwnd,IDC_RLSTRING,JE_LOAD,0,lParam);           // Since intialize will call reset, order is importaint.
          exclude = (JWP_file *) SendDlgItemMessage(hwnd,IDC_RLSTRING,JE_GETJWPFILE,0,0);
-         return (false);
+         POCKETPC_DIALOG (hwnd);
+         return          (false);
     case WM_DESTROY:
          remove_dialog (hwnd);
          delete this;
@@ -3341,13 +3392,16 @@ int READING_lookup::dlg_readinglookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
          return  (true);
     case WM_COMMAND:
          switch (LOWORD(wParam)) {
+#ifdef WINCE_POCKETPC
+           case IDOK:
+#endif WINCE_POCKETPC
            case IDCANCEL:
                 jwp_config.cfg.reading_type = (byte) SendDlgItemMessage(hwnd,IDC_RLTYPE,CB_GETCURSEL,0,0);
                 jwp_config.cfg.reading_kun  =        IsDlgButtonChecked(hwnd,IDC_RLKUN );
                 jwp_config.cfg.reading_word =        IsDlgButtonChecked(hwnd,IDC_RLWORD);
                 break;
            case IDC_RLSTROKE:
-                input_check (wParam);
+                input_check (hwnd,wParam);
                 if (HIWORD(wParam) != EN_CHANGE) return (true);
                 break;
            default:
@@ -3629,7 +3683,7 @@ static LRESULT CALLBACK JWP_skiptype_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPA
     case WM_CREATE:
          CREATESTRUCT *create;
          create = (CREATESTRUCT *) lParam;
-         MoveWindow (hwnd,create->x,create->y,SKIP_FULLWIDTH+2*GetSystemMetrics(SM_CXEDGE),SKIP_FULLHEIGHT+2*GetSystemMetrics(SM_CYEDGE),true);
+         MoveWindow (hwnd,create->x,create->y,SKIP_FULLWIDTH+2*WIN_XEDGE,SKIP_FULLHEIGHT+2*WIN_YEDGE,true);
          return (0);
 //
 //  We render the display here.  The main display element is stored as a
@@ -3671,16 +3725,22 @@ static LRESULT CALLBACK JWP_skiptype_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPA
 //
 int SKIP_lookup::dlg_skiplookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam) {
   switch (iMsg) {
-    case WM_INITDIALOG:                         // Intialize, so chache dialog box pointer.
-         SendDlgItemMessage (hwnd,IDC_SLTYPESPIN,UDM_SETRANGE,0,MAKELONG(MAX_TYPE ,0));
-         SendDlgItemMessage (hwnd,IDC_SLS1SPIN  ,UDM_SETRANGE,0,MAKELONG(MAX_SKIP1,0));
-         SendDlgItemMessage (hwnd,IDC_SLS2SPIN  ,UDM_SETRANGE,0,MAKELONG(MAX_SKIP2,0));
-         if (!(jwp_config.kanji_flags & KIFLAG_XREF)) {
-           jwp_config.cfg.skip_misscodes = false;
-           EnableWindow (GetDlgItem(hwnd,IDC_SLMISSCODES),false);
+    case WM_INITDIALOG: {                       // Intialize, so chache dialog box pointer.
+           KANJI_info kanji_info;               // Class used to access the kanji information database
+           kanji_info.open_info  (hwnd);        // We need to open kanji info at the start to see if the miss-codes are included in the info we have.
+           kanji_info.close_info ();
+           SendDlgItemMessage (hwnd,IDC_SLTYPESPIN,UDM_SETRANGE,0,MAKELONG(MAX_TYPE ,0));
+           SendDlgItemMessage (hwnd,IDC_SLS1SPIN  ,UDM_SETRANGE,0,MAKELONG(MAX_SKIP1,0));
+           SendDlgItemMessage (hwnd,IDC_SLS2SPIN  ,UDM_SETRANGE,0,MAKELONG(MAX_SKIP2,0));
+           CheckDlgButton     (hwnd,IDC_SLMISSCODES,jwp_config.cfg.skip_misscodes);
+           if (!(jwp_config.kanji_flags & KIFLAG_XREF)) {
+             jwp_config.cfg.skip_misscodes = false;
+             EnableWindow (GetDlgItem(hwnd,IDC_SLMISSCODES),false);
+           }
+           initialize      (hwnd,true,IDC_SLTYPE);
+           POCKETPC_DIALOG (hwnd);
          }
-         initialize (hwnd,true,IDC_SLTYPE);
-         return (false);
+         return          (false);
     case WM_DESTROY:
          remove_dialog (hwnd);
          delete this;
@@ -3691,6 +3751,9 @@ int SKIP_lookup::dlg_skiplookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam
          return  (true);
     case WM_COMMAND:
          switch (LOWORD(wParam)) {
+#ifdef WINCE_POCKETPC
+           case IDOK:
+#endif WINCE_POCKETPC
            case IDCANCEL:
                 jwp_config.cfg.skip_misscodes = IsDlgButtonChecked(hwnd,IDC_SLMISSCODES);
                 break;
@@ -3701,7 +3764,7 @@ int SKIP_lookup::dlg_skiplookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam
            case IDC_SLTYPE:
            case IDC_SLS1:
            case IDC_SLS2:
-                input_check (wParam);
+                input_check (hwnd,wParam);
                 if (HIWORD(wParam) != EN_CHANGE) return (true);
                 break;
            default:
@@ -3919,13 +3982,13 @@ static LRESULT CALLBACK JWP_jistable_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPA
 //      IDC_JTINSERT      Insert into file button.
 //      IDC_JTTABLE       Kanji list.
 //
-#ifdef WINCE_PPC
+#if    (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
   #define JIS_WIDTH     10      // Number of character per line in the table.
   #define JIS_HEIGHT    10      // Number of lines in the table.
-#else  WINCE_PPC
+#else  (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
   #define JIS_WIDTH     16      // Number of character per line in the table.
   #define JIS_HEIGHT    6       // Number of lines in the table.
-#endif WINCE_PPC
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
 
 //-------------------------------------------------------------------
 //
@@ -3940,6 +4003,7 @@ int JIS_table::dlg_jistable (HWND hwnd,int message,WPARAM wParam,LPARAM lParam) 
   int i;
   switch (message) {
     case WM_INITDIALOG:                             // Intialize dialog.
+         POCKETPC_DIALOG (hwnd);                    //   Full screen dialog for PocketPC
          add_dialog (dialog = hwnd,true);           //   Cache dialog pointer.
          kanji    = get_jistfont();                 //   Cache font for JIS table
          display  = GetDlgItem(hwnd,IDC_JTTABLE);   //   Cache kanji window for scroll control.
@@ -3965,19 +4029,19 @@ int JIS_table::dlg_jistable (HWND hwnd,int message,WPARAM wParam,LPARAM lParam) 
 //  This sections process chares to the edit boxes.
 //
            case IDC_JTJISCODE:
-                input_check (wParam);
+                input_check (hwnd,wParam);
                 if (!update) goto_jis(get_hex(IDC_JTJISCODE),IDC_JTJISCODE);
                 return (true);
            case IDC_JTEUCCODE:
-                input_check (wParam);
+                input_check (hwnd,wParam);
                 if (!update) goto_jis(0x7f7f & get_hex(IDC_JTEUCCODE),IDC_JTEUCCODE);
                 return (true);
            case IDC_JTSJISCODE:
-                input_check (wParam);
+                input_check (hwnd,wParam);
                 if (!update) goto_jis(sjis2jis(get_hex(IDC_JTSJISCODE)),IDC_JTSJISCODE);
                 return (true);
            case IDC_JTUNICODE:
-                input_check (wParam);
+                input_check (hwnd,wParam);
                 i = get_hex(IDC_JTUNICODE);
                 if (!update) goto_jis(unicode2jis(i,i),IDC_JTUNICODE);
                 return (true);
@@ -4079,11 +4143,7 @@ int JIS_table::jistable_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam
     case WM_CREATE:
          CREATESTRUCT *create;
          create = (CREATESTRUCT *) lParam;
-#ifdef WINCE_PPC                                // The spacing on the PPC's seems to be different than everyone else!
-         MoveWindow (hwnd,create->x,create->y,JIS_WIDTH*BUTTON_SIZE+GetSystemMetrics(SM_CXHSCROLL)+1,JIS_HEIGHT*BUTTON_SIZE+2+2*GetSystemMetrics(SM_CYEDGE),true);
-#else  WINCE_PPC
-         MoveWindow (hwnd,create->x,create->y,JIS_WIDTH*BUTTON_SIZE+GetSystemMetrics(SM_CXHSCROLL)+1+2*GetSystemMetrics(SM_CXEDGE),JIS_HEIGHT*BUTTON_SIZE+2*GetSystemMetrics(SM_CYEDGE),true);
-#endif WINCE_PPC
+         MoveWindow          (hwnd,create->x,create->y,JIS_WIDTH*BUTTON_SIZE+GetSystemMetrics(SM_CXVSCROLL)+2*WIN_XEDGE,JIS_HEIGHT*BUTTON_SIZE+2*WIN_YEDGE,true);
          ImmAssociateContext (hwnd,NULL);       // Disable the IME for this window
          return (0);
     case WM_GETDLGCODE:

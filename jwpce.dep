@@ -1,0 +1,2778 @@
+# Microsoft Developer Studio Generated Dependency File, included by jwpce.mak
+
+!IF  "$(CFG)" == "jwpce - Win32 Release"
+
+.\jwp_cach.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 Debug"
+
+.\jwp_cach.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Release"
+
+.\jwp_cach.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Debug"
+
+.\jwp_cach.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Release"
+
+.\jwp_cach.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Debug"
+
+.\jwp_cach.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ENDIF 
+
+!IF  "$(CFG)" == "jwpce - Win32 Release"
+
+.\jwp_clip.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_clip.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 Debug"
+
+.\jwp_clip.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_clip.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Release"
+
+.\jwp_clip.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_clip.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Debug"
+
+.\jwp_clip.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_clip.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Release"
+
+.\jwp_clip.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_clip.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Debug"
+
+.\jwp_clip.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_clip.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ENDIF 
+
+!IF  "$(CFG)" == "jwpce - Win32 Release"
+
+.\jwp_conv.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 Debug"
+
+.\jwp_conv.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Release"
+
+.\jwp_conv.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Debug"
+
+.\jwp_conv.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Release"
+
+.\jwp_conv.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Debug"
+
+.\jwp_conv.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ENDIF 
+
+!IF  "$(CFG)" == "jwpce - Win32 Release"
+
+.\jwp_dict.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_dict.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 Debug"
+
+.\jwp_dict.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_dict.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Release"
+
+.\jwp_dict.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_dict.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Debug"
+
+.\jwp_dict.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_dict.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Release"
+
+.\jwp_dict.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_dict.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Debug"
+
+.\jwp_dict.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_dict.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ENDIF 
+
+!IF  "$(CFG)" == "jwpce - Win32 Release"
+
+.\jwp_edit.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_flio.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 Debug"
+
+.\jwp_edit.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_flio.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Release"
+
+.\jwp_edit.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Debug"
+
+.\jwp_edit.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_flio.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Release"
+
+.\jwp_edit.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Debug"
+
+.\jwp_edit.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_flio.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ENDIF 
+
+!IF  "$(CFG)" == "jwpce - Win32 Release"
+
+.\jwp_file.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_dict.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_lkup.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 Debug"
+
+.\jwp_file.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_dict.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_lkup.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Release"
+
+.\jwp_file.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_dict.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_lkup.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Debug"
+
+.\jwp_file.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_dict.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_lkup.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Release"
+
+.\jwp_file.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_dict.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_lkup.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Debug"
+
+.\jwp_file.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_dict.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_lkup.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ENDIF 
+
+!IF  "$(CFG)" == "jwpce - Win32 Release"
+
+.\jwp_find.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_find.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 Debug"
+
+.\jwp_find.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_find.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Release"
+
+.\jwp_find.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_find.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Debug"
+
+.\jwp_find.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_find.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Release"
+
+.\jwp_find.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_find.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Debug"
+
+.\jwp_find.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_find.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ENDIF 
+
+!IF  "$(CFG)" == "jwpce - Win32 Release"
+
+.\jwp_flio.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_file.h"\
+	".\jwp_flio.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 Debug"
+
+.\jwp_flio.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_file.h"\
+	".\jwp_flio.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Release"
+
+.\jwp_flio.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_file.h"\
+	".\jwp_flio.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Debug"
+
+.\jwp_flio.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_file.h"\
+	".\jwp_flio.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Release"
+
+.\jwp_flio.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_file.h"\
+	".\jwp_flio.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Debug"
+
+.\jwp_flio.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_file.h"\
+	".\jwp_flio.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ENDIF 
+
+!IF  "$(CFG)" == "jwpce - Win32 Release"
+
+.\jwp_font.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 Debug"
+
+.\jwp_font.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Release"
+
+.\jwp_font.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Debug"
+
+.\jwp_font.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Release"
+
+.\jwp_font.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Debug"
+
+.\jwp_font.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ENDIF 
+
+!IF  "$(CFG)" == "jwpce - Win32 Release"
+
+.\jwp_help.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_conf.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_options.h"\
+	".\jwp_prnt.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 Debug"
+
+.\jwp_help.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_conf.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_options.h"\
+	".\jwp_prnt.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Release"
+
+.\jwp_help.cpp : \
+	".\jwp_conf.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_options.h"\
+	".\jwp_prnt.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Debug"
+
+.\jwp_help.cpp : \
+	".\jwp_conf.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_options.h"\
+	".\jwp_prnt.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Release"
+
+.\jwp_help.cpp : \
+	".\jwp_conf.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_options.h"\
+	".\jwp_prnt.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Debug"
+
+.\jwp_help.cpp : \
+	".\jwp_conf.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_options.h"\
+	".\jwp_prnt.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ENDIF 
+
+!IF  "$(CFG)" == "jwpce - Win32 Release"
+
+.\jwp_info.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_clip.h"\
+	".\jwp_conf.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 Debug"
+
+.\jwp_info.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_clip.h"\
+	".\jwp_conf.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Release"
+
+.\jwp_info.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_clip.h"\
+	".\jwp_conf.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Debug"
+
+.\jwp_info.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_clip.h"\
+	".\jwp_conf.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Release"
+
+.\jwp_info.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_clip.h"\
+	".\jwp_conf.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Debug"
+
+.\jwp_info.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_clip.h"\
+	".\jwp_conf.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ENDIF 
+
+!IF  "$(CFG)" == "jwpce - Win32 Release"
+
+.\jwp_inpt.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 Debug"
+
+.\jwp_inpt.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Release"
+
+.\jwp_inpt.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Debug"
+
+.\jwp_inpt.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Release"
+
+.\jwp_inpt.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Debug"
+
+.\jwp_inpt.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ENDIF 
+
+!IF  "$(CFG)" == "jwpce - Win32 Release"
+
+.\jwp_inst.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_prnt.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 Debug"
+
+.\jwp_inst.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_prnt.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Release"
+
+.\jwp_inst.cpp : \
+	".\jwp_conf.h"\
+	".\jwp_font.h"\
+	".\jwp_inst.h"\
+	".\jwp_options.h"\
+	".\jwp_prnt.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Debug"
+
+.\jwp_inst.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_prnt.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Release"
+
+.\jwp_inst.cpp : \
+	".\jwp_conf.h"\
+	".\jwp_font.h"\
+	".\jwp_inst.h"\
+	".\jwp_options.h"\
+	".\jwp_prnt.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Debug"
+
+.\jwp_inst.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_prnt.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ENDIF 
+
+!IF  "$(CFG)" == "jwpce - Win32 Release"
+
+.\jwp_jisc.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_uext.dat"\
+	".\jwp_ukan.dat"\
+	".\jwp_umis.dat"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 Debug"
+
+.\jwp_jisc.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_uext.dat"\
+	".\jwp_ukan.dat"\
+	".\jwp_umis.dat"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Release"
+
+.\jwp_jisc.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_ukan.dat"\
+	".\jwp_umis.dat"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Debug"
+
+.\jwp_jisc.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_uext.dat"\
+	".\jwp_ukan.dat"\
+	".\jwp_umis.dat"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Release"
+
+.\jwp_jisc.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_ukan.dat"\
+	".\jwp_umis.dat"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Debug"
+
+.\jwp_jisc.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_uext.dat"\
+	".\jwp_ukan.dat"\
+	".\jwp_umis.dat"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ENDIF 
+
+!IF  "$(CFG)" == "jwpce - Win32 Release"
+
+.\jwp_klst.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 Debug"
+
+.\jwp_klst.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Release"
+
+.\jwp_klst.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Debug"
+
+.\jwp_klst.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Release"
+
+.\jwp_klst.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Debug"
+
+.\jwp_klst.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ENDIF 
+
+!IF  "$(CFG)" == "jwpce - Win32 Release"
+
+.\jwp_lkup.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_lkup.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 Debug"
+
+.\jwp_lkup.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_lkup.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Release"
+
+.\jwp_lkup.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_lkup.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Debug"
+
+.\jwp_lkup.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_lkup.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Release"
+
+.\jwp_lkup.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_lkup.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Debug"
+
+.\jwp_lkup.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_lkup.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ENDIF 
+
+!IF  "$(CFG)" == "jwpce - Win32 Release"
+
+.\jwp_misc.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 Debug"
+
+.\jwp_misc.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Release"
+
+.\jwp_misc.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Debug"
+
+.\jwp_misc.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Release"
+
+.\jwp_misc.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Debug"
+
+.\jwp_misc.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ENDIF 
+
+!IF  "$(CFG)" == "jwpce - Win32 Release"
+
+.\jwp_para.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 Debug"
+
+.\jwp_para.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Release"
+
+.\jwp_para.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Debug"
+
+.\jwp_para.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Release"
+
+.\jwp_para.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Debug"
+
+.\jwp_para.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ENDIF 
+
+!IF  "$(CFG)" == "jwpce - Win32 Release"
+
+.\jwp_prnt.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 Debug"
+
+.\jwp_prnt.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Release"
+
+.\jwp_prnt.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Debug"
+
+.\jwp_prnt.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Release"
+
+.\jwp_prnt.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Debug"
+
+.\jwp_prnt.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_inpt.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ENDIF 
+
+!IF  "$(CFG)" == "jwpce - Win32 Release"
+
+.\jwp_stat.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 Debug"
+
+.\jwp_stat.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Release"
+
+.\jwp_stat.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Debug"
+
+.\jwp_stat.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Release"
+
+.\jwp_stat.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Debug"
+
+.\jwp_stat.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ENDIF 
+
+!IF  "$(CFG)" == "jwpce - Win32 Release"
+
+.\jwp_undo.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 Debug"
+
+.\jwp_undo.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Release"
+
+.\jwp_undo.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Debug"
+
+.\jwp_undo.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Release"
+
+.\jwp_undo.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Debug"
+
+.\jwp_undo.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_conf.h"\
+	".\jwp_file.h"\
+	".\jwp_font.h"\
+	".\jwp_jisc.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ENDIF 
+
+!IF  "$(CFG)" == "jwpce - Win32 Release"
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 Debug"
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Release"
+
+.\jwp_wnce.cpp : \
+	".\jwp_options.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Debug"
+
+.\jwp_wnce.cpp : \
+	".\jwp_options.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Release"
+
+.\jwp_wnce.cpp : \
+	".\jwp_options.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Debug"
+
+.\jwp_wnce.cpp : \
+	".\jwp_options.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ENDIF 
+
+!IF  "$(CFG)" == "jwpce - Win32 Release"
+
+.\jwpce.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_clip.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_dict.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_find.h"\
+	".\jwp_flio.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_inst.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_lkup.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 Debug"
+
+.\jwpce.cpp : \
+	"..\..\..\..\program files\microsoft visual studio\vc98\include\basetsd.h"\
+	".\jwp_cach.h"\
+	".\jwp_clip.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_dict.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_find.h"\
+	".\jwp_flio.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_inst.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_lkup.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Release"
+
+.\jwpce.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_clip.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_dict.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_find.h"\
+	".\jwp_flio.h"\
+	".\jwp_font.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_inst.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_lkup.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE MIPS) Debug"
+
+.\jwpce.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_clip.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_dict.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_find.h"\
+	".\jwp_flio.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_inst.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_lkup.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Release"
+
+.\jwpce.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_clip.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_dict.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_find.h"\
+	".\jwp_flio.h"\
+	".\jwp_font.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_inst.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_lkup.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ELSEIF  "$(CFG)" == "jwpce - Win32 (WCE SH3) Debug"
+
+.\jwpce.cpp : \
+	".\jwp_cach.h"\
+	".\jwp_clip.h"\
+	".\jwp_conf.h"\
+	".\jwp_conv.h"\
+	".\jwp_dict.h"\
+	".\jwp_edit.h"\
+	".\jwp_file.h"\
+	".\jwp_find.h"\
+	".\jwp_flio.h"\
+	".\jwp_font.h"\
+	".\jwp_help.h"\
+	".\jwp_info.h"\
+	".\jwp_inpt.h"\
+	".\jwp_inst.h"\
+	".\jwp_jisc.h"\
+	".\jwp_klst.h"\
+	".\jwp_lkup.h"\
+	".\jwp_misc.h"\
+	".\jwp_options.h"\
+	".\jwp_para.h"\
+	".\jwp_prnt.h"\
+	".\jwp_stat.h"\
+	".\jwp_undo.h"\
+	".\jwp_wnce.h"\
+	".\jwpce.h"\
+	
+
+!ENDIF 
+
+.\jwpce.rc : \
+	".\alticon.ico"\
+	".\cursor.bmp"\
+	".\fileicon.ico"\
+	".\icon1.ico"\
+	".\radicals.bmp"\
+	".\strokes.bmp"\
+	

@@ -1,7 +1,9 @@
 //===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
-//  All rights reserved.                                             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2004, 2005             //
+//                                                                   //
+//  JWPce is free sotware distributed under the terms of the         //
+//  GNU General Public License.                                      //
 //                                                                   //
 //  The code do do conversion between ECU, JIS, and Shift-JIS        //
 //  was taken from jconv.c which is copyright by Ken R. Lunde,       //
@@ -91,6 +93,7 @@
 //      from me.
 //
 #include "jwpce.h"
+#include "jwp_conf.h"
 #include "jwp_file.h"
 #include "jwp_inpt.h"
 #include "jwp_jisc.h"
@@ -222,7 +225,9 @@ int ascii2unicode (int ch) {
 //  character processing into the table used for the local Code page.  
 //
 void initialize_cp () {
-  switch (GetACP()) {
+  int page;
+  if (!(page = jwp_config.cfg.code_page)) page = GetACP();
+  switch (page) {
     case 1250: ext_unicode = cp1250; break;
     case 1251: ext_unicode = cp1251; break;
     case 1253: ext_unicode = cp1253; break;
@@ -360,7 +365,7 @@ int unicode2jis (int ch,int bad) {
   if ((ch <= 0x007e)                  ) return (ch);                // ASCII
   if ((ch >= 0x3041) && (ch <= 0x3093)) return (ch-0x3041+0x2421);  // Hiragana
   if ((ch >= 0x30a1) && (ch <= 0x30f6)) return (ch-0x30a1+0x2521);  // Katakana
-  if ((ch >= 0x0391) && (ch <= 0x03c9)) {                           // Greek
+  if ((ext_unicode != cp1253) && (ch >= 0x0391) && (ch <= 0x03c9)) {// Greek
     if (ch <= 0x03a1) return (ch-0x0391+0x2621);
     if (ch == 0x03a2) return (0);
     if (ch <= 0x03a9) return (ch-0x0392+0x2621);
@@ -370,13 +375,15 @@ int unicode2jis (int ch,int bad) {
     if (ch <= 0x03c9) return (ch-0x0392+0x2621);
     return (0);
   }
-  if (ch == 0x0401) return (0x2727);                                // Cyrillic
-  if (ch == 0x0451) return (0x2757);
-  if ((ch >= 0x0410) && (ch <= 0x044f)) {
-    if (ch <= 0x0415) return (ch-0x0410+0x2721);
-    if (ch <= 0x042f) return (ch-0x0416+0x2728);
-    if (ch <= 0x0435) return (ch-0x0430+0x2751);
-    if (ch <= 0x044f) return (ch-0x0436+0x2758);
+  if (ext_unicode != cp1251) {                                      // Cyrillic
+    if (ch == 0x0401) return (0x2727);                                
+    if (ch == 0x0451) return (0x2757);
+    if ((ch >= 0x0410) && (ch <= 0x044f)) {
+      if (ch <= 0x0415) return (ch-0x0410+0x2721);
+      if (ch <= 0x042f) return (ch-0x0416+0x2728);
+      if (ch <= 0x0435) return (ch-0x0430+0x2751);
+      if (ch <= 0x044f) return (ch-0x0436+0x2758);
+    }
   }
   for (i = 0; i < NUMBER_KANJIUNICODE; i++) {                       // The kanji
     if (kanji_unicode[i] == ch) {

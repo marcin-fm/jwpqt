@@ -1,7 +1,9 @@
 //===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
-//  All rights reserved.                                             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2004, 2005             //
+//                                                                   //
+//  JWPce is free sotware distributed under the terms of the         //
+//  GNU General Public License.                                      //
 //                                                                   //
 //===================================================================//
 
@@ -494,6 +496,7 @@ void JWP_file::do_key (int key,int ctrl,int shift) {
          selection      (shift);
          if (!ctrl) left ();
            else {
+             selection (shift);
              if (!cursor.bof()) do_key (VK_LEFT,false,shift);
              while (true) {
                i = char_class(cursor.get_char());
@@ -900,14 +903,15 @@ void JWP_file::do_key (int key,int ctrl,int shift) {
 //  UP -- <ctrl>  -- kana->kanji convertion forward (right).
 //        <plain> -- Up one line.
 //        <shift> -- Extend selection.
+//        SPECIAL -- On PPC/PocketPC up during a kanji conversion is taken as convert.
 //
     case VK_UP:
-#ifdef WINCE_PPC
+#if (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
          if ((sel.type == SELECT_KANJI) || (sel.type == SELECT_CONVERT)) {
            convert (CONVERT_RIGHT);
            break;
          }
-#endif WINCE_PPC
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
          if (ctrl) {
            convert (CONVERT_RIGHT);
            break;
@@ -921,17 +925,18 @@ void JWP_file::do_key (int key,int ctrl,int shift) {
          cursor.align (this,x_cursor);
          break;
 //
-//  UP -- <ctrl>  -- kana->kanji convertion backward (left).
-//        <plain> -- Down one line.
-//        <shift> -- Extend selection.
+//  DOWN -- <ctrl>  -- kana->kanji convertion backward (left).
+//          <plain> -- Down one line.
+//          <shift> -- Extend selection.
+//          SPECIAL -- On PPC/PocketPC down during a kanji conversion is taken as convert.
 //
     case VK_DOWN:
-#ifdef WINCE_PPC
+#if (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
          if ((sel.type == SELECT_KANJI) || (sel.type == SELECT_CONVERT)) {
            convert (CONVERT_RIGHT);
            break;
          }
-#endif WINCE_PPC
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
          if (ctrl) {
            convert (CONVERT_LEFT);
            break;
@@ -1218,7 +1223,6 @@ void JWP_file::draw_line (HDC hdc,Paragraph *para,Line *line,int y,int xmin,int 
   KANJI  ch;
   RECT   rect;
   int    i,j,x;
-  static TCHAR temp[2] = { 0, 0 };
 #ifdef USE_REDRAW_LINE_BLANKING
   rect.left   = (filetype == FILETYPE_EDIT) ? 1 : 0;
   rect.right  = width-1;
@@ -1257,8 +1261,7 @@ void JWP_file::draw_line (HDC hdc,Paragraph *para,Line *line,int y,int xmin,int 
       font->kanji->draw (hdc,ch,x,y);  
     }
     else if (ch != '\t') {                          //   ASCII character
-      temp[0] = (TCHAR) ch;
-      TextOut  (hdc,x,y-font->height,temp,1);
+      ascii_draw (hdc,x,y-font->height,ch);
     }
     x = font->hadvance (x,ch);                      //   Advance position
     if (x > xmax) break;
@@ -1734,8 +1737,17 @@ void JWP_file::sysname (int id) {
 void JWP_file::title () {
   TCHAR buffer[512];
   if (!this || (filetype & FILETYPE_WORKMASK)) return;
+#if    (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
+  TCHAR *ptr1,*ptr2;
+  for (ptr1 = ptr2 = name; *ptr1; ptr1++) {
+    if (*ptr1 == '\\') ptr2 = ptr1;
+  }
+  wsprintf (buffer,TEXT("%c %s"),changed ? '*' : ' ',(ptr2 == name) ? ptr2 : ptr2+1);
+  SetWindowText (main_window,buffer);
+#else  (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
   wsprintf (buffer,TEXT("%s %c %s"),VERSION_NAME,changed ? '*' : '-',name);
   SetWindowText (main_window,buffer);
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
   return;
 }
 

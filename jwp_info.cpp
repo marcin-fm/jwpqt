@@ -1,7 +1,9 @@
 //===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
-//  All rights reserved.                                             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2004, 2005             //
+//                                                                   //
+//  JWPce is free sotware distributed under the terms of the         //
+//  GNU General Public License.                                      //
 //                                                                   //
 //  The database read by JWPce is dirived directly from KANJIDIC     //
 //  database dirived by Jim Breen.  Please see the _cpright.txt file //
@@ -24,8 +26,6 @@
 //
 //      MAGIC    -- 4 byte binary number used to verify the file type.
 //      FLAGS    -- Flags indicating what is written into the file:
-//      COUNT    -- Number of entries written into the file.
-//      MAXJIS   -- Highest JIS code included in the file.
 //
 //                  KIFLAG_PINYIN (0x0001) -- Has pin yin data.
 //                  KIFLAG_KOREAN (0x0002) -- Has Korean data.
@@ -33,6 +33,9 @@
 //                  KIFLAG_EXTRA  (0x0008) -- Has extended data filed
 //                  KIFLAG_EVAR   (0x0010) -- Has extended variable data
 //                  KIFLAG_XREF   (0x0020) -- Has cross refference data
+//
+//      COUNT    -- Number of entries written into the file.
+//      MAXJIS   -- Highest JIS code included in the file.
 //
 //      FIXED    -- A fixed file part.  This contains a sequency of 
 //                  6355 kinfo structures representing each kanji.
@@ -192,34 +195,31 @@
                                         //   kun-yomi reading in the count kanji
                                         //   dialog box.
 
-#define INFO_MAXITEM INFO_KANJILEARN    // Last info-item code.
+#if (!defined(WINCE))                       // Windows version.
 
-
-#if (!defined(WINCE))
-
-  #define INFO_MAXLINES   20                // Maxinum number of displayable items for info dialog.
+  #define INFO_MAXLINES   27                // Maxinum number of displayable items for info dialog.
   #define INFO_FIRSTINDEX 0                 // First index into the aray of info dialog items.
   #define INFO_FIRST      IDC_KILABEL13     // First dynamic control for info dialog.
   #define INFO_LAST       IDC_KIITEM21      // Last dynamic control for info dialog.
-  #define MORE_MAXLINES   8                 // Maximum number of items for more info dialog
+  #define MORE_MAXLINES   13                // Maximum number of items for more info dialog
   #define MORE_FIRSTINDEX 13                // First index into items array for more info dialog.
   #define MORE_FIRST      0                 // First dynamic control for more info dialog.
   #define MORE_LAST       0                 // Last dynamic control for more info dialog.
   #define COLOR_BUSHU     COLOR_BTNFACE     // Bushu background color.
 
-#elif (!defined(WINCE_PPC))
+#elif (!(defined(WINCE_PPC) || defined(WINCE_POCKETPC)))    // HPC version
 
   #define INFO_MAXLINES   9                 // Maxinum number of displayable items for info dialog.
   #define INFO_FIRSTINDEX 0                 // First index into the aray of info dialog items.
   #define INFO_FIRST      IDC_KILABEL9      // First dynamic control for info dialog.
   #define INFO_LAST       IDC_KIITEM10      // Last dynamic control for info dialog.
-  #define MORE_MAXLINES   11                // Maximum number of items for more info dialog
+  #define MORE_MAXLINES   17                // Maximum number of items for more info dialog
   #define MORE_FIRSTINDEX 9                 // First index into items array for more info dialog.
   #define MORE_FIRST      0                 // First dynamic control for more info dialog.
   #define MORE_LAST       0                 // Last dynamic control for more info dialog.
   #define COLOR_BUSHU     COLOR_BTNFACE     // Bushu background color
 
-#else
+#else                                       // PPC/PocketPC version        
 
   #define INFO_MAXLINES   6                 // Maxinum number of displayable items for info dialog.
   #define INFO_FIRSTINDEX 0                 // First index into the aray of info dialog items.
@@ -229,7 +229,7 @@
   #define MORE_FIRSTINDEX 6                 // First index into items array for more info dialog.
   #define MORE_FIRST      0                 // First dynamic control for more info dialog.
   #define MORE_LAST       0                 // Last dynamic control for more info dialog.
-  #define XREF_MAXLINES   2                 // Maximum number of items for more info dialog
+  #define XREF_MAXLINES   8                 // Maximum number of items for more info dialog
   #define XREF_FIRSTINDEX 18                // First index into items array for more info dialog.
   #define XREF_FIRST      0                 // First dynamic control for more info dialog.
   #define XREF_LAST       0                 // Last dynamic control for more info dialog.
@@ -257,7 +257,8 @@ static SIZE_window count_size;                  // Class used to allow dynamic s
 //
 static short info_codes[] = { IDS_KI_BLANK,
                               IDS_KI_ITEMTYPE,IDS_KI_ITEMJISCODE,IDS_KI_ITEMSHIFTJIS,IDS_KI_ITEMUNICODE,IDS_KI_ITEMSTROKES,IDS_KI_ITEMGRADE,IDS_KI_ITEMHELSON,IDS_KI_ITEMHALPERN,IDS_KI_ITEMSPAHN,IDS_KI_ITEMFOURCORNERS,
-                              IDS_KI_ITEMMOROHASHI,IDS_KI_ITEMPINYIN,IDS_KI_ITEMKOREAN,IDS_KI_ITEMFREQUENCY,IDS_KI_ITEMHENSHALL,IDS_KI_ITEMGAKKEN,IDS_KI_ITEMHEISIG,IDS_KI_ITEMONEILL,IDS_KI_ITEMDEROO,IDS_KI_ITEMKANJILEARN
+                              IDS_KI_ITEMMOROHASHI,IDS_KI_ITEMPINYIN,IDS_KI_ITEMKOREAN,IDS_KI_ITEMFREQUENCY,IDS_KI_ITEMHENSHALL,IDS_KI_ITEMGAKKEN,IDS_KI_ITEMHEISIG,IDS_KI_ITEMONEILL,IDS_KI_ITEMDEROO,IDS_KI_ITEMKANJILEARN,
+                              IDS_KI_READWRITE,IDS_KI_TUTTLECARD,IDS_KI_KANJIWAY,IDS_KI_KANJICONTEXT,IDS_KI_BUSYPEOPLE,IDS_KI_COMPACTGUIDE,
                             };
 
 //--------------------------------
@@ -365,14 +366,14 @@ static BOOL CALLBACK dialog_moreinfo (HWND hwnd,UINT message,WPARAM wParam,LPARA
 //  with the dialog.  The routine then always recalls the saved 
 //  parameter and uses it to call the object's dialog box procedure.
 //
-#ifdef WINCE_PPC
+#if (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
 static BOOL CALLBACK dialog_xrefinfo (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam) {
   KANJI_info *info;
   if (message == WM_INITDIALOG) SetWindowLong (hwnd,GWL_USERDATA,lParam);
   info = (KANJI_info *) GetWindowLong(hwnd,GWL_USERDATA);
   return (info->dlg_xrefinfo(hwnd,message,wParam,lParam));
 }
-#endif WINCE_PPC
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
 
 //--------------------------------
 //
@@ -576,7 +577,7 @@ static LRESULT CALLBACK JWP_bushu_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM
 //  should be created with a call to DialogBoxParam, so the kanji to 
 //  be displayed in the dialog can be passed to the program!
 //
-#ifdef WINCE_PPC
+#if (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
 static byte kanji_view = false; // This variable is used to keep this 
                                 // dialog from being created more than
                                 // once.  When the dialog is entered,
@@ -612,7 +613,7 @@ static BOOL CALLBACK dialog_kanjiview (HWND hwnd,UINT message,WPARAM wParam,LPAR
   }
   return (false);
 }
-#endif WINCE_PPC
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
 
 //--------------------------------
 //
@@ -628,9 +629,8 @@ static LRESULT CALLBACK JWP_kanji_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM
   RECT          rect,full;  // Rectangle
   KANJI_font   *big;        // Large kanji font for window.
   HFONT         font;       // Font for ascii font.
-  SIZE          size;       // Used to get the size of the ascii characters.
-  TCHAR         text[2];    // Temp buffer to display ascii characters.
   int           kanji;      // The character
+  int           width;      // Display width of character
 
   switch (iMsg) {
 //
@@ -650,12 +650,12 @@ static LRESULT CALLBACK JWP_kanji_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM
 //  For PPC version, we allow clicking on the small kanji view to 
 //  make a large kanji view.
 //
-#ifdef WINCE_PPC
+#if (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
     case WM_LBUTTONDOWN:
          kanji = GetWindowLong(hwnd,0);
          if (kanji && !kanji_view) JDialogBox (IDD_KANJIVIEW,hwnd,(DLGPROC) dialog_kanjiview,kanji);
          return (0);
-#endif WINCE_PPC
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
 //
 //  Double click
 //
@@ -696,21 +696,19 @@ static LRESULT CALLBACK JWP_kanji_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM
              lf.lfHeight = rect.top-rect.bottom;
              if (!(font = CreateFontIndirect(&lf))) return (true);
              font = (HFONT) SelectObject (hdc,font);
-             text[0] = (TCHAR) kanji;
-             text[1] = 0;
              SetBkMode (hdc,TRANSPARENT);
-             GetTextExtentPoint32 (hdc,text,1,&size);
+             width = ascii_width(hdc,kanji);
 #ifdef PROCESS_WIDE_CHARACTERS
-             if (size.cx > rect.right-rect.left) {    // Character is too wide.
+             if (width > rect.right-rect.left) {    // Character is too wide.
                SelectObject (hdc,font);
                DeleteObject (font);
-               lf.lfHeight = ((rect.top-rect.bottom)*(rect.right-rect.left))/size.cx;
+               lf.lfHeight = ((rect.top-rect.bottom)*(rect.right-rect.left))/width;
                if (!(font = CreateFontIndirect (&lf))) return (true);
-               font = (HFONT) SelectObject (hdc,font);
-               GetTextExtentPoint32 (hdc,text,1,&size);
+               font  = (HFONT) SelectObject (hdc,font);
+               width = ascii_width(hdc,kanji);
              }
 #endif PROCESS_WIDE_CHARACTERS
-             TextOut (hdc,rect.left+(rect.right-rect.left-size.cx)/2,rect.top,text,1);
+             ascii_draw   (hdc,rect.left+(rect.right-rect.left-width)/2,rect.top,kanji);
              SelectObject (hdc,font);
              DeleteObject (font);
            }
@@ -873,6 +871,7 @@ int KANJI_info::dlg_kanjiinfo (HWND hwnd,UINT message,WPARAM wParam,LPARAM lPara
          info_size.wm_init (hwnd,IDC_KILIST,&jwp_config.cfg.size_info,false,INFO_FIRST,INFO_LAST);
          add_dialog        (hwnd,true);
          init_dialog       (hwnd);
+         POCKETPC_DIALOG   (hwnd);
          return            (false);
 //
 //  Changing the size
@@ -926,11 +925,11 @@ int KANJI_info::dlg_kanjiinfo (HWND hwnd,UINT message,WPARAM wParam,LPARAM lPara
            case IDC_KIMORE:
                 JDialogBox (IDD_MOREINFO,hwnd,(DLGPROC) dialog_moreinfo,(LONG) this);
                 return (true);
-#ifdef WINCE_PPC
+#if (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
            case IDC_KIXREF:
                 JDialogBox (IDD_XREFINFO,hwnd,(DLGPROC) dialog_xrefinfo,(LONG) this);
                 return (true);
-#endif WINCE_PPC
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
            case IDC_KIBIGKANJI:
                 JWP_file *file;
                 file = file_list.get(NULL);
@@ -963,11 +962,12 @@ int KANJI_info::dlg_moreinfo (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam
 //
     case WM_INITDIALOG: 
          more_size.wm_init (hwnd,IDC_MIXREF,&jwp_config.cfg.size_more,false,MORE_FIRST,MORE_LAST);
-#ifndef WINCE_PPC
+#if (!(defined(WINCE_PPC) || defined(WINCE_POCKETPC)))
          format_xref       (hwnd);
-#endif  WINCE_PPC
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
          for (i = 0; i < MORE_MAXLINES; i++) format_line (hwnd,i,jwp_config.cfg.kanji_info[i+MORE_FIRSTINDEX]);
-         return (false);
+         POCKETPC_DIALOG (hwnd);
+         return          (false);
 //
 //  Size message processing.
 //
@@ -994,11 +994,11 @@ int KANJI_info::dlg_moreinfo (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam
            case IDCANCEL:
                 EndDialog (hwnd,false);
                 return (true);
-#ifdef WINCE_PPC
+#if (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
            case IDC_MINEXT:
                 JDialogBox (IDD_XREFINFO,hwnd,(DLGPROC) dialog_xrefinfo,(LONG) this);
                 return (true);
-#endif WINCE_PPC
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
            case IDC_MIXREF:
            case IDC_MIINSERT:
                 SendDlgItemMessage (hwnd,IDC_MIXREF,JL_INSERTTOFILE,0,0);
@@ -1015,7 +1015,7 @@ int KANJI_info::dlg_moreinfo (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam
 //  is only used on PPC machines, and only because there is not sufficient 
 //  room for these items in any of the other dailog pages.
 //
-#ifdef  WINCE_PPC
+#if (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
 int KANJI_info::dlg_xrefinfo (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam) {
   int   i;
   switch (message) {
@@ -1028,7 +1028,8 @@ int KANJI_info::dlg_xrefinfo (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam
          more_size.wm_init (hwnd,IDC_MIXREF,&jwp_config.cfg.size_more,false,XREF_FIRST,XREF_LAST);
          format_xref       (hwnd);
          for (i = 0; i < XREF_MAXLINES; i++) format_line (hwnd,i,jwp_config.cfg.kanji_info[i+XREF_FIRSTINDEX]);
-         return (false);
+         POCKETPC_DIALOG (hwnd);
+         return          (false);
 //
 //  Process help messages
 //
@@ -1053,7 +1054,7 @@ int KANJI_info::dlg_xrefinfo (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam
   }
   return (false);
 }
-#endif WINCE_PPC
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
 
 //--------------------------------
 //
@@ -1189,6 +1190,27 @@ void KANJI_info::format_line (HWND hwnd,int line,int code) {
     case INFO_KANJILEARN:
          if (halpern_kld) SetDlgItemInt (hwnd,line,halpern_kld,false);
          break;
+    case INFO_READWRITE:
+         if (readwrite) SetDlgItemInt (hwnd,line,readwrite,false);
+         break;
+    case INFO_TUTTLECARDS:
+         if (tuttlecard) SetDlgItemInt (hwnd,line,tuttlecard,false);
+         break;         
+    case INFO_KANJIWAY:
+         if (kanjiway) SetDlgItemInt (hwnd,line,kanjiway,false);
+         break;
+    case INFO_KANJICONTEXT:
+         if (kanjicontext) SetDlgItemInt (hwnd,line,kanjicontext,false);
+         break;         
+    case INFO_COMPACTGUIDE:
+         if (kanjiguide) SetDlgItemInt (hwnd,line,kanjiguide,false);
+         break;
+    case INFO_BUSYPEOPLE:
+         if (busypeople) {
+           format_string  (buffer1,IDS_KI_BUSYFORMAT,busypeople >> 8,busypeople & 0x00ff);
+           SetDlgItemText (hwnd,line,buffer1);
+         }         
+         break;
     case INFO_BLANK:
     default:
          break;
@@ -1214,7 +1236,7 @@ void KANJI_info::format_xref (HWND hwnd) {
   if (kinfo.extra) {;
     line.initialize (GetDlgItem(hwnd,IDC_MIXREF));    // Initialize buffer for output.
     for (ptr = xref; xref && *ptr; ptr += 3) {
-      i = *((ushort *) (ptr+1));
+      i = (((ushort) ptr[2]) << 8) | ((ushort) ptr[1]);
       switch (*ptr) {
         case 'n':
              format_string (buffer,IDS_MI_NELSON,i);
@@ -1308,6 +1330,7 @@ void KANJI_info::get_info (int ch,int amount) {
     memcpy (&extend,ptr,sizeof(struct extend));                     // Fixed part of the extended data.
     if (amount == INFO_EXTEND) return;
     freq = sh_kana = henshall = gakken = heisig = oneill = deroo = halpern_kld = oneill_ek = 0;     // Zero out the data fields.
+    busypeople = kanjiway = kanjiguide = kanjicontext = readwrite = tuttlecard = 0;
     fc_main2 = -1;
     xref     = NULL;
     for (ptr += sizeof(struct extend); *ptr; ptr += 3) {            // Process the data list.
@@ -1317,16 +1340,22 @@ void KANJI_info::get_info (int ch,int amount) {
       }                                                             //   until later.
       i = (((ushort) ptr[2]) << 8) | ptr[1];                        // Get interger parameter.
       switch (*ptr) {                                               // Common entries 
-        case 'F': freq        = i; break;
-        case 'I': sh_kana     = i; break;
-        case 'E': henshall    = i; break;
-        case 'K': gakken      = i; break;
-        case 'L': heisig      = i; break;
-        case 'O': oneill      = i; break;
-        case 'Q': fc_main2    = i; break;
-        case 'D': deroo       = i; break;
-        case 'H': halpern_kld = i; break;
-        case 'N': oneill_ek   = i; break;
+        case 'B': busypeople   = i; break;      // "Japanese For Busy People" vols I-III, published by the AJLT. The codes are the volume.chapter.
+        case 'C': kanjiway     = i; break;      // "The Kanji Way to Japanese Language Power" by Dale Crowley.
+        case 'D': deroo        = i; break;      // Father Joseph De Roo, and published in his book "2001 Kanji" (Bojinsha). 
+        case 'E': henshall     = i; break;
+        case 'F': freq         = i; break;      // Frequency of use
+        case 'G': kanjiguide   = i; break;      // "Kodansha Compact Kanji Guide".
+        case 'H': halpern_kld  = i; break;      // Jack Halpern in his Kanji Learners Dictionary, published by Kodansha in 1999. The numbers have been provided by Mr Halpern.
+        case 'I': sh_kana      = i; break;
+        case 'J': kanjicontext = i; break;      // "Kanji in Context" by Nishiguchi and Kono.
+        case 'K': gakken       = i; break;      // Gakken Kanji Dictionary ("A New Dictionary of Kanji Usage"). 
+        case 'L': heisig       = i; break;      // "Remembering The Kanji" by James Heisig.
+        case 'N': oneill_ek    = i; break;      // P.G. O'Neill's Essential Kanji (ISBN 0-8348-0222-8).
+        case 'O': oneill       = i; break;      // "Japanese Names", by P.G. O'Neill. (Weatherhill, 1972)
+        case 'Q': fc_main2     = i; break;      // "Four Corner" (second code).
+        case 'S': readwrite    = i; break;      // "A Guide To Reading and Writing Japanese" edited by Florence Sakade.
+        case 'T': tuttlecard   = i; break;      // Tuttle Kanji Cards, compiled by Alexander Kask.
         default:
              break;
       }
@@ -1547,7 +1576,8 @@ int dialog_infoconfig (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam) {
            for (j = 0; j <= INFO_MAXITEM; j++) SendDlgItemMessage (hwnd,IDC_ICITEM0+i,CB_ADDSTRING,0,(LPARAM) get_string(info_codes[j]));
            SETSEL (i,cfg->kanji_info[i]);
          }
-         return (true);
+         POCKETPC_DIALOG (hwnd);
+         return          (true);
 //
 //  Process help messages
 //
@@ -1743,7 +1773,8 @@ static BOOL CALLBACK dialog_kanjicount (HWND hwnd,UINT message,WPARAM wParam,LPA
          add_dialog (kanji_count->dialog = hwnd,true);
          SetDlgItemText (hwnd,IDC_CKNUMBER,TEXT(""));
          for (i = IDC_CKFREQUENCY; i <= IDC_CKMEANING; i++) CheckDlgButton (hwnd,i,true);
-         return (true);
+         POCKETPC_DIALOG (hwnd);
+         return          (true);
 //
 //  Shut down routine
 //
@@ -1803,7 +1834,10 @@ static BOOL CALLBACK dialog_kanjicount (HWND hwnd,UINT message,WPARAM wParam,LPA
 //
 //  This is the real work.  Count!
 //
-           case IDOK: {
+#ifndef WINCE_POCKETPC
+           case IDOK:
+#endif  WINCE_POCKETPC                
+           case IDSEARCH: {
                   KANJI_info kanji_info;        // Used to get character infomration (readings, etc).
                   EUC_buffer line;              // Used to put data into the list box.
                   int        frequency,onyomi;  // List catagories.
@@ -1898,6 +1932,9 @@ static BOOL CALLBACK dialog_kanjicount (HWND hwnd,UINT message,WPARAM wParam,LPA
 //
 //  Standard exit
 //
+#ifdef WINCE_POCKETPC
+           case IDOK:
+#endif WINCE_POCKETPC                
            case IDCANCEL:
                 DestroyWindow (hwnd);
                 return (true);

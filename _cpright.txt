@@ -8,41 +8,74 @@ JWPce Program and Documentation
 File Names:     All files distributed with the JWPce package with
                 exceptions as stated below.
 
-Copyright (C):  glenn rosenthal, 1997-2001, 2002.  All rights reserved.
+Copyright (C):  1997-2004, 2005, glenn rosenthal
 
-                Distributed under the GNU General Public License.
-                Please read GNUGPL.TXT for copyright details.
+                JWPce is free software; you can redistribute it 
+                and/or modify it under the terms of the GNU 
+                General Public License as published by the Free 
+                Software Foundation; either version 2 of the 
+                License, or (at your option) any later version.
 
-                Whenever a specific copyright notice conflicts with the
-                GNU General Public License, the specific copyright
-                provision(s) will take precedence over the GNU General
-                Public License.
+                This program is distributed in the hope that it 
+                will be useful, but WITHOUT ANY WARRANTY; without 
+                even the implied warranty of MERCHANTABILITY or 
+                FITNESS FOR A PARTICULAR PURPOSE.  See the GNU 
+                General Public License for more details. 
+
+                You should have received a copy of the GNU 
+                General Public License along with this program; 
+                if not, write to the Free Software Foundation, 
+                Inc., 59 Temple Place - Suite 330, Boston, MA  
+                02111-1307, USA.
 
 JWPce Translation Kit
 =====================
 
-Copyright (c): glenn rosenthal, 2000-2001, 2002.  All rights reserved.
+Copyright (C):  glenn rosenthal, 2000-2004, 2005.
 
-                Distributed under the GNU General Public License.
-                Please read GNUGPL.TXT for copyright details.
+                JWPce translation kit is free software; you can 
+                redistribute it and/or modify it under the terms 
+                of the GNU General Public License as published 
+                by the Free Software Foundation; either version 
+                2 of the License, or (at your option) any later 
+                version.
 
-                Whenever a specific copyright notice conflicts with the
-                GNU General Public License, the specific copyright
-                provision(s) will take precedence over the GNU General
-                Public License.
+                This program is distributed in the hope that it 
+                will be useful, but WITHOUT ANY WARRANTY; without 
+                even the implied warranty of MERCHANTABILITY or 
+                FITNESS FOR A PARTICULAR PURPOSE.  See the GNU 
+                General Public License for more details. 
+
+                You should have received a copy of the GNU 
+                General Public License along with this program; 
+                if not, write to the Free Software Foundation, 
+                Inc., 59 Temple Place - Suite 330, Boston, MA  
+                02111-1307, USA.
 
 JWPce Utilities and Tools
 ========================
 
-Copyright (c): glenn rosenthal, 1997-2001, 2002.  All rights reserved.
+Copyright (C):  glenn rosenthal, 1997-2004, 2005.
 
-                Distributed under the GNU General Public License.
-                Please read GNUGPL.TXT for copyright details.
+                JWPce tools (jindex, kinfo, rinfo, uinfo, winfo,
+                and update_1.33) are free software; you can 
+                redistribute it and/or modify it under the terms 
+                of the GNU General Public License as published 
+                by the Free Software Foundation; either version 
+                2 of the License, or (at your option) any later 
+                version.
 
-                Whenever a specific copyright notice conflicts with the
-                GNU General Public License, the specific copyright
-                provision(s) will take precedence over the GNU General
-                Public License.
+                This program is distributed in the hope that it 
+                will be useful, but WITHOUT ANY WARRANTY; without 
+                even the implied warranty of MERCHANTABILITY or 
+                FITNESS FOR A PARTICULAR PURPOSE.  See the GNU 
+                General Public License for more details. 
+
+                You should have received a copy of the GNU 
+                General Public License along with this program; 
+                if not, write to the Free Software Foundation, 
+                Inc., 59 Temple Place - Suite 330, Boston, MA  
+                02111-1307, USA.
 
 JWP Main Package (JWPce's interface started as a clone of JWP's interface).
 ================

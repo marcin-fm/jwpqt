@@ -106,7 +106,7 @@ EXSTYLE WS_EX_CONTEXTHELP | 0x80000000L
 CAPTION "Text Found!"
 FONT 8, "MS Sans Serif"
 BEGIN
-    LTEXT           "Text was found!  Do you want to replace?",-1,46,6,133,8,
+    CTEXT           "Text was found!  Do you want to replace?",-1,14,6,198,8,
                     NOT WS_GROUP
     DEFPUSHBUTTON   "&Yes!",IDOK,7,22,62,14
     PUSHBUTTON      "&No",IDC_RCNOREP,81,22,62,14
@@ -114,8 +114,8 @@ BEGIN
     PUSHBUTTON      "&Cancel Replace",IDCANCEL,81,43,62,14
 END
 
-IDD_KANJIINFO DIALOG DISCARDABLE  0, 0, 378, 114
-STYLE DS_MODALFRAME | DS_CENTER | WS_MAXIMIZEBOX | WS_POPUP | WS_VISIBLE | 
+IDD_KANJIINFO DIALOG DISCARDABLE  0, 0, 381, 114
+STYLE DS_MODALFRAME | DS_CENTER | WS_MINIMIZEBOX | WS_POPUP | WS_VISIBLE | 
     WS_CAPTION | WS_SYSMENU
 EXSTYLE WS_EX_CONTEXTHELP | 0x80000000L
 CAPTION "Character Information"
@@ -149,7 +149,7 @@ BEGIN
     CONTROL         "",IDC_KIBIGKANJI,"JWP-Kanji",0xa,6,3,78,76,
                     WS_EX_CLIENTEDGE
     CONTROL         "",IDC_KILIST,"JWP-List",WS_VSCROLL | WS_TABSTOP | 0x1,
-                    213,3,159,107,WS_EX_CLIENTEDGE
+                    217,3,159,107,WS_EX_CLIENTEDGE
     LTEXT           "Spahn:",IDC_KILABEL9,89,112,46,8
     LTEXT           "",IDC_KIITEM9,138,112,74,8,NOT WS_GROUP
     LTEXT           "Spahn:",IDC_KILABEL10,89,123,46,8
@@ -214,7 +214,7 @@ BEGIN
 END
 
 IDD_DICTIONARY DIALOG DISCARDABLE  0, 0, 372, 111
-STYLE DS_MODALFRAME | DS_CENTER | WS_MAXIMIZEBOX | WS_POPUP | WS_VISIBLE | 
+STYLE DS_MODALFRAME | DS_CENTER | WS_MINIMIZEBOX | WS_POPUP | WS_VISIBLE | 
     WS_CAPTION | WS_SYSMENU
 EXSTYLE WS_EX_CONTEXTHELP | 0x80000000L
 CAPTION "Dictionary Lookup"
@@ -253,7 +253,7 @@ BEGIN
 END
 
 IDD_KANJICOUNT DIALOG DISCARDABLE  0, 0, 371, 113
-STYLE DS_MODALFRAME | DS_CENTER | WS_MAXIMIZEBOX | WS_POPUP | WS_VISIBLE | 
+STYLE DS_MODALFRAME | DS_CENTER | WS_MINIMIZEBOX | WS_POPUP | WS_VISIBLE | 
     WS_CAPTION | WS_SYSMENU
 EXSTYLE WS_EX_CONTEXTHELP | 0x80000000L
 CAPTION "Kanji Count"
@@ -284,13 +284,13 @@ BEGIN
                     116,2,251,107,WS_EX_CLIENTEDGE
 END
 
-IDD_FILES DIALOG DISCARDABLE  0, 0, 246, 98
+IDD_FILES DIALOG DISCARDABLE  0, 0, 325, 98
 STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 EXSTYLE WS_EX_CONTEXTHELP | 0x80000000L
 CAPTION "Open Files"
 FONT 8, "MS Sans Serif"
 BEGIN
-    LISTBOX         IDC_FDFILES,7,7,231,85,LBS_NOINTEGRALHEIGHT | WS_VSCROLL | 
+    LISTBOX         IDC_FDFILES,7,7,311,85,LBS_NOINTEGRALHEIGHT | WS_VSCROLL | 
                     WS_TABSTOP
 END
 
@@ -305,10 +305,10 @@ BEGIN
     PUSHBUTTON      "&No",IDCANCEL,125,55,50,14
     LTEXT           "This copy of JWPce is not the currently installed version, or some other program is using the extensions used by JWPce.",
                     IDC_STATIC,7,6,172,27
-    LTEXT           "Do you want to install this copy of JWPce?",IDC_STATIC,
-                    24,39,136,8
+    CTEXT           "Do you want to install this copy of JWPce?",IDC_STATIC,
+                    10,39,164,8
     CONTROL         "&Do not check again!",IDC_IDINSTALL,"Button",
-                    BS_AUTOCHECKBOX | WS_TABSTOP,3,73,81,10
+                    BS_AUTOCHECKBOX | WS_TABSTOP,3,73,101,10
 END
 
 IDD_ADVINSTALL DIALOG DISCARDABLE  0, 0, 306, 111
@@ -351,7 +351,7 @@ BEGIN
 END
 
 IDD_CONVERTUSER DIALOG DISCARDABLE  0, 0, 331, 110
-STYLE DS_MODALFRAME | DS_CENTER | WS_MAXIMIZEBOX | WS_POPUP | WS_VISIBLE | 
+STYLE DS_MODALFRAME | DS_CENTER | WS_MINIMIZEBOX | WS_POPUP | WS_VISIBLE | 
     WS_CAPTION | WS_SYSMENU
 EXSTYLE WS_EX_CONTEXTHELP | 0x80000000L
 CAPTION "User Kana to Kanji Conversions"
@@ -383,20 +383,20 @@ BEGIN
     LTEXT           "Ka&nji:",IDC_STATIC,6,33,18,8
     CONTROL         "",IDC_CEKANJI,"JWP-Edit",WS_TABSTOP | 0x2,30,30,182,16,
                     WS_EX_CLIENTEDGE
-    LTEXT           "Separate multiple kanji entries with /'s.",IDC_STATIC,
-                    50,52,121,8
+    CTEXT           "Separate multiple kanji entries with /'s.",IDC_STATIC,
+                    29,52,164,8
     CONTROL         "&Godan doushi (r-ending verb)",IDC_CEGODAN,"Button",
-                    BS_AUTOCHECKBOX | WS_TABSTOP,6,63,107,10
+                    BS_AUTOCHECKBOX | WS_TABSTOP,6,63,146,10
     CONTROL         "&Ichidan doushi (ru-ending verb)",IDC_CEICHIDAN,"Button",
-                    BS_AUTOCHECKBOX | WS_TABSTOP,6,74,113,10
+                    BS_AUTOCHECKBOX | WS_TABSTOP,6,74,146,10
     CONTROL         "",IDC_EDITMODE,"JWP-Mode",0x1,196,7,16,14,
                     WS_EX_WINDOWEDGE
     CONTROL         "I-keiyoushi (i-&adjective)",IDC_CEIADJ,"Button",
-                    BS_AUTOCHECKBOX | WS_TABSTOP,6,85,87,10
+                    BS_AUTOCHECKBOX | WS_TABSTOP,6,85,146,10
 END
 
 IDD_DICTUSER DIALOG DISCARDABLE  0, 0, 355, 110
-STYLE DS_MODALFRAME | DS_CENTER | WS_MAXIMIZEBOX | WS_POPUP | WS_VISIBLE | 
+STYLE DS_MODALFRAME | DS_CENTER | WS_MINIMIZEBOX | WS_POPUP | WS_VISIBLE | 
     WS_CAPTION | WS_SYSMENU
 EXSTYLE WS_EX_CONTEXTHELP | 0x80000000L
 CAPTION "User Dictionary"
@@ -417,8 +417,8 @@ BEGIN
 END
 
 IDD_DICTUSEREDIT DIALOG DISCARDABLE  25, 41, 249, 73
-STYLE DS_ABSALIGN | DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_VISIBLE | 
-    WS_CAPTION | WS_SYSMENU
+STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_VISIBLE | WS_CAPTION | 
+    WS_SYSMENU
 EXSTYLE WS_EX_CONTEXTHELP | 0x80000000L
 CAPTION "Edit User Dictionary"
 FONT 8, "MS Sans Serif"
@@ -431,8 +431,8 @@ BEGIN
                     WS_EX_CLIENTEDGE
     LTEXT           "&Meaning:",IDC_STATIC,4,44,30,8
     EDITTEXT        IDC_DEMEANING,38,42,207,14,ES_AUTOHSCROLL
-    LTEXT           "Separate multiple meanings using the / character.",
-                    IDC_STATIC,46,60,157,8
+    CTEXT           "Separate multiple meanings using the / character.",
+                    IDC_STATIC,25,60,200,8
     CONTROL         "",IDC_EDITMODE,"JWP-Mode",0x1,229,3,16,14,
                     WS_EX_WINDOWEDGE
 END
@@ -469,35 +469,35 @@ BEGIN
     CONTROL         "",IDC_DSDESCRIPTION,"JWP-Edit",WS_TABSTOP | 0x2,8,43,
                     237,16,WS_EX_CLIENTEDGE
     PUSHBUTTON      "&Refresh",IDC_DSUPDATE,254,43,50,14
-    LTEXT           "Format",IDC_STATIC,8,64,22,8
+    LTEXT           "Format",IDC_STATIC,8,64,42,8
     CONTROL         "&EUC",IDC_DSEUC,"Button",BS_AUTORADIOBUTTON | WS_GROUP,
-                    8,76,31,10
-    CONTROL         "&UTF-8",IDC_DSUTF8,"Button",BS_AUTORADIOBUTTON,8,88,36,
+                    8,76,42,10
+    CONTROL         "&UTF-8",IDC_DSUTF8,"Button",BS_AUTORADIOBUTTON,8,88,42,
                     10
     CONTROL         "Mi&xed",IDC_DSMIXED,"Button",BS_AUTORADIOBUTTON | 
-                    BS_TOP,8,100,35,10
-    LTEXT           "Type",IDC_STATIC,55,64,17,8
+                    BS_TOP,8,100,42,10
+    LTEXT           "Type",IDC_STATIC,55,64,49,8
     CONTROL         "&Indexed",IDC_DSINDEX,"Button",BS_AUTORADIOBUTTON | 
-                    WS_GROUP,55,76,41,10
+                    WS_GROUP,55,76,49,10
     CONTROL         "&Memory",IDC_DSMEMORY,"Button",BS_AUTORADIOBUTTON,55,88,
-                    41,10
+                    49,10
     CONTROL         "&Buffered",IDC_DSBUFFER,"Button",BS_AUTORADIOBUTTON,55,
-                    100,43,10
-    LTEXT           "Names",IDC_STATIC,110,64,23,8
+                    100,49,10
+    LTEXT           "Names",IDC_STATIC,110,64,58,8
     CONTROL         "N&o Names",IDC_DSNONAMES,"Button",BS_AUTORADIOBUTTON | 
-                    WS_GROUP,110,76,49,10
+                    WS_GROUP,110,76,58,10
     CONTROL         "&Has Names",IDC_DSNAMES,"Button",BS_AUTORADIOBUTTON,110,
-                    88,53,10
+                    88,58,10
     CONTROL         "Onl&y Names",IDC_DSONLY,"Button",BS_AUTORADIOBUTTON,110,
-                    100,54,10
+                    100,58,10
     CONTROL         "&Search This Dictionary",IDC_DSSEARCH,"Button",
-                    BS_AUTOCHECKBOX | WS_TABSTOP,175,64,87,10
+                    BS_AUTOCHECKBOX | WS_TABSTOP,175,64,96,10
     CONTROL         "&Quiet handling of errors",IDC_DSQUIET,"Button",
-                    BS_AUTOCHECKBOX | WS_TABSTOP,175,76,89,10
+                    BS_AUTOCHECKBOX | WS_TABSTOP,175,76,96,10
     CONTROL         "&Keep dictionary open",IDC_DSKEEP,"Button",
                     BS_AUTOCHECKBOX | WS_TABSTOP,175,88,83,10
     CONTROL         "&Classical dictionary",IDC_DSCLASSICAL,"Button",
-                    BS_AUTOCHECKBOX | WS_TABSTOP,175,100,75,8
+                    BS_AUTOCHECKBOX | WS_TABSTOP,175,100,83,8
     PUSHBUTTON      "&Auto",IDC_DSAUTO,254,6,50,14
     CONTROL         "User dictionary ",IDC_DSUSER,"Button",BS_AUTOCHECKBOX | 
                     BS_MULTILINE | WS_DISABLED,263,90,46,18
@@ -511,7 +511,7 @@ FONT 8, "MS Sans Serif"
 BEGIN
     LTEXT           "",IDC_DATA,9,5,228,8
     LTEXT           "This file is already open!  What do you want to do?",
-                    IDC_STATIC,9,19,160,8
+                    IDC_STATIC,9,19,186,8
     DEFPUSHBUTTON   "&Edit Existing File",IDOK,9,35,66,14
     PUSHBUTTON      "&Open New Copy",IDC_DFOPEN,90,35,66,14
     PUSHBUTTON      "&Replace with New",IDC_DFREPLACE,171,35,66,14
@@ -643,7 +643,7 @@ BEGIN
     LTEXT           "&Radicals",IDC_STATIC,3,47,28,8
     CONTROL         "Custom1",IDC_RLRADICALS,"JWP-Rads",WS_VSCROLL | 
                     WS_TABSTOP | 0x1,2,58,412,57,WS_EX_CLIENTEDGE
-    DEFPUSHBUTTON   "&Search",1,42,39,42,15
+    DEFPUSHBUTTON   "&Search",1,42,39,42,14
     PUSHBUTTON      "&Clear",IDC_RLCLEAR,88,39,42,14
     PUSHBUTTON      "&Get Info",IDC_RLINFO,134,39,42,14
     PUSHBUTTON      "&Insert->File",IDC_RLINSERT,180,39,42,14
@@ -658,17 +658,17 @@ BEGIN
     CONTROL         "A&uto",IDC_RLAUTO,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,
                     347,47,31,10
     CONTROL         "+/-&1",IDC_RLPM1,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,
-                    381,36,29,10
+                    381,36,35,10
     CONTROL         "+/-&2",IDC_RLPM2,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,
-                    381,47,27,10
+                    381,47,35,10
     LTEXT           "&Matches:",IDC_STATIC,4,5,30,8
     CONTROL         "",IDC_RLRESULT,"JWP-KList",WS_HSCROLL | WS_TABSTOP | 
                     0x1,42,2,372,32,WS_EX_CLIENTEDGE
     LTEXT           "",IDC_RLMESSAGE,4,16,36,17,NOT WS_GROUP
 END
 
-IDD_MOREINFO DIALOG DISCARDABLE  0, 0, 322, 114
-STYLE DS_MODALFRAME | DS_CENTER | WS_MAXIMIZEBOX | WS_POPUP | WS_VISIBLE | 
+IDD_MOREINFO DIALOG DISCARDABLE  0, 0, 355, 114
+STYLE DS_MODALFRAME | DS_CENTER | WS_MINIMIZEBOX | WS_POPUP | WS_VISIBLE | 
     WS_CAPTION | WS_SYSMENU
 EXSTYLE WS_EX_CONTEXTHELP | 0x80000000L
 CAPTION "More Character Information"
@@ -694,12 +694,24 @@ BEGIN
     LTEXT           "",IDC_KIITEM8,61,91,74,8
     LTEXT           "DeRoo",IDC_KILABEL9,6,102,52,8
     LTEXT           "",IDC_KIITEM9,61,102,74,8
-    LTEXT           "Kanji Learn",IDC_KILABEL10,142,101,52,8
-    LTEXT           "",IDC_KIITEM10,197,101,74,8
-    LTEXT           "Cross-reference entires:",IDC_STATIC,138,0,75,8
+    LTEXT           "Kanji Learn",IDC_KILABEL10,142,3,52,8
+    LTEXT           "",IDC_KIITEM10,197,3,74,8
+    RTEXT           "X-Ref Entries:",IDC_STATIC,142,86,26,17
     CONTROL         "",IDC_MIXREF,"JWP-List",WS_VSCROLL | WS_TABSTOP | 0x1,
-                    138,10,179,82,WS_EX_CLIENTEDGE
-    PUSHBUTTON      "&Ins->File",IDC_MIINSERT,275,97,42,14
+                    172,81,179,28,WS_EX_CLIENTEDGE
+    PUSHBUTTON      "&Ins->File",IDC_MIINSERT,307,62,42,14
+    LTEXT           "Kanji Learn",IDC_KILABEL11,142,14,52,8
+    LTEXT           "",IDC_KIITEM11,197,14,74,8
+    LTEXT           "Kanji Learn",IDC_KILABEL12,142,25,52,8
+    LTEXT           "",IDC_KIITEM12,197,25,74,8
+    LTEXT           "Kanji Learn",IDC_KILABEL13,142,36,52,8
+    LTEXT           "",IDC_KIITEM13,197,36,74,8
+    LTEXT           "Kanji Learn",IDC_KILABEL14,142,47,52,8
+    LTEXT           "",IDC_KIITEM14,197,47,74,8
+    LTEXT           "Kanji Learn",IDC_KILABEL15,142,58,52,8
+    LTEXT           "",IDC_KIITEM15,197,58,74,8
+    LTEXT           "Kanji Learn",IDC_KILABEL16,142,69,52,8
+    LTEXT           "",IDC_KIITEM16,197,69,74,8
 END
 
 IDD_BUSHULOOKUP DIALOG DISCARDABLE  0, 0, 419, 118
@@ -712,7 +724,7 @@ BEGIN
     LTEXT           "&Radicals",IDC_STATIC,3,47,28,8
     CONTROL         "",IDC_RLRADICALS,"JWP-Rads",WS_VSCROLL | WS_TABSTOP | 
                     0x1,2,58,412,55,WS_EX_CLIENTEDGE
-    DEFPUSHBUTTON   "&Search",1,42,39,42,15
+    DEFPUSHBUTTON   "&Search",1,42,39,42,14
     PUSHBUTTON      "&Clear",IDC_RLCLEAR,88,39,42,14
     PUSHBUTTON      "&Get Info",IDC_RLINFO,134,39,42,14
     PUSHBUTTON      "&Insert->File",IDC_RLINSERT,180,39,42,14
@@ -741,7 +753,7 @@ EXSTYLE WS_EX_CONTEXTHELP | 0x80000000L
 CAPTION "Four-Corner Lookup"
 FONT 8, "MS Sans Serif"
 BEGIN
-    DEFPUSHBUTTON   "&Search",1,3,41,41,15
+    DEFPUSHBUTTON   "&Search",1,3,41,41,14
     LTEXT           "&Matches:",IDC_STATIC,4,5,30,8
     LTEXT           "",IDC_RLMESSAGE,4,16,36,17,NOT WS_GROUP
     CONTROL         "",IDC_RLRESULT,"JWP-KList",WS_HSCROLL | WS_TABSTOP | 
@@ -753,27 +765,27 @@ BEGIN
     PUSHBUTTON      "&Done",2,228,41,41,14
     CONTROL         "&Automatic Search",IDC_RLAUTO,"Button",BS_AUTOCHECKBOX | 
                     BS_MULTILINE | WS_TABSTOP,283,36,47,23
-    LTEXT           "&Up-left",IDC_STATIC,14,62,22,8
+    CTEXT           "&Up-left",IDC_STATIC,7,62,32,8
     EDITTEXT        IDC_FC1,7,74,32,14,ES_AUTOHSCROLL
     CONTROL         "Spin1",IDC_FC1SPIN,"msctls_updown32",UDS_WRAP | 
                     UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | 
                     UDS_ARROWKEYS,31,74,11,14
-    LTEXT           "Up-&right",IDC_STATIC,52,62,26,8
+    CTEXT           "Up-&right",IDC_STATIC,48,62,32,8
     EDITTEXT        IDC_FC2,48,74,32,14,ES_AUTOHSCROLL
     CONTROL         "Spin1",IDC_FC2SPIN,"msctls_updown32",UDS_WRAP | 
                     UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | 
                     UDS_ARROWKEYS,72,74,11,14
-    LTEXT           "Down-&left",IDC_STATIC,90,62,31,8
+    CTEXT           "Down-&left",IDC_STATIC,87,62,36,8
     EDITTEXT        IDC_FC3,89,74,32,14,ES_AUTOHSCROLL
     CONTROL         "Spin1",IDC_FC3SPIN,"msctls_updown32",UDS_WRAP | 
                     UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | 
                     UDS_ARROWKEYS,113,74,11,14
-    LTEXT           "Do&wn-right",IDC_STATIC,130,62,35,8
+    CTEXT           "Do&wn-right",IDC_STATIC,127,62,39,8
     EDITTEXT        IDC_FC4,129,74,32,14,ES_AUTOHSCROLL
     CONTROL         "Spin1",IDC_FC4SPIN,"msctls_updown32",UDS_WRAP | 
                     UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | 
                     UDS_ARROWKEYS,153,74,11,14
-    LTEXT           "&Fifth",IDC_STATIC,186,62,14,8
+    CTEXT           "&Fifth",IDC_STATIC,178,62,32,8
     EDITTEXT        IDC_FC5,178,74,32,14,ES_AUTOHSCROLL
     CONTROL         "Spin1",IDC_FC5SPIN,"msctls_updown32",UDS_WRAP | 
                     UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | 
@@ -805,8 +817,8 @@ BEGIN
     LTEXT           "&Reading",IDC_STATIC,4,82,28,8
     CONTROL         "",IDC_RLSTRING,"JWP-Edit",WS_TABSTOP | 0x1,38,77,155,17,
                     WS_EX_CLIENTEDGE
-    CONTROL         "",IDC_EDITMODE,"JWP-Mode",WS_DLGFRAME | 0x1,200,77,16,
-                    14
+    CONTROL         "",IDC_EDITMODE,"JWP-Mode",0x1,200,77,16,14,
+                    WS_EX_WINDOWEDGE
     LTEXT           "S&trokes",IDC_STATIC,150,61,25,8
     EDITTEXT        IDC_RLSTROKE,178,58,32,14,ES_AUTOHSCROLL
     CONTROL         "Spin1",IDC_RLSPIN,"msctls_updown32",UDS_WRAP | 
@@ -855,7 +867,7 @@ BEGIN
     CONTROL         "&Automatic Search",IDC_RLAUTO,"Button",BS_AUTOCHECKBOX | 
                     WS_TABSTOP,131,66,72,10
     CONTROL         "I&nclude Mis-codes",IDC_SLMISSCODES,"Button",
-                    BS_AUTOCHECKBOX | WS_TABSTOP,131,79,73,10
+                    BS_AUTOCHECKBOX | WS_TABSTOP,131,79,76,10
     LTEXT           "Types",IDC_STATIC,217,60,20,8
     CONTROL         "",IDC_SLSKIPTYPE,"JWP-SKIP",0x1,244,58,76,34,
                     WS_EX_CLIENTEDGE
@@ -881,9 +893,9 @@ BEGIN
     RTEXT           "&Type of Index",IDC_STATIC,4,62,49,8
     COMBOBOX        IDC_ILTYPE,57,60,271,72,CBS_DROPDOWNLIST | WS_VSCROLL | 
                     WS_TABSTOP
-    LTEXT           "Inde&x",IDC_STATIC,35,82,18,8
+    RTEXT           "Inde&x",IDC_STATIC,5,82,48,8
     EDITTEXT        IDC_ILINDEX,57,79,63,14,ES_AUTOHSCROLL
-    LTEXT           "&Volume",IDC_STATIC,139,82,24,8
+    RTEXT           "&Volume",IDC_STATIC,124,82,37,8
     EDITTEXT        IDC_ILVOL,165,79,40,14,ES_AUTOHSCROLL
     CONTROL         "",IDC_RLAUTO,"Button",BS_AUTOCHECKBOX | NOT WS_VISIBLE | 
                     WS_DISABLED | WS_TABSTOP,261,80,16,8
@@ -896,7 +908,7 @@ EXSTYLE WS_EX_CONTEXTHELP | 0x80000000L
 CAPTION "Stroke/Bushu Lookup"
 FONT 8, "MS Sans Serif"
 BEGIN
-    DEFPUSHBUTTON   "&Search",1,42,39,42,15
+    DEFPUSHBUTTON   "&Search",1,42,39,42,14
     LTEXT           "&Matches:",-1,4,5,30,8
     LTEXT           "",IDC_RLMESSAGE,4,16,36,17,NOT WS_GROUP
     CONTROL         "",IDC_RLRESULT,"JWP-KList",WS_HSCROLL | WS_TABSTOP | 
@@ -940,7 +952,7 @@ EXSTYLE WS_EX_CONTEXTHELP | 0x80000000L
 CAPTION "Hadamitzky/Spahn Lookup"
 FONT 8, "MS Sans Serif"
 BEGIN
-    DEFPUSHBUTTON   "&Search",1,42,39,42,15
+    DEFPUSHBUTTON   "&Search",1,42,39,42,14
     LTEXT           "&Matches:",IDC_STATIC,4,5,30,8
     LTEXT           "",IDC_RLMESSAGE,4,16,36,17,NOT WS_GROUP
     CONTROL         "",IDC_RLRESULT,"JWP-KList",WS_HSCROLL | WS_TABSTOP | 
@@ -956,22 +968,22 @@ BEGIN
     LTEXT           "&Radicals",IDC_STATIC,3,47,28,8
     CONTROL         "",IDC_HSRADCHAR,"JWP-HS",WS_HSCROLL | WS_TABSTOP | 0x1,
                     4,59,329,23,WS_EX_CLIENTEDGE
-    LTEXT           "Radical Stro&kes",IDC_STATIC,26,90,28,17
+    RTEXT           "Radical Stro&kes",IDC_STATIC,22,90,30,17
     EDITTEXT        IDC_HSRADSTROKE,56,92,32,14,ES_AUTOHSCROLL
     CONTROL         "Spin1",IDC_HSRADSRKSPIN,"msctls_updown32",UDS_WRAP | 
                     UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | 
                     UDS_ARROWKEYS,80,92,11,14
-    LTEXT           "Radica&l",IDC_STATIC,102,95,25,8
+    RTEXT           "Radica&l",IDC_STATIC,97,95,30,8
     EDITTEXT        IDC_HSRADICAL,130,92,32,14,ES_AUTOHSCROLL
     CONTROL         "Spin1",IDC_HSRADSPIN,"msctls_updown32",UDS_WRAP | 
                     UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS,154,92,11,
                     14
-    LTEXT           "O&ther Strokes",IDC_STATIC,173,90,27,17
+    RTEXT           "O&ther Strokes",IDC_STATIC,169,90,31,17
     EDITTEXT        IDC_HSOTHER,204,92,32,14,ES_AUTOHSCROLL
     CONTROL         "Spin1",IDC_HSOTHERSPIN,"msctls_updown32",UDS_WRAP | 
                     UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | 
                     UDS_ARROWKEYS,228,92,11,14
-    LTEXT           "Inde&x",IDC_STATIC,256,95,18,8
+    RTEXT           "Inde&x",IDC_STATIC,247,95,26,8
     EDITTEXT        IDC_HSKANJI,277,92,32,14,ES_AUTOHSCROLL
     CONTROL         "Spin1",IDC_HSKANJISPIN,"msctls_updown32",UDS_WRAP | 
                     UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | 
@@ -1169,6 +1181,8 @@ BEGIN
     GROUPBOX        "Highlight Color",IDC_STATIC,2,49,151,43
     CONTROL         "&Status Bar",IDC_ODSTATUSBAR,"Button",BS_AUTOCHECKBOX | 
                     WS_TABSTOP,163,10,138,10
+    CONTROL         "Kanji &Bar",IDC_ODKANJIBAR,"Button",BS_AUTOCHECKBOX | 
+                    WS_TABSTOP,163,22,138,10
     CONTROL         "Kanji-bar at &Top",IDC_ODKBARTOP,"Button",
                     BS_AUTOCHECKBOX | WS_TABSTOP,163,34,138,10
     GROUPBOX        "Status/Kanji/Tool Bar",IDC_STATIC,157,1,151,47
@@ -1177,32 +1191,33 @@ BEGIN
     LTEXT           "Scroll S&peed (lower is faster)",IDC_STATIC,163,76,93,8
     EDITTEXT        IDC_ODSCROLLSPEED,259,74,40,14,ES_AUTOHSCROLL
     GROUPBOX        "Auto Scroll",IDC_STATIC,157,49,151,43
-    CONTROL         "Kanji &Bar",IDC_ODKANJIBAR,"Button",BS_AUTOCHECKBOX | 
-                    WS_TABSTOP,163,22,138,10
 END
 
 IDD_OPTADVANCED DIALOG DISCARDABLE  0, 0, 312, 95
 STYLE WS_CHILD
 FONT 8, "MS Sans Serif"
 BEGIN
-    LTEXT           "&Allocation Size",IDC_STATIC,46,7,47,8
-    EDITTEXT        IDC_OAALLOCSIZE,98,5,40,14,ES_AUTOHSCROLL
-    LTEXT           "&Conv Choices",IDC_STATIC,46,24,45,8
-    EDITTEXT        IDC_OACONVERTSIZE,98,22,40,14,ES_AUTOHSCROLL
-    LTEXT           "&Undo levels",IDC_STATIC,46,42,38,8
-    EDITTEXT        IDC_OAUNDOLEVELS,98,39,40,14,ES_AUTOHSCROLL
-    LTEXT           "&Font Cache",IDC_STATIC,46,59,38,8
-    EDITTEXT        IDC_OAFONTCACHE,98,56,40,14,ES_AUTOHSCROLL
-    LTEXT           "&History Cache",IDC_STATIC,46,78,45,8
-    EDITTEXT        IDC_OAHISTORY,98,74,40,14,ES_AUTOHSCROLL
-    LTEXT           "Dictionary &Buffer Size",IDC_STATIC,168,7,72,8
-    EDITTEXT        IDC_OABUFFER,245,5,40,14,ES_AUTOHSCROLL
+    LTEXT           "&Allocation Size",IDC_STATIC,32,7,47,8
+    EDITTEXT        IDC_OAALLOCSIZE,84,5,40,14,ES_AUTOHSCROLL
+    LTEXT           "&Conv Choices",IDC_STATIC,32,24,45,8
+    EDITTEXT        IDC_OACONVERTSIZE,84,22,40,14,ES_AUTOHSCROLL
+    LTEXT           "&Undo levels",IDC_STATIC,32,42,38,8
+    EDITTEXT        IDC_OAUNDOLEVELS,84,39,40,14,ES_AUTOHSCROLL
+    LTEXT           "&Font Cache",IDC_STATIC,32,59,38,8
+    EDITTEXT        IDC_OAFONTCACHE,84,56,40,14,ES_AUTOHSCROLL
+    LTEXT           "&History Cache",IDC_STATIC,32,78,45,8
+    EDITTEXT        IDC_OAHISTORY,84,74,40,14,ES_AUTOHSCROLL
+    LTEXT           "Dictionary &Buffer Size",IDC_STATIC,144,7,70,8
+    EDITTEXT        IDC_OABUFFER,218,5,40,14,ES_AUTOHSCROLL
     CONTROL         "Keep Search Dialogs &Open",IDC_OASEARCHOPEN,"Button",
-                    BS_AUTOCHECKBOX | WS_TABSTOP,176,40,118,10
+                    BS_AUTOCHECKBOX | WS_TABSTOP,163,41,118,10
     CONTROL         "Cache &Kanji Information",IDC_OACACHEINFO,"Button",
-                    BS_AUTOCHECKBOX | WS_TABSTOP,176,57,118,10
+                    BS_AUTOCHECKBOX | WS_TABSTOP,163,58,118,10
     CONTROL         "Cache &Display Font",IDC_OACACHEDISPLAY,"Button",
-                    BS_AUTOCHECKBOX | WS_TABSTOP,176,75,118,10
+                    BS_AUTOCHECKBOX | WS_TABSTOP,163,76,118,10
+    LTEXT           "Code Page",IDC_STATIC,144,25,42,8
+    COMBOBOX        IDC_OACODEPAGE,193,22,108,69,CBS_DROPDOWNLIST | 
+                    WS_VSCROLL | WS_TABSTOP
 END
 
 IDD_OPTMISC DIALOG DISCARDABLE  0, 0, 312, 95
@@ -1257,7 +1272,7 @@ BEGIN
 END
 
 IDD_HISTORY DIALOG DISCARDABLE  0, 0, 245, 110
-STYLE DS_MODALFRAME | WS_MAXIMIZEBOX | WS_POPUP | WS_VISIBLE | WS_CAPTION | 
+STYLE DS_MODALFRAME | WS_MINIMIZEBOX | WS_POPUP | WS_VISIBLE | WS_CAPTION | 
     WS_SYSMENU
 EXSTYLE WS_EX_CONTEXTHELP | 0x80000000L
 CAPTION "Dialog"
@@ -1267,59 +1282,71 @@ BEGIN
                     4,237,102,WS_EX_CLIENTEDGE
 END
 
-IDD_INFOCONFIG DIALOG DISCARDABLE  0, 0, 364, 114
+IDD_INFOCONFIG DIALOG DISCARDABLE  0, 0, 395, 114
 STYLE DS_MODALFRAME | DS_CENTER | WS_POPUP | WS_VISIBLE | WS_CAPTION | 
     WS_SYSMENU
 EXSTYLE WS_EX_CONTEXTHELP | 0x80000000L
 CAPTION "Configure Character Information"
 FONT 8, "MS Sans Serif"
 BEGIN
-    COMBOBOX        IDC_ICITEM0,7,17,79,107,CBS_DROPDOWNLIST | WS_VSCROLL | 
+    COMBOBOX        IDC_ICITEM0,7,17,73,107,CBS_DROPDOWNLIST | WS_VSCROLL | 
                     WS_TABSTOP
-    COMBOBOX        IDC_ICITEM1,7,32,79,92,CBS_DROPDOWNLIST | WS_VSCROLL | 
+    COMBOBOX        IDC_ICITEM1,7,32,73,92,CBS_DROPDOWNLIST | WS_VSCROLL | 
                     WS_TABSTOP
-    COMBOBOX        IDC_ICITEM2,7,46,79,78,CBS_DROPDOWNLIST | WS_VSCROLL | 
+    COMBOBOX        IDC_ICITEM2,7,46,73,78,CBS_DROPDOWNLIST | WS_VSCROLL | 
                     WS_TABSTOP
-    COMBOBOX        IDC_ICITEM3,7,61,79,84,CBS_DROPDOWNLIST | WS_VSCROLL | 
+    COMBOBOX        IDC_ICITEM3,7,61,73,84,CBS_DROPDOWNLIST | WS_VSCROLL | 
                     WS_TABSTOP
-    COMBOBOX        IDC_ICITEM4,7,76,79,95,CBS_DROPDOWNLIST | WS_VSCROLL | 
+    COMBOBOX        IDC_ICITEM4,7,76,73,95,CBS_DROPDOWNLIST | WS_VSCROLL | 
                     WS_TABSTOP
-    LTEXT           "&Bushu",IDC_STATIC,93,19,69,8,NOT WS_GROUP
-    COMBOBOX        IDC_ICITEM5,92,32,79,90,CBS_DROPDOWNLIST | WS_VSCROLL | 
+    LTEXT           "&Bushu",IDC_STATIC,83,19,69,8,NOT WS_GROUP
+    COMBOBOX        IDC_ICITEM5,82,32,73,90,CBS_DROPDOWNLIST | WS_VSCROLL | 
                     WS_TABSTOP
-    COMBOBOX        IDC_ICITEM6,92,46,79,76,CBS_DROPDOWNLIST | WS_VSCROLL | 
+    COMBOBOX        IDC_ICITEM6,82,46,73,76,CBS_DROPDOWNLIST | WS_VSCROLL | 
                     WS_TABSTOP
-    COMBOBOX        IDC_ICITEM7,92,61,79,83,CBS_DROPDOWNLIST | WS_VSCROLL | 
+    COMBOBOX        IDC_ICITEM7,82,61,73,83,CBS_DROPDOWNLIST | WS_VSCROLL | 
                     WS_TABSTOP
-    COMBOBOX        IDC_ICITEM8,92,76,79,98,CBS_DROPDOWNLIST | WS_VSCROLL | 
+    COMBOBOX        IDC_ICITEM8,82,76,73,98,CBS_DROPDOWNLIST | WS_VSCROLL | 
                     WS_TABSTOP
-    COMBOBOX        IDC_ICITEM9,192,17,79,106,CBS_DROPDOWNLIST | WS_VSCROLL | 
+    COMBOBOX        IDC_ICITEM9,167,17,73,106,CBS_DROPDOWNLIST | WS_VSCROLL | 
                     WS_TABSTOP
-    COMBOBOX        IDC_ICITEM10,192,32,79,93,CBS_DROPDOWNLIST | WS_VSCROLL | 
+    COMBOBOX        IDC_ICITEM10,167,32,73,93,CBS_DROPDOWNLIST | WS_VSCROLL | 
                     WS_TABSTOP
-    COMBOBOX        IDC_ICITEM11,192,46,79,77,CBS_DROPDOWNLIST | WS_VSCROLL | 
+    COMBOBOX        IDC_ICITEM11,167,46,73,77,CBS_DROPDOWNLIST | WS_VSCROLL | 
                     WS_TABSTOP
-    COMBOBOX        IDC_ICITEM12,192,61,79,79,CBS_DROPDOWNLIST | WS_VSCROLL | 
+    COMBOBOX        IDC_ICITEM12,167,61,73,79,CBS_DROPDOWNLIST | WS_VSCROLL | 
                     WS_TABSTOP
-    COMBOBOX        IDC_ICITEM13,192,76,79,99,CBS_DROPDOWNLIST | WS_VSCROLL | 
+    COMBOBOX        IDC_ICITEM13,167,76,73,99,CBS_DROPDOWNLIST | WS_VSCROLL | 
                     WS_TABSTOP
-    COMBOBOX        IDC_ICITEM14,278,17,79,107,CBS_DROPDOWNLIST | WS_VSCROLL | 
+    COMBOBOX        IDC_ICITEM14,242,17,73,107,CBS_DROPDOWNLIST | WS_VSCROLL | 
                     WS_TABSTOP
-    COMBOBOX        IDC_ICITEM15,278,32,79,91,CBS_DROPDOWNLIST | WS_VSCROLL | 
+    COMBOBOX        IDC_ICITEM15,242,32,73,91,CBS_DROPDOWNLIST | WS_VSCROLL | 
                     WS_TABSTOP
-    COMBOBOX        IDC_ICITEM16,278,46,79,75,CBS_DROPDOWNLIST | WS_VSCROLL | 
+    COMBOBOX        IDC_ICITEM16,242,46,73,75,CBS_DROPDOWNLIST | WS_VSCROLL | 
                     WS_TABSTOP
-    COMBOBOX        IDC_ICITEM17,278,61,79,80,CBS_DROPDOWNLIST | WS_VSCROLL | 
+    COMBOBOX        IDC_ICITEM17,242,61,73,80,CBS_DROPDOWNLIST | WS_VSCROLL | 
                     WS_TABSTOP
-    COMBOBOX        IDC_ICITEM18,278,76,79,95,CBS_DROPDOWNLIST | WS_VSCROLL | 
+    COMBOBOX        IDC_ICITEM18,242,76,73,95,CBS_DROPDOWNLIST | WS_VSCROLL | 
                     WS_TABSTOP
-    COMBOBOX        IDC_ICITEM19,278,91,79,108,CBS_DROPDOWNLIST | WS_VSCROLL | 
+    COMBOBOX        IDC_ICITEM19,242,91,73,108,CBS_DROPDOWNLIST | WS_VSCROLL | 
                     WS_TABSTOP
-    DEFPUSHBUTTON   "&OK",IDOK,7,95,50,14,WS_GROUP
-    PUSHBUTTON      "&Cancel",IDCANCEL,69,95,50,14
-    PUSHBUTTON      "&Default",IDC_ICDEFAULT,145,95,50,14
+    DEFPUSHBUTTON   "&OK",IDOK,7,94,50,14,WS_GROUP
+    PUSHBUTTON      "&Cancel",IDCANCEL,69,94,50,14
+    PUSHBUTTON      "&Default",IDC_ICDEFAULT,145,94,50,14
     LTEXT           "Character Information",IDC_STATIC,7,4,85,8
-    LTEXT           "More Character Information",IDC_STATIC,192,4,104,8
+    LTEXT           "More Character Information",IDC_STATIC,167,4,104,8
+    COMBOBOX        IDC_ICITEM20,317,17,73,106,CBS_DROPDOWNLIST | WS_VSCROLL | 
+                    WS_TABSTOP
+    COMBOBOX        IDC_ICITEM21,317,32,73,91,CBS_DROPDOWNLIST | WS_VSCROLL | 
+                    WS_TABSTOP
+    COMBOBOX        IDC_ICITEM22,317,46,73,78,CBS_DROPDOWNLIST | WS_VSCROLL | 
+                    WS_TABSTOP
+    COMBOBOX        IDC_ICITEM23,317,61,73,77,CBS_DROPDOWNLIST | WS_VSCROLL | 
+                    WS_TABSTOP
+    COMBOBOX        IDC_ICITEM24,317,76,73,98,CBS_DROPDOWNLIST | WS_VSCROLL | 
+                    WS_TABSTOP
+    COMBOBOX        IDC_ICITEM25,317,91,73,108,CBS_DROPDOWNLIST | WS_VSCROLL | 
+                    WS_TABSTOP
 END
 
 
@@ -1523,8 +1550,7 @@ BEGIN
 
     IDD_KANJIINFO, DIALOG
     BEGIN
-        RIGHTMARGIN, 358
-        BOTTOMMARGIN, 169
+        RIGHTMARGIN, 361
     END
 
     IDD_FORMATPARA, DIALOG
@@ -1550,7 +1576,7 @@ BEGIN
     IDD_FILES, DIALOG
     BEGIN
         LEFTMARGIN, 7
-        RIGHTMARGIN, 239
+        RIGHTMARGIN, 318
         TOPMARGIN, 7
         BOTTOMMARGIN, 91
     END
@@ -1654,7 +1680,7 @@ BEGIN
 
     IDD_MOREINFO, DIALOG
     BEGIN
-        RIGHTMARGIN, 318
+        RIGHTMARGIN, 351
         BOTTOMMARGIN, 109
     END
 
@@ -1726,8 +1752,8 @@ BEGIN
 
     IDD_INFOCONFIG, DIALOG
     BEGIN
-        RIGHTMARGIN, 344
-        BOTTOMMARGIN, 109
+        RIGHTMARGIN, 390
+        BOTTOMMARGIN, 108
     END
 END
 #endif    // APSTUDIO_INVOKED
@@ -1898,7 +1924,7 @@ END
 
 STRINGTABLE DISCARDABLE 
 BEGIN
-    IDS_ABOUT_TEXT          "JWPce Version %s.\n\nA Japanese Word Processor for Windows 95/98/ME/NT/2000/XP/CE/PocketPC.\n\nCopyright (C) 1997-2002, glenn rosenthal.  Distributed under GNU General Public License..\n\nInterface inspired by Stephen Chung's JWP program."
+    IDS_ABOUT_TEXT          "JWPce Version %s.\n\nA Japanese Word Processor for Windows 95/98/ME/NT/2000/XP/CE/PocketPC.\n\nCopyright (C) 1997-2002, glenn rosenthal.  Distributed under GNU General Public License.\n\nInterface inspired by Stephen Chung's JWP program."
     IDS_ABOUT_TITLE         "About JWPce %s"
     IDS_AREYOUSURE          "Are You Sure?"
     IDS_WARNING             "JWPce Warning!"
@@ -2059,7 +2085,7 @@ STRINGTABLE DISCARDABLE
 BEGIN
     IDS_CK_ERROR            "Cannot save color-kanji list\n\n%s."
     IDS_CK_SUMMARYTITLE     "Count Summary"
-    IDS_CK_SUMMARY          "Total:\t%d\n\nKanji:\t%d\t(on list=%d  off list=%d)\nDif Kanji:\t%d\t(on list=%d  off list=%d)\nKana:\t%d\t(hiragana=%d  katakana=%d)\nASCII:\t%d\t(ascii=%d  j-ascii=%d)\nOther:\t%d"
+    IDS_CK_SUMMARY          "Total:\t%d\n\nKanji:\t\t%d\t(on list=%d  off list=%d)\nDif Kanji:\t%d\t(on list=%d  off list=%d)\nKana:\t\t%d\t(hiragana=%d  katakana=%d)\nASCII:\t\t%d\t(ascii=%d  j-ascii=%d)\nOther:\t\t%d"
     IDS_CK_APPEND           "Color kanji list built, %d kanji.\n\n%d kanji added."
     IDS_CK_REMOVE           "Color kanji list built, %d kanji.\n\n%d kanji removed."
     IDS_CK_VIEWNAME         ":: Color Kanji List"
@@ -2212,7 +2238,7 @@ BEGIN
     IDS_DD_ABORTREJECT      "ABORT [%d]\nrejected [%d]"
     IDS_DD_ABORT            "ABORT [%d]"
     IDS_DD_NOMATCH          "No Matches!"
-    IDS_DD_NOKANJI          "Pattern searches require at least on kani to anchor the search!"
+    IDS_DD_NOKANJI          "Pattern searches require at least one kanji to anchor the search!"
 END
 
 STRINGTABLE DISCARDABLE 
@@ -2338,6 +2364,33 @@ END
 STRINGTABLE DISCARDABLE 
 BEGIN
     IDS_LM_INCH             "Units: inches"
+    IDS_IL_READWRITE        "A Guide To Reading and Writing Japanese, Florence Sakade"
+    IDS_IL_TUTTLECARD       "Tuttle Kanji Cards, Alexander Kask"
+    IDS_IL_KANJIWAY         "Kanji Way to Japanese Language Power, Dale Crowley"
+    IDS_IL_KANJICONTEXT     "Kanji in Context, Nishiguchi and Kono"
+    IDS_IL_BUSYPEOPLE       "Japanese For Busy People"
+    IDS_IL_COMPACTKANJI     "Kodansha Compact Kanji Guide"
+    IDS_KI_READWRITE        "Read / Write"
+    IDS_KI_TUTTLECARD       "Tuttle Cards"
+    IDS_KI_KANJIWAY         "Kanji Way"
+    IDS_KI_KANJICONTEXT     "Kanji in Context"
+    IDS_KI_BUSYPEOPLE       "Busy People"
+    IDS_KI_COMPACTGUIDE     "Compact Guide"
+    IDS_KI_BUSYFORMAT       "vol=%d  chap=%d"
+    IDS_CP_AUTO             "Auto"
+    IDS_CP_EASTEUROPE       "1250 -- East Europe"
+END
+
+STRINGTABLE DISCARDABLE 
+BEGIN
+    IDS_CP_CYRILLIC         "1251 -- Cyrillic"
+    IDS_CP_USA              "1252 -- US & West Europe"
+    IDS_CP_GREEK            "1253 -- Greek"
+    IDS_CP_TURKISH          "1254 -- Turkish"
+    IDS_CP_HEBREW           "1255 -- Hebrew"
+    IDS_CP_ARABIC           "1256 -- Arabic"
+    IDS_CP_BALTIC           "1257 -- Baltic"
+    IDS_CP_VIETNAMESE       "1258 -- Vietnamese"
 END
 
 #endif    // English (U.S.) resources

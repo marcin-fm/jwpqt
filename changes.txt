@@ -1,3 +1,111 @@
+1.42->1.50:
+
+1.  Fixed bug in Index lookup.  Indexes are now initialized correctly even if
+    not using character info first.
+    
+2.  When converting to VC++ 7.0 all the tab dialog boxes lost the control 
+    settings.  This prevented accelerators from working in these dialog 
+    boxes.  
+    
+3.  Tab order in the margins page of the layout dialog got messed up.  This 
+    has been fixed.
+
+4.  Count kanji dialog did not convert from VC++ 6.0 to VC++ 7.0 correctly.
+    The list control extended outside the dialog box.  This has been fixed.
+    
+5.  Corrected bug in the insert to file routines. If the entry contained only
+    Japanese text the insert to new lines feature did not work correctly.
+    (Thanks, Antonio Regidor García)  
+    
+6.  Fixed a small bug in the translation kit.  (Dictionary dialog was 
+    missing the caption.)    
+
+7.  Fixed problem in Bushu/Stroke lookup.  The spin control for the radical was
+    not working.
+
+8.  Internal change.  Kanji lookups use a macro for the maximum number of strokes
+    instead of a fixed value of 30.
+
+9.  PocketPC dialogs moved to full screen:
+        Bushu Lookup
+        Bushu/Stroke Lookup
+        Supplemental Dictionary Setup
+        Dictionary Lookup
+        User Dictionary
+        Four-Corners Lookup
+        Hadamitzky/Spahn Lookup
+        Index Lookup
+        Setup Character Information
+        JIS Table
+        Kanji Information
+        Page Layout
+        More Kanji Information
+        Options
+        Radical Lookup
+        Reading Lookup
+        SKIP Lookup
+        X-Ref Kanji Information
+
+10. Modified files list to abbreviate names on PPC/PocketPC devices.
+
+11. Added the following indexes to the index lookup
+        "A Guide To Reading and Writing Japanese" edited by Florence Sakade. 
+        The Tuttle Kanji Cards, compiled by Alexander Kask. 
+        "The Kanji Way to Japanese Language Power" by Dale Crowley. 
+        "Kanji in Context" by Nishiguchi and Kono. 
+        "Japanese For Busy People" vols I-III, published by the AJLT. 
+        "Kodansha Compact Kanji Guide". 
+
+12. Added the following information to the kanji info dialog
+        "A Guide To Reading and Writing Japanese" edited by Florence Sakade. 
+        The Tuttle Kanji Cards, compiled by Alexander Kask. 
+        "The Kanji Way to Japanese Language Power" by Dale Crowley. 
+        "Kanji in Context" by Nishiguchi and Kono. 
+        "Japanese For Busy People" vols I-III, published by the AJLT. 
+        "Kodansha Compact Kanji Guide". 
+
+13. Fixed bug in size allocation for the JIS Table.
+
+14. PPC and PocketPC systems have been redesigned to use a simple (non-3D)
+    display that works better with these systems.
+
+15. Fixed bug in implementation of variable dictionary buffer for PPC/PocketPC 
+    devices.
+
+16. Reformatted the summary list on the Count Kanji feature for the PocketPC/PPC
+    to make it more readable.
+
+17. Fixed bug with selecting text in the left going direction.  These are now 
+    correctly selected.
+
+18. Fixed bug in Kanji Info which caused problem on ARM processors.
+
+20. Fixed bug in CE toolbar initializations that could cause a system
+    crash.
+
+21. Changed file title so that only the file name is shown for PPCs/PocketPCs.
+
+22. PocketPC SIP control and window sizing is implemented.
+
+23. Visual oddity in the Reading Lookup fixed.
+
+24. New menu system for PocketPC installed.
+
+25. Fixed spelling of the Arial font.
+
+26. Significant changes in processing of Greek and Cyrillic characters.  On 
+    systems which have a Greek or Cyrillic code page selected, these 
+    characters will no longer be converted to fixed-width characters.  
+    Instead they will be processed as extended ASCII.  Converting these
+    characters to fixed-width (when processing UNICODE text) made sense
+    on Western systems, but clearly not on a Greek or Cyrillic system.
+
+27. Added ability to select code page in the advanced page of the options
+    dialog.
+
+**  Known problem.  spinner control on PocketPC does not work correctly for 
+    Bushu/Stroke lookup (other strokes).
+
 1.41B->1.42:
 
 1.  Single clicking on the large kanji window will no longer inserts the kanji,
@@ -71,10 +179,17 @@
 
 25. Fixed bug in searching Mixed dictionaries.  (Thanks Jean-Marc!)
 
-26. Fixed auto-typing for dictionaries, now correctly reconizes most Mixed
+26. Fixed auto-typing for dictionaries, now correctly recognizes most Mixed
     dictionaries.
     
 27. Updated translation kits.
+
+28. Significant changes in processing of Greek and Cyrillic characters.  On 
+    systems which have a Greek or Cyrillic code page selected, these 
+    characters will no longer be converted to fixed-width characters.  
+    Instead they will be processed as extended ASCII.  Converting these
+    characters to fixed-width (when processing UNICODE text) made sense
+    on Western systems, but clearly not on a Greek or Cyrillic system.
 
 1.40B->1.41B:
 
@@ -243,7 +358,7 @@
 
 48. Windows CE devices use static text instead of edit boxes for 
     Character Information.  This is required to support the new 
-    arrangeable dialog.  The loss here is you cannot select the text
+    configurable dialog.  The loss here is you cannot select the text
     and copy it to the clipboard.  Probably a small loss.
 
 49. Added exception to dictionary to processing ???? (all in fixed 

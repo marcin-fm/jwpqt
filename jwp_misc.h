@@ -1,7 +1,9 @@
 //===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
-//  All rights reserved.                                             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2004, 2005             //
+//                                                                   //
+//  JWPce is free sotware distributed under the terms of the         //
+//  GNU General Public License.                                      //
 //                                                                   //
 //===================================================================//
 
@@ -151,6 +153,36 @@ extern void put_float   (HWND hwnd,int id,float value,int scale);             //
 //
 extern long get_menudata (HMENU menu,int item,int position,TCHAR *buffer);  // Get information from recent files menu
 
+#if    (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
+//--------------------------------
+//
+//  Class that manages the list of recent file names.
+//
+#define RECENT_MAX  10                  // Number of items in recent files list (must be 1 more then the actual values)
+#define RECENT_LEN  28                  // Maximum length of recent file name
+
+typedef TCHAR RecentLine[256];          // Single line of the list.
+
+class RecentList {
+public:
+  RecentList::RecentList (void);                                // Constructor
+  inline TCHAR *get    (int pos) { return (list[pos]); }        // Get an item
+  void          insert (HMENU menu,int pos,TCHAR *text);        // Insert a name into the list.
+  void          remove (HMENU menu,int pos);                    // Remove a name from the list.
+private:
+  RecentLine list[RECENT_MAX];                                  // Actual list.
+};
+
+extern class RecentList recent_list;    // Class instance.
+
+  #define JInsertMenu(menu,pos,flags,item,text)    recent_list.insert(menu,pos,text)  
+  #define JRemoveMenu(menu,pos,flags)              recent_list.remove(menu,pos)
+#else  (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
+  #define JInsertMenu(menu,pos,flags,item,text)    InsertMenu(menu,pos,flags,item,text)
+  #define JRemoveMenu(menu,pos,flags)              RemoveMenu(menu,pos,flags)
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
+
+
 //--------------------------------
 //
 //  String table manipulation tools.
@@ -168,7 +200,21 @@ extern TCHAR *tab_string    (int id,int id2 = 0);       // Get a string an repla
 //
 #define NINT(x) ((int) ((x)+0.5))   // Round float to integer.
 
-
+//-------------------------------------------------------------------
+//
+//  Graphics IO routins.
+//
+//      Fills a rectangle with the current background color.
+//      This used to be done with direct calls to FillRect,
+//      with color arguments, however, Windows CE does not 
+//      correctly support these calls, thus I replaced the 
+//      calls with this routine.
+//
+#ifdef WINCE 
+  #define BackFillRect(hdc,rect)    { HBRUSH brush; brush = (HBRUSH) SelectObject(hdc,CreateSolidBrush(GetSysColor(COLOR_WINDOW))); FillRect (hdc,rect,brush); DeleteObject(SelectObject(hdc,brush)); }
+#else
+  #define BackFillRect(hdc,rect)    FillRect (hdc,rect,(HBRUSH) (COLOR_WINDOW+1));
+#endif WINCE
 
 #endif jwp_misc_h
 

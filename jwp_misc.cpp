@@ -1,7 +1,9 @@
 //===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
-//  All rights reserved.                                             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2004, 2005             //
+//                                                                   //
+//  JWPce is free sotware distributed under the terms of the         //
+//  GNU General Public License.                                      //
 //                                                                   //
 //===================================================================//
 
@@ -213,7 +215,9 @@ int KANJI_string::write (IO_cache *cache) {
 //  Constructor
 //
 SIZE_window::SIZE_window () {
+#ifndef WINCE_POCKETPC
   memset (this,0,sizeof(class SIZE_window));
+#endif WINCE_POCKETPC
   return;
 }
 
@@ -224,6 +228,7 @@ SIZE_window::SIZE_window () {
 //  visible.
 //
 void SIZE_window::check_controls () {
+#ifndef WINCE_POCKETPC
   int  i;
   HWND hwnd;
   RECT drect,rect;
@@ -241,6 +246,7 @@ void SIZE_window::check_controls () {
       ShowWindow   (hwnd,SW_HIDE);
     }
   }
+#endif WINCE_POCKETPC
   return;
 }
 
@@ -263,6 +269,7 @@ void SIZE_window::check_controls () {
 //                 size of the dialog box gets big enough to show them
 //
 void SIZE_window::wm_init (HWND hwnd,int id,struct size_window *init,int buttons,int dfirst,int dlast) {
+#ifndef WINCE_POCKETPC
   RECT rect;
   move_buttons = buttons;                           // Save buttons option.
   dlg          = hwnd;                              // Save dialog
@@ -289,6 +296,7 @@ void SIZE_window::wm_init (HWND hwnd,int id,struct size_window *init,int buttons
 #else   WINCE
   if ((save->sx > dlg_xmin) || (save->sy > dlg_ymin)) ShowWindow (hwnd,SW_MAXIMIZE);
 #endif  WINCE
+#endif  WINCE_POCKETPC
   return;
 }
 
@@ -298,11 +306,13 @@ void SIZE_window::wm_init (HWND hwnd,int id,struct size_window *init,int buttons
 //  box position.  This should be called as a responce to a WM_MOVE message.
 //
 void SIZE_window::wm_move () {
+#ifndef WINCE_POCKETPC
   RECT rect;
   if (!save) return;
   GetWindowRect (dlg,&rect);
   save->x = rect.left;
   save->y = rect.top;
+#endif  WINCE_POCKETPC
   return;
 }
 
@@ -317,6 +327,7 @@ void SIZE_window::wm_move () {
 //      wParam -- wParam from the WM_SIZE message.  Used to dectect minimize.
 //
 void SIZE_window::wm_size (int wParam) {
+#ifndef WINCE_POCKETPC
 #ifndef WINCE
   RECT         rect;
   size_window *size,temp;
@@ -357,6 +368,7 @@ void SIZE_window::wm_size (int wParam) {
     MoveWindow (list,rect.left-size->x-GetSystemMetrics(SM_CXDLGFRAME),rect.top-size->y-GetSystemMetrics(SM_CYCAPTION)-GetSystemMetrics(SM_CYDLGFRAME),lst_xmin+size->sx-dlg_xmin,lst_ymin+size->sy-dlg_ymin,true);
   }
 #endif WINCE
+#endif WINCE_POCKETPC
   return;
 }
 
@@ -370,8 +382,10 @@ void SIZE_window::wm_size (int wParam) {
 //              the WM_SIZING message in lParam.
 //
 void SIZE_window::wm_sizing (RECT *rect) {
+#ifndef WINCE_POCKETPC
   if (rect->right-rect->left < dlg_xmin) rect->right  = rect->left+dlg_xmin;
   if (rect->bottom-rect->top < dlg_ymin) rect->bottom = rect->top +dlg_ymin;
+#endif WINCE_POCKETPC
   return;
 }
 
@@ -422,6 +436,7 @@ static BOOL CALLBACK tab_dialog (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lParam)
            ShowWindow         (page,SW_HIDE);        
          }
          TabCtrl_SetCurSel (tab,setup->page);           // Select last page used.
+         POCKETPC_DIALOG   (hwnd);
          goto SetPage;
     case WM_HELP:
          do_help (hwnd,setup->pages[setup->page].help);
@@ -445,6 +460,11 @@ SetPage:;
                 BringWindowToTop (page);
                 if (msg == WM_INITDIALOG) SetFocus (GetNextDlgTabItem(page,null,false));
                 return (false);                
+#ifndef WINCE_POCKETPC
+           case IDCANCEL:                               // Just exit.
+                EndDialog (hwnd,false);
+                return    (true);
+#endif  WINCE_POCKETPC
          }
          break;
     case WM_COMMAND:
@@ -456,8 +476,10 @@ SetPage:;
                   TabCtrl_GetItem (tab,i,&item);
                   SendMessage ((HWND) (item.lParam),WM_GETDLGVALUES,0,0);
                 }
+                EndDialog (hwnd,true);
+				return    (true);
            case IDCANCEL:                               // Just exit.
-                EndDialog (hwnd,LOWORD(wParam == IDOK));
+                EndDialog (hwnd,false);
                 return    (true);
            case IDC_TABHELP:
                 do_help (hwnd,setup->pages[setup->page].help);
@@ -724,35 +746,6 @@ int get_int (HWND hwnd,int id,int min_val,int max_val,int def) {
 
 //--------------------------------
 //
-//  This routine gets information about a specific menu item.  The 
-//  information returned includes the ID and the text of the item.
-//
-//      menu     -- Menu or sub-menu to look in.
-//      item     -- Menu item or position (from zero).
-//      position -- If this is non-zero then item indicates a psotion,
-//                  otherwise this idicates a menu item by id.
-//      buffer   -- Location to return the text of the menu item.  
-//                  This buffer should be atleast SIZE_BUFFER long to
-//                  avoid an error.
-//
-//      RETURN   -- Return value is the ID of the menu item, or zero
-//                  if this is not a valid menu item.
-//
-//  This routine replaced the old GetMenuItemText, and GetMenuItemID,
-//  which are not supported under windows CE.
-//  
-long get_menudata (HMENU menu,int item,int position,TCHAR *buffer) {
-  MENUITEMINFO info;
-  info.cbSize     = sizeof(info);           // This is required, but not in the docs.
-  info.fMask      = MIIM_ID | MIIM_TYPE;    // What we want back.
-  info.dwTypeData = buffer;                 // Buffer setup
-  info.cch        = SIZE_BUFFER;            // Size of buffer, also required but not in the docs.
-  if (!GetMenuItemInfo(menu,item,position,&info)) return (0);
-  return (info.wID);
-}
-
-//--------------------------------
-//
 //  Gets a string from the system resource and returns the string.
 //
 //  Care must be used in calling this routine since the routine returns the string in 
@@ -973,7 +966,188 @@ int YesNo (int format,...) {
   return (IDYES == MessageBox(main_window,buffer,get_string(IDS_AREYOUSURE),MB_YESNO | MB_ICONQUESTION));
 }
 
+//===================================================================
+//
+//  PPC and PocketPC routines for halding the list of recent files.
+//
+//  In Windows or HPC systems, the list is kept in the actual menu, since
+//  the screen allows display of the full name.  In PPC and PocketPC 
+//  systems only part of the name is shown.  This requires keeping two 
+//  lists of files.
+//
 
+#if (defined(WINCE_POCKETPC) || defined(WINCE_PPC))
+
+//--------------------------------
+//
+//  Class that manages the list of recent file names.
+//
+class RecentList recent_list;   // Class instance.
+
+extern HMENU button_menu;       // This is defined in jwp_flio.cpp and is used only for PocketPCs
+
+//--------------------------------
+//
+//  Constructor
+//
+RecentList::RecentList () {
+  int i;
+  for (i = 0; i < RECENT_MAX; i++) list[i][0] = 0;              // All strings are set to zero length
+  return;
+}
+
+//--------------------------------
+//
+//  Insert an item into the list.
+//
+//      menu -- Menu containning the list so It can be changes.
+//      pos  -- Menu position.
+//      text -- Text to be inserted.
+//
+void RecentList::insert (HMENU menu,int pos,TCHAR *text) {
+  TCHAR buffer[SIZE_BUFFER];
+  int   i;
+  for (i = RECENT_MAX-2; i >= pos; i--) lstrcpy (list[i+1],list[i]);
+  lstrcpy    (list[pos],text);
+  if (lstrlen(text) <= RECENT_LEN) lstrcpy (buffer,text);
+    else {
+      buffer[0] = text[0];
+      buffer[1] = text[1];
+      lstrcpy (buffer+2,TEXT(" ..."));
+      lstrcat (buffer,text+lstrlen(text)-RECENT_LEN);
+    }
+  InsertMenu (menu,pos,MF_BYPOSITION,IDM_FILE_FILES_BASE+pos,buffer);
+#ifdef WINCE_POCKETPC
+  InsertMenu (button_menu,pos,MF_BYPOSITION,IDM_FILE_FILES_BASE+pos,buffer);
+#endif WINCE_POCKETPC
+  return;
+}
+
+//--------------------------------
+//
+//  Remove item from the list.
+//
+//      menu -- Pointer to the menu system.
+//      pos  -- Item to be removed.
+//
+void RecentList::remove (HMENU menu,int pos) {
+  int i;
+  for (i = pos; i <= RECENT_MAX-2; i++) lstrcpy (list[i],list[i+1]);
+  list[RECENT_MAX-1][0] = 0;
+  RemoveMenu (menu,pos,MF_BYPOSITION);
+#ifdef WINCE_POCKETPC
+  RemoveMenu (button_menu,pos,MF_BYPOSITION);
+#endif WINCE_POCKETPC
+  return;
+}
+
+//--------------------------------
+//
+//  Replacemnt for the get_menudata() utility routine that is in jfc_misc.cpp.
+//  This is basically the same as the normal get_menudata(), except that 
+//  instead of getting the string from the menu, it gets the string from the list.
+//
+//      menu     -- Menu or sub-menu to look in.
+//      item     -- Menu item or position (from zero).
+//      position -- If this is non-zero then item indicates a psotion,
+//                  otherwise this idicates a menu item by id.
+//      buffer   -- Location to return the text of the menu item.  
+//                  This buffer should be atleast SIZE_BUFFER long to
+//                  avoid an error.
+//
+//      RETURN   -- Return value is the ID of the menu item, or zero
+//                  if this is not a valid menu item.
+//
+long get_menudata (HMENU menu,int item,int position,TCHAR *buffer) {
+  MENUITEMINFO info;
+  info.cbSize     = sizeof(info);           // This is required, but not in the docs.
+  info.fMask      = MIIM_ID | MIIM_TYPE;    // What we want back.
+  info.dwTypeData = buffer;                 // Buffer setup
+  info.cch        = SIZE_BUFFER;            // Size of buffer, also required but not in the docs.
+  if (!GetMenuItemInfo(menu,item,position,&info)) return (0);
+  if (!position) item = item-IDM_FILE_FILES_BASE;
+  lstrcpy (buffer,recent_list.get(item));
+  return (info.wID);
+}
+
+#else  WINCE_POCKETPC
+
+//--------------------------------
+//
+//  This routine gets information about a specific menu item.  The 
+//  information returned includes the ID and the text of the item.
+//
+//      menu     -- Menu or sub-menu to look in.
+//      item     -- Menu item or position (from zero).
+//      position -- If this is non-zero then item indicates a psotion,
+//                  otherwise this idicates a menu item by id.
+//      buffer   -- Location to return the text of the menu item.  
+//                  This buffer should be atleast SIZE_BUFFER long to
+//                  avoid an error.
+//
+//      RETURN   -- Return value is the ID of the menu item, or zero
+//                  if this is not a valid menu item.
+//
+//  This routine replaced the old GetMenuItemText, and GetMenuItemID,
+//  which are not supported under windows CE.
+//  
+long get_menudata (HMENU menu,int item,int position,TCHAR *buffer) {
+  MENUITEMINFO info;
+  info.cbSize     = sizeof(info);           // This is required, but not in the docs.
+  info.fMask      = MIIM_ID | MIIM_TYPE;    // What we want back.
+  info.dwTypeData = buffer;                 // Buffer setup
+  info.cch        = SIZE_BUFFER;            // Size of buffer, also required but not in the docs.
+  if (!GetMenuItemInfo(menu,item,position,&info)) return (0);
+  return (info.wID);
+}
+
+#endif WINCE_POCKETPC
+
+//
+//===================================================================
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#ifdef WINCE
+void draw_frame (HDC hdc,HWND hwnd) {
+  HPEN   pen;
+  HBRUSH brush;
+  RECT   rect;
+  pen   = (HPEN)   SelectObject(hdc,CreatePen(PS_SOLID,1,GetSysColor(COLOR_WINDOWTEXT)));
+  brush = (HBRUSH) SelectObject(hdc,CreateSolidBrush(GetSysColor(COLOR_WINDOW)));
+  GetClientRect (hwnd,&rect);
+  Rectangle     (hdc,rect.left,rect.top,rect.right,rect.bottom);
+  DeleteObject  (SelectObject(hdc,pen));
+  DeleteObject  (SelectObject(hdc,brush));
+  return;
+}
+#endif WINCE
 
 
 

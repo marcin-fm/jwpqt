@@ -1,8 +1,10 @@
 //===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
-//  All rights reserved.                                             //
-//                                                                   //   
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2004, 2005             //
+//                                                                   //
+//  JWPce is free sotware distributed under the terms of the         //
+//  GNU General Public License.                                      //
+//                                                                   //
 //  These routines are intended to interface with EDICT, which is    //
 //  a Japanese/English Dictionary developed and copyrighted by       //
 //  James William Breen.                                             //

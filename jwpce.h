@@ -1,7 +1,9 @@
 //===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
-//  All rights reserved.                                             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2004, 2005             //
+//                                                                   //
+//  JWPce is free sotware distributed under the terms of the         //
+//  GNU General Public License.                                      //
 //                                                                   //
 //===================================================================//
 
@@ -64,7 +66,7 @@
 #ifndef VERSION_SPECIAL
   #define VERSION_SPECIAL                       // Define the special ID if not already.  Used for special versions.
 #endif  VERSION_SPECIAL
-#define VERSION_STRING  TEXT("1.42") VERSION_SPECIAL  // Version ID number
+#define VERSION_STRING  TEXT("1.50") VERSION_SPECIAL  // Version ID number
 #define VERSION_NAME    TEXT("JWPce ") VERSION_STRING // Version name.
 
                                 // Input modes
@@ -82,6 +84,9 @@ extern HINSTANCE instance;      // Our instance.
 extern HINSTANCE language;      // Language processor instance.
 extern HMENU     hmenu;         // Our menu.
 extern HMENU     popup;         // Our popup menu.
+#ifdef WINCE_POCKETPC
+extern HMENU     hmenu2;        // File menu in the button bar.
+#endif WINCE_POCKETPC
 
 typedef short           INT16;  // Various sizes (mostly used in relation to JWP structures).
 typedef unsigned short  UINT16;
@@ -95,7 +100,7 @@ typedef const TCHAR     tchar;
 //
 //  Menu defintiions, in order (need to be used in both jwpce.cpp, and jwp_file.cpp).
 //
-#if   defined(WINCE_PPC)
+#if  (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
   #define MENU_FILE                         0       // Menu number for File menu.
   #define MENU_RECENT                       10      // Menu number for recent files list.
 #elif defined(WINCE_HPC)

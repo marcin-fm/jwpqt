@@ -1,7 +1,9 @@
 //===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
-//  All rights reserved.                                             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2004, 2005             //
+//                                                                   //
+//  JWPce is free sotware distributed under the terms of the         //
+//  GNU General Public License.                                      //
 //                                                                   //
 //===================================================================//
 
@@ -203,6 +205,7 @@ typedef struct {                    // JWP native file pharagraph header used af
 //      IDC_FDFILES   The files list.
 //
 static int files_help;
+#define MAX_FILENAME    36
 
 static BOOL CALLBACK dialog_files (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam) {
   JWP_file *file;
@@ -210,7 +213,25 @@ static BOOL CALLBACK dialog_files (HWND hwnd,UINT message,WPARAM wParam,LPARAM l
     case WM_INITDIALOG: 
          file = jwp_file;
          do {
+#if    (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
+           TCHAR *ptr,*last,buffer[SIZE_BUFFER];
+           int    i;
+           if (lstrlen(file->get_name()) <= MAX_FILENAME) SendDlgItemMessage (hwnd,IDC_FDFILES,LB_ADDSTRING,0,(LPARAM) file->get_name());
+             else {
+               last = ptr = file->get_name();
+               lstrcpy (buffer,TEXT("..."));
+               for (i = 0; ptr[i]; i++) {
+                 if (ptr[i] == '\\') {
+                   last = ptr+i;
+                   if (lstrlen(ptr+i) <= MAX_FILENAME) break;
+                 }
+               }
+               if (ptr[i]) lstrcat(buffer,ptr+i); else lstrcat (buffer,last);
+               SendDlgItemMessage (hwnd,IDC_FDFILES,LB_ADDSTRING,0,(LPARAM) buffer);
+             }
+#else  (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
            SendDlgItemMessage (hwnd,IDC_FDFILES,LB_ADDSTRING,0,(LPARAM) file->get_name());
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
            file = file->next;
          } while (file != jwp_file);
          SendDlgItemMessage (hwnd,IDC_FDFILES,LB_SETCURSEL,0,0);
@@ -369,11 +390,11 @@ void do_fileopen () {
   ofn.hwndOwner         = main_window;
   ofn.hInstance         = instance;
   ofn.lpstrFilter       = tab_string(IDS_FILE_FILTERSOPEN,IDS_FILE_FILTERSGENERAL);
-#ifdef WINCE_PPC
+#if    (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
   ofn.nFilterIndex      = FILETYPE_NORMAL;
-#else  WINCE_PPC
+#else  (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
   ofn.nFilterIndex      = FILETYPE_JTYPES;
-#endif WINCE_PPC
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
   ofn.lpstrFile         = buffer;
   ofn.nMaxFile          = SIZE_OPENBUFFER;
 #ifdef WINCE
@@ -458,19 +479,37 @@ JWP_file *file_is_open (tchar *name) {
 //  This routine processes files into the recent files list.  This 
 //  routine is called whenever a named file is open or closed.
 //
+HMENU button_menu;
+
 void recent_files (tchar *name) {
+#ifdef WINCE_POCKETPC
+  int   i,j;
+  TCHAR buffer[SIZE_BUFFER];
+  HMENU menu;
+  menu        = GetSubMenu(GetSubMenu(hmenu ,MENU_FILE),MENU_RECENT);     // Get recent files sub-menu
+  button_menu = GetSubMenu(GetSubMenu(hmenu2,MENU_FILE),MENU_RECENT);     // Get recent files sub-menu
+  wsprintf (buffer,TEXT("&1 %s"),name);                             // Make menu item
+  JInsertMenu (menu ,0,MF_BYPOSITION,IDM_FILE_FILES_BASE,buffer);   // Insert at the top of the list.
+  for (i = 1; (j = get_menudata(menu,i,true,buffer)); i++) {        // Check the rest of the list.
+    JRemoveMenu (menu ,i,MF_BYPOSITION);                            // Dump item.
+    if ((j == IDM_FILE_FILES_NONE) || (i >= 9) || !stricmp(buffer+3,name)) { i--; continue; }
+    buffer[1] = '1'+i;                                              // If here we will re-add item.
+    JInsertMenu (menu ,i,MF_BYPOSITION,IDM_FILE_FILES_BASE+i,buffer);
+  }
+#else  WINCE_POCKETPC
   int   i,j;
   TCHAR buffer[SIZE_BUFFER];
   HMENU menu;
   menu = GetSubMenu(GetSubMenu(hmenu,MENU_FILE),MENU_RECENT);       // Get recent files sub-menu
   wsprintf (buffer,TEXT("&1 %s"),name);                             // Make menu item
-  InsertMenu (menu,0,MF_BYPOSITION,IDM_FILE_FILES_BASE,buffer);     // Insert at the top of the list.
+  JInsertMenu (menu,0,MF_BYPOSITION,IDM_FILE_FILES_BASE,buffer);    // Insert at the top of the list.
   for (i = 1; (j = get_menudata(menu,i,true,buffer)); i++) {        // Check the rest of the list.
-    RemoveMenu (menu,i,MF_BYPOSITION);                              // Dump item.
+    JRemoveMenu (menu,i,MF_BYPOSITION);                             // Dump item.
     if ((j == IDM_FILE_FILES_NONE) || (i >= 9) || !stricmp(buffer+3,name)) { i--; continue; }
     buffer[1] = '1'+i;                                              // If here we will re-add item.
-    InsertMenu (menu,i,MF_BYPOSITION,IDM_FILE_FILES_BASE+i,buffer);
+    JInsertMenu (menu,i,MF_BYPOSITION,IDM_FILE_FILES_BASE+i,buffer);
   }
+#endif WINCE_POCKETPC
   return;
 }
 
@@ -1178,13 +1217,13 @@ int JWP_file::save_as () {
   if (buffer[i] == '.') buffer[i] = 0;
   if (!GetSaveFileName(&ofn)) return (true);
 #ifdef WINCE
-#ifdef WINCE_PPC
+#if    (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
   TCHAR temp[SIZE_BUFFER];                          // This is a big Kludge!
   if ((buffer[0] == '\\') && (buffer[1] == '\\')) { // This appears to be a problem only on the PPC's
     lstrcpy (temp,&buffer[1]);
     lstrcpy (buffer,temp);
   }
-#endif WINCE_PPC
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
   set_currentdir (buffer,true);         // Wave windows CE current directory
 #endif WINCE
 //

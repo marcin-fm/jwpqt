@@ -1,7 +1,9 @@
 //===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
-//  All rights reserved.                                             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2004, 2005             //
+//                                                                   //
+//  JWPce is free sotware distributed under the terms of the         //
+//  GNU General Public License.                                      //
 //                                                                   //
 //===================================================================//
 
@@ -20,7 +22,7 @@
 //  Special note for Windows CE PPC's
 //
 //  Special handling needs to be done in the case of PPC's.  When the 
-//  user renders a i character using a line ana dot, the sequence of 
+//  user renders a i character using a line and dot, the sequence of 
 //  actions we will receive from the system is as follows:
 //
 //      'l' character
@@ -411,7 +413,7 @@ typedef struct kana_state {
 #define KANA_DONE       100 // We are done, i.e. cannot go on.
 #define KANA_BASE       0   // Table enry point.
 
-#ifdef WINCE_PPC
+#if (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
                             // The folloiwing are internal codes, not to be used by others.
 #define KANA_F          15  // fa,fi,fu,fe,fo  f-
 #define KANA_N          18  // na,ni,nu,ne,no  nyu,nyo,nya  n',n"
@@ -507,7 +509,7 @@ static kana_state kana_states[] = {
   { ""     ,0 ,KANA_PENDING  }, // 51   KANA_PENDING    // Loop holding state.
 };
 
-#else WINCE_PPC
+#else (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
 
 #define KANA_F          15  // fa,fi,fu,fe,fo  f-
 #define KANA_N          17  // na,ni,nu,ne,no  nyu,nyo,nya  n',n"
@@ -588,7 +590,7 @@ static kana_state kana_states[] = {
 
   { ""     ,0 ,KANA_PENDING  }, // 43   KANA_PENDING    // Loop holding state.
 };
-#endif WINCE_PPC
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
 
 //--------------------------------
 //
@@ -737,7 +739,7 @@ int KANA_convert::erase () {
 //  current state is KANA_PPC_L, then the erase will not simply 
 //  erase, but will remove only the last character.
 //
-#ifdef WINCE_PPC
+#if (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
   int i,j,k;
   char temp[6];
   i       = state;      // Save state to generate return.
@@ -749,12 +751,12 @@ int KANA_convert::erase () {
       clear ();                                         // Clear
       for (k = 0; k < j-1; k++) do_char (file,temp[k]); // Put back some characters
     }
-#else WINCE_PPC
+#else (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
   int i;
   i       = state;      // Save state to generate return.
   pending = false;      // This will suppress output of characters.
   clear  ();            // clear system. (does not mater the context since no output)
-#endif WINCE_PPC
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
   return (i);           // Generate return, used for bs/del to determinine if they are done.
 }
 

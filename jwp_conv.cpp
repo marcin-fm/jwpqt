@@ -1,7 +1,9 @@
 //===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
-//  All rights reserved.                                             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2004, 2005             //
+//                                                                   //
+//  JWPce is free sotware distributed under the terms of the         //
+//  GNU General Public License.                                      //
 //                                                                   //
 //===================================================================//
 
@@ -514,6 +516,7 @@ int EDIT_userconv::dlg_convert (HWND hwnd,UINT message,WPARAM wParam,LPARAM lPar
 //  User wants to keep this conversion, so see what is up.
 //
            case IDOK:
+           case IDSEARCH:
 //
 //  Get strings and make sure they are not empty.
 //

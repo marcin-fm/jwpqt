@@ -1,7 +1,9 @@
 //===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
-//  All rights reserved.                                             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2004, 2005             //
+//                                                                   //
+//  JWPce is free sotware distributed under the terms of the         //
+//  GNU General Public License.                                      //
 //                                                                   //
 //  The database read by JWPce is dirived directly from KANJIDIC     //
 //  database dirived by Jim Breen.  Please see the _cpright.txt file //
@@ -140,6 +142,14 @@ struct extend {
 #define INFO_ONEILL             18
 #define INFO_DEROO              19
 #define INFO_KANJILEARN         20
+#define INFO_READWRITE          21
+#define INFO_TUTTLECARDS        22
+#define INFO_KANJIWAY           23
+#define INFO_KANJICONTEXT       24
+#define INFO_BUSYPEOPLE         25
+#define INFO_COMPACTGUIDE       26
+
+#define INFO_MAXITEM INFO_COMPACTGUIDE  // Last info-item code.
 
 //--------------------------------
 //
@@ -172,6 +182,12 @@ public:
   short            halpern_kld;                 // Jack Halpern in his Kanji Learners Dictionary, published by Kodansha in 1999
   short            deroo;                       // Father Joseph De Roo, and published in his book "2001 Kanji"
   short            count;                       // Number of kanji in the database. (NOT USED AT THIS TIME)
+  short            readwrite;                   // "A Guide To Reading and Writing Japanese" edited by Florence Sakade. 
+  short            tuttlecard;                  // Tuttle Kanji Cards, compiled by Alexander Kask. 
+  short            kanjiway;                    // "The Kanji Way to Japanese Language Power" by Dale Crowley. 
+  short            kanjicontext;                // "Kanji in Context" by Nishiguchi and Kono. 
+  short            kanjiguide;                  // "Kodansha Compact Kanji Guide". 
+  short            busypeople;                  // "Japanese For Busy People" vols I-III, published by the AJLT. The codes are the volume.chapter. 
   KANJI            last_jis;                    // Last JIS value in the database.
 
   int  dlg_kanjiinfo (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam);  // Dialog box procedure

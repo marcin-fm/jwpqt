@@ -1,7 +1,9 @@
 //===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
-//  All rights reserved.                                             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2004, 2005             //
+//                                                                   //
+//  JWPce is free sotware distributed under the terms of the         //
+//  GNU General Public License.                                      //
 //                                                                   //
 //===================================================================//
 //
@@ -12,6 +14,9 @@
 #ifdef WINCE
 #include "jwpce.h"
 
+#ifdef WINCE_POCKETPC
+  #include <aygshell.h>
+#endif WINCE_POCKETPC
 #ifdef WINCE_PPC
   #include <C:\Program Files\Windows CE Tools\wce211\ms palm size pc\include\Aygshell.h>
 #endif WINCE_PPC
@@ -113,7 +118,7 @@ void set_currentdir (TCHAR *path,int filename) {
 //
 //  Routines specific to PPC's
 //
-#ifdef WINCE_PPC
+#if (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
 
 static short input_state = false;   // Memory location for stored input panel state.
 
@@ -123,10 +128,10 @@ static short input_state = false;   // Memory location for stored input panel st
 //
 //      notify -- Notification from the system.
 //
-void input_check (int wParam) {
+void input_check (HWND hwnd,int wParam) {
   switch (HIWORD(wParam)) {
-    case EN_SETFOCUS:  input_panel (true);  break;
-    case EN_KILLFOCUS: input_panel (false); break;
+    case EN_SETFOCUS:  input_panel (hwnd,true);  break;
+    case EN_KILLFOCUS: input_panel (hwnd,false); break;
     break; 
   }
   return;
@@ -139,7 +144,10 @@ void input_check (int wParam) {
 //
 //      state -- Set to non-zero to turn on the panel.
 //
-void input_panel (int state) {
+void input_panel (HWND hwnd,int state) {
+#ifdef WINCE_POCKETPC
+    SHSipPreference (hwnd,state ? SIP_UP : SIP_DOWN);
+#else  WINCE_POCKETPC
   SIPINFO si;                                       // Intialize the SIPINFO structure
   memset (&si,0,sizeof(si));
   si.cbSize = sizeof(si);
@@ -147,6 +155,7 @@ void input_panel (int state) {
   si.fdwFlags &= ~SIPF_ON;                          // Clear the flag that controls the input panel
   if (state) si.fdwFlags |= SIPF_ON;                // Set flag if we want to turn it on.
   SHSipInfo (SPI_SETSIPINFO,0,&si,0);               // Set the input panel
+#endif WINCE_POCKETPC
   return;
 }
 
@@ -156,16 +165,19 @@ void input_panel (int state) {
 //  rather clever.  If the panel was open we will open it.  If it was closed we will do 
 //  nothing.  Generally this has a very intiuative feel.
 //
-void input_restore () {
-  if (input_state) input_panel (true);
+#ifdef WINCE_PPC
+void input_restore (HWND hwnd) {
+  if (input_state) input_panel (hwnd,true);
   return;
 }
+#endif WINCE_PPC
 
 //--------------------------------
 //
 //  This rotuine stores the state of the input so it can potentially be restore at a later 
 //  time.
 //
+#ifdef WINCE_PPC
 void input_status () {
   SIPINFO si;                                       // Intialize the SIPINFO structure
   memset (&si,0,sizeof(si));
@@ -174,7 +186,31 @@ void input_status () {
   input_state = (short) (si.fdwFlags & SIPF_ON);    // Get input panel state.
   return;
 }
-
 #endif WINCE_PPC
+
+#endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
+
+//-------------------------------------------------------------------
+//
+//  Routines specific to PocketPC's
+//
+#ifdef WINCE_POCKETPC
+
+//
+//  This routine sets the dialog window to full screen mode.  This can only be used on PocketPC routines.
+//  The dialog pointer is stored in a stack.  This is used to restore the window titles as the user
+//  moves through the dialogs.  The main window title is replaced with the dialog title.  This allows 
+//  The user to identifiy the dialog box in the full screen dialogs.
+//
+//      hwnd   -- Dialog window
+//
+void full_screen (HWND hwnd) {
+  static SHINITDLGINFO dlginfo = { SHIDIM_FLAGS,NULL,SHIDIF_DONEBUTTON | SHIDIF_SIZEDLGFULLSCREEN };
+  dlginfo.hDlg = hwnd;
+  SHInitDialog (&dlginfo);
+  return;
+}
+
+#endif WINCE_POCKETPC
 
 #endif WINCE

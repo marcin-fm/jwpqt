@@ -1,7 +1,9 @@
 //===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
-//  All rights reserved.                                             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2004, 2005             //
+//                                                                   //
+//  JWPce is free sotware distributed under the terms of the         //
+//  GNU General Public License.                                      //
 //                                                                   //
 //===================================================================//
 
@@ -46,6 +48,17 @@
 #define IME_MIXED           1   // Mode uses the IME, but ASCII text is pass through JWPce's input processor
 #define IME_ON              2   // Replace JWPce's input sytem with the IME.
 #define IME_FULL            3   // Allows extended IME support.
+
+#define CODEPAGE_AUTO       0       // Automatically determine the code page.
+#define CODEPAGE_EASTEUROPE 1250    // Easter Europ code page
+#define CODEPAGE_CYRILLIC   1251    // Cyrillic code page
+#define CODEPAGE_USA        1252    // USA and Western Europe code page
+#define CODEPAGE_GREEK      1253    // Greek code page
+#define CODEPAGE_TURKISH    1254    // Turkish code page
+#define CODEPAGE_HEBREW     1255    // Hebrew code page
+#define CODEPAGE_ARABIC     1256    // Arabic code page
+#define CODEPAGE_BALTIC     1257    // Baltic code page
+#define CODEPAGE_VIETNAMESE 1258    // Vietnamese code page
 
 #ifdef WINCE
   #define CONFIG_MAGIC  0xCE72C536  // Magic ID for JWP config files.
@@ -218,10 +231,15 @@ struct cfg {
   byte  cache_displayfont;      // Should we cache or not cache the display font.
   byte  all_fonts;              // Show all fonts in the font selector
 //
-//  Fill
+//  Added
 //
   byte  nokanjibar;             // Diables the kanji bar.
-  byte  fill[256];              // Fill for later expansion.
+  short code_page;              // Code page used for translations
+//
+//  Fill
+//
+  short fill1;
+  byte  fill[252];              // Fill for later expansion.
 };
 
 //--------------------------------
