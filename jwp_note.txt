@@ -1,0 +1,100 @@
+some changes from JWP:
+
+
+kana input:
+
+ ^^   ->  ^
+ ^-   ->  ...
+ ^.   ->  center .
+ +ka  ->  small katakana ka
+ +ke  ->  small katakana ke
+
+
+Program overview:
+
+The program is large and is dividied into a number of parts.  This 
+summary of the program covers the program both from the point of view
+of class structure and file structure.  
+
+Class overview:
+
+class JWP_file:
+
+    This is the central class in the system.  A JWP_file object 
+    represents a file and most all of the operations that can be 
+    performed on it.  This means that most of the program is 
+    actually within a JWP_file object.
+
+    The current editing file is pointed to by jwp_file.  This actually,
+    points to a double linked ring of files, representing all files 
+    open by the user.  
+
+    Other JWP_file class instances are used in other places.  For 
+    example, data pending placement on the clipboard is stored in a 
+    JWP_file class pointed to by jwp_clipboard.  Data read from 
+    the clipboard is stored in a JWP_class structure allocated during 
+    the read (paste).  JWP_file class instances are also used to store 
+    data in edit controls.
+
+    The class JWP_file makes use of a number of other classes that
+    are lined to it, or contained within it:
+
+    class Paragraph:
+
+        Used a lot, this class represents a paragrph, and is the basic
+        element of text used within the program.  A paragraph actually
+        conists of a text buffer, length, formating parameters, and 
+        some house keeping parameters.  Containned in the paragraph 
+        is a double linked list of Line structures.  These essentually
+        represent the line breaks within the paragraph.
+
+        The data within a file is represented as a double linked list
+        of paragraphs.  In some cases, the Line structures are used in
+        a minamule way.  For example, data imported from the clipboard 
+        may not have line breaks, thus is unformated, and contains only
+        a single line.  Simular approche is used for data used in a 
+        edit control.
+
+        struct Line:
+
+            Represents a line break within a class Paragraph object.
+
+    class Position:
+
+        A Poisition represents a location of an object within the 
+        file and potentially on the display.  Positions are stored in
+        two alternative coordinate systems.  The program reguarly 
+        switches back and forth between the two coordinate systems so
+        you must becomve familure with them.
+
+        ABSOLUTE COORDINATES:  In this coordinates, the line of the 
+        position should point to the first line wihin the Paragraph,
+        and the pos indicator should measure the offset from the 
+        beginning of the file.  This coordinate system is useful 
+        because as things are insterted or removed from a paragrpha 
+        thins will move around the line, making keeping track of 
+        them difficult.  In abosolue coordinates, however, the offset 
+        from the beinning of the file is easier to keep track of.
+
+        RELATIVE COORDINATES:  Also though of as user coordinates.  
+        Here the line parameter of the position is the line within the
+        paragraph, and the pos parameter  is the offest into that 
+        line.  This tends to be the way the user thinks of the 
+        cursor location.
+
+        Normally the cursor location is keep in RELATIVE coordinates 
+        and only moved to ABSOLUTE coordinates for a specific use, and 
+        then moved back.
+
+        The position structe also contains parameters for aboslute 
+        display location.  These are used to optimize redering and
+        cursor movement, because we now know the placement of various
+        screen components.  Note that this placement is on a realy 
+        large vitual screen, and only relativly small positive numbers
+        result in an actual display location.
+
+        Some predominante Positions are cursor, representing the cursor
+        location.  view_top which represents the upper left corner of
+        the display.  (Note, view_top's display coodrinate are in 
+        slighly odd, because of the border around the top and left
+        side of the display.
