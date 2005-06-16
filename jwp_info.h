@@ -1,15 +1,15 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
-//                                                                   //   
+//                                                                   //
 //  The database read by JWPce is dirived directly from KANJIDIC     //
 //  database dirived by Jim Breen.  Please see the _cpright.txt file //
 //  for additional information.                                      //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This modlue implements various informational routines.  The 
 //  principle of these are the character-info (kanji info) and the 
@@ -33,6 +33,10 @@
 #include <pshpack2.h>   // Structure to be packed at 2 byte boundaries.
                         //   this results is a smaller data size.
 
+//--------------------------------
+//
+//  Fixed kanji info structure.
+//
 struct kinfo {
   ushort bushu      :8;     // Radical number (from Nelson).
   ushort strokes    :5;     // Stroke count.
@@ -60,6 +64,10 @@ struct kinfo {
   ulong  offset     :24;    // File offset to variable part of the data.
 };
 
+//--------------------------------
+//
+//  Extended data structrue.
+//
 struct extend {
   ushort md_long;           // Morohashi Daikanwajiten long entry
 
@@ -108,11 +116,32 @@ struct extend {
 #define KIFLAG_XREF     0x0020  // Has cross refference data
 
 //
-//  Number of kanji in the database.  This is actually written in the newer databases,
-//  buf for the moment, I will continue using a hard-coded value.
+//  Identifiers for kanji info dialog items.
 //
-#define KIMAX_KANJI     6355    // Eventually this should be read from the file.
+#define INFO_BLANK              0
+#define INFO_TYPE               1
+#define INFO_JIS                2
+#define INFO_SHIFTJIS           3
+#define INFO_UNICODE            4
+#define INFO_STROKE             5
+#define INFO_GRADE              6
+#define INFO_NELSON             7
+#define INFO_HALPERN            8
+#define INFO_SPAHN              9
+#define INFO_FOURCORNERS        10
+#define INFO_MOROHASHI          11
+#define INFO_PINYIN             12
+#define INFO_KOREAN             13
 
+#define INFO_FREQUENCY          14
+#define INFO_HENSHALL           15
+#define INFO_GAKKEN             16
+#define INFO_HEISIG             17
+#define INFO_ONEILL             18
+#define INFO_DEROO              19
+#define INFO_KANJILEARN         20
+
+//--------------------------------
 //
 //  KANJI_info class handles acess to the kanji-info file, and generation
 //  of the character info dalog box.
@@ -139,8 +168,11 @@ public:
   short            heisig;                      // "Remembering The Kanji" by James Heisig
   short            oneill;                      // "Japanese Names", by P.G. O'Neill
   short            fc_main2;                    // Four-corners secondary code <code><resolution is stroed in the struture>
-//  short            count;                       // Number of kanji in the database. (NOT USED AT THIS TIME)
-//  KANJI            last_jis;                    // Last JIS value in the database.  (NOT USED AT THIS TIME)
+  short            oneill_ek;                   // P.G. O'Neill's Essential Kanji (ISBN 0-8348-0222-8). 
+  short            halpern_kld;                 // Jack Halpern in his Kanji Learners Dictionary, published by Kodansha in 1999
+  short            deroo;                       // Father Joseph De Roo, and published in his book "2001 Kanji"
+  short            count;                       // Number of kanji in the database. (NOT USED AT THIS TIME)
+  KANJI            last_jis;                    // Last JIS value in the database.
 
   int  dlg_kanjiinfo (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam);  // Dialog box procedure
   int  dlg_moreinfo  (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam);  // Dialog box procedure
@@ -150,16 +182,20 @@ public:
   int  get_stroke    (int ch);                      // Get stroke count for character (used by the kanji search rotuines)
   void close_info    (void);                        // Close info
 private:
+  void format_line (HWND hwnd,int line,int code);   // Format and place an object in the display.
   void setup_char  (HWND hwnd);                     // Setup dialog box to display a character.
   void init_dialog (HWND hwnd);                     // Intialize main character info dialog.
+  void format_xref (HWND hwnd);                     // Format the xref.
   KANJI     ch;                                     // Kanji we are working with.
   HANDLE    handle;                                 // Hanlde for accessing the kanji-info file.
+  HWND      dialog;                                 // Dialog pointer.
 };
 
 typedef KANJI_info KANJI_info;
 
 extern void do_kanjicount   (void);                 // Implements the count kanji feature.
 extern void free_info       (void);                 // Free memory allocated for the kanji info.
+extern void info_config     (HWND hwnd);            // Open configure kanji-info dialog.
 extern int  initialize_info (WNDCLASS *wclass);     // Register classes needed by the info routines.
 extern void kanji_info      (HWND hwnd,int kanji);  // Get kanji finformation for a character
 

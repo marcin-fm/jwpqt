@@ -1,11 +1,11 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This modlue is a collection of micelaeous routines not placed 
 //  in any other module.
@@ -16,8 +16,12 @@
 #include "jwp_help.h"
 #include "jwp_misc.h"
 #include <commctrl.h>   // Needed for tab controls
+#include <shellapi.h>
+#include <shlobj.h>
 
-//-------------------------------------------------------------------
+//#define FIXED_LOCATIONS   // This generates fixed file loations for older CE machines.
+
+//===================================================================
 //
 //  Begin class KANJI_string.
 //
@@ -29,6 +33,7 @@
 //  terminated list of JIS codes and ASCII codes.
 //
 
+//--------------------------------
 //
 //  Copies the contents of the string buffer into a fixed length 
 //  buffer, that is NULL terminated.
@@ -48,6 +53,7 @@ void KANJI_string::copy (KANJI *string,int limit) {
   return;
 }
 
+//--------------------------------
 //
 //  Deallocate memory associated with the string.
 //
@@ -57,6 +63,7 @@ void KANJI_string::free () {
   return;
 }
 
+//--------------------------------
 //
 //  Get the string value from a Japanese edit box.
 //
@@ -66,13 +73,14 @@ void KANJI_string::free () {
 void KANJI_string::get (HWND hwnd,int id) {
   int    i;
   KANJI *k;
-  i = JE_GetText(hwnd,id,&k);
+  i = JEGetDlgItemText(hwnd,id,&k);
   free ();
   if (!i) return;
   set (k,i);
   return;
 }
 
+//--------------------------------
 //
 //  Get the length of the string.
 //
@@ -85,6 +93,7 @@ int KANJI_string::length () {
   return (i);
 }
 
+//--------------------------------
 //
 //  Put the string into a Japanese edit-box.
 //
@@ -96,6 +105,7 @@ void KANJI_string::put (HWND hwnd,int id) {
   return;
 }
 
+//--------------------------------
 //
 //  Read a string from a file.
 //
@@ -114,6 +124,7 @@ int KANJI_string::read (IO_cache *cache) {
   return (false);
 }
 
+//--------------------------------
 //
 //  Set the string value (i.e. copy a string into this object).
 //
@@ -132,6 +143,7 @@ void KANJI_string::set (KANJI *kstring,int len) {
   return;
 }
 
+//--------------------------------
 //
 //  This routine transfers the actual string from one KANJI_string 
 //  object to another without allocating the string.  This is faster 
@@ -147,6 +159,7 @@ void KANJI_string::transfer(KANJI_string *ks) {
   return;
 }
 
+//--------------------------------
 //
 //  Write the string to a file.  The format of the string in the file
 //  is a count of the number of bytes followed by the bytes.  The 
@@ -169,13 +182,210 @@ int KANJI_string::write (IO_cache *cache) {
 //
 //  End class KANJI_string.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
+//
+//  Begin class SIZE_window
+//
+//  This class contains a coloection of data an routines used to manage
+//  resizable dialog boxes.  In reallity we only allow resizing on 
+//  dialog boxes containning Japnese List constrols.  The idea here is 
+//  to be able to see more of the list.  We generally require that the
+//  list control be in the lower right hand corner of the dialog.  All
+//  the buttons generally stay put, but the list box streaturches to 
+//  fill the changing space.  This is done by keeping track of the 
+//  dialog default size as well as the default size of the list control
+//  this can be used to do all the calculations we need.
+//
+//  This class also provides a way to store the basic size information
+//  in the configuation structure so we can open the dialog where the
+//  user wants it again.
+//
+//  A acception to the constraints is made for the OK and CANCEL
+//  controls.  The option of allowing these to be below the 
+//  list control is supported.
+//
+//
+
+//--------------------------------
+//
+//  Constructor
+//
+SIZE_window::SIZE_window () {
+  memset (this,0,sizeof(class SIZE_window));
+  return;
+}
+
+//--------------------------------
+//
+//  This routine handles the dynamic controls.  These are controls that are
+//  revieled and activated if the dialog box is extended enough to make them
+//  visible.
+//
+void SIZE_window::check_controls () {
+  int  i;
+  HWND hwnd;
+  RECT drect,rect;
+  if (!first) return;                       // No dynamic controls
+  GetWindowRect (dlg,&drect);   
+  for (i = first; i <= last; i++) {
+    hwnd = GetDlgItem(dlg,i);
+    GetWindowRect (hwnd,&rect);
+    if ((rect.bottom < drect.bottom-(rect.bottom-rect.top)/2) && (rect.right < drect.right)) {      // Didn't use GetSystemMetrics() for CE devices.
+      EnableWindow (hwnd,true);             // Control is visible so actvate it.
+      ShowWindow   (hwnd,SW_SHOW);
+    }
+    else {                                  // Control is not visible so disable it.
+      EnableWindow (hwnd,false);
+      ShowWindow   (hwnd,SW_HIDE);
+    }
+  }
+  return;
+}
+
+//--------------------------------
+//
+//  Intialize call.  This should be called in the dialog WM_INITDIALOG
+//  message and sets the base values.
+//
+//      hwnd    -- Dialog window.
+//      id      -- ID of the list control.
+//      init    -- Pointer to a size_window structure.  This canotains the location and
+//                 size of the user's last use of the dialog.  These are generally 
+//                 stored in the configuration stucture.  If this is NULL, then the 
+//                 dialog will open at the default size and location.  The size and 
+//                 location will not ve saved.
+//      buttons -- If non-zero this indicate the OK and CANCEL buttons are below
+//                 the list and must be moved along with the list control.
+//      dfirst  -- First dynamic button (Use zero if there are no dynamic buttons).
+//      dlast   -- Last dynamic button.  These are controls that are activated as the 
+//                 size of the dialog box gets big enough to show them
+//
+void SIZE_window::wm_init (HWND hwnd,int id,struct size_window *init,int buttons,int dfirst,int dlast) {
+  RECT rect;
+  move_buttons = buttons;                           // Save buttons option.
+  dlg          = hwnd;                              // Save dialog
+  list         = GetDlgItem(hwnd,id);               // Save list
+  save         = init;                              // Save intitializer
+  first        = dfirst;                            // Save dynamic buttons
+  last         = dlast;
+  GetWindowRect (list,&rect);                       // Get list default size.
+  lst_xmin = rect.right-rect.left;
+  lst_ymin = rect.bottom-rect.top;
+  GetWindowRect (dlg,&rect);                        // Get dialog default size.
+  dlg_xmin = rect.right-rect.left;
+  dlg_ymin = rect.bottom-rect.top;
+  GetWindowRect (GetDlgItem(hwnd,IDOK),&rect);      // Get location of OK button.
+  check_controls ();                                // Check controls for visible.
+  btn_y    = rect.top;                              // Restore window settings.
+//
+//  Do we need to adjust the dialog.
+//
+  if (!init) return;                                            // No intialize so cannot setup
+  if ((save->sx < dlg_xmin) || (save->sy < dlg_ymin)) return;   // Save is smaller than initialize dailog.
+#ifndef WINCE
+  if ((save->sx > dlg_xmin) || (save->sy > dlg_ymin)) MoveWindow (hwnd,save->x,save->y,save->sx,save->sy,true);
+#else   WINCE
+  if ((save->sx > dlg_xmin) || (save->sy > dlg_ymin)) ShowWindow (hwnd,SW_MAXIMIZE);
+#endif  WINCE
+  return;
+}
+
+//--------------------------------
+//
+//  This routine keeps track of dialog box moves so we can restore the dialog
+//  box position.  This should be called as a responce to a WM_MOVE message.
+//
+void SIZE_window::wm_move () {
+  RECT rect;
+  if (!save) return;
+  GetWindowRect (dlg,&rect);
+  save->x = rect.left;
+  save->y = rect.top;
+  return;
+}
+
+//--------------------------------
+//
+//  This routine is called whenever the size of the dialog is changed.  This should
+//  be called as a responce to a WM_SIZE message.  This will correct the position 
+//  and size of the list control as well as move the buttons if necessary.
+//  Note that if we change the size of the list control, it will get a WM_SIZE
+//  message and reform.
+//
+//      wParam -- wParam from the WM_SIZE message.  Used to dectect minimize.
+//
+void SIZE_window::wm_size (int wParam) {
+#ifndef WINCE
+  RECT         rect;
+  size_window *size,temp;
+  if (wParam == SIZE_MINIMIZED) return;
+  GetWindowRect (dlg,&rect);                        // Take care of the window parameters
+  if (save) size = save; else size = &temp;
+  size->sx = rect.right-rect.left;
+  size->sy = rect.bottom-rect.top; 
+  size->x  = rect.left;
+  size->y  = rect.top;
+  check_controls ();
+  GetWindowRect  (list,&rect);                      // Take care of the list control
+  MoveWindow     (list,rect.left-size->x-GetSystemMetrics(SM_CXFRAME),rect.top-size->y-GetSystemMetrics(SM_CYCAPTION)-GetSystemMetrics(SM_CYFRAME),lst_xmin+size->sx-dlg_xmin,lst_ymin+size->sy-dlg_ymin,true);
+  if (move_buttons) {                               // Move the OK and CANCEL buttons if necessary.
+    HWND button;
+    button = GetDlgItem(dlg,IDOK);
+    GetWindowRect (button,&rect);
+    MoveWindow (button,rect.left-size->x-GetSystemMetrics(SM_CXFRAME),btn_y+size->sy-dlg_ymin-size->y-GetSystemMetrics(SM_CYCAPTION)-GetSystemMetrics(SM_CYFRAME),rect.right-rect.left,rect.bottom-rect.top,true);
+    button = GetDlgItem(dlg,IDCANCEL);
+    GetWindowRect (button,&rect);
+    MoveWindow (button,rect.left-size->x-GetSystemMetrics(SM_CXFRAME),btn_y+size->sy-dlg_ymin-size->y-GetSystemMetrics(SM_CYCAPTION)-GetSystemMetrics(SM_CYFRAME),rect.right-rect.left,rect.bottom-rect.top,true);
+  }
+#else  WINCE
+  RECT         rect;
+  size_window *size,temp = { 0,0,0,0 };
+  GetWindowRect (dlg,&rect);                        // Take care of the window parameters
+  if (save) size = save; else size = &temp;
+  size->sx = rect.right-rect.left;
+  size->sy = rect.bottom-rect.top; 
+  size->x  = rect.left;
+  size->y  = rect.top;
+  check_controls ();
+  GetWindowRect  (list,&rect);                     // Take care of the list control
+  if (wParam == SIZE_MAXIMIZED) {
+    MoveWindow (list,rect.left-size->x-GetSystemMetrics(SM_CXDLGFRAME)-1,rect.top-size->y-GetSystemMetrics(SM_CYCAPTION)-GetSystemMetrics(SM_CYDLGFRAME)-1,lst_xmin+size->sx-dlg_xmin,lst_ymin+size->sy-dlg_ymin,true);
+  }
+  else {
+    MoveWindow (list,rect.left-size->x-GetSystemMetrics(SM_CXDLGFRAME),rect.top-size->y-GetSystemMetrics(SM_CYCAPTION)-GetSystemMetrics(SM_CYDLGFRAME),lst_xmin+size->sx-dlg_xmin,lst_ymin+size->sy-dlg_ymin,true);
+  }
+#endif WINCE
+  return;
+}
+
+//--------------------------------
+//
+//  Called during a sizing operation, this is used to prevent the user
+//  from reducing the dialog below the minimum size.  This routine should
+//  be called as a responce to a WM_SIZING message.
+//
+//      rect -- Proposized sizing rectange.  This is actually passed to
+//              the WM_SIZING message in lParam.
+//
+void SIZE_window::wm_sizing (RECT *rect) {
+  if (rect->right-rect->left < dlg_xmin) rect->right  = rect->left+dlg_xmin;
+  if (rect->bottom-rect->top < dlg_ymin) rect->bottom = rect->top +dlg_ymin;
+  return;
+}
+
+//
+//  End class SIZE_window.
+//
+//===================================================================
+
+//===================================================================
 //
 //  Static rotuines.
 //
 
+//--------------------------------
 //
 //  Main dialog box handler for tabed-dialog boxes.  There is actually a second user
 //  handler tha may be called to process messages not processed here.
@@ -186,10 +396,10 @@ static BOOL CALLBACK tab_dialog (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lParam)
   TC_ITEM   item;               // Item structure to access data in the tab control.
   RECT      dlg,rect;           // Rectangles for the dialog box and the tab control (and it's window)
   int       i;              
-  tab   = GetDlgItem(hwnd,IDC_TABCONTROL);              // The tab control.
   setup = (TabSetup *) GetWindowLong(hwnd,DWL_USER);    // The user setup, passed in lParam, and saved in the DWL_USER window param
   switch (msg) {
     case WM_INITDIALOG:
+         tab   = GetDlgItem(hwnd,IDC_TABCONTROL);       // The tab control.
          setup = (TabSetup *) lParam;                   // Get the real setup.
          SetWindowLong (hwnd,DWL_USER,lParam);          // Save it for later
          GetWindowRect (hwnd,&dlg);                     // Get working space in tab control
@@ -219,12 +429,14 @@ static BOOL CALLBACK tab_dialog (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lParam)
     case WM_NOTIFY:
          switch (((LPNMHDR) lParam)->code) {
            case TCN_SELCHANGING:                        // Page is going out of view so hide it.
+                tab       = GetDlgItem(hwnd,IDC_TABCONTROL);
                 item.mask = TCIF_PARAM;
                 TabCtrl_GetItem(tab,TabCtrl_GetCurSel(tab),&item);
                 ShowWindow ((HWND) (item.lParam),SW_HIDE);
                 return (false);
            case TCN_SELCHANGE:                          // Page is coming into view so show it.
 SetPage:;
+                tab         = GetDlgItem(hwnd,IDC_TABCONTROL);
                 item.mask   = TCIF_PARAM;
                 i           = TabCtrl_GetCurSel(tab);
                 setup->page = i;
@@ -238,6 +450,7 @@ SetPage:;
     case WM_COMMAND:
          switch (LOWORD(wParam)) { 
            case IDOK:                                   // Keep the changes, so read all pages.
+                tab       = GetDlgItem(hwnd,IDC_TABCONTROL);
                 item.mask = TCIF_PARAM;
                 for (i = 0; i < setup->count; i++) {
                   TabCtrl_GetItem (tab,i,&item);
@@ -259,18 +472,19 @@ SetPage:;
   return (false);
 }
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Exported structures.
 //
 
 SCROLLINFO scroll_info = { sizeof(SCROLLINFO),SIF_ALL | SIF_DISABLENOSCROLL,0,0,0,0,0 };    
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Exported routines.
 //
 
+//--------------------------------
 //
 //  This small utility routine is actually designed for use with the 
 //  file requestors.  It's fucntion is to add a part the a file name
@@ -295,6 +509,7 @@ TCHAR *add_part (TCHAR *buffer,TCHAR *part) {
   return (part+lstrlen(part)+1);
 }
 
+//--------------------------------
 //
 //  Group of routines to process button dialog boxes.  A button 
 //  dialog box is any dialog box that contains only active buttons.
@@ -311,6 +526,7 @@ static tchar *button_data;  // Static location to pass data to the
 static int    button_help;  // Static location used to hold help ID for
                             //   button dialog.
 
+//--------------------------------
 //
 //  Dialog box procedure.
 //
@@ -329,9 +545,11 @@ static BOOL CALLBACK dialog_button (HWND hwnd,UINT message,WPARAM wParam,LPARAM 
   return (false);
 }
 
+//--------------------------------
 //
 //  Generates a button dialog.
 //
+//      HWND   -- Parent window (NULL will use the main window).
 //      idd    -- Diolog box id.
 //      data   -- Data for the static text item.  A value of NULL should
 //                be used if there is not static text item.
@@ -340,12 +558,14 @@ static BOOL CALLBACK dialog_button (HWND hwnd,UINT message,WPARAM wParam,LPARAM 
 //      RETURN -- The ID of the button selected that termianted the 
 //                dialog.
 //
-int ButtonDialog (int idd,tchar *data,int help) {
+int ButtonDialog (HWND hwnd,int idd,tchar *data,int help) {
+  if (!hwnd) hwnd = main_window;
   button_data = data;
   button_help = help;
-  return (JDialogBox(idd,main_window,(DLGPROC) dialog_button));
+  return (JDialogBox(idd,hwnd,(DLGPROC) dialog_button));
 }
 
+//--------------------------------
 //
 //  Generate an error message.
 //
@@ -364,6 +584,7 @@ void ErrorMessage (int error,int format,...) {
   return;
 }
 
+//--------------------------------
 //
 //  Check to see if a file exists.
 //
@@ -387,6 +608,7 @@ int FileExists (tchar *name) {
   return (true);
 }
 
+//--------------------------------
 //
 //  This routine formats a string based on an ID from the resource table.
 //
@@ -404,6 +626,7 @@ TCHAR *format_string (TCHAR *buffer,int id,...) {
   return (buffer);
 }
 
+//--------------------------------
 //
 //  This rotuine is used to read a float value from an edit-box.
 //
@@ -440,6 +663,43 @@ int get_float (HWND hwnd,int id,float min_val,float max_val,float def,int scale,
   return ((int) (value+0.5));
 }
 
+//--------------------------------
+//
+//  Get a system folder.
+//
+//      id -- Folder ID.
+//      buffer -- Buffer for folder path.
+//
+//      RETURN -- Pointer to buffer.
+//
+TCHAR *get_folder (int id,TCHAR *buffer) {
+#ifndef FIXED_LOCATIONS
+  LPITEMIDLIST item  = NULL;
+  LPMALLOC     alloc = NULL;
+  SHGetMalloc                (&alloc);
+  SHGetSpecialFolderLocation (NULL,id,&item);
+  SHGetPathFromIDList        (item,buffer); 
+  alloc->Free    (item);
+  alloc->Release ();
+  return (buffer);
+#else  FIXED_LOCATIONS
+  switch (id) {
+    case CSIDL_DESKTOP:
+         lstrcpy (buffer,TEXT("\\windows\\desktop"));
+         break;
+    case CSIDL_PROGRAMS:
+         lstrcpy (buffer,TEXT("\\windows\\start menu\\programs"));
+         break;
+    default:
+    case CSIDL_PERSONAL:
+         lstrcpy (buffer,TEXT("\\my documents"));
+         break;
+  }
+  return (buffer);
+#endif FIXED_LOCATIONS
+}
+
+//--------------------------------
 //
 //  Gets an interger value from a dialog box edit control with 
 //  bounds checking, and a default value to use if no value can 
@@ -462,6 +722,7 @@ int get_int (HWND hwnd,int id,int min_val,int max_val,int def) {
   return (i);
 }
 
+//--------------------------------
 //
 //  This routine gets information about a specific menu item.  The 
 //  information returned includes the ID and the text of the item.
@@ -490,6 +751,7 @@ long get_menudata (HMENU menu,int item,int position,TCHAR *buffer) {
   return (info.wID);
 }
 
+//--------------------------------
 //
 //  Gets a string from the system resource and returns the string.
 //
@@ -511,6 +773,7 @@ TCHAR *get_string (int id) {
   return (buffer);
 }
 
+//--------------------------------
 //
 //  This is a replacment for the system routines CreateDialogParam/CreateDialog.  This 
 //  routien supports reading the templete from one source and the dialog from another.
@@ -534,6 +797,7 @@ HWND JCreateDialog (int id,HWND hwnd,DLGPROC proc,long param) {
   return (CreateDialogIndirectParam(instance,(LPCDLGTEMPLATE) data,hwnd,proc,param));
 }
 
+//--------------------------------
 //
 //  This is a replacment for the system routines DialogBoxParam/DialogBox.  This 
 //  routien supports reading the templete from one source and the dialog from another.
@@ -557,6 +821,25 @@ int JDialogBox (int id,HWND hwnd,DLGPROC proc,long param) {
   return (DialogBoxIndirectParam(instance,(LPCDLGTEMPLATE) data,hwnd,proc,param));
 }
 
+//--------------------------------
+//
+//  Duplicate a kanji string.  Takes care of the case of the input string being NULL, or 
+//  the length being zero.
+//
+//      string -- String to duplciate.
+//      length -- Length of string.
+//
+//      RETURN -- Dulicated string.  Null indicates an error, or no input string.
+//
+KANJI *kstrdup (KANJI *string,int length) {
+  KANJI *dup;
+  if (!string || !length) return (NULL);
+  if (!(dup = (KANJI *) malloc(length*sizeof(KANJI)))) return (NULL);
+  memcpy (dup,string,length*sizeof(KANJI));
+  return (dup);
+}
+
+//--------------------------------
 //
 //  This routine loads a null termianted image of a file into memroy.
 //  This is used by various routines in the system.
@@ -577,6 +860,7 @@ byte *load_image (tchar *name) {
   return (image);
 }
 
+//--------------------------------
 //
 //  This is an enhanced version of the system routine.
 //
@@ -599,6 +883,7 @@ int JMessageBox (HWND hwnd,int text,int caption,UINT type,...) {
   return (MessageBox(hwnd,buffer,title,type));
 }
 
+//--------------------------------
 //
 //  This routine is used to write a float value into an edit box.
 //
@@ -617,6 +902,7 @@ void put_float (HWND hwnd,int id,float value,int scale) {
   return;
 }
 
+//--------------------------------
 //
 //  Generate an out of memory error.
 //
@@ -625,6 +911,36 @@ void OutOfMemory (HWND hwnd) {
   return;
 }
 
+//--------------------------------
+//
+//  A string is loaded from the string table.  The tab characters are converted to ascii 0.
+//  This routine is used to support file requestors.
+//
+//  Care must be used in calling this routine since the routine returns the string in 
+//  a static data space.  First this means there are two rules to follow:
+//
+//      1. The length of the string that can be recovered is limited by the the
+//         static buffer.  Tis currently SIZE_BUFFER.  The filter strings are long!
+//      2. There is only one static buffer so care must be taken in the use of 
+//         the string.
+//
+//      id     -- ID of string to recover.
+//      id2    -- ID for additional part of the string.  If these are both 
+//                present, the two strings will be added together.
+//
+//      RETURN -- Pointer to static location containning the string.
+//
+TCHAR *tab_string (int id,int id2) {
+  TCHAR *ptr,*p;
+  ptr = get_string(id);
+  if (id2) LOAD_STRING (ptr+lstrlen(ptr),id2,SIZE_BUFFER-lstrlen(ptr));
+  for (p = ptr; *p; p++) {
+    if (*p == '\t') *p = 0;
+  }
+  return (ptr);
+}
+
+//--------------------------------
 //
 //  Small stub rotuine for initializing a tabed dialog box.
 //
@@ -640,6 +956,7 @@ int TabDialog (int id,TabSetup *setup) {
   return (JDialogBox(id,main_window,(DLGPROC) tab_dialog,(LONG) setup));
 }
 
+//--------------------------------
 //
 //  Generate a simple Yes-No dialog box, and get input from the user.
 //

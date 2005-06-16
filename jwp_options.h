@@ -1,11 +1,11 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This modlue contains all of the major compile time otpions for the
 //  program.  These are not adjustments of the size of various buffers,
@@ -73,31 +73,5 @@
 //                     much.
 //
 #define SUPORT_HALFKATA
-
-//
-//------  jwp_dict  ------
-//
-//  DICTONARY_TRACKING -- If defined, this causes special code used for
-//                        research to become active, this code will 
-//                        record quieries to the dictonary and determine
-//                        and their success or failure.  This is designed
-//                        as a research tool for Professor M. O. Douglass
-//                        of UCLA, and not as a general use tool.  Not
-//                        defining this value removes all trace of the 
-//                        research code for the compilation.
-//
-#ifdef WINCE
-  #ifdef DICTONARY_TRACKING
-    #undef DICTIONARY_TRACKING
-  #endif DICTONARY_TRACKING
-#else  WINCE
-//#define DICTIONARY_TRACKING
-#endif WINCE
-
-#ifdef DICTIONARY_TRACKING      
-  #define VERSION_SPECIAL "r"   // Define version special constaint so name is different
-#else  DICTIONARY_TRACKING
-  #define VERSION_SPECIAL 
-#endif DICTIONARY_TRACKING
 
 #endif jwp_opts_h

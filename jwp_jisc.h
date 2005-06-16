@@ -1,15 +1,15 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
-//                                                                   //   
+//                                                                   //
 //  The code do do conversion between ECU, JIS, and Shift-JIS        //
 //  was taken from jconv.c which is copyright by Ken R. Lunde,       //
 //  Adobe Systems Incorporated.  Full copyright notice is cpp file.  //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This module implements the translatin between JWP's internal coding
 //  and various other formats.  These formats include various JIS formats,
@@ -53,8 +53,24 @@
 #define FILETYPE_TYPEMASK   0x0f    // Mask to get actual working types for files.
 #define IS_WORKFILE(x)  ((x) & FILETYPE_WORKMASK)   // Test for working type file
 
-                                // Character markers.
-#define JIS_EOF             -1  // All other characters are internal
+#define UNICODE_BAD         0xffff  // Unicode value representing an error.
+
+                                    // UTF-8 encouding values. 
+#define UTF8_VALUE1     0x00        // Value for set bits for single byte UTF-8 Code.
+#define UTF8_MASK1      0x80        // Mask (i.e. bits not set by the standard) 0xxxxxxx
+#define UTF8_WRITE1     0xff80      // Mask of bits we cannot allow if we are going to write one byte code
+#define UTF8_VALUE2     0xc0        // Two byte codes
+#define UTF8_MASK2      0xe0        // 110xxxxx 10yyyyyy
+#define UTF8_WRITE2     0xf800      // Mask of mits we cannot allow if we are going to write two byte code
+#define UTF8_VALUE3     0xe0        // Three byte codes    
+#define UTF8_MASK3      0xf0        // 1110xxxx 10yyyyyy 10zzzzzz
+#define UTF8_VALUE4     0xf0        // Four byte values
+#define UTF8_MASK4      0xf8        // 11110xxx ----    (These values are not supported by JWPce).    
+#define UTF8_VALUEC     0x80        // Continueation byte (10xxxxxx).
+#define UTF8_MASKC      0xc0
+
+                                    // Character markers.
+#define JIS_EOF             -1      // All other characters are internal
 
 class JIS_convert : public IO_cache {
 public:
@@ -80,15 +96,24 @@ private:
 
 typedef class JIS_convert JIS_convert;
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Exported routines.
 //
-extern int  jis2sjis       (int);   // Convert JIS code into Shift-JIS code.
-extern int  jis2unicode    (int);   // Convert JIS code into Unicode.
-extern int  sjis2jis       (int);   // Convert Shift-JIS code to JIS code.
-extern int  unicode2jis    (int);   // Convert Unicode to JIS code.   
+extern int  ascii2unicode  (int ch);            // Convert extended ASCII to UNICODE
+extern int  jis2sjis       (int ch);            // Convert JIS code into Shift-JIS code.
+extern int  jis2unicode    (int ch);            // Convert JIS code into Unicode.
+extern int  sjis2jis       (int ch);            // Convert Shift-JIS code to JIS code.
+extern int  unicode2jis    (int ch,int bad);    // Convert Unicode to JIS code.   
+//
+//  Some of functions have been blocked out because they are not yet needed.  They are for when the 
+//  code is converted to UNICODE.
+//
+extern void jis2utf        (byte *&ptr,int ch); // Convert JIS code to UTF-8
+extern int  utf2jis        (byte *&ptr);        // Convert UTF-8 to JIS code.
+//extern void unicode2utf    (byte *&ptr,int ch); // Convert UNICODE to UTF-8
+//extern int  utf2unicode    (byte *&ptr);        // Convert UTF-8 to UNICODE.
 
-extern void initialize_cp  (void);  // Initialize the conversion routines (adjust for code page)
+extern void initialize_cp  (void);              // Initialize the conversion routines (adjust for code page)
 
 #endif jwp_jisc_h

@@ -1,11 +1,11 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This modlue is central to the program.  In this module most of the 
 //  basic manipulations on a file are implemented.  This modlue includes 
@@ -20,7 +20,7 @@
 #include "jwp_para.h"
 #include "jwp_prnt.h"
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  class Position
 //
@@ -58,7 +58,7 @@ private:
 
 #include "jwp_undo.h"
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  struct Selection.
 //
@@ -82,16 +82,16 @@ typedef struct Selection {      // Information for a selection.
   byte           fixed;         // Indicates which point of the mark is fixed.
 } Selection;
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin Class JWP_view.
 //
-//  Class defines a basic fiel fiew window.  This is generally associated
+//  Class defines a basic file fiew window.  This is generally associated
 //  with a list of JWP_file class, whcih contain the actual files being
 //  editied.
 //
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin Class JWP_File.
 //
@@ -118,6 +118,13 @@ typedef struct Selection {      // Information for a selection.
 #define CHAR_START          1   // Start kana->kanji conversion
 #define CHAR_STOP           2   // Stop kana->kanji conversion
 
+                                // File reading errors
+#define FILEERR_OK          0   // No errror
+#define FILEERR_FATAL       1   // Fatal file error, cannot be recovered from.
+#define FILEERR_ERROR       2   // File has an error but is recoverable
+
+#define SEL_MOUSE           2   // Special flag indicating selection is with a mouse.
+
 typedef class JWP_file {
 friend class Position;
 friend class Paragraph;
@@ -136,12 +143,13 @@ public:
   void        do_key         (int key,int ctrl,int shift);  //Process key. 
   void        do_mouse       (int iMsg,WPARAM wParam,LPARAM lParam);    // Process mouse.
   void        do_menu        (int wParam);              // Execute a memue command
+  void        popup_menu     (int x,int y);             // Generate a popup menu.
   void        draw_all       (HDC hdc,RECT *bound);     // Main draw routine.
   void        h_scroll       (int message);             // Process horizontal scroll messages.
   void        v_scroll       (int message);             // Process vertical scroll messages       
-  void        cursor_left    (void);                    // Moves the cursor to the left.
+  void        left           (void);                    // Move sursor to the left witht or whitout shift.
+  void        right          (void);                    // Move cursor to the right with or whithout shift.
   byte        filetype;                                 // File type (disk type).
-
 //
 //  Formatting commands.
 //
@@ -155,6 +163,12 @@ public:
   void        redraw_range   (int pos1,Paragraph *para2,int pos2);  // Redraw range.
   void        reformat       (void);                    // Reforamt the file.
   void        title          (void);                    // Set current display title.
+  void        sysname        (int id);                  // Used to name special files that belong to the editor.
+//
+//  Routines for support of the the history buffer.
+//
+public:
+  class JWP_history *history;                           // Pointer to the history buffer if there is one.
 //
 //  Undo/redo manipulation rotuines.
 //
@@ -195,7 +209,7 @@ private:
 public:
   void        do_char        (int ch);                  // Process keys
   void        put_char       (int ch,int code);         // Put character into file from ascii->kana convert.
-  void        ime_char       (int ch);                  // Inserts a character from the IME.
+  void        ime_char       (int ch,int unicode);      // Inserts a character from the IME.
 //
 //  Support for Color-kanji (located in jwp_font.cpp)
 //
@@ -233,6 +247,7 @@ public:
 //
 public:
   void          put_string   (KANJI *kanji,int length);             // Used by dialog boxes, to insert back into file.
+  void          insert_string(KANJI *kanji,int length);             // Insert a string from a dialog box into a file.with undo
 //
 //  These fucntions are here to support edit control boxes.
 //
@@ -247,72 +262,66 @@ public:
 //  Support routines for clipboard functions
 //
 public:
-  JWP_file (int format_width);                      // This construct is really for the clipboard functions.
-  JWP_file   *clip_copy        (void);              // Copy slected region to clipboard.
-  HGLOBAL     export_bitmap    (void);              // Export clipboard data to bitmap.
-  int         import_clip      (void);              // Read clipboard data into this file.
+  JWP_file (int format_width);                          // This construct is really for the clipboard functions.
+  JWP_file   *clip_copy        (void);                  // Copy slected region to clipboard.
+  HGLOBAL     export_bitmap    (void);                  // Export clipboard data to bitmap.
+  int         import_clip      (void);                  // Read clipboard data into this file.
 private:
-  void        clip_paste       (int errors);        // Paste from clipboard.
-  void        clip_cut         (void);              // Cut text to clipboard.
+  void        clip_paste       (int errors);            // Paste from clipboard.
+  void        clip_cut         (void);                  // Cut text to clipboard.
 //
 //  Support for kana->kanji conversion routines.
 //
 public:
   void        put_kanji        (KANJI *kanji,int length);   // Put kanji into file from kana->kanji convert.
-private:
-  void        convert          (int direction);     // Dirve conversion commands.
-//
-//  Dictionary tracking routines.
-//
-#ifdef DICTIONARY_TRACKING
-public:
-  int         dictionary_track (KANJI *buffer);     // Get user selection into dictionary.
-#endif
+  void        convert          (int direction);         // Dirve conversion commands.
 //
 //  Selection controls.
 //
 public:
-  void        selection_clear  (void);              // Clear the selection.
-  void        selection_delete (void);              // Delete the selection.
-  struct Selection  sel;                    // Selection for this file
+  void        selection_clear  (void);                  // Clear the selection.
+  void        selection_delete (void);                  // Delete the selection.
+  struct Selection  sel;                                // Selection for this file
 private:
-  int         in_selection     (Position *loc);     // Tests if a position in in the selection.
-  void        selection        (int shift);         // General processing routine for making selection my shift-cursor motion.
+  int         in_selection     (Position *loc);         // Tests if a position in in the selection.
+  void        selection        (int shift);             // General processing routine for making selection my shift-cursor motion.
 
 public:
-  void        view_check       (void);              // Adjust horizontal/vertical scroll to show cursor.
-  void        edit_menu        (void);              // Dtermines the state of elements of the edit-menu.
+  void        view_check       (void);                  // Adjust horizontal/vertical scroll to show cursor.
+  void        edit_menu        (void);                  // Dtermines the state of elements of the edit-menu.
+  byte        changed;                                  // File is changed.
 private:
-  void        all_abs          (void);              // Convert all points to abs.
-  void        all_rel          (void);              // Convert all points to relative.
+  void        all_abs          (void);                  // Convert all points to abs.
+  void        all_rel          (void);                  // Convert all points to relative.
   void inline clear_cursor     (void) { x_cursor = 0; } // Clear stored vertical cursor.
-  void        draw_line        (HDC hdc,Paragraph *para,Line *line,int y,int xmin,int xmax);
+  void        draw_line        (HDC hdc,Paragraph *para,Line *line,int y,int xmin,int xmax,class JWP_font *font);
   void        find_pos         (Position *loc,int view = POS_CURSOR);   // Find the pixal location of a point..
-  void        set_scroll       (void);              // Adjust position of scroll bars.
-  class  Paragraph *first,*last;            // Paragraphs for the file.
-  class  Position   cursor;                 // Current cursor position
-  class  Position   view_top;               // Indicates top-left corner of display.  Control screen scrolling.
-  short             x_cursor;               // X cursor location used in scroll ups and downs (stores pixal locaton at start of up/down).
-  short             char_pagewidth;         // Width of page in characters.
-  long              total_length;           // Total length of the file (int pixls)
-  short             height;                 // Display height.
-  short             width;                  // Display width.
-  short             char_width;             // Width of display area in kanji characters.
-  short             hscroll;                // Horizontal scroll in characters width 
-  short             vscroll;                // Vertical scroll distance in in pixals (page up/down)
-  short             ime_y;                  // Vertical offset used for IME composition window.
-  TCHAR            *name;                   // Disk file name
-  PrintSetup        page;                   // Page setup.
-  byte              changed;                // File is changed.
-  byte              no_first;               // No headers & footers on first page.
-  byte              odd_even;               // Separate odd and even headers and footers.
-  KANJI_string      summary[NUMBER_SUMMARY];// Summary data for file.
+  void        set_scroll       (void);                  // Adjust position of scroll bars.
+  class  Paragraph *first,*last;                        // Paragraphs for the file.
+  class  Position   cursor;                             // Current cursor position
+  class  Position   view_top;                           // Indicates top-left corner of display.  Control screen scrolling.
+  short             x_cursor;                           // X cursor location used in scroll ups and downs (stores pixal locaton at start of up/down).
+  short             char_pagewidth;                     // Width of page in characters.
+  long              total_length;                       // Total length of the file (int pixls)
+  short             height;                             // Display height.
+  short             width;                              // Display width.
+  short             char_width;                         // Width of display area in kanji characters.
+  short             hscroll;                            // Horizontal scroll in characters width 
+  short             vscroll;                            // Vertical scroll distance in in pixals (page up/down)
+  short             ime_y;                              // Vertical offset used for IME composition window.
+  TCHAR            *name;                               // Disk file name
+  PrintSetup        page;                               // Page setup.
+  byte              no_first;                           // No headers & footers on first page.
+  byte              odd_even;                           // Separate odd and even headers and footers.
+  KANJI_string      summary[NUMBER_SUMMARY];            // Summary data for file.
   KANJI_string      headers[NUMBER_HEADERS][NUMBER_POSITIONS];  // Header information for this file.
 } JWP_file;
 
+#define JWP_FONT    ((filetype == FILETYPE_EDIT) ? edit_font : file_font)
+
 extern class JWP_file *jwp_file;    // Pointer to double linked ring of files.
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Class to keep track of current files list.  This is the list used
 //  to determine where to "Insert to File".
@@ -335,7 +344,7 @@ private:
 
 extern FILE_list file_list;                 // Actual class instance.
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Key code for use with do_key().
 //

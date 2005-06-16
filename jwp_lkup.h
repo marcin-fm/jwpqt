@@ -1,14 +1,14 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
 //  The radical lookup tables used were originally developed by      //
 //  Michael Raine and Derc Yamasaki.                                 //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This module implements the kanji search by radical and count dialog
 //  box and all fucntions associated with this kanji lookup feature.

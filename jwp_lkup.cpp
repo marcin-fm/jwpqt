@@ -1,14 +1,14 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
 //  The radical lookup tables used were originally developed by      //
 //  Michael Raine and Derc Yamasaki.                                 //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This module implements the kanji search by radical and count dialog
 //  box and all fucntions associated with this kanji lookup feature.
@@ -69,13 +69,15 @@
 #include "jwp_lkup.h"
 #include "jwp_misc.h"
 #include <commctrl.h>
+#include <limits.h>
+
+static LRESULT CALLBACK JWP_jistable_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam);
+
 #ifdef WINELIB
   #include <updown.h>
 #endif WINELIB
 
-static LRESULT CALLBACK JWP_jistable_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam);
-
-//-------------------------------------------------------------------
+    //===================================================================
 //
 //  Compile time options.
 //
@@ -118,6 +120,8 @@ static LRESULT CALLBACK JWP_jistable_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPA
 #define BUTTON_JBMSIZE      16                  // Size of a JIS table character.
 #define BUTTON_RBMSIZE      16                  // Size of a radical bitmap
 #define BUTTON_SBMSIZE      16                  // Size of a stroke count bitmap.
+
+#define MAX_STROKES 30                          // Maximum number of stokes
 
 #define BUTTON_JBMOFFSET    ((BUTTON_SIZE-BUTTON_JBMSIZE)/2)
 #define BUTTON_RBMOFFSET    ((BUTTON_SIZE-BUTTON_RBMSIZE)/2)
@@ -187,6 +191,7 @@ static KANJI_lookup *temp_link = NULL;      // This is a KLUDGE, but I could not
 //  static procedures.
 //
 
+//--------------------------------
 //
 //  Window procedure stub for the results list on the Radical Lookup 
 //  dialog box.
@@ -203,6 +208,7 @@ static LRESULT CALLBACK JWP_radlookup_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LP
 //  Class routines.
 //
 
+//--------------------------------
 //
 //  Constructor.
 //
@@ -214,6 +220,7 @@ KANJI_lookup::KANJI_lookup (void) : KANJI_list (3000) {
   return;
 }
 
+//--------------------------------
 //
 //  This routine is called when the user selects any button that can 
 //  effect the result of the search.  If auto-search is active, then 
@@ -225,6 +232,7 @@ void KANJI_lookup::auto_check () {
   return;
 } 
 
+//--------------------------------
 //
 //  Clear all results parts of the dialog box.
 //
@@ -237,6 +245,7 @@ void KANJI_lookup::clear_results () {
   return;
 }
 
+//--------------------------------
 //
 //  Process standard commands from the dialog box.  These include:
 //
@@ -278,12 +287,10 @@ int KANJI_lookup::command (WPARAM wParam) {
            }
          }
          return (true);
-    case IDC_RLINSERT: {                  // Insert back into file.
-           JWP_file *file = file_list.get(exclude);
-           file->undo_para  (UNDO_ANY);         // Allow specific undo of put back.
-           file->put_string (&list[selected],1);
-           file->view_check ();
-         }
+    case IDC_RLINSERT:                    // Insert back into file.
+         JWP_file *file; 
+         file = file_list.get(exclude);
+         file->insert_string (&list[selected],1);   // Allows undo of this specific operation.
          return (true);
     case IDC_RLAUTO:                     // Change auto-search state.
          auto_search = IsDlgButtonChecked(dialog,IDC_RLAUTO);
@@ -296,6 +303,7 @@ int KANJI_lookup::command (WPARAM wParam) {
   return (false);
 }
 
+//--------------------------------
 //
 //  This routine actually does the setup, then the search, then the cleanup.
 //
@@ -336,6 +344,7 @@ void KANJI_lookup::do_search (int activate) {
   return;
 }
 
+//--------------------------------
 //
 //  Gets a value from a control.  The special case of a blank or non-numerical value is 
 //  automatically mapped to a full range.  The value is also clipped around the exclusion 
@@ -359,6 +368,7 @@ int KANJI_lookup::get_value (int id,int limit,int &v1,int &v2) {
   return (i);
 }
 
+//--------------------------------
 //
 //  Intialize the class structures.
 //
@@ -379,6 +389,7 @@ void KANJI_lookup::initialize (HWND hwnd,int allow_auto,int id) {
   return;
 }
 
+//--------------------------------
 //
 //  This is the window procedure for the results list dialog box.  For
 //  the most part, this procedure calls routines from the base class 
@@ -393,7 +404,7 @@ int KANJI_lookup::radlist_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPar
     case WM_CREATE:                 // Create window and adjust size.
          CREATESTRUCT *create;
          create = (CREATESTRUCT *) lParam;
-         height = jwp_font.height+2*jwp_font.vspace+GetSystemMetrics(SM_CYHSCROLL);
+         height = bar_font.height+2*bar_font.vspace+GetSystemMetrics(SM_CYHSCROLL);
          MoveWindow (hwnd,create->x,create->y,create->cx,height+2*GetSystemMetrics(SM_CYEDGE),true);
          adjust (window = hwnd);
          ImmAssociateContext (hwnd,NULL);       // Disable the IME for this window
@@ -402,12 +413,19 @@ int KANJI_lookup::radlist_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPar
          return (DLGC_WANTARROWS | DLGC_WANTCHARS);
     case WM_PAINT:                  // Render
          hdc = BeginPaint (hwnd,&ps);
-         draw     (hdc);
-         EndPaint (hwnd,&ps);
-         return (0);
+         SetTextColor (hdc,GetSysColor(COLOR_WINDOWTEXT));
+         SetBkColor   (hdc,GetSysColor(COLOR_WINDOW));
+         draw         (hdc);
+         EndPaint     (hwnd,&ps);
+         return       (0);
     case WM_HSCROLL:                // Process scroll messages.
          do_scroll (wParam);
-         return (0);
+         return    (0);
+#ifndef WINCE
+    case WM_MOUSEWHEEL:
+         do_wheel (wParam);
+         return   (0);
+#endif  WINCE
     case WM_KEYDOWN:                // Process keyboard events.
          i = (GetKeyState(VK_CONTROL) < 0) ? CONTROL_MOVE*2 : 2;
          switch (wParam) {
@@ -484,6 +502,7 @@ SetFocus:
   return (DefWindowProc(hwnd,iMsg,wParam,lParam));
 }
 
+//--------------------------------
 //
 //  Sets the value in a control.  The value of zero is mapped to a blank value.
 //
@@ -520,14 +539,15 @@ typedef class KANJIRAD_lookup : public KANJI_lookup {
 public:
   KANJIRAD_lookup  (int count,int single);
   ~KANJIRAD_lookup ();
+  void do_spinner       (NMUPDOWN *ud,int id);  // Do spiner control.
   int  radicals_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam);
-  void reset_radicals   (void);         // Reset all radicals
-  void set_radical      (int rad);      // Sets all buttons associated with a radical (multi-select only);
-  byte    states[BUTTON_COUNT+1];       // State array for radical buttons.
+  void reset_radicals   (void);                 // Reset all radicals
+  void set_radical      (int rad);              // Sets all buttons associated with a radical (multi-select only);
+  byte    states[BUTTON_COUNT+1];               // State array for radical buttons.
 private:
-  void   redraw_radicals (void);                        // Redraw the radicals selection window.
-  void   set_cursor      (HWND hwnd);                   // Set cursor in the radicals window.
-  void   toggle_button   (void);                        // Toggle button state in the radicals window.
+  void   redraw_radicals (void);                // Redraw the radicals selection window.
+  void   set_cursor      (HWND hwnd);           // Set cursor in the radicals window.
+  void   toggle_button   (void);                // Toggle button state in the radicals window.
   HBITMAP cursor_bitmap;                // Bitmap for caret in radicals window.
   HBITMAP radical_bitmap;               // Radicals bitmaps.
   HBITMAP stroke_bitmap;                // Storke count bitmaps.
@@ -545,6 +565,7 @@ private:
 //  Static data and structures
 //
 
+//--------------------------------
 //
 //  This table defines all the buttons in the radical button list.  The numbers have
 //  the following meanings.  A value of zero is relplaced with a stroke count number.  
@@ -568,6 +589,7 @@ static byte buttons[BUTTON_TOTAL] = {
   229,230,231,  0,232,233,234,235,  0,236,237,  0,238,  0,239,240,  0,241,          // 240..257
 };
 
+//--------------------------------
 //
 //  This table gives the bushu number for the radical buttons.  Because there are 
 //  only 214 bushu and there are 241 buttons, there are a large number of variations.
@@ -619,6 +641,7 @@ static byte bushus[BUTTON_COUNT+1] = {
 //  static procedures.
 //
 
+//--------------------------------
 //
 //  Window procedure stub for the radicals button window.
 //  
@@ -634,6 +657,36 @@ static LRESULT CALLBACK JWP_radicals_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPA
 //  Class routines.
 //
 
+//--------------------------------
+//
+//  This routine handles the spinner control for the count.  The idea is to improve
+//  the sequenc of number used.  The default would be 0, 1, 2 // 29, 30, 0.
+//  If radicals are selected with say 11 strokes, this routine will give the following
+//  sequence:
+//
+//      0, 11, 12, .. 29, 30, 0
+//
+//  1-10 are skipped because they will result in no matches.
+//
+//      up -- Updown notification structrure.  This is passed as lParam.
+//      id -- Id of the edit control.
+//
+void KANJIRAD_lookup::do_spinner (NMUPDOWN *ud,int id) {
+  int i,j,k;
+  for (k = j = i = 0; i <= BUTTON_TOTAL; i++) {         // Scann all buttons.
+    if      (!buttons[i])        j++;                   // Maker so increment strokes.
+    else if (states[buttons[i]]) k += j;                // Selected so change count.
+  }
+  i  = GetDlgItemInt (dialog,id,NULL,false);            // Get int value.
+  i -= ud->iDelta;                                      // Increment.
+  if (i < 0 ) i = MAX_STROKES;                          // Check bounds
+  if (i > 30) i = 0;
+  if (i && (i < k)) i = (ud->iDelta < 0) ? k : 0;       // Check for dead spot.
+  SetDlgItemInt (dialog,id,i,false);                    // Put int value.
+  return;
+}
+
+//--------------------------------
 //
 //  Constructor.
 //
@@ -647,6 +700,7 @@ KANJIRAD_lookup::KANJIRAD_lookup (int count,int do_single) {
   return;
 }
 
+//--------------------------------
 //
 //  Destructor.
 //
@@ -659,6 +713,7 @@ KANJIRAD_lookup::~KANJIRAD_lookup () {
   return;
 }
 
+//--------------------------------
 //
 //  This is the window procedure for the radical buttons window.  This 
 //  window contains a number of buttons associated with the radicals
@@ -685,7 +740,7 @@ int KANJIRAD_lookup::radicals_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
     case WM_CREATE:
          CREATESTRUCT *create;
          create    = (CREATESTRUCT *) lParam;
-             top       = 0;
+         top       = 0;
          last_char = 0;
 #ifdef USE_SCROLL_RADICALS
          button_x  = (create->cx-GetSystemMetrics(SM_CXVSCROLL))/BUTTON_SIZE;
@@ -714,8 +769,49 @@ int KANJIRAD_lookup::radicals_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
          DestroyCaret ();
          return (0);
 //
+//  Wheel mouse support.
+//
+#ifndef WINCE
+    case WM_MOUSEWHEEL:
+         static int delta;                                                  // Accumulation point for deltas.
+         int shift,ctrl;
+         shift  = SystemParametersInfo(SPI_GETWHEELSCROLLLINES,0,&ctrl,0);  // Scroll amount.
+         ctrl   = LOWORD(wParam);                                           // Keys
+         delta += (short) HIWORD(wParam);                                   // Delta
+//
+//  Shift -- skip pages.
+//
+         if ((ctrl & MK_SHIFT) || (shift == WHEEL_PAGESCROLL)) {
+           while (delta > WHEEL_DELTA) {
+             cursor += button_v*button_x;
+             delta  -= WHEEL_DELTA;
+           }
+           while (abs(delta) > WHEEL_DELTA) {
+             cursor -= button_v*button_x;
+             delta  += WHEEL_DELTA;
+           }
+         }
+//
+//  Normal -- skip lines.
+//
+         else {
+           while (delta > WHEEL_DELTA) {
+             cursor += shift*button_x;
+             delta  -= WHEEL_DELTA;
+           }
+           while (abs(delta) > WHEEL_DELTA) {
+             cursor -= shift*button_x;
+             delta  += WHEEL_DELTA;
+           }
+         }
+         if (cursor <  0) cursor = 0;   
+         if (cursor >= BUTTON_TOTAL) cursor = BUTTON_TOTAL-1;
+         set_cursor (hwnd);
+         return (0);
+//
 //  Process scroll messages.
 //
+#else WINCE
     case WM_VSCROLL:
          switch (LOWORD(wParam)) {
            case SB_LINEDOWN:
@@ -742,6 +838,7 @@ int KANJIRAD_lookup::radicals_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
          if (cursor >= BUTTON_TOTAL) cursor = BUTTON_TOTAL-1;
          set_cursor (hwnd);
          return (0);
+#endif  WINCE
 //
 //  Character input.  We accept the space character which selects a 
 //  radical, and we accept numbers wich move use to the first radical
@@ -843,7 +940,7 @@ int KANJIRAD_lookup::radicals_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
                  rad  = buttons[index];
                  if (states[rad]) brush = (HBRUSH) SelectObject(hdc,brush);
                    else SelectObject (hdc,GetStockObject(LTGRAY_BRUSH));
-                 Rectangle (hdc,i*BUTTON_SIZE,y,i*BUTTON_SIZE+BUTTON_SIZE,y+BUTTON_SIZE);
+                 Rectangle    (hdc,i*BUTTON_SIZE,y,i*BUTTON_SIZE+BUTTON_SIZE,y+BUTTON_SIZE);
                  SetTextColor (hdc,RGB(0,0,0));
                  SelectObject (hdcmem,radical_bitmap);
                  BitBlt       (hdc,i*BUTTON_SIZE+BUTTON_RBMOFFSET,y+BUTTON_RBMOFFSET,BUTTON_RBMSIZE,BUTTON_RBMSIZE,hdcmem,0,(rad-1)*BUTTON_RBMSIZE,SRCAND);
@@ -887,6 +984,7 @@ int KANJIRAD_lookup::radicals_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
   return (DefWindowProc(hwnd,iMsg,wParam,lParam));
 }
 
+//--------------------------------
 //
 //  Clear all the radicals and redraw the mindow.
 //
@@ -897,6 +995,7 @@ void KANJIRAD_lookup::reset_radicals () {
   return;
 }
 
+//--------------------------------
 //
 //  This rotuine sets the cursor for the radical button window.
 //
@@ -928,6 +1027,7 @@ void KANJIRAD_lookup::set_cursor (HWND hwnd) {
   return;
 }
 
+//--------------------------------
 //
 //  This routine toggles the state of the radical button indicated 
 //  by the radical.  Because of the arrangement of the radical
@@ -966,6 +1066,7 @@ void KANJIRAD_lookup::set_radical (int rad) {
   return;
 }
 
+//--------------------------------
 //
 //  This routine toggles the state of the radical button indicated 
 //  at the cursor location.  Because of the arrangement of the radical
@@ -1002,6 +1103,7 @@ void KANJIRAD_lookup::toggle_button () {
   return;
 }
 
+//--------------------------------
 //
 //  Forces a redraw of the radical buttons window.  This is called when
 //  the state of these buttons changes.
@@ -1094,6 +1196,7 @@ private:
 #define VARIATION_INDEX(x)      (data[x][DATA_VARINDEX])
 #define NOVAR_INDEX(x)          (data[x][DATA_NOVINDEX])   
 
+//--------------------------------
 //
 //  Used to convert radical numbers to letters and back.  Note the missing l.
 //
@@ -1116,6 +1219,7 @@ static LRESULT CALLBACK JWP_bushu_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM
 //  begin class RADSTROKE_lookup
 //
 
+//--------------------------------
 //
 //  Class constructor.  Needs to get access to the radical bit map and
 //  and the cursor bitmap
@@ -1127,6 +1231,7 @@ RADSTROKE_lookup::RADSTROKE_lookup () {
   return;
 }
 
+//--------------------------------
 //
 //  Destructor.
 //
@@ -1138,6 +1243,7 @@ RADSTROKE_lookup::~RADSTROKE_lookup () {
   return;
 }
 
+//--------------------------------
 //
 //  Window procedure for the radical selection window strip control
 //
@@ -1174,6 +1280,45 @@ int RADSTROKE_lookup::bushu_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lP
          DestroyCaret ();
          return (0);
 //
+//  Process mouse-wheel messages.
+//
+#ifndef WINCE
+    case WM_MOUSEWHEEL:
+         static int delta;                                                  // Accumulation point for deltas.
+         int shift,ctrl;
+         shift  = SystemParametersInfo(SPI_GETWHEELSCROLLLINES,0,&ctrl,0);  // Scroll amount.
+         ctrl   = LOWORD(wParam);                                           // Keys
+         delta += (short) HIWORD(wParam);                                   // Delta
+//
+//  Shift -- skip pages.
+//
+         if ((ctrl & MK_SHIFT) || (shift == WHEEL_PAGESCROLL)) {
+           while (delta > WHEEL_DELTA) {
+             cursor -= buttons;
+             delta  -= WHEEL_DELTA;
+           }
+           while (abs(delta) > WHEEL_DELTA) {
+             cursor += buttons;
+             delta  += WHEEL_DELTA;
+           }
+         }
+//
+//  Normal -- skip lines.
+//
+         else {
+           while (delta > WHEEL_DELTA) {
+             cursor -= shift;
+             delta  -= WHEEL_DELTA;
+           }
+           while (abs(delta) > WHEEL_DELTA) {
+             cursor += shift;
+             delta  += WHEEL_DELTA;
+           }
+         }
+         set_cursor (true);
+         return (0);
+#endif  WINCE
+//
 //  Process scroll messages.
 //
     case WM_HSCROLL:
@@ -1199,6 +1344,7 @@ int RADSTROKE_lookup::bushu_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lP
                 return (0);
          }
          set_cursor (true);
+         SetFocus   (hwnd);
          return (0);
 //
 //  This is the difficult part, of corse, this is the draw routine.
@@ -1229,7 +1375,7 @@ int RADSTROKE_lookup::bushu_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lP
              else {                                             // Real button.
                rad = get_index(j);                              // Get index into radical array.
                if (current_radical == radical_value[rad]) brush = (HBRUSH) SelectObject(hdc,brush); else SelectObject (hdc,GetStockObject(LTGRAY_BRUSH));
-               Rectangle (hdc,i*BUTTON_SIZE,0,i*BUTTON_SIZE+BUTTON_SIZE,BUTTON_SIZE);
+               Rectangle    (hdc,i*BUTTON_SIZE,0,i*BUTTON_SIZE+BUTTON_SIZE,BUTTON_SIZE);
                SetTextColor (hdc,RGB(0,0,0));
                SelectObject (hdcmem,radical_bitmap);
                BitBlt       (hdc,i*BUTTON_SIZE+BUTTON_RBMOFFSET,BUTTON_RBMOFFSET,BUTTON_RBMSIZE,BUTTON_RBMSIZE,hdcmem,0,rad*BUTTON_RBMSIZE,SRCAND);
@@ -1299,6 +1445,7 @@ int RADSTROKE_lookup::bushu_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lP
   return (DefWindowProc(hwnd,iMsg,wParam,lParam));
 }
 
+//--------------------------------
 //
 //  This is a piece of a dialog box control rotuine, that handles most of the common things
 //  that need to be done.
@@ -1342,6 +1489,7 @@ int RADSTROKE_lookup::dlg_lookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPara
   return (false);       // Let the dialog box handler handle the standard
 }
 
+//--------------------------------
 //
 //  Get the index into the radical bitmap for the current radial.  This is based on the
 //  viewming mode and other options.
@@ -1353,6 +1501,7 @@ int RADSTROKE_lookup::get_index (int box) {
   return (box+VARIATION_INDEX(current_stroke));
 }
 
+//--------------------------------
 //
 //  This routine gets the current radical selected in the alphabetical list and 
 //  converts it to a number form.  
@@ -1367,6 +1516,7 @@ int RADSTROKE_lookup::get_radical () {
   return (0);
 }
 
+//--------------------------------
 //
 //  Resets the entire dialog box to it's default state.  This is
 //  the Clear Button, it is also used to initialize the dalog box.
@@ -1381,6 +1531,7 @@ void RADSTROKE_lookup::reset () {
   return;
 }
 
+//--------------------------------
 //
 //  This rotuine sets the cursor for the radical button window.
 //
@@ -1418,6 +1569,7 @@ void RADSTROKE_lookup::set_cursor (int show) {
   return;
 }
 
+//--------------------------------
 //
 //  Sets the currently selected radical.  This sets the edit box letter, and then
 //  sets the radical display to match.
@@ -1449,6 +1601,7 @@ void RADSTROKE_lookup::set_radical (int value) {
   return;
 }
 
+//--------------------------------
 //
 //  Responds to changes in the number of radical strokes.  This assumes the control is set
 //  before calling, and just responds to the changes.
@@ -1463,6 +1616,7 @@ void RADSTROKE_lookup::set_radstroke () {
   return;
 }
 
+//--------------------------------
 //
 //  Routine used to select a radical from the list via the selection window (not the edit-box).
 //
@@ -1514,8 +1668,6 @@ private:
 //  static data and definitions.
 //
 
-#define MAX_STROKES 30                  // Maximum number of stokes
-
 static BUSHU_lookup *bs_lookup = NULL;  // Global pointer for the skip lookup chart.
 
 //-------------------------------------------------------------------
@@ -1523,6 +1675,7 @@ static BUSHU_lookup *bs_lookup = NULL;  // Global pointer for the skip lookup ch
 //  static procedures.
 //
 
+//--------------------------------
 //
 //  Dialog box procedure stub for the Bushu Lookup dialog box.
 //
@@ -1535,6 +1688,7 @@ static BOOL CALLBACK dialog_bushulookup (HWND hwnd,UINT message,WPARAM wParam,LP
 //  begin class BUSHU_lookup
 //
 
+//--------------------------------
 //
 //  Dailog box handler for the radical lookup dailog box.  This does all
 //  the control work here.
@@ -1542,8 +1696,6 @@ static BOOL CALLBACK dialog_bushulookup (HWND hwnd,UINT message,WPARAM wParam,LP
 int BUSHU_lookup::dlg_bushulookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam) {
   switch (iMsg) {
     case WM_INITDIALOG:                         // Intialize, so chache dialog box pointer.
-         SendDlgItemMessage (hwnd,IDC_BLSPIN,UDM_SETRANGE,0,MAKELONG(MAX_STROKES,0));
-         if (!jwp_config.cfg.bushu_nelson && !jwp_config.cfg.bushu_classical) jwp_config.cfg.bushu_nelson = true;
          CheckDlgButton (hwnd,IDC_BLNELSON   ,jwp_config.cfg.bushu_nelson   );
          CheckDlgButton (hwnd,IDC_BLCLASSICAL,jwp_config.cfg.bushu_classical);
          initialize (hwnd,true,IDC_RLRADICALS);
@@ -1558,6 +1710,9 @@ int BUSHU_lookup::dlg_bushulookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPar
          delete this;
          bs_lookup = NULL;
          return (true);
+    case WM_NOTIFY:
+         if (wParam == IDC_BLSPIN) do_spinner ((NMUPDOWN *) lParam,IDC_BLSTROKE);
+         return (0);
     case WM_COMMAND:
          switch (LOWORD(wParam)) {
            case IDC_BLNELSON:
@@ -1578,6 +1733,7 @@ int BUSHU_lookup::dlg_bushulookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPar
   return (false);       // Let the dialog box handler handle the standard
 }                                                   //   buttons and actions.    
 
+//--------------------------------
 //
 //  Resets the entire dialog box to it's default state.  This is
 //  the Clear Button, it is also used to initialize the dalog box.
@@ -1591,6 +1747,7 @@ void BUSHU_lookup::reset () {
   return;
 }
 
+//--------------------------------
 //
 //  This does the actual search.
 //
@@ -1648,6 +1805,7 @@ void BUSHU_lookup::search () {
 //  Stub routine for entry
 //
 
+//--------------------------------
 //
 //  Generailly, I do not like friend fucntions, but I need an entry point,
 //  and I wanted all the routines in this file.
@@ -1697,6 +1855,7 @@ static BUSHU2_lookup *b2_lookup = NULL; // Global pointer for the skip lookup ch
 
 #define MAX_BUSHUSTROKES    17          // Number of radical strokes that are possible
 
+//--------------------------------
 //
 //  This array indicates all the major parameters associated with the radica data.   For each
 //  possible number of radical strokes, five numbers are specifiec.  Note that a final number 
@@ -1730,6 +1889,7 @@ static byte b2_data[][6] = {
   {   0,  0,   0, 0,  241,210 },  // 18 none
 };
 
+//--------------------------------
 //
 //  Radical list,  The radicals are in order and include the variants.  This hops through 
 //  the list just getting the main radicals.  Each line is a different stroke count, starting
@@ -1760,6 +1920,7 @@ static byte b2_radlist[] = {
 //  static procedures.
 //
 
+//--------------------------------
 //
 //  Dialog box procedure stub for the four-corner Lookup dialog box.
 //
@@ -1772,6 +1933,7 @@ static BOOL CALLBACK dialog_bushu2lookup (HWND hwnd,UINT message,WPARAM wParam,L
 //  begin class HS_lookup
 //
 
+//--------------------------------
 //
 //  Class constructor.  Needs to get access to the radical bit map and
 //  and the cursor bitmap
@@ -1786,6 +1948,7 @@ BUSHU2_lookup::BUSHU2_lookup () {
   return;
 }
 
+//--------------------------------
 //
 //  Dailog box handler for the radical lookup dailog box.  This does all
 //  the control work here.
@@ -1793,9 +1956,7 @@ BUSHU2_lookup::BUSHU2_lookup () {
 int BUSHU2_lookup::dlg_bushulookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam) {
   switch (iMsg) {
     case WM_INITDIALOG:                         // Intialize, so chache dialog box pointer.
-         if (!jwp_config.cfg.bushu_nelson && !jwp_config.cfg.bushu_classical) jwp_config.cfg.bushu_nelson = true;
          SendDlgItemMessage (hwnd,IDC_HSRADSRKSPIN,UDM_SETRANGE,0,MAKELONG(MAX_BUSHUSTROKES,0));
-         SendDlgItemMessage (hwnd,IDC_HSOTHERSPIN ,UDM_SETRANGE,0,MAKELONG(MAX_STROKES     ,0));
          CheckDlgButton     (hwnd,IDC_HSVARIANTS,!jwp_config.cfg.no_variants);
          CheckDlgButton     (hwnd,IDC_BLNELSON   ,jwp_config.cfg.bushu_nelson   );
          CheckDlgButton     (hwnd,IDC_BLCLASSICAL,jwp_config.cfg.bushu_classical);
@@ -1808,6 +1969,20 @@ int BUSHU2_lookup::dlg_bushulookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPa
          delete this;
          b2_lookup = NULL;
          return (true);
+    case WM_NOTIFY:
+         if (wParam == IDC_HSOTHERSPIN) {
+           NMUPDOWN *ud;
+           int       i,j;
+           ud = (NMUPDOWN *) lParam;
+           i = GetDlgItemInt(hwnd,IDC_HSOTHER    ,NULL,false);
+           j = GetDlgItemInt(hwnd,IDC_HSRADSTROKE,NULL,false);
+           i -= ud->iDelta;
+           if (i < 0 ) i = MAX_STROKES;
+           if (i > 30) i = 0;
+           if (i && (i < j)) i = (ud->iDelta < 0) ? j : 0;
+           SetDlgItemInt (hwnd,IDC_HSOTHER,i,false);
+         }
+         return (0);
     case WM_HELP:
          do_help (hwnd,IDH_KANJI_BSLOOKUP);
          return  (true);
@@ -1827,6 +2002,7 @@ int BUSHU2_lookup::dlg_bushulookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPa
   return (dlg_lookup (hwnd,iMsg,wParam,lParam));
 }                                                   //   buttons and actions.    
 
+//--------------------------------
 //
 //  This does the actual search.
 //
@@ -1879,6 +2055,7 @@ void BUSHU2_lookup::search () {
 //  Stub routine for entry
 //
 
+//--------------------------------
 //
 //  Generailly, I do not like friend fucntions, but I need an entry point,
 //  and I wanted all the routines in this file.
@@ -1936,6 +2113,7 @@ static FOURCORNER_lookup *fc_lookup = NULL;     // Global pointer for the skip l
 //  static procedures.
 //
 
+//--------------------------------
 //
 //  Dialog box procedure stub for the four-corner Lookup dialog box.
 //
@@ -1943,6 +2121,7 @@ static BOOL CALLBACK dialog_fclookup (HWND hwnd,UINT message,WPARAM wParam,LPARA
   return (fc_lookup->dlg_fclookup(hwnd,message,wParam,lParam));
 }
 
+//--------------------------------
 //
 //  This routine controls the FC shape selector control.  This control allows you to
 //  choose shapes by using the mouse.
@@ -1978,7 +2157,7 @@ static LRESULT CALLBACK JWP_fcshape_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPAR
 //       SetMapMode    (hdcmem,GetMapMode(hdc));                        // Not necessary
          bitmap = LoadBitmap(instance,MAKEINTRESOURCE(IDB_FCSHAPES));
          SelectObject (hdcmem,bitmap);
-         BitBlt       (hdc,0,0,FC_FULLWIDTH,FC_FULLHEIGHT,hdcmem,0,0,SRCAND);
+         BitBlt       (hdc,0,0,FC_FULLWIDTH,FC_FULLHEIGHT,hdcmem,0,0,SRCCOPY);
          DeleteObject (bitmap);
          DeleteDC     (hdcmem);
          EndPaint     (hwnd,&ps);
@@ -2000,6 +2179,7 @@ static LRESULT CALLBACK JWP_fcshape_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPAR
 //  begin class FOURCORNER_lookup
 //
 
+//--------------------------------
 //
 //  This routine checks the value in a location after a change.  This is used to generate 
 //  the correct input data for the spinners, ie, it adds the blank at the position 10.
@@ -2013,6 +2193,7 @@ void FOURCORNER_lookup::check_value (int id) {
   return;
 }
 
+//--------------------------------
 //
 //  Dailog box handler for the radical lookup dailog box.  This does all
 //  the control work here.
@@ -2060,6 +2241,7 @@ int FOURCORNER_lookup::dlg_fclookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lP
   return (false);       // Let the dialog box handler handle the standard
 }                                                   //   buttons and actions.    
 
+//--------------------------------
 //
 //  Resets the entire dialog box to it's default state.  This is
 //  the Clear Button, it is also used to initialize the dalog box.
@@ -2072,6 +2254,7 @@ void FOURCORNER_lookup::reset () {
   return;
 }
 
+//--------------------------------
 //
 //  This does the actual search.
 //
@@ -2115,6 +2298,7 @@ void FOURCORNER_lookup::search () {
   return;
 }
 
+//--------------------------------
 //
 //  Sets a value in one of the corner boxes.  A value of 10 is wild.
 //
@@ -2127,6 +2311,7 @@ void FOURCORNER_lookup::set_value (int id,int value) {
   adjusting = false;
 }
 
+//--------------------------------
 //
 //  This routine test to see if a four-corners code fits in the range selected by the user.
 //
@@ -2153,6 +2338,7 @@ int FOURCORNER_lookup::test (int limits[5][2],int main,int index) {
 //  Stub routine for entry
 //
 
+//--------------------------------
 //
 //  Generailly, I do not like friend fucntions, but I need an entry point,
 //  and I wanted all the routines in this file.
@@ -2205,6 +2391,7 @@ static HS_lookup *hs_lookup = NULL;     // Global pointer for the skip lookup ch
 #define MAX_HSKANJI     47              // Maximum number of kanji for other strokes.
 #define MAX_HSRADICALS  19              // Maximum radicla value (used only for searching)
 
+//--------------------------------
 //
 //  This array indicates all the major parameters associated with the radica data.   For each
 //  possible number of radical strokes, five numbers are specifiec.  Note that a final number 
@@ -2232,6 +2419,7 @@ static byte hs_data[][6] = {
   {   0, 0,   0, 0,  116,0                    },   // 12
 };
 
+//--------------------------------
 //
 //  Radical list,  The radicals are in order and include the variants.  This hops through 
 //  the list just getting the main radicals.  Each line is a different stroke count, starting
@@ -2250,6 +2438,7 @@ static byte hs_radlist[] = {
   114,115,
 };
 
+//--------------------------------
 //
 //  Assigns a unique number to each radical, based on the order of the radicals with variants.
 //  The value go from 1 to 79.  A value of zero is used to indicate no selected radical.
@@ -2272,6 +2461,7 @@ static byte hs_radvalue[] = {
 //  static procedures.
 //
 
+//--------------------------------
 //
 //  Dialog box procedure stub for the four-corner Lookup dialog box.
 //
@@ -2284,6 +2474,7 @@ static BOOL CALLBACK dialog_hslookup (HWND hwnd,UINT message,WPARAM wParam,LPARA
 //  begin class HS_lookup
 //
 
+//--------------------------------
 //
 //  Class constructor.  Needs to get access to the radical bit map and
 //  and the cursor bitmap
@@ -2298,6 +2489,7 @@ HS_lookup::HS_lookup () {
   return;
 }
 
+//--------------------------------
 //
 //  Dailog box handler for the radical lookup dailog box.  This does all
 //  the control work here.
@@ -2323,6 +2515,7 @@ int HS_lookup::dlg_hslookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam) {
   return (dlg_lookup (hwnd,iMsg,wParam,lParam));
 }                                                   //   buttons and actions.    
 
+//--------------------------------
 //
 //  This does the actual search.
 //
@@ -2379,6 +2572,7 @@ void HS_lookup::search () {
 //  Stub routine for entry
 //
 
+//--------------------------------
 //
 //  Generailly, I do not like friend fucntions, but I need an entry point,
 //  and I wanted all the routines in this file.
@@ -2431,19 +2625,26 @@ private:
 //
 // Defintiion of the actual search indexes.
 //
-#define ILTYPE_NELSON   0       // Modern Reader's Japanese-English Character Dictionary, Andrew Nelson
-#define ILTYPE_HAIG     1       // The New Nelson Japanese-English Character Dictionary, John Haig
-#define ILTYPE_HALPERN  2       // The New Japanese-English Character Dictionary, Jack Halpern
-#define ILTYPE_GRADE    3       // Grade Level
-#define ILTYPE_MD_LONG  4       // Morohashi Daikanwajiten (full index)
-#define ILTYPE_MD_SHORT 5       // Morohashi Daikanwajiten (volume index)
-#define ILTYPE_SH_KANA  6       // Kanji & Kana, Spahn and Hadamitzky
-#define ILTYPE_HENSHALL 7       // A Guide To Remembering Japanese Characters, Kenneth G. Henshall
-#define ILTYPE_GAKKEN   8       // A New Dictionary  of Kanji Usage, Gakken
-#define ILTYPE_HEISIG   9       // Remembering The Kanji, James Heisig
-#define ILTYPE_ONEILL   10      // Japanese Names, P. G. O'Neill
-#define ILTYPE_FREQ     11      // Frequency-of-use ranking, Jack Halpern
+                                    // Searches in the base kanji-info file
+#define ILTYPE_NELSON       0       // Modern Reader's Japanese-English Character Dictionary, Andrew Nelson
+#define ILTYPE_HAIG         1       // The New Nelson Japanese-English Character Dictionary, John Haig
+#define ILTYPE_HALPERN      2       // The New Japanese-English Character Dictionary, Jack Halpern
+#define ILTYPE_GRADE        3       // Grade Level
+                                    // Searches in the extended data set.
+#define ILTYPE_MD_LONG      4       // Morohashi Daikanwajiten (full index)
+#define ILTYPE_MD_SHORT     5       // Morohashi Daikanwajiten (volume index)
+                                    // Searches in the fully expanded data set.
+#define ILTYPE_HALPERNKLD   6       // Jack Halpern in his Kanji Learners Dictionary, published by Kodansha in 1999
+#define ILTYPE_SH_KANA      7       // Kanji & Kana, Spahn and Hadamitzky
+#define ILTYPE_HENSHALL     8       // A Guide To Remembering Japanese Characters, Kenneth G. Henshall
+#define ILTYPE_GAKKEN       9       // A New Dictionary  of Kanji Usage, Gakken
+#define ILTYPE_HEISIG       10      // Remembering The Kanji, James Heisig
+#define ILTYPE_ONEILL       11      // Japanese Names, P. G. O'Neill
+#define ILTYPE_ONEILLEK     12      // P.G. O'Neill's Essential Kanji (ISBN 0-8348-0222-8). 
+#define ILTYPE_DEROO        13      // Father Joseph De Roo, and published in his book "2001 Kanji"
+#define ILTYPE_FREQ         14      // Frequency-of-use ranking, Jack Halpern
 
+//--------------------------------
 //
 //  Text used to describe the indexes.
 //
@@ -2452,7 +2653,7 @@ static int indexes[] = {
 
   IDS_IL_MOROHASHILONG,IDS_IL_MOROHASHISHORT,
 
-  IDS_IL_SPAHN,IDS_IL_HENSHALL,IDS_IL_GAKKEN,IDS_IL_HEISIG,IDS_IL_ONEILL,IDS_IL_FREQUENCY,
+  IDS_IL_HALPERNKLD,IDS_IL_SPAHN,IDS_IL_HENSHALL,IDS_IL_GAKKEN,IDS_IL_HEISIG,IDS_IL_ONEILL,IDS_IL_ONEILLEK,IDS_IL_DEROO,IDS_IL_FREQUENCY,
 };
 
 static INDEX_lookup *idx_lookup = NULL;     // Global pointer for the skip lookup chart.
@@ -2462,6 +2663,7 @@ static INDEX_lookup *idx_lookup = NULL;     // Global pointer for the skip looku
 //  static procedures.
 //
 
+//--------------------------------
 //
 //  Dialog box procedure stub for the SKIP Lookup dialog box.
 //
@@ -2474,6 +2676,7 @@ static BOOL CALLBACK dialog_indexlookup (HWND hwnd,UINT message,WPARAM wParam,LP
 //  begin class INDEX_lookup
 //
 
+//--------------------------------
 //
 //  Dailog box handler for the radical lookup dailog box.  This does all
 //  the control work here.
@@ -2518,6 +2721,7 @@ int INDEX_lookup::dlg_indexlookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPar
   return (false);       // Let the dialog box handler handle the standard
 }                                                   //   buttons and actions.    
 
+//--------------------------------
 //
 //  This routine gets the current search index.  Remember the first character indicates the 
 //  search index to be used.
@@ -2526,6 +2730,7 @@ int INDEX_lookup::get_type () {
   return (SendDlgItemMessage(dialog,IDC_ILTYPE,CB_GETCURSEL,0,0));
 }
 
+//--------------------------------
 //
 //  Resets the entire dialog box to it's default state.  This is
 //  the Clear Button, it is also used to initialize the dalog box.
@@ -2538,11 +2743,12 @@ void INDEX_lookup::reset () {
   return;
 }
 
+//--------------------------------
 //
 //  This does the actual search.
 //
 void INDEX_lookup::search () {
-  static byte codes[] = { INFO_FIXED,INFO_FIXED,INFO_FIXED,INFO_FIXED, INFO_EXTEND,INFO_EXTEND, INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL };
+  static byte codes[] = { INFO_FIXED,INFO_FIXED,INFO_FIXED,INFO_FIXED, INFO_EXTEND,INFO_EXTEND, INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL,INFO_ALL };
   int code,type,index,vol,i,j;
   KANJI_info kanji_info;        // Class used to access the kanji information database
 //
@@ -2602,6 +2808,15 @@ void INDEX_lookup::search () {
         case ILTYPE_FREQ:            // Frequency-of-use ranking, Jack Halpern
              if (kanji_info.freq != index) continue;
              break;
+        case ILTYPE_DEROO:          // Father Joseph De Roo, and published in his book "2001 Kanji"
+             if (kanji_info.deroo != index) continue;
+             break;
+        case ILTYPE_ONEILLEK:       // P.G. O'Neill's Essential Kanji (ISBN 0-8348-0222-8). 
+             if (kanji_info.oneill_ek != index) continue;
+             break;
+        case ILTYPE_HALPERNKLD:     // Jack Halpern in his Kanji Learners Dictionary, published by Kodansha in 1999
+             if (kanji_info.halpern_kld != index) continue;
+             break;
       }
       put_kanji (i|j);
       put_kanji ('/');
@@ -2619,6 +2834,7 @@ void INDEX_lookup::search () {
 //  Stub routine for entry
 //
 
+//--------------------------------
 //
 //  Generailly, I do not like friend fucntions, but I need an entry point,
 //  and I wanted all the routines in this file.
@@ -2656,7 +2872,7 @@ private:                                                // Required procedures:
   void   search          (void);                        // Execute the actual search.
 private:
   int    get_data        (int ch,KANJI *buffer);        // Get information from a dialog, based on a radical or count.
-  HANDLE open            (tchar *filename,int message); // Open a file, (data or index).
+  HANDLE open            (TCHAR *filename,int message); // Open a file, (data or index).
   HANDLE data;                                          // Handle for data file.
 } RADICAL_lookup;
 
@@ -2678,6 +2894,7 @@ static RADICAL_lookup *rad_lookup = NULL;   // This is a big kludge, we use this
 //  static procedures.
 //
 
+//--------------------------------
 //
 //  Dialog box procedure stub for the Radical Lookup dialog box.
 //
@@ -2690,6 +2907,7 @@ static BOOL CALLBACK dialog_radlookup (HWND hwnd,UINT message,WPARAM wParam,LPAR
 //  begin class RADICAL_lookup
 //
 
+//--------------------------------
 //
 //  Dailog box handler for the radical lookup dailog box.  This does all
 //  the control work here.
@@ -2697,7 +2915,6 @@ static BOOL CALLBACK dialog_radlookup (HWND hwnd,UINT message,WPARAM wParam,LPAR
 int RADICAL_lookup::dlg_radlookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam) {
   switch (iMsg) {
     case WM_INITDIALOG:                         // Intialize, so chache dialog box pointer.
-         SendDlgItemMessage (hwnd,IDC_RLSPIN,UDM_SETRANGE,0,MAKELONG(30,0));
          initialize (hwnd,true,IDC_RLRADICALS);
          return (false);
     case WM_DESTROY:
@@ -2708,6 +2925,21 @@ int RADICAL_lookup::dlg_radlookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPar
     case WM_HELP:
          do_help (hwnd,IDH_KANJI_RADLOOKUP);
          return  (true);
+//
+//  This really processes the up down buttons.  These could be automatically processed, but 
+//  we want these buttons to be smart.  If you select some raticals, say that combine to 11
+//  strokes, the smart sequence would be:
+//
+//          0, 11, 12, 13, ...  30, 0
+//
+//  The values 1-10 are skipped, because these will always lead to no matches.
+//
+    case WM_NOTIFY:
+         if (wParam == IDC_RLSPIN) do_spinner ((NMUPDOWN *) lParam,IDC_RLSTROKE);
+         return (0);
+//
+//  Process controls.
+//
     case WM_COMMAND:
          switch (LOWORD(wParam)) {
 //
@@ -2756,6 +2988,7 @@ int RADICAL_lookup::dlg_radlookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPar
   return (false);       // Let the dialog box handler handle the standard
 }                                                   //   buttons and actions.    
 
+//--------------------------------
 //
 //  Get the kanji information form the curretnly open index/data file 
 //  pair.  Depeniding on the index and data file pair open, this will
@@ -2782,6 +3015,7 @@ int RADICAL_lookup::get_data (int ch,KANJI *buffer) {
   return (rad_data.count);
 }
 
+//--------------------------------
 //
 //  Opens a file for use in the radical lookup system.  Basically, this
 //  is called for the radical and stroke index and data files.  This
@@ -2794,7 +3028,7 @@ int RADICAL_lookup::get_data (int ch,KANJI *buffer) {
 //
 //      RETURN   -- Handle to the file.
 //
-HANDLE RADICAL_lookup::open (tchar *filename,int message) {
+HANDLE RADICAL_lookup::open (TCHAR *filename,int message) {
   HANDLE handle;
   handle = jwp_config.open(filename,OPEN_READ,false);
   if (handle == INVALID_HANDLE_VALUE) {
@@ -2803,6 +3037,7 @@ HANDLE RADICAL_lookup::open (tchar *filename,int message) {
   return (handle);
 }
 
+//--------------------------------
 //
 //  Resets the entire dialog box to it's default state.  This is
 //  the Clear Button, it is also used to initialize the dalog box.
@@ -2817,6 +3052,7 @@ void RADICAL_lookup::reset () {
   return;
 }
 
+//--------------------------------
 //
 //  This is a the heart of the search routine.  This routine actually 
 //  performs the search and puts the results in the buffer.  The routine
@@ -2933,6 +3169,7 @@ KeepThisOne:;
 //  Stub routine for entry
 //
 
+//--------------------------------
 //
 //  Generailly, I do not like friend fucntions, but I need an entry point,
 //  and I wanted all the routines in this file.
@@ -2975,6 +3212,7 @@ private:
 //  static data and definitions.
 //
 
+//--------------------------------
 //
 // Defintiion of the actual search indexes.
 //
@@ -2986,6 +3224,7 @@ private:
 #define RLTYPE_PINYIN   5       // pinyin
 #define RLTYPE_KOREAN   6       // korean
 
+//--------------------------------
 //
 //  Text used to describe the indexes.
 //
@@ -3000,6 +3239,7 @@ static READING_lookup *read_lookup = NULL;  // Global pointer for the skip looku
 //  static procedures.
 //
 
+//--------------------------------
 //
 //  Dialog box procedure stub for the READING Lookup dialog box.
 //
@@ -3007,6 +3247,7 @@ static BOOL CALLBACK dialog_readinglookup (HWND hwnd,UINT message,WPARAM wParam,
   return (read_lookup->dlg_readinglookup(hwnd,message,wParam,lParam));
 }
 
+//--------------------------------
 //
 //  This routine is used to test an ascii string for a match.
 //
@@ -3035,6 +3276,7 @@ static int test_ascii (byte *string,byte *buffer,int frags) {
   return (false);
 }
 
+//--------------------------------
 //
 //  Tests an kana string for comparison with a key.
 //
@@ -3063,6 +3305,7 @@ static int test_kana (byte *string,byte *buffer,int flex) {
 //  begin class READING_lookup
 //
 
+//--------------------------------
 //
 //  Dailog box handler for the radical lookup dailog box.  This does all
 //  the control work here.
@@ -3115,6 +3358,7 @@ int READING_lookup::dlg_readinglookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
   return (false);       // Let the dialog box handler handle the standard
 }                                                   //   buttons and actions.    
 
+//--------------------------------
 //
 //  This routine gets the current search index.  Remember the first character indicates the 
 //  search index to be used.
@@ -3131,6 +3375,7 @@ int READING_lookup::get_type () {
   return (RLTYPE_ON);
 }
 
+//--------------------------------
 //
 //  Resets the entire dialog box to it's default state.  This is
 //  the Clear Button, it is also used to initialize the dalog box.
@@ -3141,6 +3386,7 @@ void READING_lookup::reset () {
   return;
 }
 
+//--------------------------------
 //
 //  This does the actual search.
 //
@@ -3158,7 +3404,7 @@ void READING_lookup::search () {
 //  Get search parameters.
 //
   type   = get_type ();
-  length = JE_GetText(dialog,IDC_RLSTRING,&kptr);
+  length = JEGetDlgItemText(dialog,IDC_RLSTRING,&kptr);
   frags  = IsDlgButtonChecked(dialog,IDC_RLWORD);
   kun    = IsDlgButtonChecked(dialog,IDC_RLKUN);
   get_value (IDC_RLSTROKE,MAX_STROKES,s1,s2);
@@ -3168,15 +3414,15 @@ void READING_lookup::search () {
 //  Ascii based search strings.
 //
   if ((type == RLTYPE_PINYIN) || (type == RLTYPE_KOREAN) || (type == RLTYPE_MEANING)) {
-    for (i = 0; i < length; i++) {                              // Convert to byte ascii string.
+    for (ptr = astring, i = 0; i < length; i++) {               // Convert to UTF-8 string
       if (ISJIS(kptr[i])) {
         JMessageBox (dialog,IDS_RL_ERRORKANAFOUND,IDS_RL_ERRORKANA,MB_OK | MB_ICONERROR);
         SetFocus    (GetDlgItem(dialog,IDC_RLSTRING));
         return;
       }
-      astring[i] = tolower(kptr[i]);
+      if (type == RLTYPE_MEANING) jis2utf (ptr,tolower(kptr[i])); else *ptr++ = tolower(kptr[i]);
     }
-    astring[i] = 0;
+    *ptr = 0;
     if (type == RLTYPE_PINYIN) {                                // For pinyin expand the tone values.
       for (pin = pout = astring; *pin; pin++, pout++) {
         i = *pin;
@@ -3294,6 +3540,7 @@ keep_this:;
 //  Stub routine for entry
 //
 
+//--------------------------------
 //
 //  Generailly, I do not like friend fucntions, but I need an entry point,
 //  and I wanted all the routines in this file.
@@ -3350,6 +3597,7 @@ static SKIP_lookup *skp_lookup = NULL;  // Global pointer for the skip lookup ch
 //  static procedures.
 //
 
+//--------------------------------
 //
 //  Dialog box procedure stub for the SKIP Lookup dialog box.
 //
@@ -3357,6 +3605,7 @@ static BOOL CALLBACK dialog_skiplookup (HWND hwnd,UINT message,WPARAM wParam,LPA
   return (skp_lookup->dlg_skiplookup(hwnd,message,wParam,lParam));
 }
 
+//--------------------------------
 //
 //  This procedure handles processing for the skip type window.  This window allows 
 //  you to choose the skip type by selecting an image, not a number.
@@ -3392,7 +3641,8 @@ static LRESULT CALLBACK JWP_skiptype_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPA
 //       SetMapMode    (hdcmem,GetMapMode(hdc));            // Not actually necessary.
          bitmap = LoadBitmap(instance,MAKEINTRESOURCE(IDB_SKIPTYPES));
          SelectObject (hdcmem,bitmap);
-         BitBlt       (hdc,0,0,SKIP_FULLWIDTH,SKIP_FULLHEIGHT,hdcmem,0,0,SRCAND);
+         SetBkColor   (hdc,GetSysColor(COLOR_BTNFACE));
+         BitBlt       (hdc,0,0,SKIP_FULLWIDTH,SKIP_FULLHEIGHT,hdcmem,0,0,SRCCOPY);
          DeleteObject (bitmap);
          DeleteDC     (hdcmem);
          EndPaint     (hwnd,&ps);
@@ -3414,6 +3664,7 @@ static LRESULT CALLBACK JWP_skiptype_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPA
 //  begin class SKIP_lookup
 //
 
+//--------------------------------
 //
 //  Dailog box handler for the radical lookup dailog box.  This does all
 //  the control work here.
@@ -3461,6 +3712,7 @@ int SKIP_lookup::dlg_skiplookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam
   return (false);       // Let the dialog box handler handle the standard
 }                                                   //   buttons and actions.    
 
+//--------------------------------
 //
 //  Resets the entire dialog box to it's default state.  This is
 //  the Clear Button, it is also used to initialize the dalog box.
@@ -3476,6 +3728,7 @@ void SKIP_lookup::reset () {
   return;
 }
 
+//--------------------------------
 //
 //  This does the actual search.
 //
@@ -3542,6 +3795,7 @@ void SKIP_lookup::search () {
 //  Stub routine for entry
 //
 
+//--------------------------------
 //
 //  Generailly, I do not like friend fucntions, but I need an entry point,
 //  and I wanted all the routines in this file.
@@ -3586,7 +3840,7 @@ void skip_lookup (JWP_file *file) {
 
 
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Class JIS_table definition.
 //
@@ -3597,10 +3851,11 @@ public:
   int jistable_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam);
   HWND  dialog;         // Window pointer for dialog box.
 private:
-  KANJI current;        // Current active character (JIS code)
-  HWND  display;        // Window pointer for character display
-  int   kanjibad;       // Cached value of bad kanji (black box).
-  int   update;         // Flag indicates doing an update.
+  KANJI_font *kanji;        // Font used to draw the JIS table.    
+  KANJI       current;      // Current active character (JIS code)
+  HWND        display;      // Window pointer for character display
+  int         kanjibad;     // Cached value of bad kanji (black box).
+  int         update;       // Flag indicates doing an update.
   int  get_hex    (int id);                 // Get hex value from an edit box.
   void goto_jis   (int jis,int exclude);    // Move view to a specific JIS code.
   void put_hex    (int id,int hex);         // Put hex value into an edit box.
@@ -3621,6 +3876,7 @@ static JIS_table *jis_ptr = NULL;       // Class poiner to dialog procedures can
 //  static procedures.
 //
 
+//--------------------------------
 //
 //  Dialog box procedure stub for JIS table.
 //
@@ -3628,6 +3884,7 @@ static BOOL CALLBACK dialog_jistable (HWND hwnd,UINT message,WPARAM wParam,LPARA
   return (jis_ptr->dlg_jistable(hwnd,message,wParam,lParam));
 }
 
+//--------------------------------
 //
 //  Window procedure stub for the character window in the JIS table.
 //
@@ -3636,11 +3893,11 @@ static LRESULT CALLBACK JWP_jistable_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPA
 }
 
 //
-//  end class KANJI_lookup
+//  end class JIS_table
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  JIS table rotuines (see stub routine above, and class definition
 //                      above).
@@ -3650,7 +3907,7 @@ static LRESULT CALLBACK JWP_jistable_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPA
 //  and Unicode character spaces.
 //
 
-//```````````````````````````````````````````````````````````````````
+//-------------------------------------------------------------------
 //
 //  Dialog box ID's and other static definitions.
 //
@@ -3670,11 +3927,12 @@ static LRESULT CALLBACK JWP_jistable_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPA
   #define JIS_HEIGHT    6       // Number of lines in the table.
 #endif WINCE_PPC
 
-//```````````````````````````````````````````````````````````````````
+//-------------------------------------------------------------------
 //
 //  Begin class JIS_table
 //
 
+//--------------------------------
 //
 //  Dialog box procedure for processing the JIS table dialog box.
 //
@@ -3683,6 +3941,7 @@ int JIS_table::dlg_jistable (HWND hwnd,int message,WPARAM wParam,LPARAM lParam) 
   switch (message) {
     case WM_INITDIALOG:                             // Intialize dialog.
          add_dialog (dialog = hwnd,true);           //   Cache dialog pointer.
+         kanji    = get_jistfont();                 //   Cache font for JIS table
          display  = GetDlgItem(hwnd,IDC_JTTABLE);   //   Cache kanji window for scroll control.
          update   = false;                          //   We are not updating text boxes
          kanjibad = kanji->jis_index(KANJI_BAD);    //   Cache bad kanji index for this font.
@@ -3719,7 +3978,8 @@ int JIS_table::dlg_jistable (HWND hwnd,int message,WPARAM wParam,LPARAM lParam) 
                 return (true);
            case IDC_JTUNICODE:
                 input_check (wParam);
-                if (!update) goto_jis(unicode2jis(get_hex(IDC_JTUNICODE)),IDC_JTUNICODE);
+                i = get_hex(IDC_JTUNICODE);
+                if (!update) goto_jis(unicode2jis(i,i),IDC_JTUNICODE);
                 return (true);
 //
 //  Info and insert are relativly simple.
@@ -3734,12 +3994,10 @@ int JIS_table::dlg_jistable (HWND hwnd,int message,WPARAM wParam,LPARAM lParam) 
                   }
                 }
                 return (true);
-           case IDC_JTINSERT: {
-                  JWP_file *file = file_list.get(NULL);
-                  file->undo_para  (UNDO_ANY);            // Allow specific undo of put back.
-                  file->put_string (&current,1);
-                  file->view_check ();
-                }
+           case IDC_JTINSERT: 
+                JWP_file *file;
+                file = file_list.get(NULL);
+                file->insert_string (&current,1);       // Allow specific undo of put back.
                 return (true);
          }
          break;
@@ -3747,6 +4005,7 @@ int JIS_table::dlg_jistable (HWND hwnd,int message,WPARAM wParam,LPARAM lParam) 
   return (false);
 }
 
+//--------------------------------
 //
 //  Reads a hex value from a text edit box and returns the value.
 //
@@ -3762,6 +4021,7 @@ int JIS_table::get_hex (int id) {
   return (hex);
 }
 
+//--------------------------------
 //
 //  This key routine implements a change in the cursor location within
 //  the caracter set.  This routien will adjust the scroll bar, and 
@@ -3796,6 +4056,7 @@ void JIS_table::goto_jis (int jis,int exclude) {
   return;
 }
 
+//--------------------------------
 //
 //  This routine process messages for the character window in the 
 //  JIS table dialog.
@@ -3805,6 +4066,7 @@ int JIS_table::jistable_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam
   PAINTSTRUCT ps;           // Paint structure (WM_PAINT only).
   RECT        rect;         // Rect is the entire entire window, then the 16x16 character display box.
   RECT        box;          // This is the entire button box, including borders.
+  HPEN        pen;          // Pen used for drawing outlines around the boxes.
   int         i,j,x,y;
   int         index;        // JIS code.
 
@@ -3834,12 +4096,12 @@ int JIS_table::jistable_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam
 //  the flashing and actually being faster.
 //
     case WM_PAINT:
-         KANJI_font *jist;
-         if (!(jist = get_jistfont())) return (0);
          hdc    = BeginPaint(hwnd,&ps);
-         index = (current & 0xff00) | 0x20;             // Intialize JIS value.
-         for (j = 0; j < JIS_HEIGHT; j++) {             // Do each row.
-           y           = j*BUTTON_SIZE;                 // Initialize row based values.
+         index = (current & 0xff00) | 0x20;                 // Intialize JIS value.
+         SetTextColor (hdc,GetSysColor(COLOR_WINDOWTEXT));
+         SetBkColor   (hdc,GetSysColor(COLOR_WINDOW));
+         for (j = 0; j < JIS_HEIGHT; j++) {                 // Do each row.
+           y           = j*BUTTON_SIZE;                     // Initialize row based values.
            box .top    = y;
            box .bottom = y+BUTTON_SIZE;
            rect.top    = y+BUTTON_JBMOFFSET;
@@ -3850,9 +4112,11 @@ int JIS_table::jistable_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam
              rect.left  = i*BUTTON_SIZE+BUTTON_JBMOFFSET;
              rect.right = rect.left+BUTTON_JBMSIZE;
              if (valid(index)) {                            // Render button with charcter.
-               SelectObject (hdc,GetStockObject(WHITE_BRUSH));
+               pen = (HPEN) SelectObject(hdc,CreatePen(PS_SOLID,0,GetSysColor(COLOR_WINDOWTEXT)));
+               SelectObject (hdc,GetSysColorBrush(COLOR_WINDOW));
                Rectangle    (hdc,i*BUTTON_SIZE,y,i*BUTTON_SIZE+BUTTON_SIZE,y+BUTTON_SIZE);
-               jist->fill (hdc,index,&rect);
+               kanji->fill  (hdc,index,&rect);
+               DeleteObject (SelectObject(hdc,pen));
              }
              else {                                         // Render invalid button.
                FillRect (hdc,&box,(HBRUSH) GetStockObject(GRAY_BRUSH));
@@ -3863,6 +4127,23 @@ int JIS_table::jistable_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam
          }
          EndPaint (hwnd,&ps);
          return (0);
+//
+//  Wheel mouse support.
+//
+#ifndef WINCE
+    case WM_MOUSEWHEEL:
+         static int delta;                                                  // Accumulation point for deltas.
+         delta += (short) HIWORD(wParam);                                   // Delta
+         while (delta > WHEEL_DELTA) {
+           SendMessage (hwnd,WM_KEYDOWN,VK_PRIOR,0);
+           delta -= WHEEL_DELTA;
+         }
+         while (abs(delta) > WHEEL_DELTA) {
+           SendMessage (hwnd,WM_KEYDOWN,VK_NEXT,0);
+           delta += WHEEL_DELTA;
+         }
+         return (0);
+#endif  WINCE
 //
 //  Process scroll messages.
 //
@@ -3930,6 +4211,9 @@ int JIS_table::jistable_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam
            case VK_C:
                 SendMessage (dialog,WM_COMMAND,IDC_JTCLIP,0);
                 break;
+           case VK_I:
+                SendMessage (dialog,WM_COMMAND,IDC_JTINFO,0);
+                break;
            default:
                 return (0);
          }
@@ -3977,6 +4261,7 @@ int JIS_table::jistable_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam
   return (DefWindowProc(hwnd,iMsg,wParam,lParam));
 }
 
+//--------------------------------
 //
 //  Puts a hex value into a text item in the dialog box.  This is used
 //  to set the JIS, EUC, shift-JIS and Unicode values.
@@ -3991,6 +4276,7 @@ void JIS_table::put_hex (int id,int hex) {
   return;
 }
 
+//--------------------------------
 //
 //  This is a simple test routine to determine if a JIS value is 
 //  valid.  Currently this is based on the actual font loaded, which
@@ -4008,6 +4294,7 @@ int JIS_table::valid (int jis) {
   return (false);
 }
 
+//--------------------------------
 //
 //  This is a simple test routine to determine if there is a valid 
 //  character on a particular page.  If there is not any valid character,
@@ -4026,11 +4313,12 @@ int JIS_table::valid_page (int page) {
   return (false);
 }
 
-//```````````````````````````````````````````````````````````````````
+//-------------------------------------------------------------------
 //
 //  Exported routines.
 //
 
+//--------------------------------
 //
 //  Entry point for generating the JIS table.
 //
@@ -4050,7 +4338,7 @@ void jis_table (JWP_file *file) {
 //
 //  End JIS table
 //
-//-------------------------------------------------------------------
+//===================================================================
 
 
 
@@ -4073,6 +4361,7 @@ void jis_table (JWP_file *file) {
 //  Other exported procedrues.
 //
 
+//--------------------------------
 //
 //  Initialization procedure.  This basically registers the windows 
 //  classes used by the results window and by the radicals buttons
@@ -4084,26 +4373,30 @@ int initialize_radlookup (WNDCLASS *wclass) {
   wclass->hbrBackground = (HBRUSH) (COLOR_WINDOW+1);
   wclass->lpszClassName = TEXT("JWP-KList");
   if (!RegisterClass(wclass)) return (true);
+  wclass->style         = CS_HREDRAW | CS_VREDRAW;
   wclass->lpfnWndProc   = JWP_skiptype_proc;                // Radicals window for radicals lookup dialog
-  wclass->hbrBackground = (HBRUSH) (COLOR_MENU+1);
+  wclass->hbrBackground = (HBRUSH) (COLOR_BTNFACE+1);
   wclass->lpszClassName = TEXT("JWP-SKIP");
   if (!RegisterClass(wclass)) return (true);
+  wclass->style         = CS_HREDRAW | CS_VREDRAW;
   wclass->lpfnWndProc   = JWP_fcshape_proc;                 // Radicals window for radicals lookup dialog
   wclass->lpszClassName = TEXT("JWP-FC");
   if (!RegisterClass(wclass)) return (true);
+  wclass->style         = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
   wclass->lpfnWndProc   = JWP_radicals_proc;                // Radicals window for radicals lookup dialog
   wclass->hbrBackground = (HBRUSH) (COLOR_APPWORKSPACE+1);
   wclass->lpszClassName = TEXT("JWP-Rads");
   if (!RegisterClass(wclass)) return (true);
+  wclass->style         = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
   wclass->lpfnWndProc   = JWP_bushu_proc;                   // Bushu list for HS lookup
   wclass->lpszClassName = TEXT("JWP-HS");
   if (!RegisterClass(wclass)) return (true);
+  wclass->style         = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
   wclass->lpfnWndProc   = JWP_jistable_proc;                // JIS table character window.
   wclass->lpszClassName = TEXT("JWP-Table");
   if (!RegisterClass(wclass)) return (true);
   return (false);
 }
-
 
 
 

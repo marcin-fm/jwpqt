@@ -1,0 +1,33 @@
+Microsoft Visual Studio Solution File, Format Version 7.00
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "jwpce", "jwpce.vcproj", "{8AC4C559-92FC-4BE3-85CD-6F426C46A35D}"
+EndProject
+Global
+	GlobalSection(SolutionConfiguration) = preSolution
+		ConfigName.0 = (WCE MIPS) Debug
+		ConfigName.1 = (WCE MIPS) Release
+		ConfigName.2 = (WCE SH3) Debug
+		ConfigName.3 = (WCE SH3) Release
+		ConfigName.4 = Debug
+		ConfigName.5 = Release
+	EndGlobalSection
+	GlobalSection(ProjectDependencies) = postSolution
+	EndGlobalSection
+	GlobalSection(ProjectConfiguration) = postSolution
+		{8AC4C559-92FC-4BE3-85CD-6F426C46A35D}.(WCE MIPS) Debug.ActiveCfg = (WCE MIPS) Debug|Win32
+		{8AC4C559-92FC-4BE3-85CD-6F426C46A35D}.(WCE MIPS) Debug.Build.0 = (WCE MIPS) Debug|Win32
+		{8AC4C559-92FC-4BE3-85CD-6F426C46A35D}.(WCE MIPS) Release.ActiveCfg = (WCE MIPS) Release|Win32
+		{8AC4C559-92FC-4BE3-85CD-6F426C46A35D}.(WCE MIPS) Release.Build.0 = (WCE MIPS) Release|Win32
+		{8AC4C559-92FC-4BE3-85CD-6F426C46A35D}.(WCE SH3) Debug.ActiveCfg = (WCE SH3) Debug|Win32
+		{8AC4C559-92FC-4BE3-85CD-6F426C46A35D}.(WCE SH3) Debug.Build.0 = (WCE SH3) Debug|Win32
+		{8AC4C559-92FC-4BE3-85CD-6F426C46A35D}.(WCE SH3) Release.ActiveCfg = (WCE SH3) Release|Win32
+		{8AC4C559-92FC-4BE3-85CD-6F426C46A35D}.(WCE SH3) Release.Build.0 = (WCE SH3) Release|Win32
+		{8AC4C559-92FC-4BE3-85CD-6F426C46A35D}.Debug.ActiveCfg = Debug|Win32
+		{8AC4C559-92FC-4BE3-85CD-6F426C46A35D}.Debug.Build.0 = Debug|Win32
+		{8AC4C559-92FC-4BE3-85CD-6F426C46A35D}.Release.ActiveCfg = Release|Win32
+		{8AC4C559-92FC-4BE3-85CD-6F426C46A35D}.Release.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+	EndGlobalSection
+	GlobalSection(ExtensibilityAddIns) = postSolution
+	EndGlobalSection
+EndGlobal

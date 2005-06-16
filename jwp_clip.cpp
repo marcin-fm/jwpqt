@@ -1,11 +1,11 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This modlue implement most of the clipboard functionaly of the 
 //  system.  The clipbard has no class associated witht it, but rather
@@ -27,7 +27,7 @@
 //  clipboard and imported by the other program.  
 //
 //  JWPce supports four clipboard formats CF_TEXT, CF_OEMTEST 
-//  (identical from our point of view), private format clip_id, and
+//  (identical from our point of view), private format clip_jwpce, and
 //  CF_BITMAP.  
 //
 //  The private format allows different instances of JWPce to share 
@@ -57,31 +57,33 @@
   #endif
 #endif  CLIPBOARD_FORMAT
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Compile-time parameters.
 //
 
-#define JWP_CLIPBOARD   TEXT("JWPce-Clip")  // Name of private clipbard format.
+#define CLIPBOARD_JWPCE TEXT("JWPce-Clip")  // Name of private clipbard format.
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Static data.
 //
 
-static UINT             clip_id;            // Id of JWPce's private clipboard format.
+static UINT             clip_jwpce;         // Id of JWPce's private clipboard format.
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Exported data.
 //
+
 JWP_file *jwp_clipboard = NULL;         // Internal representation of the clipboard.
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Exported routines.
 //
 
+//--------------------------------
 //
 //  Clear the contents of the clipboard image.
 //
@@ -92,6 +94,7 @@ void clear_clipboard () {
   return;
 }
 
+//--------------------------------
 //
 //  This routine processes clipbard messages from the system or other 
 //  parts of the program.
@@ -115,7 +118,7 @@ void do_clipboard (int iMsg,WPARAM wParam) {
 //
     case WM_RENDERALLFORMATS:
          OpenClipboard  (main_window);
-         do_clipboard   (WM_RENDERFORMAT,clip_id);
+         do_clipboard   (WM_RENDERFORMAT,clip_jwpce);
 #ifndef WINCE
          do_clipboard   (WM_RENDERFORMAT,CF_TEXT);
          do_clipboard   (WM_RENDERFORMAT,CF_OEMTEXT);
@@ -155,14 +158,14 @@ void do_clipboard (int iMsg,WPARAM wParam) {
                 jwp_clipboard->export_file (&convert);
                 break;
 #else WINCE                         // Windows NT/95 support all text formats.
-           case CF_TEXT:            // Test formats, base on JIS_convert
+           case CF_TEXT:            // Text formats, base on JIS_convert
            case CF_OEMTEXT:
            case CF_UNICODETEXT:     // UNICODE format is supported though JIS_convert.
                 convert.output_count ();
                 convert.set_type ((wParam == CF_UNICODETEXT) ? FILETYPE_UNICODE : jwp_config.cfg.clip_write);
                 size  = jwp_clipboard->export_file(&convert);
                 block = convert.output_clip (size);
-                convert.set_type (jwp_config.cfg.clip_write);
+                convert.set_type ((wParam == CF_UNICODETEXT) ? FILETYPE_UNICODE : jwp_config.cfg.clip_write);
                 jwp_clipboard->export_file (&convert);
                 break;
 #endif WINDCE
@@ -179,12 +182,13 @@ void do_clipboard (int iMsg,WPARAM wParam) {
 //  startup, this tells us to register our private clipboard class.
 //
     case WM_CREATE:
-         clip_id = RegisterClipboardFormat(JWP_CLIPBOARD);
+         clip_jwpce = RegisterClipboardFormat(CLIPBOARD_JWPCE);
          return;
   }
   return;
 }
 
+//--------------------------------
 //
 //  Correctly release the data structure allocated with get_paste.
 //
@@ -195,6 +199,7 @@ void free_paste (JWP_file *paste) {
   return;
 }
 
+//--------------------------------
 //
 //  This routine gets the clipboard data (from whatever the soruce is) and
 //  converts it into a JWP_file class object.  A pointer to the object is
@@ -222,7 +227,7 @@ JWP_file *get_paste (HWND hwnd) {
   return (paste);
 }
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin Class Paragraph.
 //
@@ -231,6 +236,7 @@ JWP_file *get_paste (HWND hwnd) {
 //  to this modlue.
 //
 
+//--------------------------------
 //
 //  Transfer's this paragraph to the end of the clipboard.
 //
@@ -250,15 +256,16 @@ int Paragraph::add_to_clip (int start,int end) {
 //
 //  End Class Paragraph.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin Class JWP_File.
 //
 //  Parts of the class JWP_file associated with the clipboard.
 //
 
+//--------------------------------
 //
 //  Minimalistic file constructor used for jwp_clipboard and temp 
 //  JWP_file objects.
@@ -279,6 +286,7 @@ JWP_file::JWP_file (int format_width) {
   return;
 }
 
+//--------------------------------
 //
 //  This routine implements a paste from the clipboard to the current 
 //  cursor location.
@@ -332,6 +340,7 @@ void JWP_file::clip_paste (int errors) {
   return;
 }
 
+//--------------------------------
 //
 //  Implements a copy to the clipbaord format he current file.  Here, 
 //  data is copped to the internal cliboard and windows is notifiled 
@@ -386,20 +395,21 @@ JWP_file *JWP_file::clip_copy () {
 //
 //  Export clipboard formats.
 //
-    SetClipboardData (clip_id       ,null);
-    if (!jwp_config.cfg.no_UNICODETEXT) SetClipboardData (CF_UNICODETEXT,null);
+  SetClipboardData (clip_jwpce    ,null);
+  if (!jwp_config.cfg.no_UNICODETEXT) SetClipboardData (CF_UNICODETEXT,null);
 #ifndef WINCE
-    SetClipboardData (CF_TEXT       ,null);
-    SetClipboardData (CF_OEMTEXT    ,null);
+  SetClipboardData (CF_TEXT       ,null);
+  SetClipboardData (CF_OEMTEXT    ,null);
 #endif  WINCE
 #if (CLIPBOARD_FORMAT == CLIPBOARD_FORMAT_BITMAP)
-    if (!jwp_config.cfg.no_BITMAP) SetClipboardData (CF_BITMAP     ,null);
+  if (!jwp_config.cfg.no_BITMAP) SetClipboardData (CF_BITMAP     ,null);
 #endif CLIPBOARD_FORMAT
 CleanUp:
   CloseClipboard ();
   return (jwp_clipboard);
 }
 
+//--------------------------------
 //
 //  This little routine controls the activation of the Edit/Cut and Edit/Copy
 //  Menu items.  Bascially, they are enabled when there is a selected text.
@@ -415,6 +425,7 @@ void JWP_file::edit_menu () {
   return;
 }
 
+//--------------------------------
 //
 //  This routine exports the clipbard data as a bitmap format.  This
 //  allows Japanese text to be imported into a standard word processor
@@ -448,25 +459,25 @@ HGLOBAL JWP_file::export_bitmap () {
   for (para = first; para; para = para->next) {
     para->format (this,NULL,false); // Data placed in the clipboard is unformatted!
     for (line = para->first; line; line = line->next) {
-      y += jwp_font.vheight;
-      for (j = jwp_font.x_offset, i = 0; i < line->length; i++) j = jwp_font.hadvance(j,para->text[line->first+i]);
-      j -= jwp_font.x_offset;
+      y += clip_font.vheight;
+      for (j = clip_font.x_offset, i = 0; i < line->length; i++) j = clip_font.hadvance(j,para->text[line->first+i]);
+      j -= clip_font.x_offset;
       if (j > x) x = j;
     }
   }
-  y -= 2*kanji->leading;                            // Remove extra vertical space allocated for each line.
+  y -= 2*clip_font.kanji->leading;                  // Remove extra vertical space allocated for each line.
 //
 //  Make memory bitmap
 //
   hdc     = GetDC(main_window);
   hdcmem  = CreateCompatibleDC(hdc);
-  if (!jwp_config.cfg.colorkanji_bitmap || !jwp_config.cfg.colorkanji_mode || !colorkanji_list) {
+  if (!jwp_config.cfg.colorkanji_bitmap || !jwp_config.cfg.colorkanji_mode) {
     hbitmap = CreateBitmap(x,y,1,1,NULL);           // No color kanji so just make a monocrome
   }                                                 //   bitmap.  
   else {                                        
     hbitmap = CreateCompatibleBitmap (hdc,x,y);     // Color mode so make color bitmap.
   }
-  font    = (HFONT) SelectObject (hdcmem,jwp_font.font);
+  font    = (HFONT) SelectObject (hdcmem,clip_font.ascii);
   SelectObject(hdcmem,hbitmap);
 //
 //  Fill background with white.
@@ -479,16 +490,16 @@ HGLOBAL JWP_file::export_bitmap () {
 //
 //  Render bitmap.
 //
-  y                 = jwp_font.height;          // Vertical start location.
-  x                 = jwp_font.x_offset;        // Save horizonal border
-  jwp_font.x_offset = 0;                        // Set to zero for rending
+  y                  = clip_font.height;        // Vertical start location.
+  x                  = clip_font.x_offset;      // Save horizonal border
+  clip_font.x_offset = 0;                       // Set to zero for rending
   for (para = first; para; para = para->next) {
     for (line = para->first; line; line = line->next) {
-      draw_line (hdcmem,para,line,y,rect.left,rect.right);
-      y += jwp_font.vheight;
+      draw_line (hdcmem,para,line,y,rect.left,rect.right,&clip_font);
+      y += clip_font.vheight;
     }
   }
-  jwp_font.x_offset = x;                        // Restore default x border.
+  clip_font.x_offset = x;                       // Restore default x border.
 //
 //  Clean up and exit.
 //
@@ -499,6 +510,7 @@ HGLOBAL JWP_file::export_bitmap () {
 }
 #endif CLIPBOARD_FORMAT
 
+//--------------------------------
 //
 //  This routine actually goes about the process of reading from the 
 //  clipboard.  This is used when data is coming form another instance
@@ -514,7 +526,7 @@ int JWP_file::import_clip () {
 //
 //  Attempt to get private data format.
 //
-  if ((block = GetClipboardData(clip_id))) {
+  if ((block = GetClipboardData(clip_jwpce))) {
     cache.input_clip (block);
     read_jwp_file    (&cache);
     cache.input_end  ();
@@ -583,6 +595,6 @@ int JWP_file::import_clip () {
 //
 //  End Class JWP_file.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
 

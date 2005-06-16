@@ -1,9 +1,11 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
-//                                                                   //   
-//-------------------------------------------------------------------//
+//                                                                   //
+//===================================================================//
+
+#define _WIN32_WINNT    0x0401                  // Necessary to get wheel-mouse defintions.
 
 #include <windows.h>
 
@@ -30,7 +32,7 @@
   #define CF_UNICODETEXT 99
 #endif WINELIB
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Degugging stuff
 //
@@ -51,7 +53,7 @@
   #define MPRINTF   (true ? (void) 0 : wsprintf )
 #endif DEBUG_ROUTINES
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  General definitions.
 //
@@ -59,7 +61,10 @@
 #define SIZE_BUFFER     512                     // Size of general working character buffer.
                                                 // Version special is defined in options and includes special flags.
 #define SIZE_WORKING    256                     // Size of a working string (smaller than a buffer).
-#define VERSION_STRING  TEXT("1.34") VERSION_SPECIAL  // Version ID number
+#ifndef VERSION_SPECIAL
+  #define VERSION_SPECIAL                       // Define the special ID if not already.  Used for special versions.
+#endif  VERSION_SPECIAL
+#define VERSION_STRING  TEXT("1.42") VERSION_SPECIAL  // Version ID number
 #define VERSION_NAME    TEXT("JWPce ") VERSION_STRING // Version name.
 
                                 // Input modes
@@ -120,8 +125,30 @@ typedef const TCHAR     tchar;
 #define WMU_SETSELECT       (WM_USER+11)    // Set selection in Japanese List control
 #define WMU_SETEXCLUDE      (WM_USER+12)    // Set exclusion file used for inserts
 #define WMU_OKTODESTROY     (WM_USER+13)    // Message sent to non-modal dialog boxes before they are destroyed
+#define WMU_CHARFROMLIST    (WM_USER+14)    // User is typing into the list box.
+#define WMU_EDITFROMLIST    (WM_USER+15)    // User has enetered edit commands into the list box.
+#define WMU_IMEFROMLIST     (WM_USER+16)    // User is typing text via the IME into the list box.
+#define WMU_SETHISTORY      (WM_USER+17)    // Set the history used with a Japanese edit control
+#define WMU_HISTORYLIST     (WM_USER+18)    // Generate a history list for this list.
+#define WMU_SETINFOKANJI    (WM_USER+19)    // Set the character used for the kanji info (used in single window system)
 
+//
+//  Timers used.
+//
+#define TIMER_AUTOSCROLL    1               // Timer used for auto-scroll
+#define TIMER_MOUSEHOLD     2               // Timer used for mouse hold events.
 
+//===================================================================
+//
+//  Configuration defintiions
+//
+extern struct cfg *cfg;                     // Pointer to configuration used 
+extern struct cfg  default_config;          // Default config stucture definines the default condition.
+
+//===================================================================
+//
+//  Exported routines.
+//
 extern void add_dialog    (HWND hwnd,int closeable);    // Add a modeless dialog to the system list
 extern void remove_dialog (HWND hwnd);                  // Remove a mdoeless dialog from the system list.
 extern void set_mode      (int mode);                   // Sets the current edit mode.

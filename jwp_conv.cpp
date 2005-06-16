@@ -1,11 +1,11 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------//
+//===================================================================//
 //
 //  How the kana->kanji conversion works.  The system is stored in two
 //  files.  The first file is a index file used to find the correct set
@@ -121,7 +121,7 @@
   #endif
 #endif  CONVERT_ACCESS
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Compile time options.
 //
@@ -132,7 +132,7 @@
                         // make sure to change the text in the edit conversion
                         // dialog box.
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Defines and types.
 //
@@ -142,15 +142,23 @@
 #define NAME_USERSEL    TEXT("user.sel")    // User conversion dictionary.
 #define NAME_USERCONV   TEXT("user.cnv")    // User kana-kanji conversion dictionary.
 
-//-------------------------------------------------------------------
+//===================================================================
+//
+//  Static data..
+//
+
+static SIZE_window cvrt_size;       // class for dynamic sizing of the user conversions dialog.
+
+//===================================================================
 //
 //  Static processing rotuines.
 //
 
-static int cmp_key      (byte *p1,byte *p2);            // Compare two keys, used in the binary search.
-static int test_endings (int dict,int key,int kana);    // Test endings for kana->kanji conversions.
-static int test_nkey    (byte *kana,byte *key);         // Tests is key is beginning of kana string.
+static int cmp_key      (byte *p1,byte *p2,int endkana);    // Compare two keys, used in the binary search.
+static int test_endings (int dict,int key,int kana);        // Test endings for kana->kanji conversions.
+static int test_nkey    (byte *kana,byte *key);             // Tests is key is beginning of kana string.
 
+//--------------------------------
 //
 //  Compares two keys to determine if one is bigger or smaller.
 //
@@ -161,12 +169,13 @@ static int test_nkey    (byte *kana,byte *key);         // Tests is key is begin
 //                =0  -> p1 = p2
 //                <0  -> p1 is before p2 (p1 < p2)
 //
-static int cmp_key (byte *p1,byte *p2) {
+static int cmp_key (byte *p1,byte *p2,int endkana) {
   for (; *p1 == *p2; p1++, p2++);
-  if ((*p1 <= 0x7f) && !*p2) return (0);
-  return (*p1 - *p2);
+  if ((*p1 <= 0x7f) && !*p2 && (endkana || (*p1 == '*'))) return (0);
+  return (((int) *p1) - ((int) *p2));
 }
 
+//--------------------------------
 //
 //  Tests the ending kana for a match.  The kana->kanji conversion
 //  dictionary contains an ending code.  A code of '*' indicates no
@@ -230,6 +239,7 @@ static int test_endings (int dict,int key,int kana) {
   return (false);
 }
 
+//--------------------------------
 //
 //  Compares two keys, requiring that key and kana be identical to the
 //  end of key.
@@ -248,28 +258,38 @@ static int test_nkey (byte *kana,byte *key) {
   return (!*key);
 }
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Window proc for handling the conversion bar.
 //
 static LRESULT CALLBACK JWP_conv_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam);
 
+//--------------------------------
+//
+//  Window proc for the conversion bar.
+//
 static LRESULT CALLBACK JWP_conv_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam) {
   HDC         hdc;
   PAINTSTRUCT ps;
-
   switch (iMsg) {
     case WM_CREATE:
          jwp_conv.adjust (hwnd);
          return (0);
     case WM_PAINT:
          hdc = BeginPaint (hwnd,&ps);
+         SetTextColor  (hdc,GetSysColor(COLOR_WINDOWTEXT));
+         SetBkColor    (hdc,GetSysColor(COLOR_BTNFACE));
          jwp_conv.draw (hdc);
-         EndPaint (hwnd,&ps);
+         EndPaint      (hwnd,&ps);
          return (0);
     case WM_HSCROLL:
          jwp_conv.do_scroll(wParam);
          return (0);
+#ifndef WINCE
+    case WM_MOUSEWHEEL:
+         jwp_conv.do_wheel(wParam);
+         return (0);
+#endif  WINCE
     case WM_LBUTTONDOWN:                        // Left button.
          if (GetKeyState(VK_MENU) >= 0) {       // Alt+left bufgton makes a right button
            jwp_conv.do_mouse (lParam);          // Simply changes the selection.
@@ -283,7 +303,7 @@ static LRESULT CALLBACK JWP_conv_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
   return (DefWindowProc(hwnd,iMsg,wParam,lParam));
 }
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin Class EDIT_userconv.
 //
@@ -292,7 +312,7 @@ static LRESULT CALLBACK JWP_conv_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
 //  class defined in the modlue jwp_edit.
 //
 
-//```````````````````````````````````````````````````````````````````
+//-------------------------------------------------------------------
 //
 //  Class defintion.
 //
@@ -307,7 +327,7 @@ private:
   int   edit        (void);                     // Edit/Add entry procedure.
 };
 
-//```````````````````````````````````````````````````````````````````
+//-------------------------------------------------------------------
 //
 //  Godan utility routines.
 //
@@ -326,6 +346,7 @@ static struct godan godans[] = {
   { 0x4C,'n' },{ 0x56,'b' },{ 0x60,'m' },{ 0x6B,'r' }
 };
 
+//--------------------------------
 //
 //  Gets the ascii character assoicated with a godan verb ending.  For
 //  example, if you pass it the character ku, you will get the character
@@ -345,6 +366,7 @@ static int godan_ascii (KANJI kana) {
   return (0);
 }
 
+//--------------------------------
 //
 //  From an ascii character, get the kana character that is the end 
 //  of the godan character.
@@ -362,7 +384,7 @@ int godan_kana (int ascii) {
   return (0);
 }
 
-//```````````````````````````````````````````````````````````````````
+//-------------------------------------------------------------------
 //
 //  Static data and routines.
 //
@@ -377,6 +399,7 @@ int godan_kana (int ascii) {
 
 static class EDIT_userconv *edit_userconv = NULL;   // Pointer to class instance so dialog procedure can find us.
 
+//--------------------------------
 //
 //  Stub dialog box routine.
 //
@@ -384,11 +407,12 @@ static int dialog_convert (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam) {
   return (edit_userconv->dlg_convert(hwnd,message,wParam,lParam));
 }
 
-//```````````````````````````````````````````````````````````````````
+//-------------------------------------------------------------------
 //
 //  Class routines.
 //
 
+//--------------------------------
 //
 //  Internal error check and display routine.  This is used by the 
 //  put_data fucntion to check the validility of the data being added 
@@ -411,6 +435,7 @@ int EDIT_userconv::check_error (int data,tchar *name) {
   return (true);
 }
 
+//--------------------------------
 //
 //  Required virtual function to edit an entry.  This just invokes the 
 //  edit dialog box.  All of the real work is there.
@@ -419,6 +444,7 @@ int EDIT_userconv::edit () {
   return (JDialogBox(IDD_CONVERTEDIT,dialog,(DLGPROC) dialog_convert));
 }
 
+//--------------------------------
 //
 //  This is the dialog procedure to edit an entry for the user conversion
 //  dictionary.
@@ -491,8 +517,8 @@ int EDIT_userconv::dlg_convert (HWND hwnd,UINT message,WPARAM wParam,LPARAM lPar
 //
 //  Get strings and make sure they are not empty.
 //
-                lkana  = JE_GetText(hwnd,IDC_CEKANA ,&kkana );
-                lkanji = JE_GetText(hwnd,IDC_CEKANJI,&kkanji);
+                lkana  = JEGetDlgItemText(hwnd,IDC_CEKANA ,&kkana );
+                lkanji = JEGetDlgItemText(hwnd,IDC_CEKANJI,&kkanji);
                 if (!lkana || !lkanji) {
                   JMessageBox (hwnd,IDS_CE_ERROREMPTY,IDS_CE_ERRORTITLE,MB_OK | MB_ICONWARNING);
                   SetFocus    (GetDlgItem(hwnd,lkana ? IDC_CEKANJI : IDC_CEKANA));
@@ -597,6 +623,7 @@ int EDIT_userconv::dlg_convert (HWND hwnd,UINT message,WPARAM wParam,LPARAM lPar
   return (false);
 }
 
+//--------------------------------
 //
 //  Get data from the list-box and generate a user conversion dictionary.
 //
@@ -644,6 +671,7 @@ byte *EDIT_userconv::get_data () {
   return (data);
 }
 
+//--------------------------------
 //
 //  This routine takes data and loads it into the edit-list box.  This
 //  routine translates the data to the form correct for the list box.
@@ -701,11 +729,35 @@ void EDIT_userconv::put_data (byte *data,tchar *name) {
   return;
 }
 
-//```````````````````````````````````````````````````````````````````
+//-------------------------------------------------------------------
 //
 //  Class JWP_conv routines.
 //
 
+//--------------------------------
+//
+//  Compairosn routine for kana->kanji conversion entries.  This is used to sort the 
+//  list of entries.
+//
+//      buf1,buff2 -- Pointer to strings to be compaired.
+//
+//      return     -- Non-zero value indicates buf2 should precede buf1.
+//
+static int convert_compare (KANJI *buf1,KANJI *buf2) {
+  int c1,c2;
+  c1 = c2 = 0;
+  while (*buf1 == *buf2) {
+    buf1++;
+    buf2++;
+    if ((*buf1 == '[') || (*buf1 == '(') || (*buf1 == '{') || (*buf1 == ']') || (*buf1 == ')') || (*buf1 == '}')) c1 = *buf1++;
+    if ((*buf2 == '[') || (*buf2 == '(') || (*buf2 == '{') || (*buf2 == ']') || (*buf2 == ')') || (*buf2 == '}')) c2 = *buf2++;
+    if ((*buf1 == KANJI_ARROW) && (c1 != c2)) return (c2 < c1);
+  }
+  for ( ; *buf1 && *buf2 && (*buf1 == *buf2); buf1++, buf2++);
+  return (*buf2 < *buf1);
+}
+
+//--------------------------------
 //
 //  This is the dialog handler for the User Conversion Dailog box.
 //  Mostly this dialog handler passes control to the EDIT_userconv
@@ -717,6 +769,7 @@ void EDIT_userconv::put_data (byte *data,tchar *name) {
 int JWP_conv::dlg_userconv (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam) {
   switch (message) {
     case WM_INITDIALOG:
+         cvrt_size.wm_init (hwnd,IDC_EDITLIST,&jwp_config.cfg.size_cnvrt,true,0,0);
          add_dialog (dialog = hwnd,false);
          if (!(edit_userconv = new EDIT_userconv())) return (false);
          edit_userconv->init (hwnd,user,IDS_CE_FILETYPE);
@@ -726,6 +779,17 @@ int JWP_conv::dlg_userconv (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam) 
          delete edit_userconv;
          dialog = null;
          return (true);
+#ifndef WINCE
+    case WM_SIZING:
+         cvrt_size.wm_sizing ((RECT *) lParam);
+         return (0);
+#endif  WINCE
+    case WM_SIZE:
+         cvrt_size.wm_size (wParam);
+         return (0);
+    case WM_MOVE:
+         cvrt_size.wm_move ();
+         return (0);
 #ifndef WINCE
     case WM_DROPFILES:                          // Drag & drop import a file
          edit_userconv->do_drop ((HDROP) wParam);
@@ -743,8 +807,11 @@ int JWP_conv::dlg_userconv (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam) 
          }
          return (0);
     case WM_COMMAND:
-         switch (LOWORD(wParam)) {              // These events belong to the edit-
-           case IDC_EDITLIST:                   //   list class.
+         switch (LOWORD(wParam)) {              
+           case IDC_UCSORT:
+                edit_userconv->list->sort (convert_compare);
+                return (0);
+           case IDC_EDITLIST:                   // These events belong to the edit-list class.
            case IDC_EDITLISTADD:
            case IDC_EDITLISTEDIT:
            case IDC_EDITLISTUP:
@@ -752,6 +819,8 @@ int JWP_conv::dlg_userconv (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam) 
            case IDC_EDITLISTDELETE:
            case IDC_EDITLISTIMPORT:
            case IDC_EDITLISTINSERT:
+           case IDC_EDITLISTFIND:
+           case IDC_EDITLISTNEXT:
                 edit_userconv->do_event (wParam);
                 return (0);
            case IDOK:                           // User wants to keep changes.
@@ -765,6 +834,7 @@ int JWP_conv::dlg_userconv (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam) 
   return (0);
 }
 
+//--------------------------------
 //
 //  Save the user conversions databese
 //
@@ -789,9 +859,9 @@ int JWP_conv::save_user () {
 //
 //  End class EDIT_userconv.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin Class JWP_conv.
 //
@@ -803,6 +873,7 @@ int JWP_conv::save_user () {
 
 class JWP_conv jwp_conv(500);                   // Instance of class.
 
+//--------------------------------
 //
 //  Constructor.
 //
@@ -815,6 +886,7 @@ JWP_conv::JWP_conv (int count) : KANJI_list (count) {
   return;
 }
 
+//--------------------------------
 //
 //  Destructor.
 //
@@ -836,6 +908,7 @@ JWP_conv::~JWP_conv () {
   return;
 }
 
+//--------------------------------
 //
 //  Adjust the window, usually as a responce to a change in window 
 //  size.
@@ -844,27 +917,25 @@ JWP_conv::~JWP_conv () {
 //              call this will NULL.  A value is only passed in during
 //              the window creation routines.
 //
+extern HWND command_bar;
+
 void JWP_conv::adjust (HWND hwnd) {
   RECT rect;
   if (!hwnd) hwnd = window;
-  if (!hwnd) return;
-  height = jwp_font.height+2*jwp_font.vspace;
+  if (!hwnd) return; 
+  height = bar_font.height+2*bar_font.vspace;
   if (jwp_config.cfg.kscroll) height += GetSystemMetrics(SM_CYHSCROLL);
 #ifndef WINCE
   ShowScrollBar (hwnd,SB_HORZ,jwp_config.cfg.kscroll);
 #endif  WINCE
   GetClientRect (main_window,&rect);
-#ifdef WINCE
-  if (jwp_config.cfg.kanjibar_top) MoveWindow (hwnd,-1,0,rect.right+2,height,true);
-    else MoveWindow (hwnd,-1,rect.bottom-(height+jwp_stat.height-2),rect.right+2,height,true);
-#else WINCE
   if (jwp_config.cfg.kanjibar_top) MoveWindow (hwnd,-1,jwp_config.commandbar_height,rect.right+2,height,true);
     else MoveWindow (hwnd,-1,rect.bottom-(height+jwp_stat.height-2),rect.right+2,height,true);
-#endif WINCE
   KANJI_list::adjust (hwnd);
   return;
 }
 
+//--------------------------------
 //
 //  Attempt to do a conversion.  This is actually a check weather the
 //  current kana string represents a valid conversion.  A number of
@@ -894,6 +965,7 @@ int JWP_conv::attempt (KANJI *kana,int length) {
   return (true);
 }
 
+//--------------------------------
 //
 //  This routine finds the closes key to the supplied key within the
 //  index file.  This indicates the location within actual dictionalry
@@ -920,6 +992,7 @@ int JWP_conv::binary_search (byte *key) {
   return (top);
 }
 
+//--------------------------------
 //
 //  Clear the kana->kanji conversion system.
 //
@@ -930,6 +1003,7 @@ void JWP_conv::clear () {
   return;
 }
 
+//--------------------------------
 //
 //  Attempt to conver a kana string into kanji.  The routine makes no
 //  external visible changes, but is deisgned to setup a convert that
@@ -977,6 +1051,7 @@ int JWP_conv::convert (KANJI *kana,int length) {
   return (list_len);
 }
 
+//--------------------------------
 //
 //  Enery point for forced conversions.
 //
@@ -993,6 +1068,7 @@ void JWP_conv::do_convert (KANJI *kana,int length) {
   return;
 }
 
+//--------------------------------
 //
 //  Main element of the convert engine.  This routine does a conversion
 //  in complete.  Note the actual display part of the conversion is 
@@ -1027,6 +1103,7 @@ void JWP_conv::do_select (int direction) {
   return;
 }
 
+//--------------------------------
 //
 //  Called when exiting the system, this routine writes the user 
 //  conversion dictionaries and the user kanji dictionary to disk.
@@ -1044,6 +1121,7 @@ void JWP_conv::done () {
   return;
 }
 
+//--------------------------------
 //
 //  This routine removes duplicate kanji form the list.  Particualry 
 //  ru ending verbs result in duplicate entries in the list.  NOTE!
@@ -1084,6 +1162,7 @@ void JWP_conv::filter () {
   return;
 }
 
+//--------------------------------
 //
 //  Attempt to find a user's choice for kana->kanji conversion.  The
 //  choice is based on the sel_key which was intialized when the 
@@ -1104,6 +1183,7 @@ KANJI_sel *JWP_conv::find_choice () {
   return (NULL);
 }
 
+//--------------------------------
 //
 //  Internal comparison routine used to compare a key against a key 
 //  within the index file.
@@ -1124,6 +1204,7 @@ int JWP_conv::index_compare (byte *key,int id) {
   return (0);
 }
 
+//--------------------------------
 //
 //  This routine intializes the kana->kanji conversion system.
 //
@@ -1158,7 +1239,7 @@ int JWP_conv::initialize (WNDCLASS *wclass) {
   if (INVALID_HANDLE_VALUE == (file = jwp_config.open(NAME_INDEX,OPEN_READ,false))) return (true);
   isize = GetFileSize (file,NULL);
   SetFilePointer (file,0,NULL,FILE_BEGIN);
-  size = isize/sizeof(KANJI_index);
+  size = (short) (isize/sizeof(KANJI_index));
   if (!(index = (KANJI_index *) malloc (isize)) || !ReadFile(file,index,isize,&done,NULL)) err = true;
   CloseHandle (file);
   if (err) return (true);
@@ -1186,18 +1267,26 @@ int JWP_conv::initialize (WNDCLASS *wclass) {
 //  Generate window.
 //
   if (wclass) {
+    wclass->style         = CS_HREDRAW | CS_VREDRAW;
     wclass->lpfnWndProc   = JWP_conv_proc;
-    wclass->hbrBackground = (HBRUSH) (COLOR_MENU+1);
+    wclass->hbrBackground = (HBRUSH) (COLOR_BTNFACE+1);
     wclass->lpszClassName = WINCLASS_CONVERTBAR;
     if (!RegisterClass(wclass)) return (true);
   }
-  style = WS_CHILD | WS_VISIBLE | WS_BORDER;
-  if (jwp_config.cfg.kscroll) style |= WS_HSCROLL;
-  if (!(window = CreateWindow(WINCLASS_CONVERTBAR,NULL,style,0,0,0,0,main_window,(HMENU) 3,instance,NULL))) return (true);
-  ShowWindow (window,SW_SHOW);
+  if (jwp_config.cfg.nokanjibar) {                              // User wants no kanji bar.
+    height = 0;
+    window = NULL;
+  }
+  else { 
+    style = WS_CHILD | WS_VISIBLE | WS_BORDER;
+    if (jwp_config.cfg.kscroll) style |= WS_HSCROLL;
+    if (!(window = CreateWindow(WINCLASS_CONVERTBAR,NULL,style,0,0,0,0,main_window,(HMENU) 3,instance,NULL))) return (true);
+    ShowWindow (window,SW_SHOW);
+  }
   return (false);
 }
 
+//--------------------------------
 //
 //  This routine reallocates the size of the user selection buffer.
 //  This routine is intended to be called by routines that manipulate
@@ -1216,6 +1305,7 @@ void JWP_conv::realloc (int size) {
   return;
 }
 
+//--------------------------------
 //
 //  This is the main dictionary search routine.  It is used to 
 //  search for entries in the user and the system conversion 
@@ -1259,6 +1349,7 @@ void JWP_conv::search (byte *key,int endkana) {
   return;
 }
 
+//--------------------------------
 //
 //  This is the main dictionary search routine.  It is used to 
 //  search for entries in a specific conversion dictionary (user or
@@ -1307,9 +1398,9 @@ void JWP_conv::search_dict (byte *key,int endkana,IO_cache *cache,int sorted) {
     dict_ending = *ptr++;
     for (convert = ptr; *ptr != '\n'; ptr++);   // Read pointer list.
     ptr++;
-    diff = cmp_key (kana,key);                  // Compare keys.
+    diff = cmp_key (kana,key,endkana);          // Compare keys.
     if (diff > 0) {
-      if ((ending == '*') && test_nkey(kana,key)) is_more = true; // Test to see if kana can possible be added to string.
+      if (test_nkey(kana,key)) is_more = true;  // Test to see if kana can possible be added to string.
       if (sorted) break;                        // Past key in sorted dictionary so done.
       continue;                                 // Unsorted dictionary may still have entries.
     }
@@ -1344,6 +1435,7 @@ void JWP_conv::search_dict (byte *key,int endkana,IO_cache *cache,int sorted) {
   return;
 }
 
+//--------------------------------
 //
 //  Selects a kanji replacement string, and implements the replacement.
 //  
@@ -1383,9 +1475,9 @@ void JWP_conv::select (int s) {
 //
 //  End Class JWP_conv.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin Class JWP_file.
 //
@@ -1393,6 +1485,7 @@ void JWP_conv::select (int s) {
 //  converter.
 //
 
+//--------------------------------
 //
 //  Main entry point from other routines is this.  This routine is 
 //  called when the user selects one of the kana->kanji conversion 
@@ -1480,6 +1573,7 @@ void JWP_file::convert (int code) {
   return;
 }
 
+//--------------------------------
 //
 //  Routine inserts a kanji substitution back into a file, and 
 //  adjust the marks.
@@ -1514,7 +1608,7 @@ void JWP_file::put_kanji (KANJI *kanji,int length) {
 //
 //  End Class JWP_file.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
 
 

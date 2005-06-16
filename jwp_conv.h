@@ -1,11 +1,11 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------//
+//===================================================================
 //
 //  This modlue hanles conversion of kana to kanji.
 //
@@ -26,7 +26,7 @@
 #include "jwp_file.h"
 #include "jwp_klst.h"
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Potentially adjustuable parameters.
 //
@@ -34,7 +34,7 @@
 #define SIZE_SELKEY     6       // Max size of keys in the user conversion dictionary.
 #define SIZE_MAXKEY     20      // We will not even attempt to convert kana strings this long.
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Parameters for routines.
 //
@@ -44,7 +44,7 @@
 #define CONVERT_ATTEMPT 2               // Not a shift command, but an attempt to do an automatic conversion.
 #define CONVERT_FORCE   0               // Force conversion.
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  KANJI_index structre:
 //
@@ -58,7 +58,7 @@ typedef struct KANJI_index {    // Describes dictionary index file entries.
   long offset;                  // Offest into the data file.
 } KANJI_index;
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  KANJI_sel structure:
 //
@@ -70,7 +70,7 @@ typedef struct KANJI_sel {
   short select;                 // Index into list that user has selected.
 } KANJI_sel;
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  JWP_conv class
 //

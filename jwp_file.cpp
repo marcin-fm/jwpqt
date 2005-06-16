@@ -1,11 +1,11 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This modlue is central to the program.  In this module most of the 
 //  basic manipulations on a file are implemented.  This modlue includes 
@@ -26,7 +26,7 @@
 #include "jwp_para.h"
 #include "jwp_stat.h"
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Compile time options.
 //
@@ -44,11 +44,12 @@
   #define REDRAW_BLANK  true
 #endif USE_REDRAW_LINE_BLANKING
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin Class FILE_list
 //
 
+//--------------------------------
 //
 //  This class is used to manage a list of files the user has selected.  
 //  (Remember, an edit-box is a file to JWPce.)  This list keeps track 
@@ -70,6 +71,7 @@
 
 FILE_list file_list;            // The global list instance.
 
+//--------------------------------
 //
 //  Add a file to the list.  
 //
@@ -103,6 +105,7 @@ void FILE_list::add (JWP_file *file) {
   return;
 }
 
+//--------------------------------
 //
 //  This routine gets the target for the "Insert to File" operatitons.
 //  Normally this is the top file in the list, but if the list is empty,
@@ -119,6 +122,7 @@ JWP_file *FILE_list::get (JWP_file *exclude) {
   return (jwp_file);
 }
 
+//--------------------------------
 //
 //  Remove a file from the list.  The rotuine does handle the case where
 //  you try to remove a file not in the list.
@@ -147,9 +151,9 @@ void FILE_list::remove (JWP_file *file) {
 //
 //  End Class FILE_list.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin Class Position
 //
@@ -159,6 +163,7 @@ void FILE_list::remove (JWP_file *file) {
 //  of the text.
 //
 
+//--------------------------------
 //
 //  Advance this position by a number of characters (could be a negative
 //  value).  
@@ -172,6 +177,7 @@ void Position::advance (int count) {
   return;
 }
 
+//--------------------------------
 //
 //  Align cursor when moving up or down.  This consists of finding the 
 //  the cursor location on the current line that is ass close as possible
@@ -187,7 +193,7 @@ void Position::align (JWP_file *file,int x_pos,int mouse) {
   int i,x,x2;
   x2 = x = para->line_start(line); 
   for (i = 0; i < line->length; i++)  {
-    x2 = jwp_font.hadvance(x,para->text[line->first+i]);
+    x2 = file_font.hadvance(x,para->text[line->first+i]);
     if (x2 >= x_pos) break;
     x = x2;
   }
@@ -202,6 +208,7 @@ void Position::align (JWP_file *file,int x_pos,int mouse) {
   return;
 }
 
+//--------------------------------
 //
 //  Move indicated position down (toward end of file).
 //
@@ -213,6 +220,7 @@ int Position::move_down () {
   return (true);
 }
 
+//--------------------------------
 //
 //  Move indicated position up (toward top of file).
 //
@@ -224,6 +232,7 @@ int Position::move_up () {
   return (true);
 }
 
+//--------------------------------
 //
 //  Convert position from absolute position (where line parameter of 
 //  position is not used, but rather cursor is stored relative from 
@@ -241,9 +250,9 @@ void Position::rel () {
 //
 //  End Class Position.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin Class JWP_File.
 //
@@ -255,6 +264,7 @@ void Position::rel () {
 
 class JWP_file *jwp_file = NULL;
 
+//--------------------------------
 //
 //  File descructor.
 //
@@ -266,6 +276,7 @@ JWP_file::~JWP_file () {
   return;
 }
 
+//--------------------------------
 //
 //  Adjust file data after major changes.
 //
@@ -277,9 +288,9 @@ void JWP_file::adjust () {
   GetClientRect (window,&rect);
   width      = (short) (rect.right);
   height     = (short) (rect.bottom);
-  char_width = (width-jwp_font.x_offset)/jwp_font.hwidth;
+  char_width = (width-JWP_FONT.x_offset)/JWP_FONT.hwidth;
   hscroll    = char_width/4;
-  vscroll    = height-2*jwp_font.vheight-jwp_font.y_offset;
+  vscroll    = height-2*JWP_FONT.vheight-JWP_FONT.y_offset;
   if (hscroll < 1) hscroll = 1;
 //
 //  Determine how the page margins are setup.
@@ -320,6 +331,7 @@ void JWP_file::adjust () {
   return;
 }
 
+//--------------------------------
 //
 //  Small utility routine to convert the cursor and selection points
 //  to absolute coordinates.
@@ -333,6 +345,7 @@ void JWP_file::all_abs () {
   return;
 }
 
+//--------------------------------
 //
 //  Small utility routine to convert the cursor and selection points
 //  to relative coordinates.
@@ -346,6 +359,7 @@ void JWP_file::all_rel () {
   return; 
 }
 
+//--------------------------------
 //
 //  Enables the display of the caret.
 //
@@ -353,26 +367,32 @@ void JWP_file::caret_on () {
   int width,x,y;
   x = cursor.x-view_top.x;
   if (jwp_config.insert) width = CARETWIDTH_INSERT; else width = CARETWIDTH_OVERWRITE;
-  CreateCaret (window,null,width,jwp_font.cheight);
-  SetCaretPos (x-width/2,y = (cursor.y-view_top.y-jwp_font.rheight));
+  CreateCaret (window,null,width,JWP_FONT.cheight);
+  SetCaretPos (x-width/2,y = (cursor.y-view_top.y-JWP_FONT.rheight));
   ShowCaret   (window);
 //
 //  Deal with the IME if pressent
 //
 #ifndef WINCE
-  HIMC imc;
+  HIMC    imc;
   if (imc = ImmGetContext(window)) {
+    LOGFONT         lf;
 	COMPOSITIONFORM cf;
+    memset (&lf,0,sizeof(lf));
+    lf.lfHeight       = -JWP_FONT.height;
+    lf.lfCharSet      = SHIFTJIS_CHARSET;
 	cf.dwStyle        = CFS_FORCE_POSITION;
 	cf.ptCurrentPos.x = x;
 	cf.ptCurrentPos.y = y+ime_y;
 	ImmSetCompositionWindow (imc,&cf);
+    ImmSetCompositionFont   (imc,&lf);
 	ImmReleaseContext       (window,imc);
   }
 #endif WINCE
   return;
 }
 
+//--------------------------------
 //
 //  Mark file as changed and update title bar.
 //
@@ -383,6 +403,7 @@ void JWP_file::change () {
   return;
 }
 
+//--------------------------------
 //
 //  Cut text to clipboard.
 //
@@ -394,17 +415,26 @@ void JWP_file::clip_cut () {
   return;
 }
 
+//--------------------------------
 //
 //  A small utility routine to move the cursor to the left.  This was 
 //  separated out because it is used in more than one location.
 //
-void JWP_file::cursor_left () {
+void JWP_file::left () {
   if      (!cursor.bol()) cursor.pos--;
   else if (cursor.line->prev) { cursor.line = cursor.line->prev; cursor.pos = cursor.line->length; }
   else if (cursor.para->prev) { cursor.para = cursor.para->prev; cursor.line = cursor.para->last; cursor.pos = cursor.line->length; }
   return;
 }
 
+void JWP_file::right () {
+  if      (!cursor.eol()) cursor.pos++;
+  else if (cursor.line->next) { cursor.line = cursor.line->next; cursor.pos = 0; }
+  else if (cursor.para->next) { cursor.para = cursor.para->next; cursor.line = cursor.para->first; cursor.pos = 0; }
+  return;
+}
+
+//--------------------------------
 //
 //  This routine processes all general keyboard messages from the user
 //  and from the menu systems.  Actually, this routine processes virtal 
@@ -461,20 +491,18 @@ void JWP_file::do_key (int key,int ctrl,int shift) {
          jwp_conv.clear ();
          clear_cursor   ();
          undo_clear     ();
-         if (ctrl) {
-           if (!cursor.bof()) do_key (VK_LEFT,false,shift);
-           while (true) {
-             i = char_class(cursor.get_char());
-             if (cursor.bof() || ((i != CLASS_JUNK) && (i != CLASS_SPACE))) break;
-             do_key (VK_LEFT,false,shift);
+         selection      (shift);
+         if (!ctrl) left ();
+           else {
+             if (!cursor.bof()) do_key (VK_LEFT,false,shift);
+             while (true) {
+               i = char_class(cursor.get_char());
+               if (cursor.bof() || ((i != CLASS_JUNK) && (i != CLASS_SPACE))) break;
+               left ();
+             }
+             while ((i == char_class(cursor.get_char())) && !cursor.bof()) left ();
+             if (!cursor.bof()) do_key (VK_RIGHT,false,shift);
            }
-           while ((i == char_class(cursor.get_char())) && !cursor.bof()) do_key (VK_LEFT,false,shift); 
-           if (!cursor.bof()) do_key (VK_RIGHT,false,shift);
-         }
-         else {
-           selection   (shift);
-           cursor_left ();
-         }
          break;
 //
 //  RIGHT -- <plain> -- Cursor to the right.
@@ -485,25 +513,19 @@ void JWP_file::do_key (int key,int ctrl,int shift) {
          jwp_conv.clear ();
          clear_cursor   ();
          undo_clear     ();
-         if (ctrl) {
-           i = char_class(cursor.get_char());           
-           if (i == CLASS_SPACE) i = CLASS_JUNK;
-           while (true) {
-             if (cursor.eof()) break;
-             j = char_class(cursor.get_char());
-             if (j == CLASS_SPACE) i = CLASS_JUNK;
-             if ((j != i) && (j != CLASS_SPACE)) break;
-             do_key (VK_RIGHT,false,shift);
+         selection      (shift);
+         if (!ctrl) right ();
+           else {
+             i = char_class(cursor.get_char());           
+             if (i == CLASS_SPACE) i = CLASS_JUNK;
+             while (true) {
+               if (cursor.eof()) break;
+               j = char_class(cursor.get_char());
+               if (j == CLASS_SPACE) i = CLASS_JUNK;
+               if ((j != i) && (j != CLASS_SPACE)) break;
+               right ();
+             }
            }
-           break;
-         }
-         else {
-           selection (shift);
-           if      (!cursor.eol()) cursor.pos++;
-           else if (cursor.line->next) { cursor.line = cursor.line->next; cursor.pos = 0; }
-           else if (cursor.para->next) { cursor.para = cursor.para->next; cursor.line = cursor.para->first; cursor.pos = 0; }
-           else return;
-         }
          break;
 //
 //  BACKSPACE -- <in ascii->kana convert> Abort conversion.
@@ -532,7 +554,7 @@ void JWP_file::do_key (int key,int ctrl,int shift) {
            break;
          }
          if (cursor.bof()) return;
-         cursor_left ();
+         left ();
 //
 //  DELETE -- <in kana->kanji start>   Delete character from conversion.
 //            <in selection process>   Delete selection.
@@ -548,6 +570,7 @@ void JWP_file::do_key (int key,int ctrl,int shift) {
            clip_cut ();
            break;
          }
+         if (sel.type == SELECT_CONVERT) selection_clear ();
          if (sel.type) {
            undo_start       ();
            selection_delete ();
@@ -673,7 +696,7 @@ void JWP_file::do_key (int key,int ctrl,int shift) {
          if (ctrl) {
            undo_clear ();
            all_abs ();
-           if (sel.type) i = sel.pos1.para->text[sel.pos1.pos];
+           if (sel.type && (sel.pos1.pos < sel.pos1.para->length)) i = sel.pos1.para->text[sel.pos1.pos];
            else if (cursor.pos < cursor.para->length) i = cursor.para->text[cursor.pos];
            else i = 0;
            all_rel ();
@@ -792,6 +815,8 @@ void JWP_file::do_key (int key,int ctrl,int shift) {
 //
 //  F4 -- Toggle input mode (kanji--ascii)
 //
+    case '6':
+         if (!ctrl) break;
     case VK_F4:
          set_mode (MODE_TOGGLE);
          break;
@@ -799,14 +824,14 @@ void JWP_file::do_key (int key,int ctrl,int shift) {
 //  Application key, and shift-F10 -- Cause the same as a right mouse click at the cursor location.
 //
     case VK_APPS:
-         do_mouse (WM_RBUTTONDOWN,0,0xffffffff);
+         popup_menu (cursor.x-view_top.x,cursor.y-view_top.y);
          return;
 //
 //  F23 -- This is really a message from Windows CE on the palm commputer
 //         This is a select button which popus up the popup menu.
 //
     case VK_F23:
-         do_mouse (WM_RBUTTONDOWN,0,0x00050005);
+         popup_menu (cursor.x-view_top.x,cursor.y-view_top.y);
          return;
 //
 //  RETURN -- <ctrl>  -- Insert page break.
@@ -814,6 +839,8 @@ void JWP_file::do_key (int key,int ctrl,int shift) {
 //            <plain> -- Insert paraagraph.
 //
     case VK_RETURN:
+         if (sel.type == SELECT_KANJI) convert (CONVERT_RIGHT);
+// IMPROVE -- Would be nice if this did not lose the conversion when pressing enter.  That is, if we could delay the conversion for a bit.         
          clear_cursor    ();
          jwp_conv.clear  ();
          undo_start      ();
@@ -885,6 +912,7 @@ void JWP_file::do_key (int key,int ctrl,int shift) {
            convert (CONVERT_RIGHT);
            break;
          }
+         if (jwp_config.cfg.page_mode_file) goto PageUp;
          jwp_conv.clear ();
          undo_clear     ();
          selection      (shift);
@@ -908,6 +936,7 @@ void JWP_file::do_key (int key,int ctrl,int shift) {
            convert (CONVERT_LEFT);
            break;
          }
+         if (jwp_config.cfg.page_mode_file) goto PageDown;
          jwp_conv.clear ();
          undo_clear     ();
          selection      (shift);
@@ -921,6 +950,7 @@ void JWP_file::do_key (int key,int ctrl,int shift) {
 //            <shift> -- Extend selection.
 //
     case VK_PRIOR:
+PageUp:;
          jwp_conv.clear ();
          undo_clear     ();
          selection      (shift);
@@ -938,6 +968,7 @@ void JWP_file::do_key (int key,int ctrl,int shift) {
 //              <shift> -- Extend selection.
 //
     case VK_NEXT:  // page down
+PageDown:;
          jwp_conv.clear ();
          undo_clear     ();
          selection      (shift);
@@ -966,6 +997,7 @@ void JWP_file::do_key (int key,int ctrl,int shift) {
   return;
 }
 
+//--------------------------------
 //
 //  Process all mouse commands in the main window.  These primarally 
 //  consist of move cursor, select region, and select word.
@@ -974,7 +1006,9 @@ void JWP_file::do_key (int key,int ctrl,int shift) {
 //      wParam -- Contains the keyboard flags for the mouse event.
 //      lParam -- Contains the mouse location.
 //
+
 void JWP_file::do_mouse (int iMsg,WPARAM wParam,LPARAM lParam) {
+  static short      mouse_x,mouse_y;    // Location of mouse click.
   static Paragraph *last_para = NULL;   // These remember the last selection 
   static Line      *last_line = NULL;   //   render position.  This is used    
   static short      last_pos  = 0;      //   to prevent unnecessary rendring.
@@ -983,75 +1017,73 @@ void JWP_file::do_mouse (int iMsg,WPARAM wParam,LPARAM lParam) {
   Line      *line = NULL;               //   being set.
   Position   mouse;
   int        i,insel,y,x_pos,y_pos;
+
+  switch (iMsg) {
+    case WM_TIMER:
+         selecting = false; 
+         KillTimer       (window,TIMER_MOUSEHOLD); 
+         ReleaseCapture  (); 
+         popup_menu      (mouse_x,mouse_y);
+         return;
+    case WM_LBUTTONUP:
+         KillTimer       (window,TIMER_MOUSEHOLD);
+         ReleaseCapture  ();
+         if (!selecting) return;
+         break;
+    case WM_LBUTTONDOWN:
+         if (wParam & MK_SHIFT) { iMsg = WMU_KANJIINFO; break; }        // shift+left -> right button click.
+         mouse_x = LOWORD(lParam); 
+         mouse_y = HIWORD(lParam); 
+         SetTimer        (window,TIMER_MOUSEHOLD,GetDoubleClickTime(),NULL);
+         SetCapture      (window);
+         if (wParam & MK_CONTROL)      iMsg = WM_LBUTTONDBLCLK;     // clrt+left -> left button double click.
+         if (GetKeyState(VK_MENU) < 0) iMsg = WM_RBUTTONDOWN;       // alt+left -> kanji information.
+         break;
+    case WM_MOUSEMOVE:
+         if ((abs(LOWORD(lParam)-mouse_x) > DOUBLE_X) || (abs(HIWORD(lParam)-mouse_y) > DOUBLE_Y)) KillTimer (window,TIMER_MOUSEHOLD);
+         if (!selecting) return;
+         break;
+  }
 //
 //  Set focus to this window.  Translate messages as needed.
 //
-  if (!selecting && ((iMsg == WM_MOUSEMOVE) || (iMsg == WM_LBUTTONUP))) return;  // Only watch mouse move and up when in selection.
   SetFocus (window);
-//
-//  Translate various mouse events into other events.
-//
-  if (wParam & MK_SHIFT  ) iMsg = WMU_KANJIINFO;        // shift+left -> right button click.
-  if (iMsg == WM_LBUTTONDOWN) {
-    if (wParam & MK_CONTROL) iMsg = WM_LBUTTONDBLCLK;   // clrt+left -> left button double click.
-    if (GetKeyState(VK_MENU) < 0) iMsg = WM_RBUTTONDOWN;// alt+left -> kanji information.
-  }
 //
 //  Find the y location of the mosue click.
 //
-  x_pos = LOWORD(lParam);                               // Decode mouse position.
-  y_pos = HIWORD(lParam);
-  if ((x_pos == 0xffff) && (y_pos == 0xffff)) {         // Special code indicates that the 
-    mouse = cursor;                                     //   mouse event is actually generated
-    x_pos = cursor.x-view_top.x;                        //   from the keyboard, thus we will use
-    y_pos = cursor.y-view_top.y;                        //   the current cursor positions.
-    insel = true;
-  }
-  else {
-    y     = jwp_font.y_offset;
-    line  = view_top.line;                                  // Intialize to the top of the display.
-    for (para = view_top.para; para; para = para->next) {   // Find vertical position
-      if (!line) line = para->first;
-      for (; line; line = line->next) {
-        if (y >= y_pos) goto FoundYPosition;
-        y += (para->spacing*jwp_font.vheight)/100;
-      }
+  x_pos = (short) LOWORD(lParam);                       // Decode mouse position.
+  y_pos = (short) HIWORD(lParam);
+  y     = JWP_FONT.y_offset;
+  line  = view_top.line;                                // Intialize to the top of the display.
+  for (para = view_top.para; para; para = para->next) { // Find vertical position
+    if (!line) line = para->first;
+    for (; line; line = line->next) {
+      if (y >= y_pos) goto FoundYPosition;
+      y += (para->spacing*JWP_FONT.vheight)/100;
     }
-    if (!line) { para = last; line = para->last; }        // Vertical is past EOF
+  }
+  if (!line) { para = last; line = para->last; }        // Vertical is past EOF
 FoundYPosition:
 //
 //  Set location of the mouse click in file coordinates.
 //
-    mouse.para = para;
-    mouse.line = line;
-    mouse.align (this,LOWORD(lParam)+view_top.x,!selecting);
+  mouse.para = para;
+  mouse.line = line;
+  mouse.align (this,x_pos+view_top.x,!selecting);
 //
 //  Detemine if we need to move the cursor.  If this is a right mouse
 //  button event within a marked region we don't move the cursor,
 //  otherwise we need to move the cursor to where the click was.
 //
-    insel = false;
-#ifdef WINCE_PPC
-//
-//  For PPC's the right mouse event is actually the action button, so
-//  we never move the mouse on these events.
-//
-    if ((iMsg != WM_LBUTTONUP) && (iMsg != WM_RBUTTONDOWN)) {
+  insel = false;
+  if (iMsg != WM_LBUTTONUP) {                           // Don't move the mouse if this is cursor up.
+    if ((iMsg != WM_RBUTTONDOWN) || !(insel = in_selection(&mouse))) {
       cursor.para = mouse.para;     // Instead of doing a full structure copy we copy the position 
       cursor.line = mouse.line;     //   elements.  This preserves the x,y location in case the cursor did
       cursor.pos  = mouse.pos;      //   not move.  This saves a call to find_pos() later.
     }
-#else WINCE_PPC
-    if (iMsg != WM_LBUTTONUP) {                           // Don't move the mouse if this is cursor up.
-      if ((iMsg != WM_RBUTTONDOWN) || !(insel = in_selection(&mouse))) {
-        cursor.para = mouse.para;     // Instead of doing a full structure copy we copy the position 
-        cursor.line = mouse.line;     //   elements.  This preserves the x,y location in case the cursor did
-        cursor.pos  = mouse.pos;      //   not move.  This saves a call to find_pos() later.
-      }
-    }
-#endif WINCE_PPC
-    if ((iMsg == WM_RBUTTONDOWN) && !insel) selection_clear ();
   }
+  if ((iMsg == WM_RBUTTONDOWN) && !insel) selection_clear ();
 //
 //  Now se have to process the individual actions.
 //
@@ -1066,29 +1098,9 @@ FoundYPosition:
 //
 //  Right button click.
 //
-    case WM_RBUTTONDOWN:                // Right button.  Bring up popup menu and let it send 
-         int   i;                       //   messages back to our window.
-         HMENU pmenu;
-         RECT  rect;
-         pmenu = GetSubMenu(popup,0);
-         i     = MF_BYCOMMAND | (sel.type ? MF_ENABLED : MF_GRAYED);
-         EnableMenuItem (pmenu,IDM_EDIT_COPY,i);
-         EnableMenuItem (pmenu,IDM_EDIT_CUT ,i);
-         EnableMenuItem (pmenu,IDM_EDIT_UNDO,MF_BYCOMMAND | (undo && undo[0]) ? MF_ENABLED : MF_GRAYED);
-         EnableMenuItem (pmenu,IDM_EDIT_REDO,MF_BYCOMMAND | (redo && redo[0]) ? MF_ENABLED : MF_GRAYED);
-         for (i = MODE_KANJI; i <= MODE_JASCII; i++) CheckMenuItem (pmenu,IDM_EDIT_MODE_KANJI+i,(i == jwp_config.mode) ? MF_CHECKED : MF_UNCHECKED);
-         GetWindowRect  (window,&rect);
-         x_pos += rect.left;
-         y_pos += rect.top;
-         view_check ();                 // These allow us to move the cursor before the
-         caret_on   ();                 //   menu appears.  This tends to look nicer.
-#ifdef WINCE
-         TrackPopupMenu (pmenu,TPM_LEFTALIGN | TPM_TOPALIGN,x_pos,y_pos,0,window,NULL);
-#else  WINCE
-         TrackPopupMenu (pmenu,TPM_LEFTBUTTON | TPM_RIGHTBUTTON | TPM_LEFTALIGN | TPM_TOPALIGN,x_pos,y_pos,0,window,NULL);
-#endif WINCE
-         if (insel) return;             // If user clicked in a selection do not move the mouse!
-         break;
+    case WM_RBUTTONDOWN:                // Right button.  Bring up popup menu and let it send messages back to our window.
+         popup_menu (x_pos,y_pos);
+         return;
 //
 //  Double click -> select a word.
 //
@@ -1111,6 +1123,7 @@ FoundYPosition:
          if (sel.type && (sel.pos1.para == sel.pos2.para) && (sel.pos1.line == sel.pos2.line) && (sel.pos1.pos == sel.pos2.pos)) {
            iMsg      = WM_RBUTTONDOWN;          // If select is zero width block selection generation, ie. just move cursor
            last_para = NULL;                    // This will force the cursor movement (thus redraw).
+           selection_clear ();
          }
          break;
 //
@@ -1127,36 +1140,32 @@ FoundYPosition:
     last_line = cursor.line;
     last_pos  = cursor.pos;
     view_check ();
-    selection  (iMsg != WM_RBUTTONDOWN);          // Block generation of select if right button
+    selection  ((iMsg != WM_RBUTTONDOWN) ? SEL_MOUSE : false);  // Block generation of select if right button
   }
 //
 //  Auto-scroll handler.  When currsor is close enough to the edge 
 //  we generate move up or move down commands necessary to scroll the 
 //  list.
 //
-  if     ((HIWORD(lParam) < jwp_font.height/2) && (view_top.line != first->first)) i = SB_LINEUP;
-  else if (HIWORD(lParam) > height-jwp_font.height/2) {
+  if (!jwp_config.cfg.auto_scroll) return;
+  if     ((HIWORD(lParam) < JWP_FONT.height/3) && (view_top.line != first->first)) i = SB_LINEUP;
+  else if (HIWORD(lParam) > height-JWP_FONT.height/3) {
     Position pos;                               // This section makes sure we do not 
     pos.para = last;                            //   over-scroll the display.  This is 
     pos.line = last->last;                      //   such a mess becuase the difficulties of
     pos.pos  = 0;                               //   the variable length paragraphs.
     find_pos (&pos);
-    if (pos.y <= view_top.y+height-jwp_font.vheight) return;
+    if (pos.y <= view_top.y+height-JWP_FONT.vheight) return;
     i = SB_LINEDOWN;
   }
-  else return;                  // No auto-scroll so exit.
-  static short delta = 1;       // This is a KLUDGE used to get around the fact
-                                //   that mouse_event will not generate an event
-                                //   if the mouse does not move so we generate
-                                //   events that move one micky right and left 
-                                //   alternately, so the average is no motion.
+  else return;                                  // No auto-scroll so exit.
   SendMessage  (window,WM_VSCROLL,i,0);         // Scroll list.
   UpdateWindow (window);                        // Force window redraw
-  mouse_event  (MOUSEEVENTF_MOVE,delta,0,0,0);  // Fake mouse event so window keeps scrolling
-  if (delta == 1) delta = -1; else delta = 1;   // Toggle mouse direction so no net motion occures.
+  SetTimer     (window,TIMER_AUTOSCROLL,jwp_config.cfg.scroll_speed,NULL);
   return;
 }
 
+//--------------------------------
 //
 //  Draw all lines in the file.
 //
@@ -1167,17 +1176,18 @@ void JWP_file::draw_all (HDC hdc,RECT *bound) {
   int        y;
   HFONT      font;
   Paragraph *para;
-  Line      *line = view_top.line;
-  y            = jwp_font.y_offset;
-  bound->left -= jwp_font.x_offset;
-  font = (HFONT) SelectObject (hdc,jwp_font.font);
+  JWP_font  *kfont = &JWP_FONT;
+  Line      *line  = view_top.line;
+  y            = kfont->y_offset;
+  bound->left -= kfont->x_offset;
+  font = (HFONT) SelectObject (hdc,JWP_FONT.ascii);
   SetBkMode (hdc,TRANSPARENT);
   for (para = view_top.para; para; para = para->next) {
     if (!line) line = para->first;
     for (; line; line = line->next) {
-      if (y >= bound->top) draw_line (hdc,para,line,y,bound->left,bound->right);
+      if (y >= bound->top) draw_line (hdc,para,line,y,bound->left,bound->right,kfont);
       if (y > bound->bottom) return;
-      y += (para->spacing*jwp_font.vheight)/100;
+      y += (para->spacing*kfont->vheight)/100;
     }
   }
 #ifdef USE_REDRAW_LINE_BLANKING
@@ -1193,6 +1203,7 @@ void JWP_file::draw_all (HDC hdc,RECT *bound) {
   return;
 }
 
+//--------------------------------
 //
 //  The core of the screen redering.  This routine renders an actuall 
 //  line with all details.
@@ -1203,7 +1214,7 @@ void JWP_file::draw_all (HDC hdc,RECT *bound) {
 //      y         -- Screen pixal location for line.
 //      xmin,xmax -- Restricts rendering to the indicated range (sort of).
 //
-void JWP_file::draw_line (HDC hdc,Paragraph *para,Line *line,int y,int xmin,int xmax) {
+void JWP_file::draw_line (HDC hdc,Paragraph *para,Line *line,int y,int xmin,int xmax,class JWP_font *font) {
   KANJI  ch;
   RECT   rect;
   int    i,j,x;
@@ -1219,15 +1230,15 @@ void JWP_file::draw_line (HDC hdc,Paragraph *para,Line *line,int y,int xmin,int 
 //  This is a hard page break, so draw a bar.
 //
   if (para->page_break) {
-    rect.left   = jwp_font.x_offset;
+    rect.left   = font->x_offset;
     rect.right  = xmax;
-    rect.top    = y-(5*jwp_font.height)/8;
-    rect.bottom = rect.top+jwp_font.height/4;
+    rect.top    = y-(5*font->height)/8;
+    rect.bottom = rect.top+font->height/4;
     FillRect (hdc,&rect,(HBRUSH) GetStockObject(LTGRAY_BRUSH));
     y += view_top.y;                                        // Page break in selection 
     if (!sel.type || (y >= sel.pos2.y) || (y < sel.pos1.y)) return; // selection ends at page break -> page break is not included
-    rect.top    = y-jwp_font.height-view_top.y;
-    rect.bottom = rect.top+jwp_font.vheight;
+    rect.top    = y-font->height-view_top.y;
+    rect.bottom = rect.top+font->vheight;
     InvertRect (hdc,&rect);
     return;
   }
@@ -1236,20 +1247,20 @@ void JWP_file::draw_line (HDC hdc,Paragraph *para,Line *line,int y,int xmin,int 
 //
   x = para->line_start(line)-view_top.x; 
   for (i = 0; i < line->length; i++) {              // Determine start character
-    j = jwp_font.hadvance(x,para->text[line->first+i]);
+    j = font->hadvance(x,para->text[line->first+i]);
     if (j >= xmin) break;
     x = j;
   }
   for (; (i < line->length) && (x <= xmax); i++) {  // draw characters for line
     ch = para->text[line->first+i];
     if (ISJIS(ch)) {                                //   JIS character
-      kanji->draw (hdc,ch,x,y);  
+      font->kanji->draw (hdc,ch,x,y);  
     }
     else if (ch != '\t') {                          //   ASCII character
       temp[0] = (TCHAR) ch;
-      TextOut  (hdc,x,y-jwp_font.height,temp,1);
+      TextOut  (hdc,x,y-font->height,temp,1);
     }
-    x = jwp_font.hadvance (x,ch);                   //   Advance position
+    x = font->hadvance (x,ch);                      //   Advance position
     if (x > xmax) break;
   }
 //
@@ -1267,20 +1278,21 @@ void JWP_file::draw_line (HDC hdc,Paragraph *para,Line *line,int y,int xmin,int 
     rect.right = x;
   }
   else if (y == sel.pos2.y) {
-    rect.left  = jwp_font.x_offset;
+    rect.left  = font->x_offset;
     rect.right = sel.pos2.x-view_top.x;
   }
   else {
-    rect.left  = jwp_font.x_offset;
+    rect.left  = font->x_offset;
     rect.right = x;
   }
-  rect.top    = y-jwp_font.height-view_top.y-1; // ### just added -1.  If I like this move it back to ajdust routines.
-  rect.bottom = rect.top+jwp_font.vheight;
+  rect.top    = y-font->height-view_top.y-1;        // ### just added -1.  If I like this move it back to ajdust routines.
+  rect.bottom = rect.top+font->vheight;
   rect.left--;
   InvertRect (hdc,&rect);
   return;
 }
 
+//--------------------------------
 //
 //  Find the location of a point within the file.
 //
@@ -1301,27 +1313,28 @@ void JWP_file::find_pos (Position *loc,int code) {
   int        i;
   Paragraph *para;
   Line      *line = NULL;
-  loc->y = jwp_font.y_offset;
+  loc->y = JWP_FONT.y_offset;
   for (para = first; para; para = para->next) {
-    for (line = para->first; line && (line != loc->line); line = line->next) loc->y += (para->spacing*jwp_font.vheight)/100;
+    for (line = para->first; line && (line != loc->line); line = line->next) loc->y += (para->spacing*JWP_FONT.vheight)/100;
     if (line == loc->line) break;
   }
   if (code == POS_VVERT) {
-    loc->y -= jwp_font.y_offset;
+    loc->y -= JWP_FONT.y_offset;
     return;
   }
   if (code == POS_VERT) return;
   if (code == POS_CURSOR) {
     loc->x = loc->para->line_start(loc->line);
-    for (i = 0; (i < loc->pos) && (i < loc->line->length); i++) loc->x = jwp_font.hadvance(loc->x,para->text[line->first+i]);
+    for (i = 0; (i < loc->pos) && (i < loc->line->length); i++) loc->x = JWP_FONT.hadvance(loc->x,para->text[line->first+i]);
   }
   else {    // VIEW
-    loc->x  = jwp_font.hwidth*loc->pos;
-    loc->y -= jwp_font.y_offset;
+    loc->x  = JWP_FONT.hwidth*loc->pos;
+    loc->y -= JWP_FONT.y_offset;
   }
   return;
 }
 
+//--------------------------------
 //
 //  Processes horizontal scroll bar messages.
 //
@@ -1359,6 +1372,26 @@ void JWP_file::h_scroll (int message) {
   return;
 }
 
+//--------------------------------
+//
+//  Process character from the IME.
+//
+//      ch      -- Character.
+//      unicode -- Non-zero indicates UNICODE 
+//
+void JWP_file::ime_char (int ch,int unicode) {
+  if (ch == '\t') return;
+#ifdef WINCE
+  put_char (ch,CHAR_STOP);
+#else  WINCE
+  if      (ch < 0x100) put_char (ch,CHAR_STOP);
+  else if (unicode)    put_char (unicode2jis(ch,KANJI_BAD),CHAR_STOP);
+  else                 put_char (sjis2jis   (ch)          ,CHAR_STOP);
+#endif WINCE
+  return;
+}
+
+//--------------------------------
 //
 //  This routine determines if the indicated location is within the 
 //  selected region.
@@ -1389,6 +1422,51 @@ int JWP_file::in_selection (Position *loc) {
   return   (false);
 }
 
+//--------------------------------
+//
+//  Utility fucntion used to insert from a dialog into a file with undo.
+//
+//      kanji  -- Kanji string to be insrted.
+//      length -- Length of string.
+//
+void JWP_file::insert_string (KANJI *kanji,int length) {
+  undo_para  (UNDO_ANY);                        // Allow specific undo of put back.
+  put_string (kanji,length);
+  view_check ();
+  return;
+}
+
+//--------------------------------
+//
+//  Generate a popup menu.
+//
+//      x,y -- Location for menu, relative to the window.
+//
+void JWP_file::popup_menu (int x,int y) {
+  int   i;
+  HMENU pmenu;
+  RECT  rect;
+  pmenu = GetSubMenu(popup,0);
+  i     = MF_BYCOMMAND | (sel.type ? MF_ENABLED : MF_GRAYED);
+  EnableMenuItem (pmenu,IDM_EDIT_COPY,i);
+  EnableMenuItem (pmenu,IDM_EDIT_CUT ,i);
+  EnableMenuItem (pmenu,IDM_EDIT_UNDO,MF_BYCOMMAND | (undo && undo[0]) ? MF_ENABLED : MF_GRAYED);
+  EnableMenuItem (pmenu,IDM_EDIT_REDO,MF_BYCOMMAND | (redo && redo[0]) ? MF_ENABLED : MF_GRAYED);
+  for (i = MODE_KANJI; i <= MODE_JASCII; i++) CheckMenuItem (pmenu,IDM_EDIT_MODE_KANJI+i,(i == jwp_config.mode) ? MF_CHECKED : MF_UNCHECKED);
+  GetWindowRect  (window,&rect);
+  x += rect.left;
+  y += rect.top;
+  view_check ();                                // These allow us to move the cursor before the
+  caret_on   ();                                //   menu appears.  This tends to look nicer.
+#ifdef WINCE
+  TrackPopupMenu (pmenu,TPM_LEFTALIGN | TPM_TOPALIGN,x,y,0,window,NULL);
+#else  WINCE
+  TrackPopupMenu (pmenu,TPM_LEFTBUTTON | TPM_RIGHTBUTTON | TPM_LEFTALIGN | TPM_TOPALIGN,x,y,0,window,NULL);
+#endif WINCE
+  return;
+}
+
+//--------------------------------
 //
 //  This routine is used to insert a string at the current cursor location.
 //  This is not used for editing fucntions, but rather for dialog boxes
@@ -1409,6 +1487,7 @@ void JWP_file::put_string (KANJI *string,int length) {
   return;
 }
 
+//--------------------------------
 //
 //  Redraw the entire file.
 //
@@ -1417,6 +1496,7 @@ void JWP_file::redraw_all () {
   return;
 }
 
+//--------------------------------
 //
 //  Redraw from the beginning of the specified paragraph to the end of 
 //  the file.  This is used when lines are added or removed from the
@@ -1437,12 +1517,13 @@ void JWP_file::redraw_from (Paragraph *para,Line *line) {
   find_pos (&pos,POS_VERT);
   rect.left   = 0;                                  // Build redraw rectangle
   rect.right  = width;
-  rect.top    = pos.y-view_top.y-jwp_font.rheight;
+  rect.top    = pos.y-view_top.y-JWP_FONT.rheight;
   rect.bottom = height;
   InvalidateRect (window,&rect,REDRAW_BLANK);       // Redraw
   return;
 }
 
+//--------------------------------
 //
 //  Redraw the contents of the paragraph.
 //
@@ -1462,12 +1543,13 @@ void JWP_file::redraw_para (Paragraph *para,Line *line) {
   find_pos (&pos2,POS_VERT);
   rect.left   = 0;                              // Build redraw rectangle
   rect.right  = width;
-  rect.top    = pos1.y-view_top.y-jwp_font.rheight;
-  rect.bottom = pos2.y-view_top.y-jwp_font.rheight+(para->spacing*jwp_font.vheight)/100;
+  rect.top    = pos1.y-view_top.y-JWP_FONT.rheight;
+  rect.bottom = pos2.y-view_top.y-JWP_FONT.rheight+(para->spacing*JWP_FONT.vheight)/100;
   InvalidateRect (window,&rect,REDRAW_BLANK);   // Do redraw.
   return;
 }
 
+//--------------------------------
 //
 //  Redraw a range of the screen based on the pixal locations (measured
 //  from the top of the file).
@@ -1481,12 +1563,13 @@ void JWP_file::redraw_range (int pos1,Paragraph *para2,int pos2) {
   RECT rect;
   rect.left   = 0;                              // Build redraw rectangle
   rect.right  = width;
-  rect.top    = pos1-view_top.y-jwp_font.rheight;
-  rect.bottom = pos2-view_top.y-jwp_font.rheight+(para2->spacing*jwp_font.vheight)/100;
+  rect.top    = pos1-view_top.y-JWP_FONT.rheight;
+  rect.bottom = pos2-view_top.y-JWP_FONT.rheight+(para2->spacing*JWP_FONT.vheight)/100;
   InvalidateRect (window,&rect,REDRAW_BLANK);   // Redraw
   return;
 }
 
+//--------------------------------
 //
 //  This routine forces a reformatting of all paragraphs in the file.
 //
@@ -1500,12 +1583,16 @@ void JWP_file::reformat () {
   return;
 }
 
+//--------------------------------
 //
 //  Main selection driver routine.  This is called before a cursor 
 //  movement, and after.  This will cause the selection to be 
 //  generated and mantained as the cursor is moved.
 //
 //      shift -- Inidcates the state of the shift.
+//
+//  Setting shift to SEL_MOUSE, is used when processing mosue messages.
+//  This generates some different options.
 //
 void JWP_file::selection (int shift) {
   Position pos,last;
@@ -1516,6 +1603,11 @@ void JWP_file::selection (int shift) {
     selection_clear ();
     return;
   }
+//
+//  If coming off of a kanji convert clear the selection and set the 
+//  new position.
+//
+  if (sel.type == SELECT_CONVERT) selection_clear ();
 //
 //  No selection currently, so start a selection.
 //
@@ -1538,8 +1630,8 @@ void JWP_file::selection (int shift) {
   else {
     last     = sel.pos1;
     sel.pos1 = cursor;
-  }                                     // Start and end ar at same position, so clear selection.
-  if ((sel.pos1.line == sel.pos2.line) && (sel.pos1.pos == sel.pos2.pos)) { selection_clear(); return; }
+  }                                     // Start and end or at same position, so clear selection.
+  if ((sel.pos1.line == sel.pos2.line) && (sel.pos1.pos == sel.pos2.pos) && (shift != SEL_MOUSE)) { selection_clear(); return; }
   if ((sel.pos1.y > sel.pos2.y) || ((sel.pos1.y == sel.pos2.y) && (sel.pos1.x > sel.pos2.x))) {
     pos      = sel.pos1;                // Determine if fixpoint comes first or second.
     sel.pos1 = sel.pos2;                //   If necessary swap order of points.
@@ -1554,6 +1646,7 @@ void JWP_file::selection (int shift) {
   return;
 }
 
+//--------------------------------
 //
 //  This routine clears the selection, and is safe the call under 
 //  any circumstances.
@@ -1566,6 +1659,7 @@ void JWP_file::selection_clear () {
   return;
 }
 
+//--------------------------------
 //
 //  Delete selected region.
 //
@@ -1595,6 +1689,7 @@ void JWP_file::selection_delete () {
   return;
 }
 
+//--------------------------------
 //
 //  Setup the scroll bars and handle changing them for the current
 //  cursor location.
@@ -1603,7 +1698,7 @@ void JWP_file::set_scroll () {
   if (IS_WORKFILE(filetype)) return;
   if (jwp_config.cfg.vscroll) {
     scroll_info.nMax   = total_length;
-    scroll_info.nPage  = height-jwp_font.vheight;
+    scroll_info.nPage  = height-JWP_FONT.vheight;
     scroll_info.nPos   = view_top.y;
     SetScrollInfo (window,SB_VERT,&scroll_info,true);
   }
@@ -1616,6 +1711,23 @@ void JWP_file::set_scroll () {
   return;
 }
 
+//--------------------------------
+//
+//  This routine names a file as a specific system file.  Typically these names are 
+//  ivalid file anmes and cannot actually be saved.  This is used for things such as
+//  viewing the color kanji list.
+//
+//      id -- String table ID for the name of the file.  This currently only allows
+//            fixed file names.
+//
+void JWP_file::sysname (int id) {
+  changed = false;
+  name = strdup(get_string(id));
+  title ();
+  return;
+}
+
+//--------------------------------
 //
 //  Set title bar for view.
 //
@@ -1627,6 +1739,7 @@ void JWP_file::title () {
   return;
 }
 
+//--------------------------------
 //
 //  Processes vertical scroll bar messages.
 //
@@ -1658,12 +1771,11 @@ void JWP_file::v_scroll (int message) {
     case SB_THUMBTRACK:
     case SB_THUMBPOSITION:
          GetScrollInfo (window,SB_VERT,&scroll_info);
-         scroll_info.nPos = HIWORD(message);    // This is a kludge because GetScrollInfo does not return the correct data.
-         i = scroll_info.nPos;
-         if (view_top.y > i) {
-           while ((i < view_top.y) && !view_top.move_up()) find_pos (&view_top,POS_VVERT);
+         i = scroll_info.nTrackPos;
+         if (view_top.y > i) {                                          // Fast positioning for the cursor motion.
+           while ((i < view_top.y) && !view_top.move_up()) view_top.y -= (view_top.para->spacing*JWP_FONT.vheight)/100;
          }
-         while ((i > view_top.y) && !view_top.move_down()) find_pos (&view_top,POS_VVERT);
+         while ((i > view_top.y) && !view_top.move_down()) view_top.y += (view_top.para->spacing*JWP_FONT.vheight)/100;
          break;
     default:
          return;
@@ -1675,6 +1787,7 @@ void JWP_file::v_scroll (int message) {
   return;
 }
 
+//--------------------------------
 //
 //  This routine checks the display to make sure that the cursor
 //  is visible in the display window.  If necessary, this routine
@@ -1698,7 +1811,7 @@ void JWP_file::view_check () {
 //  cause the display to scroll back to display a full screen worth 
 //  of the file.
 //
-  while ((cursor.y <= view_top.y+jwp_font.vspace) || (total_length <= view_top.y+height-jwp_font.vheight)) {  // Cursor is off the top
+  while ((cursor.y <= view_top.y+JWP_FONT.vspace) || (total_length <= view_top.y+height-JWP_FONT.vheight)) {  // Cursor is off the top
     abort = view_top.move_up ();
     find_pos (&view_top,POS_VIEW);
     if (abort) break;
@@ -1710,7 +1823,7 @@ void JWP_file::view_check () {
     redraw_all ();
   }
   if (filetype == FILETYPE_EDIT) {                  // Special case for edit control, scroll to keep end of line in window
-    while (view_top.pos && (pos.x <= view_top.x+width-jwp_font.hwidth)) {
+    while (view_top.pos && (pos.x <= view_top.x+width-JWP_FONT.hwidth)) {
       view_top.pos--;
       find_pos (&view_top,POS_VIEW);
       redraw_all ();
@@ -1735,19 +1848,9 @@ void JWP_file::view_check () {
 //
 //  End Class JWP_File.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
 // ### Still not really happy with the screen dredraw on Windows CE.
 
 
-
-void JWP_file::ime_char (int ch) {
-  if (ch == '\t') return;
-#ifdef WINCE
-  put_char (ch,CHAR_STOP);
-#else  WINCE
-  if (ch < 0x100) put_char (ch,CHAR_STOP); else put_char (sjis2jis(ch),CHAR_STOP);
-#endif WINCE
-  return;
-}
 

@@ -1,11 +1,11 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This modlule implements the undo system.  This system is quite 
 //  complex, because of the constraints of a reasonable system.  In 
@@ -171,7 +171,7 @@
 #include "jwp_file.h"
 #include "jwp_stat.h"
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Static data and definitions.
 //
@@ -181,11 +181,12 @@ static byte queing        = false;  // Causes accumulation of some types of chan
 static byte undoing       = false;  // Set during an actual undo phase.
 static byte redoing       = false;  // Set during an actual redo phase.
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Static routines
 //
 
+//--------------------------------
 //
 //  Deallocates a chain of undo actions that have been linked.
 //
@@ -201,11 +202,12 @@ static void free_chain (UNDO_action *action) {
   return;
 }
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Exported routines.
 //
 
+//--------------------------------
 //
 //  Allocates (or reallocates) and undo list to a new length.
 //
@@ -230,6 +232,7 @@ UNDO_action **undo_alloc (UNDO_action **old,int old_length) {
   return (undo);
 }
 
+//--------------------------------
 //
 //  Deallocate an undo list.
 //
@@ -244,7 +247,7 @@ void undo_free (UNDO_action **list,int length) {
   return;
 }
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin class UNDO_action:
 //
@@ -252,17 +255,22 @@ void undo_free (UNDO_action **list,int length) {
 //  to it.
 //
 
+//--------------------------------
+//
+//  Destructor.
+//
 UNDO_action::~UNDO_action () {
   if (data) free (data);
   return;
 }
 
+//--------------------------------
 //
 //  End Class UNDO_action
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin class UNDO_delpara:
 //
@@ -281,6 +289,7 @@ UNDO_action::~UNDO_action () {
 //  will then be followed by an UNDO_para object.
 //
 
+//--------------------------------
 //
 //  This routine simply restores the deleted paragraph.  Remember, that
 //  the gnerator placed a paragrah type object next in the chain, that 
@@ -293,6 +302,7 @@ void UNDO_delpara::undo (JWP_file *file) {
   return;
 }
 
+//--------------------------------
 //
 //  This is the constructor for a class UNDO_delpara object.  This 
 //  constructor calls the same core as the UNDO_para constructor to
@@ -318,9 +328,9 @@ void JWP_file::undo_delpara (Paragraph *para) {
 //
 //  End Class UNDO_delpara.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin class UNDO_newpara:
 //
@@ -328,6 +338,7 @@ void JWP_file::undo_delpara (Paragraph *para) {
 //  as in ctrl+return.
 //
 
+//--------------------------------
 //
 //  Actual undo fucntion.  This basically deletes the paragraph.
 //
@@ -340,6 +351,7 @@ void UNDO_newpara::undo (JWP_file *file) {
   return;
 }
 
+//--------------------------------
 //
 //  Generator function.  This is called with a pointer to a new 
 //  pargraph (after the paragraph has been generated).
@@ -358,9 +370,9 @@ void JWP_file::undo_newpara (Paragraph *para) {
 //
 //  End Class UNDO_newpara.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin class UNDO_para:
 //
@@ -369,6 +381,7 @@ void JWP_file::undo_newpara (Paragraph *para) {
 //  and most other changes fit within this class.
 //
 
+//--------------------------------
 //
 //  This is a class stub that calls a function in JWP_file class.  We 
 //  do this because we need to get out of this class and into the file
@@ -379,6 +392,7 @@ void UNDO_para::undo (JWP_file *file) {
   return;
 }
 
+//--------------------------------
 //
 //  Main rotuine of the paragraph saving block.  This routine if actually
 //  invoked will save an image of the current curor paragraph that can be 
@@ -436,6 +450,7 @@ void JWP_file::undo_para (int id,Paragraph *para) {
   return;
 }
 
+//--------------------------------
 //
 //  This rotuine actually undoes changes to a single paragaraph.  This 
 //  is the prinary undo funcion that actually does work.
@@ -463,9 +478,9 @@ void JWP_file::undo_undo (UNDO_para *undo) {
 //
 //  End Class UNDO_para
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin class UNDO_type:
 //
@@ -474,6 +489,7 @@ void JWP_file::undo_undo (UNDO_para *undo) {
 //  command processor.
 //
 
+//--------------------------------
 //
 //  The actual undo for this class of action.  Note that this must be
 //  a friend class for this to work out.
@@ -489,6 +505,7 @@ void UNDO_type::undo (JWP_file *file) {
   return;
 }
 
+//--------------------------------
 //
 //  Geneates an UNDO_type object in the undo list
 //
@@ -507,13 +524,14 @@ void JWP_file::undo_type () {
 //
 //  End Class UNDO_type
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin class JWP_file:
 //
 
+//--------------------------------
 //
 //  This routine implements the Edit/Redo command.
 //
@@ -529,6 +547,7 @@ void JWP_file::do_redo () {
   return;
 }
 
+//--------------------------------
 //
 //  This is the user entry point.  This implements the Edit/Undo command.
 //
@@ -544,6 +563,7 @@ void JWP_file::do_undo () {
   return;
 }
 
+//--------------------------------
 //
 //  Converts a paragarph number to an actuall paragraph pointer.  Use 
 //  of paragraph number in necessary in the undo system, becuase if we 
@@ -561,6 +581,7 @@ Paragraph *JWP_file::number_to_para (int number) {
   return (para);
 }
 
+//--------------------------------
 //
 //  Converts an actual paragarph painter to a paragraph number.  Use 
 //  of paragraph number in necessary in the undo system, becuase if we 
@@ -578,6 +599,7 @@ int JWP_file::para_to_number (Paragraph *para) {
   return (i);
 }
 
+//--------------------------------
 //
 //  Clears the contents of the redo list.  This is actually blocked if 
 //  you are in the state of redoing, or undoing.
@@ -590,6 +612,7 @@ void JWP_file::redo_clear () {
   return;
 }
 
+//--------------------------------
 //
 //  This routine cleas the undo_accum flag, which indicates the type 
 //  of changes currently being accumulated.  If the flag matches the 
@@ -602,6 +625,7 @@ void JWP_file::undo_clear (int id) {
   return;
 }
 
+//--------------------------------
 //
 //  Ends a level of passive undo envent quing.  Note that calls to 
 //  undo_start()/undo_end() are nested, and thus should be  matched.
@@ -615,6 +639,7 @@ void JWP_file::undo_end () {
   return;
 }
 
+//--------------------------------
 //
 //  Intialize the undo buffer based on an old length.
 //
@@ -628,6 +653,7 @@ void JWP_file::undo_init (int old_length) {
   return;
 }
 
+//--------------------------------
 //
 //  Updates the state of the Edit/Undo and Edit/Redo menu itmes to 
 //  reflect the state of the buffers.
@@ -642,6 +668,7 @@ void JWP_file::undo_menu () {
   return;
 }
 
+//--------------------------------
 //
 //  Generates a new undo chain.  Depending on weather we are accumulating
 //  undo data or doing an undo, the new chain is generated in the 
@@ -659,6 +686,7 @@ void JWP_file::undo_new () {
   return;  
 }
 
+//--------------------------------
 //
 //  This is the reall workhorse of the undo/redo actions.  This actually 
 //  perofrmes the undo or redo action.  Setup for this rotuine must be 
@@ -684,6 +712,7 @@ void JWP_file::undo_pop (UNDO_action **list) {
   return;
 }
 
+//--------------------------------
 //
 //  Add an action to the current undo chain   Depending on the current
 //  state (in an undo, in a redo, etc.) the action canbe added to the 
@@ -700,6 +729,7 @@ void JWP_file::undo_push (UNDO_action *action) {
   return;
 }
 
+//--------------------------------
 //
 //  Start passive quing of undo events.  Note that calls to undo_start()
 //  are nested, and must be followed by a matching call to undo_end().
@@ -714,7 +744,7 @@ void JWP_file::undo_start () {
 //
 //  End Class JWP_file
 //
-//-------------------------------------------------------------------
+//===================================================================
 
 
 

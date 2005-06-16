@@ -1,17 +1,17 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This modlule implements a knaji list window.  This is bascially 
 //  the same window used for the kana->kanji conversion and for the 
 //  results of a kadical lookup conversion.  This is bascially a 
 //  horizontal strip of kanji/(kana) compounds seperated by spaces.
-//  The routines here implement omost of the functionality of processing
+//  The routines here implement most of the functionality of processing
 //  window events, and selecting items.  It is left to the derived 
 //  classes JWP_conv, and RADICAL_lookup to actually put contents 
 //  back into a file, and procedue data.
@@ -29,13 +29,16 @@
 #include "jwp_klst.h"
 #include "jwp_misc.h"
 
-//-------------------------------------------------------------------
+#include <limits.h>
+
+//===================================================================
 //
 //  Begin Class KANJI_list.
 //
 //  This class handles processing of kanji-list windows.
 //
 
+//--------------------------------
 //
 //  Constructor.
 //
@@ -47,6 +50,7 @@ KANJI_list::KANJI_list (int count) {
   return;
 }
 
+//--------------------------------
 //
 //  Destructor.
 //
@@ -55,6 +59,7 @@ KANJI_list::~KANJI_list () {
   return;
 }
 
+//--------------------------------
 //
 //  Adjust the window, usually as a responce to a change in window 
 //  size.
@@ -68,16 +73,18 @@ KANJI_list::~KANJI_list () {
 //
 void KANJI_list::adjust (HWND hwnd) {
   RECT rect;
+  if (!hwnd) return;
   GetClientRect (hwnd,&rect);
-  blank_space = jwp_font.hwidth/3;
-  y_offset    = jwp_font.height-1+jwp_font.vspace;
-  sel.top     = y_offset-jwp_font.height-jwp_font.vspace/4;
-  sel.bottom  = sel.top+jwp_font.vheight+1;
+  blank_space = bar_font.hwidth/3;
+  y_offset    = bar_font.height-1+bar_font.vspace;
+  sel.top     = y_offset-bar_font.height-bar_font.vspace/4;
+  sel.bottom  = sel.top+bar_font.vheight+1;
   width       = (short) rect.right;
   set_scroll (true);
   return;
 }
 
+//--------------------------------
 //
 //  Clear the kana->kanji conversion system.
 //
@@ -90,6 +97,7 @@ void KANJI_list::clear () {
   return;
 }
 
+//--------------------------------
 //
 //  Not called directly, but rather called from the window proc, this 
 //  this routine process the mouse events.  The only events that are 
@@ -107,7 +115,7 @@ void KANJI_list::do_mouse (LPARAM lParam) {
     set_scroll (false);
     if ((x >= sel.left) && (x <= sel.right)) {
       select (selected);
-      sel_char = selected+(x-sel.left)/jwp_font.hwidth;
+      sel_char = (short) (selected+(x-sel.left)/bar_font.hwidth);
       if (list[sel_char] == '/') sel_char--;
       return;
     }
@@ -118,6 +126,7 @@ void KANJI_list::do_mouse (LPARAM lParam) {
   return;
 }
 
+//--------------------------------
 //
 //  Processes horizontal scroll bar messages.
 //
@@ -127,8 +136,7 @@ void KANJI_list::do_scroll (int message) {
   int i;
   switch (LOWORD(message)) {
     case SB_LINEDOWN:
-         if (x_total < x_first+width) return;
-         first = next(first);
+         next_first ();
          break;
     case SB_LINEUP:
          first = prev(first);
@@ -144,10 +152,7 @@ void KANJI_list::do_scroll (int message) {
          break;
     case SB_PAGEDOWN:
          i = x_first+width/2;
-         while ((x_first < i) && (x_total > x_first+width)) {
-           first = next(first);
-           set_scroll (false);
-         }
+         while ((x_first < i) && !next_first()) set_scroll (false);
          break;
     case SB_THUMBTRACK:
     case SB_THUMBPOSITION:
@@ -168,6 +173,59 @@ void KANJI_list::do_scroll (int message) {
   return;
 }
 
+//--------------------------------
+//
+//  Processes the wheel-mouse events for the kanji lists. 
+//
+//      wParam -- The wParam passed in trom the WM_MOUSEWHEEL message.
+//
+#ifndef WINCE
+void KANJI_list::do_wheel (WPARAM wParam) {
+  int ctrl,shift,i;
+  static int delta;                                                 // Accumulation point for deltas.
+  shift  = SystemParametersInfo(SPI_GETWHEELSCROLLLINES,0,&ctrl,0); // Scroll amount.
+  ctrl   = LOWORD(wParam);                                          // Keys
+  delta += (short) HIWORD(wParam);                                  // Delta
+//
+//  Shift -- skip pages.
+//
+  if ((ctrl & MK_SHIFT) || (shift == WHEEL_PAGESCROLL)) {
+    while (delta > WHEEL_DELTA) {
+      delta -= WHEEL_DELTA;
+      if (first == 0) break;
+      i = x_first-width/2;
+      if (i < 0) i = 0;
+      while (x_first > i) {
+        first = prev(first);
+        set_scroll (false);
+      }
+    }
+    while (abs(delta) > WHEEL_DELTA) {
+      delta += WHEEL_DELTA;
+      i      = x_first+width/2;
+      while ((x_first < i) && !next_first()) set_scroll (false);
+    }
+  }
+//
+//  Normal -- skip lines.
+//
+  else {
+    while (delta > WHEEL_DELTA) {
+      for (i = 0; i < shift; i++) first = prev(first);
+      delta -= WHEEL_DELTA;
+    }
+    while (abs(delta) > WHEEL_DELTA) {
+      for (i = 0; i < shift; i++) next_first ();
+      delta += WHEEL_DELTA;
+    }
+  }
+  set_scroll (true);
+  redraw ();
+  return;
+}
+#endif  WINCE
+
+//--------------------------------
 //
 //  Not called directly, but rather called from the window proc, this
 //  routine draws the conversion bar.
@@ -177,15 +235,16 @@ void KANJI_list::do_scroll (int message) {
 void KANJI_list::draw (HDC hdc) {
   int i,x;
   if (!list_len) return;
-  x = jwp_font.x_offset-x_first;
+  x = bar_font.x_offset-x_first;
   for (i = 0; (i < list_len) && (x < width); i++) {
-    if (list[i] != '/') kanji->draw (hdc,list[i],x,y_offset);
+    if (list[i] != '/') bar_font.kanji->draw (hdc,list[i],x,y_offset);
     x = hadvance(x,list[i]);
   }
   InvertRect (hdc,&sel);
   return;
 }
 
+//--------------------------------
 //
 //  This routine is used to get the character information for the selected character.
 //  This is used by list handlers the allow the user to determine the meaning of 
@@ -199,6 +258,7 @@ void KANJI_list::get_info (HWND hwnd) {
   return;
 }
 
+//--------------------------------
 //
 //  Advance a pixal counter down the kanji bar.
 //
@@ -209,9 +269,10 @@ void KANJI_list::get_info (HWND hwnd) {
 //
 int KANJI_list::hadvance (int x,int ch) {
   if (ch == '/') return (x+2*blank_space);
-  return (x+jwp_font.hwidth);
+  return (x+bar_font.hwidth);
 }
 
+//--------------------------------
 //
 //  Utiltiy routine to reurn the index of the last conversion in the 
 //  list.  Note, this will always be the kana string.
@@ -222,6 +283,7 @@ int KANJI_list::last () {
   return (prev(list_len+1));
 }
 
+//--------------------------------
 //
 //  Utility routine that returns the length of an item beginning at 
 //  the indicated location.
@@ -232,6 +294,7 @@ int KANJI_list::len (int pos) {
   return (i);
 }
 
+//--------------------------------
 //
 //  Small utility routine to move to next conversion in list.
 //
@@ -247,6 +310,21 @@ int KANJI_list::next (int pos) {
   return (i+1); 
 }
 
+//--------------------------------
+//
+//  This routine moves the first pointer forward.  The routine will automatically not move the 
+//  first pointer if the remainning part of the display line would be less than the width of the 
+//  display.  This prevents a blank space on the right side.
+//
+//      RETURN -- A non-zero value indicates the first position was not changed.
+//
+int KANJI_list::next_first () {
+  if (x_total < x_first+width) return (true);
+  first = next(first);
+  return (false);
+}
+
+//--------------------------------
 //
 //  Small utility routine to move to previous conversion in list.
 //
@@ -262,6 +340,7 @@ int KANJI_list::prev (int pos) {
   
 }
 
+//--------------------------------
 //
 //  Puts a character into the kanji list.  This routine checks to make 
 //  sure the kanji list has not overflowed before putting the character.
@@ -277,6 +356,7 @@ int KANJI_list::put_kanji (int kanji) {
   return (false);
 }
 
+//--------------------------------
 //
 //  Force a redraw of the window.
 //
@@ -285,6 +365,7 @@ void KANJI_list::redraw () {
   return;
 }
 
+//--------------------------------
 //
 //  Selects a kanji replacement string, and implements the replacement.
 //  
@@ -308,6 +389,7 @@ void KANJI_list::select (int s) {
   return;
 }
 
+//--------------------------------
 //
 //  The name of this routine is somewhat a misnomer.  Yes, it does set
 //  the scroll bar, but it also calcualtes all of the parameters 
@@ -319,7 +401,7 @@ void KANJI_list::select (int s) {
 //
 void KANJI_list::set_scroll (int draw) {
   int i;
-  sel.left = jwp_font.x_offset;
+  sel.left = bar_font.x_offset;
   x_first  = 0;
   x_total  = 0;
   for (i = 0; i < first; i++) x_first = hadvance(x_first,list[i]);      // pixal location of fist visible kanji.
@@ -341,7 +423,7 @@ void KANJI_list::set_scroll (int draw) {
 //
 //  End Class KANJI_list.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
 // ### Need to think about processing list differently, not usinng '/' 
 // ###   to separate entriles, but rather setting high bit.

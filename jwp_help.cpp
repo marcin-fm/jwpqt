@@ -1,14 +1,15 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
 #include "jwpce.h"
 #include "jwp_conf.h"
 #include "jwp_help.h"
 
+//--------------------------------
 //
 //  Process help based on ID number.  Id numbers come from Windows 95
 //  type help.  For Windows CE they are converted in URL's and sent

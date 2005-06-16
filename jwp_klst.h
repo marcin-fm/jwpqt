@@ -1,11 +1,11 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This modlule implements a knaji list window.  This is bascially 
 //  the same window used for the kana->kanji conversion and for the 
@@ -30,7 +30,7 @@
 
 
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Parameters for routines.
 //
@@ -46,6 +46,7 @@ public:
   void  clear        (void);                    // Clear conversion system
   void  do_mouse     (LPARAM lParam);           // Process mouse messages.
   void  do_scroll    (int message);             // Process scroll bar messages.
+  void  do_wheel     (WPARAM wParam);           // Do wheel-mouse events.
   void  draw         (HDC hdc);                 // Render conversion bar.
   void  get_info     (HWND hwnd);               // Gets info for the selected character.
   int   last         (void);                    // Returns index of last compound.
@@ -80,6 +81,7 @@ public:
   RECT         sel;             // Specifies the location of the invert box for the slected conversion.
 private:
   int  hadvance      (int x,int ch);            // Advance to next character
+  int  next_first    (void);                    // Advance the first marker.
 };
 
 typedef class KANJI_list KANJI_list;

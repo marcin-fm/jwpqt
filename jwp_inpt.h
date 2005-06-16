@@ -1,11 +1,11 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This module is the primary processor of keyboard strokes from the 
 //  user.  The main entry point is to the routine JWP_file::do_char.
@@ -27,6 +27,7 @@
 
 #define KANJI_SPACE     0x2121      // Space character in kanji.
 #define KANJI_SLASH     0x213F      // Forward slash (Japanese).
+#define KANJI_QUESTION  0x2129      // ? (Japanese)
 #define KANJI_CAMA      0x2122      // Cama (Japanese)
 #define KANJI_DOT       0x2126      // Center dot (Japanese)
 #define KANJI_ASTRIC    0x2176      // Astric (Japanese)
@@ -38,6 +39,8 @@
 #define KANJI_RPARAN    0x214B      // ) (Japanese)
 #define KANJI_LBRACKET  0x215A      // [ (heavy Japanese)
 #define KANJI_RBRACKET  0x215B      // ] (heavy Japanese)   
+#define KANJI_LBRACE    0x214E      // [ (Japanese)
+#define KANJI_RBRACE    0x214F      // ] (Japanese)
 #define KANJI_BAD       0x2223      // Knaji used for invalid kanji (this is a solid box).
 
 #define ISCRLF(ch)     (((ch) == '\n') || ((ch) == '\r'))               // Is this a cr or lf 
@@ -49,6 +52,20 @@
 #define ISKANA(ch)     (ISHIRAGANA(ch) || ISKATAKANA(ch))               // Is this a kana
 #define ISJASCII(ch)   (((ch) & 0x7f00) == BASE_JASCII)
 #define ISKANJI(ch)    (((ch)         ) >= BASE_KANJI)
+
+//-------------------------------------------------------------------
+//
+//  Exported data (romaji->kana converter)
+//
+struct compound_kana {
+  char string[6];     // sting pattern to match (embeded in table).
+  byte kana  [2];     // Generated kana.  A value of zero in one byte will suppress that kana.
+}; 
+                                    
+#define SIZE_DIRECT 83
+
+extern char                  direct_kana[SIZE_DIRECT][4];   // Direct kana (each corresponds to a single value
+extern struct compound_kana  compound_kana[];               // Compound kana list.  Mostly two kana characters, but there are some others.
 
 //-------------------------------------------------------------------
 //

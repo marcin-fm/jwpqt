@@ -1,9 +1,9 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
 #include "jwpce.h"
 #include "jwp_conf.h"
@@ -14,7 +14,7 @@
 #include "jwp_misc.h"
 #include "jwp_prnt.h"
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  These routines handle the processing of the Utilities/Page Layout...
 //  dialog box.
@@ -26,11 +26,12 @@
 //  defintions), if not, they a simply dellocated.
 //
 
-//```````````````````````````````````````````````````````````````````
+//-------------------------------------------------------------------
 //
 //  Global definitions.
 //
 
+//--------------------------------
 //
 //  Structure containning things that can be modified using this 
 //  dialog box.
@@ -57,7 +58,7 @@ typedef struct FileSetup {
 static FileSetup *filesetup;                // Pointer to data structure so dialog 
                                             //   routines can get to it.
 
-//```````````````````````````````````````````````````````````````````
+//-------------------------------------------------------------------
 //
 //  Advanced page routines.
 //
@@ -86,7 +87,7 @@ static BOOL CALLBACK setup_advanced (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lPa
 }
 #endif WINCE
 
-//```````````````````````````````````````````````````````````````````
+//--------------------------------
 //
 //  Date & Time page routines.
 //
@@ -116,7 +117,7 @@ static BOOL CALLBACK setup_datetime (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lPa
 }
 #endif WINCE
 
-//```````````````````````````````````````````````````````````````````
+//-------------------------------------------------------------------
 //
 //  Header/Footer page routines.
 //
@@ -128,6 +129,7 @@ static BOOL CALLBACK setup_datetime (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lPa
 //      IDC_LHHEADRIGHT   Right header/footer
 //
 
+//--------------------------------
 //
 //  This rutine is called to change the curretn header/footer set being
 //  edited.
@@ -161,6 +163,7 @@ static void change_head (HWND hwnd,int newhead) {
   return;
 }
 
+//--------------------------------
 //
 //  This routine handles changes from separate odd-even headers/footers,
 //  and normal.
@@ -192,6 +195,7 @@ static void setup_oddeven (HWND hwnd) {
   return;
 }
 
+//--------------------------------
 //
 //  Dialog box procedure for this page.
 //
@@ -226,7 +230,7 @@ static BOOL CALLBACK setup_header (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lPara
   return (false);
 }
 
-//```````````````````````````````````````````````````````````````````
+//-------------------------------------------------------------------
 //
 //  Margins page routines.
 //
@@ -252,6 +256,7 @@ static BOOL CALLBACK setup_header (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lPara
 #define OFFSET_FILE     0                           // Offset for file variables
 #define OFFSET_DEFAULT  (IDC_LMDLEFT-IDC_LMFLEFT)   // Offest for default variables.
 
+//--------------------------------
 //
 //  Gets a dimension value from an edit box.  If necessary, this routine
 //  corrects for the units.
@@ -270,6 +275,7 @@ static void get_dim (HWND hwnd,int id,float *value) {
   return;
 }
 
+//--------------------------------
 //
 //  Gets all the setup parameters for a page.
 //
@@ -288,6 +294,7 @@ static void get_page (HWND hwnd,PageSetup *page,int offset) {
   return;
 }
 
+//--------------------------------
 //
 //  Puts a margin dimension into the edit box.  This rotuine corrects 
 //  for the units if necessary.
@@ -302,6 +309,7 @@ static void put_dim (HWND hwnd,int id,float value) {
   return;
 }
 
+//--------------------------------
 //
 //  Put a page setup into the dailog box.
 //
@@ -321,6 +329,7 @@ static void put_page (HWND hwnd,PageSetup *page,int offset) {
   return;
 }
 
+//--------------------------------
 //
 //  Dailog box procedure for the margins page.
 //
@@ -346,12 +355,16 @@ static BOOL CALLBACK setup_margins (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lPar
            INPUT_CHECK (IDC_LMDTOP);
            INPUT_CHECK (IDC_LMDBOTTOM);
            case IDC_LMFROMFILE:                 // Load default from file.
+                setup = true;
                 get_page (hwnd,&filesetup->file,OFFSET_FILE);
                 put_page (hwnd,&filesetup->file,OFFSET_DEFAULT);
+                setup = false;
                 break;
            case IDC_LMFROMDEFAULT:              // Load file from default.
+                setup = true;
                 get_page (hwnd,&filesetup->file,OFFSET_DEFAULT);
                 put_page (hwnd,&filesetup->file,OFFSET_FILE   );
+                setup = false;
                 break;
          }                                      
 //
@@ -372,7 +385,7 @@ static BOOL CALLBACK setup_margins (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lPar
   return (false);
 }
 
-//```````````````````````````````````````````````````````````````````
+//-------------------------------------------------------------------
 //
 //  Summary page routines.
 //
@@ -395,7 +408,7 @@ static BOOL CALLBACK setup_summary (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lPar
   return (false);
 }
 
-//```````````````````````````````````````````````````````````````````
+//-------------------------------------------------------------------
 //
 //  This routine processes the page layout command.
 //
@@ -465,9 +478,9 @@ void JWP_file::page_setup () {
 //  End of routines to handle the processing of the Utilities/Page Layout...
 //  dialog box.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin class TEMP_string.
 //
@@ -492,6 +505,7 @@ public:
   void inline clear (void) { length = 0; }          // Clear contents of string.
 } TEMP_string;
 
+//--------------------------------
 //
 //  Constructor, initializes the string as having no characters, and 
 //  sets the maximum number of characters possible.
@@ -505,6 +519,7 @@ TEMP_string::TEMP_string (int limit) {
   return;
 }
 
+//--------------------------------
 //
 //  The core routine, this routine adds a character if the string is
 //  not filled.  This routine is called by all other add routines 
@@ -518,6 +533,7 @@ void TEMP_string::add_char (int ch) {
   return;
 }
 
+//--------------------------------
 //
 //  Add an integer value to the string.  This routine simply formats 
 //  the integer value into a temporary string and then calles add_string().
@@ -533,6 +549,7 @@ void TEMP_string::add_int (int value,int fill) {
   return;
 }
 
+//--------------------------------
 //
 //  Adds a null terminated kanji string to the string.  
 //
@@ -544,6 +561,7 @@ void TEMP_string::add_kanji (KANJI *kanji) {
   return;
 }
 
+//--------------------------------
 //
 //  This is a very specific routine that adds a special code pattern 
 //  to the string.  This is used to add the time and/or date to the 
@@ -613,6 +631,7 @@ void TEMP_string::add_pattern (KANJI *pattern) {
   }
 }
 
+//--------------------------------
 //
 //  Add an ASCII stirng.
 //
@@ -628,9 +647,9 @@ void TEMP_string::add_string (tchar *string) {
 //
 //  End class TEMP_string.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin class PrintContext.
 //
@@ -641,6 +660,7 @@ void TEMP_string::add_string (tchar *string) {
 PrintContext print_context;     // Global print context defines the 
                                 // currently selected printer characteristics.
 
+//--------------------------------
 //
 //  This rotuine initializes a print context, calculating all the 
 //  parameters used in printing.
@@ -671,10 +691,10 @@ void PrintContext::setup (HDC hdc,class PageSetup *ps) {
   font       = get_printfont(hdc,ps->vertical);         // We will need a kanji font.
   width      = xmax-left-right;                         // Actual printed sizes
   height     = ymax-top -bottom;                        // Kanji font dimensions, with space around characters
-  kwidth     = ((jwp_config.cfg.print_size)*xdpi*(font->width +font->spacing))/720/font->width;
-  kheight    = ((jwp_config.cfg.print_size)*ydpi*(font->height+font->leading))/720/font->height;
-  fwidth     = ((jwp_config.cfg.print_size)*xdpi)/720;  // Kanji font dimensions, raw character size
-  fheight    = ((jwp_config.cfg.print_size)*ydpi)/720;
+  kwidth     = ((jwp_config.cfg.print_font.size)*xdpi*(font->width +font->spacing))/720/font->width;
+  kheight    = ((jwp_config.cfg.print_font.size)*ydpi*(font->height+font->leading))/720/font->height;
+  fwidth     = ((jwp_config.cfg.print_font.size)*xdpi)/720; // Kanji font dimensions, raw character size
+  fheight    = ((jwp_config.cfg.print_font.size)*ydpi)/720;
   xoffset    = left-GetDeviceCaps(hdc,PHYSICALOFFSETX); // Corrections for non-printable area and margins
   yoffset    = top -GetDeviceCaps(hdc,PHYSICALOFFSETY);
   xshift     = (kwidth-fwidth)/2;                       // Kanji character centering.
@@ -686,9 +706,9 @@ void PrintContext::setup (HDC hdc,class PageSetup *ps) {
 //
 //  End class PrintContext.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin class PageSetup.
 //
@@ -696,6 +716,7 @@ void PrintContext::setup (HDC hdc,class PageSetup *ps) {
 //  landscape/portrait, vertical print, and margins settings.
 //
 
+//--------------------------------
 //
 //  This routine calculates the kanji width of a page useing the global
 //  PrintContext this page setup.
@@ -714,7 +735,7 @@ int PageSetup::print_width () {
 //
 //  End class PrintContext.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
 
 
@@ -726,6 +747,7 @@ static HANDLE hDevNames = null;
 
 
 
+//--------------------------------
 //
 //  This routine changes or gets the setting on the landscape or 
 //  portrait mode for the printer.  Generally the printer context is
@@ -763,6 +785,7 @@ static int getset_landscape (int mode) {
 #endif WINCE
 } 
 
+//--------------------------------
 //
 //  Create an Inforamtion Context for the printer specified by the 
 //  user.  This will always start as the default printer, with the 
@@ -795,6 +818,10 @@ static HDC open_printer () {
 
 
 
+//--------------------------------
+//
+//  Initialzie the printer.
+//
 void initialize_printer (PageSetup *ps) {
 #ifdef WINCE
   print_context.setup (NULL,ps);
@@ -823,7 +850,7 @@ void initialize_printer (PageSetup *ps) {
 
 
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin printer block.
 //
@@ -831,7 +858,7 @@ void initialize_printer (PageSetup *ps) {
 //  the setup or general routines.
 //
 
-//```````````````````````````````````````````````````````````````````
+//-------------------------------------------------------------------
 //
 //  Static data.
 //
@@ -840,12 +867,13 @@ void initialize_printer (PageSetup *ps) {
 static short print_abort;           // Set to non-zero to abort printing.
 static HWND  print_dialog = null;   // Pointer to print dialog so we can do page count.
 
-//```````````````````````````````````````````````````````````````````
+//-------------------------------------------------------------------
 //
 //  Static procedures.
 //
 static int print_line (HDC hdc,KANJI *kanji,int length,int xx,int yy,PrintContext *pc,int *widths,int vertical,int end,int noprint);   
 
+//--------------------------------
 //
 //  Printer's abort procedure.  This is basically a directoy copy of 
 //  the standard windows procedures.
@@ -861,6 +889,7 @@ static BOOL CALLBACK AbortProc (HDC hdc,int icode) {
   return (!print_abort);
 }
 
+//--------------------------------
 //
 //  This is the dialog box procedure for the print status dialog box.
 //  This simply allows the user to cancle the prining and provides a 
@@ -885,11 +914,12 @@ static BOOL CALLBACK printing_dialog (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lP
 }
 #endif WINCE
 
-//```````````````````````````````````````````````````````````````````
+//-------------------------------------------------------------------
 //
 //  JWP_file class rotuines.
 //
 
+//--------------------------------
 //
 //  This is is the main print rotuine.  This handles both the print 
 //  command and the printer setup command.
@@ -1039,7 +1069,7 @@ CountDone:;
   ABC        abc[256];          // Used to get font width.
   int        widths[256];       // Calculated font widths in device units.
   memset (&lf,0,sizeof(lf));    // Create the font.
-  strcpy (lf.lfFaceName,jwp_config.cfg.font);
+  strcpy (lf.lfFaceName,jwp_config.cfg.ascii_font.name);
   lf.lfHeight = -pc.fheight;
   if ((font = CreateFontIndirect(&lf))) {	            // Did we get the font!
 //  
@@ -1182,6 +1212,7 @@ CleanUp:;
 #endif WINCE
 }
 
+//--------------------------------
 //
 //  Prints the header or futter lines. for this page.
 //
@@ -1266,6 +1297,7 @@ void JWP_file::print_heads (HDC hdc,int head,int y,PrintContext *pc,int *widths,
 
 
 
+//--------------------------------
 //
 //  This routine prints a line of text at a specified location on the 
 //  page.  This is the basis of all the print operations.
@@ -1297,7 +1329,7 @@ static int print_line (HDC hdc,KANJI *kanji,int length,int xx,int yy,PrintContex
       if (!noprint) {
         rect.left  = x+xx+pc->xshift;
         rect.right = rect.left+pc->fwidth;
-        pc->font->fill (hdc,ch,&rect,vertical);  
+        pc->font->fill (hdc,ch,&rect);  
       }
       x += pc->kwidth;
     }
@@ -1355,7 +1387,10 @@ int j,spaces,x2;
 }
 #endif
 
-
+//--------------------------------
+//
+//  Constructor
+//
 PrintContext::PrintContext () {
 //
 //  Since we don't support printing on the Windows CE routines, we 
@@ -1374,7 +1409,7 @@ PrintContext::PrintContext () {
 //bottom     = ydpi;
   left       = xdpi;
   right      = xdpi;
-  font       = kanji;                                   // We will need a kanji font.
+  font       = file_font.kanji;                         // We will need a kanji font.
   width      = xmax-left-right;                         // Actual printed sizes
 //height     = ymax-top -bottom;                        // Kanji font dimensions, with space around characters
   kwidth     = (120*xdpi*(16+2))/720/16;

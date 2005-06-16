@@ -1,11 +1,11 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================//
 //
 //  This modlues main function is to deal with the system fonts.  
 //  There are three fonts used in the system currently.  These are
@@ -24,9 +24,17 @@
 
 //#include "jwp_prnt.h"               // We need this for the definition of the print structures
 
+//===================================================================//
+//
+//  Exported definitons.
+//
+#ifndef SHIFTJIS_CHARSET            // This constaint is only defined in Win CE 2.11 and 
+  #define SHIFTJIS_CHARSET 0x80     //   up.  We support TrueType fonts for all versions, but
+#endif  SHIFTJIS_CHARSET            //   must check for Japanese fonts.
+
 typedef unsigned short KANJI;       // Type for a kanji/kana character.
 
-#define ONLY_16                     // Allows only the F16X16.F00 kanji font.  This allows some optimizations.
+//#define ONLY_16                     // Allows only the F16X16.F00 kanji font.  This allows some optimizations.
 
 //-------------------------------------------------------------------
 //
@@ -36,6 +44,7 @@ typedef unsigned short KANJI;       // Type for a kanji/kana character.
 //  kanji font.
 //
 
+//--------------------------------
 //
 //  This is a virtual font class.  This class cannot be used directly, but must be used
 //  to define a veritual class for the type of font that you want.  Because the font 
@@ -48,29 +57,31 @@ public:
   short width,height;       // height and witdth of font
   short leading;            // Vertial gaps between lines
   short spacing;            // Horizontal gaps between characters.
-  short truetype;           // Indicates this is a TrueType font.
-  void  virtual draw       (HDC hdc,int jis,int x,int y) = 0;                       // Render character
-  void  virtual fill       (HDC hdc,int jis,RECT *rect,int vertical = false) = 0;   // Used to make big kanji.
-  void          find_color (int jis,HDC hdc,COLORREF &color);                       // Find a kanji.  Load the kanji from disk if necessary
-  void          remove     (void);                                                  // Deallocate this font and clean up.
-  int   virtual jis_index  (int jis) = 0;                                           // Convert jis code to font code.
+  byte  truetype;           // Indicates this is a TrueType font.
+  byte  vertfont;           // Vertical font.
+  void  virtual draw       (HDC hdc,int jis,int x,int y) = 0;   // Render character
+  void  virtual fill       (HDC hdc,int jis,RECT *rect) = 0;    // Used to make big kanji.
+  void          find_color (int jis,HDC hdc,COLORREF &color);   // Find a kanji.  Load the kanji from disk if necessary
+  int   virtual jis_index  (int jis) = 0;                       // Convert jis code to font code.
+  void          remove     (void);                              // Deallocate this font and clean up.
 private:
-  void  virtual close      (void) = 0;                                              // Close the font
+  void  virtual close      (void) = 0;                          // Close the font
 };
 
+//--------------------------------
 //  
 //  This dirived class processes bitmaped fonts
 //
 class BITMAP_KANJI_font : public KANJI_font {
 public:
   BITMAP_KANJI_font (void);
-  void  draw        (HDC hdc,int jis,int x,int y);                      // Render character
-  void  fill        (HDC hdc,int jis,RECT *rect,int vertical = false);  // Used to make big kanji.
-  int   jis_index   (int jis);                                          // Convert jis code to font code.
-  int   open        (tchar *name,int cache);                            // Open the font.
+  void  draw        (HDC hdc,int jis,int x,int y);          // Render character
+  void  fill        (HDC hdc,int jis,RECT *rect);           // Used to make big kanji.
+  int   jis_index   (int jis);                              // Convert jis code to font code.
+  int   open        (TCHAR *name,int cache,int vertical);   // Open the font.
 private:
-  void  close       (void);                                             // Closes a font.
-  int   find_kanji  (int index,HDC hdc,COLORREF &color);                // Find a kanji.  Load the kanji from disk if necessary
+  void  close       (void);                                 // Closes a font.
+  int   find_kanji  (int index,HDC hdc,COLORREF &color);    // Find a kanji.  Load the kanji from disk if necessary
 
   short   holes;                // Indicates font has holes.
   short   hshift;               // Shift used in redering characters.
@@ -86,18 +97,19 @@ private:
 #endif  WINCE
 };
 
+//--------------------------------
 //
 //  This dirived class processes TrueType fonts.
 //
 class TRUETYPE_KANJI_font : public KANJI_font {
 public:
   TRUETYPE_KANJI_font (void);
-  void  draw          (HDC hdc,int jis,int x,int y);                    // Render character
-  void  fill          (HDC hdc,int jis,RECT *rect,int vertical = false);// Used to make big kanji.
-  int   jis_index     (int jis);                                        // Convert jis code to font code.
-  int   open          (HDC hdc,tchar *name,int cache,int vertical);     // Open the font.
+  void  draw          (HDC hdc,int jis,int x,int y);                // Render character
+  void  fill          (HDC hdc,int jis,RECT *rect);                 // Used to make big kanji.
+  int   jis_index     (int jis);                                    // Convert jis code to font code.
+  int   open          (HDC hdc,tchar *name,int cache,int vertical); // Open the font.
 private:
-  void  close         (void);                                           // Closes a font.
+  void  close         (void);                                       // Closes a font.
   HFONT   font;                 // TrueType font structure.
   short   hshift;               // Shift used in redering characters.
   short   vshift;               // Vertical shift for rendering characters
@@ -116,56 +128,101 @@ private:
 #endif WINCE
 };
 
-extern class KANJI_font *kanji;             // Main display kanji font.
+//-------------------------------------------------------------------
+//
+//  This is the main class for font work.  Each JFC_font object contains all
+//  the information necessary to render text in a particular font.  All spacings
+//  and other settings are contained in the class as well as the ASCII font 
+//  metrics.  
+//
+//  Each JFC_font object really constists of a kanji font and an ASCII font pair,
+//  plus all the support information.  
+//
+//  JFC_font objects can contain dupicates of open fonts.  This makes things more
+//  efficient.  They are flaged by the duplicate member.
+//
+class JWP_font {
+public:
+  short height;                             // Kanji font height
+  short hwidth;                             // Kanji nominal character-character spcaking.
+  short rheight;                            // Top of rectange around kanji font (used a lot in redraw, and selecting).
+  short vheight;                            // Kanji nominal line-line spacing.
+  short lheight;                            // Height used in list boxes.
+  short loffset;                            // Offset for rending line of text in list box.  (Only used once, but pre-calculated for speed)
+  short cheight;                            // Height of caret (cursor)
+  short vspace;                             // Vertical extra space measure (framing around window).
+  short hspace;                             // Horizontal extra space meauser (framing around window).
+  short x_offset;                           // Horizontal offset for rendering text (leaves a small borer on left side). [Parameter used by the JFC_file class]
+  short y_offset;                           // Vertical offset for rendering of text from top of screen. [Parameter used by the JFC_file class]
+  short vertical;                           // Vertical printing font.
+  byte  duplicate;                          // Indicates that the font is actually a duplicate of another font, so don't deallocate.
+  HFONT       ascii;                        // Ascii font.
+  KANJI_font *kanji;                        // Kanji font.
+
+  void  close      (void);                  // Close the font.
+  void  copy       (class JWP_font *font);  // Duplicates a particular font.
+  int   hadvance   (int x,int ch);          // Advance a cursor horizontaly by a single character.
+  int   open       (TCHAR *name,int size,int cache,HDC hdc,int vert); // Open and initialize the font.
+  HFONT open_ascii (tchar *face);           // Open an ascii font.
+
+  inline JWP_font (void) { ascii = NULL; kanji = NULL; duplicate = false; }
+private: 
+  short widths[256];                        // Holds the char widths in pixels, for the pirmary ASCII.
+};
 
 //-------------------------------------------------------------------
 //
-//  class JWP_font.
+//  class COLOR_kanji.
 //
-//  This class contains information ralted to fonts used by the program,
-//  there sises, and other features.  Much of the information contained
-//  in this class is simply mainted such that other parts of the 
-//  program do not need to recalculate these values.
+//  Manages the color kanji list.
+//
+//  The basics of the color kanji list is an array containning one byte for
+//  each kanji.  If the byte is set the kanji is in the list.  If it is not 
+//  set the kanji is not in the list.
 //
 
-class JWP_font {
+#define MAX_KANJI   6355                            // Number of kanji in the JIS character set.
+
+class COLOR_kanji {
 public:
-  short height;                         // Kanji font height
-  short hwidth;                         // Kanji nominal character-character spcaking.
-  short rheight;                        // Top of rectange around kanji font (used a lot in redraw, and selecting).
-  short vheight;                        // Kanji nominal line-line spacing.
-  short lheight;                        // Height used in list boxes.
-  short loffset;                        // Offset for rending line of text in list box.  (Only used once, but pre-calculated for speed)
-  short cheight;                        // Height of caret (cursor)
-  short vspace;                         // Vertical extra space measure (framing around window).
-  short hspace;                         // Horizontal extra space meauser (framing around window).
-  short sysheight;                      // Height of system font.
-  short x_offset;                       // Horizontal offset for rendering text (leaves a small borer on left side). [Parameter used by the JWP_file class]
-  short y_offset;                       // Vertical offset for rendering of text from top of screen. [Parameter used by the JWP_file class]
-  HFONT font;                           // ASCII font (for main window).
-  inline  JWP_font (void) { font = null; }
-  ~JWP_font (void);
-  int   hadvance   (int x,int ch);                      // Advance a cursor horizontaly by a single character.
-  int   initialize (void);                              // Initailize fonts/
-  HFONT open_ascii (tchar *face);                       // Open an ascii font.
+  inline COLOR_kanji (void) { clear(); return; }    // Initialize.
+  int  add       (int ch);                          // Add a character to the list.
+  void clear     (void);                            // Clear the list.
+  int  count     (void);                            // Count the number of kanji in the list.
+  void do_adddel (void);                            // Does the add & remove kanji from list dialog
+  int  in        (int ch);                          // Is a character in the list.
+  void put       (void);                            // Add the color kanji into the current file.
+  void read      (void);                            // Read list from a file.
+  int  remove    (int ch);                          // Remove a character from the color kanji list.
+  int  write     (void);                            // Write the list to a file.
 private:
-  byte widths[256];         // Widths of the ascii characters.
+  byte data[MAX_KANJI+10];                          // One byte for each character.
 };
 
-extern class JWP_font jwp_font;         // Instance of the font data.
+//-------------------------------------------------------------------
+//
+//  Exported data
+//
 
-extern KANJI *colorkanji_list;          // Pointer to the actual list.
-extern short  colorkanji_size;          // Size of the list in kanji.
+extern class JWP_font clip_font;            // Font used for posting bitmaps on the clipboard.
+extern class JWP_font bar_font;             // Font used for kanji bars.
+extern class JWP_font file_font;            // Font used for file information.
+extern class JWP_font sys_font;             // Font used for system data (bushu, JIS table, etc).
+extern class JWP_font edit_font;            // Font used for line edit
+extern class JWP_font list_font;            // Font used for lists.
+extern short sysfont_height;                // Height of the system font (used for toolbars).
 
-void        free_fonts    (void);                   // Cleanup routine to close all open fonts.
-KANJI_font *get_bigfont   (RECT *rect);             // Routine to get the big font.
-KANJI_font *get_jistfont  (void);                   // Get font for use in the JIS table
-KANJI_font *get_printfont (HDC hdc,int vertical);   // Routine to get a printer font of a given height.
+extern class COLOR_kanji color_kanji;
 
-#ifndef SHIFTJIS_CHARSET                            // This constaint is only defined in Win CE 2.11 and 
-  #define SHIFTJIS_CHARSET 0x80                     //   up.  We support TrueType fonts for all versions, but
-#endif  SHIFTJIS_CHARSET                            //   must check for Japanese fonts.
+//-------------------------------------------------------------------
+//
+//  Exported routines.
+//
+extern void        free_fonts       (void);                 // Cleanup routine to close all open fonts.
+extern KANJI_font *get_bigfont      (RECT *rect);           // Routine to get the big font.
+extern KANJI_font *get_jistfont     (void);                 // Get font for use in the JIS table
+extern KANJI_font *get_printfont    (HDC hdc,int vertical); // Routine to get a printer font of a given height.
+extern int         initialize_fonts (void);                 // Setup the fonts system and intiailize.
 
 #endif jwp_font_h
-
 

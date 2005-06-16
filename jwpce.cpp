@@ -1,14 +1,15 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Main executable module for JWPce.
 //
+
 #include <ctype.h>
 
 #include "jwpce.h"
@@ -38,9 +39,11 @@
 
 #include <commctrl.h> 
 #include <commdlg.h>
+#include <limits.h>
 
-#if (defined(WINCE_PPC) && !defined(_ARM_))
-  #include <Aygshell.h>
+#ifdef WINCE_PPC
+  #include <C:\Program Files\Windows CE Tools\wce300\ms pocket pc\include\Aygshell.h>
+//  #include <C:\Program Files\Windows CE Tools\wce211\ms palm size pc\include\Aygshell.h>
 #endif
 
 #ifdef WINCE
@@ -52,7 +55,7 @@ static void do_commandbar (void);
 //
 static LRESULT CALLBACK JWP_mode_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam);
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Options.
 //
@@ -82,7 +85,7 @@ static LRESULT CALLBACK JWP_mode_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
   #define LANGUAGE_CODE 'W'     
 #endif
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Debugging routines.  These either create a message box or send a
 //  message to the debugger.
@@ -90,6 +93,7 @@ static LRESULT CALLBACK JWP_mode_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
 
 #ifdef DEBUG_ROUTINES
 
+//--------------------------------
 //
 //  Send a message to the debugger.  This routine is only active in debug mode.
 //
@@ -108,6 +112,7 @@ void dprintf (TCHAR *format,...) {
   return;
 }
 
+//--------------------------------
 //
 //  Display a message in a message box..  This routine is only active in debug mode.
 //
@@ -128,12 +133,12 @@ void mprintf (TCHAR *format,...) {
 
 #endif DEBUG_ROUTINES
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Static data.
 //
 
-static HACCEL haccel = null;        // The accelerator table for the menu.
+static HACCEL haccel     = null;    // The accelerator table for the menu.
 
 #ifdef WINCE
 static HWND  command_bar = null;    // The Windows CE command bar / Windows tool bar
@@ -143,6 +148,7 @@ static TCHAR *tip_data   = NULL;    // Data use for the tool-tips
 static HWND  button_bar  = null;    // Button bar for PPC's
 #endif WINCE_PPC
 
+//--------------------------------
 //
 //  This is the default configuation stored as a static structure.
 //  This is harder to maintain than a set of assignments, but it is 
@@ -154,121 +160,183 @@ static HWND  button_bar  = null;    // Button bar for PPC's
 //
 #define DICTBITS    (DICTBIT_NAMES | DICTBIT_PLACES | DICTBIT_BEGIN)
 
-static struct cfg default_config = {
-  CONFIG_MAGIC,                 //  long  magic;                  // Identifies this as a JWPce config file.
-  DICTBITS,                     //  long  dict_bits;              // Stores the state of all dictionary bits in one place.
-  sizeof(struct cfg),           //  short size;                   // Size of structure
-  false,                        //  byte  dict_compress;          // Displays diconary search results in compressed form.
-  true,                         //  byte  dict_auto;              // Automatically attempt a search if the user has selected text.
-  true,                         //  byte  dict_edict;             // Search EDICT dictionary.
-  true,                         //  byte  dict_namdict;           // Search NAMDICT dictionary.
-  true,                         //  byte  dict_quiet;             // Quiety handle error in NAMDICT.
-  true,                         //  byte  dict_user;              // Search user dictionary.
-  false,                        //  byte  dict_advanced;          // Use addaptive dictionary search.
-  true,                         //  byte  dict_iadj;              // Process i-adjitives.
-  true,                         //  byte  dict_always;            // Even if choices are found do an addpative search.
-  false,                        //  byte  dict_showall;           // Show all possible choices in an addaptive search.
-  true,                         //  byte  install;                // If set causes check for installed version and file extensions.
-  false,                        //  byte  maximize;               // Maximaize the file.
-  false,                        //  byte  usedims;                // Use last saved dimensions.
-  true,                         //  byte  save_exit;              // Save configuration on exit.     
-  true,                         //  byte  reload_files;           // Reload files loaded when we exited.
-  true,true,                    //  byte  vscroll,hscroll;        // Vertical and horizontal scroll bar.
-  true,                         //  byte  kscroll;                // Activate scroll bar on bar.
-  false,                        //  byte  kanjibar_top;           // Places the kanji bar at the top of the screen
-  true,                         //  byte  status;                 // Display status bar.
-  true,                         //  byte  confirm_exit;           // Require confirmation of exit on closing last file.
-  true,                         //  byte  close_does_file;        // Window close control, closes just current file.
-#ifdef WINCE_PPC                                                  // Autobackup is disabled on PPC's by default.
-  false,                        //  byte  backup_files;           // Save last version of a file as a backup.
-#else  WINCE_PPC
-  true,                         //  byte  backup_files;           // Save last version of a file as a backup.
-#endif WINCE_PPC
-  DOUBLE_PROMPT,                //  byte  double_open;            // Determine the action in the case of a double open.
-  FILETYPE_SJS,                 //  byte  clip_write;             // Clipboard write type.
-  FILETYPE_AUTODETECT,          //  byte  clip_read;              // Clipboard read type.
-  true,                         //  byte  export_crlf;            // Export files with cr-fl pair (DOS format).
-  EXPORT_PARAGRAPH,             //  byte  export_lines;           // How exported files should be processed.
-  false,                        //  byte  search_nocase;          // Search: Ignore case
-  false,                        //  byte  search_jascii;          // Search: JASCII=ascii
-  false,                        //  byte  search_back;            // Search: Move backward
-  false,                        //  byte  search_wrap;            // Search: Wrap at end of file.
-  false,                        //  byte  search_all;             // Search: All files.
-  false,                        //  byte  search_noconfirm;       // Repalce: Without confirmation.
-  true,                         //  byte  paste_newpara;          // When pasting back in the file insert extra lines into new paragraph.
-  true,                         //  byte  relax_pucntuation;      // Allow relaxed punctuation.
-  true,                         //  byte  relax_smallkana;        // Allow relaxed small kana.
-  WIDTH_DYNAMIC,                //  byte  width_mode;             // Determines how the width of the display is calculated.
-  true,                         //  byte  print_autofont;         // Auto font select for printing.
-  true,                         //  byte  print_justify;          // Justfication for ascii text during printing.
-  false,                        //  byte  units_cm;               // CM units (or inches).
-  true,                         //  byte  info_titles;            // Puts titles in the kanji-info list box.
-  COLORKANJI_NOMATCH,           //  byte  colorkanji_mode;        // Determines the way color-fonts are suported.
-  false,                        //  byte  colorkanji_bitmap;      // Support color kanji in bitmap clipboard format
-  false,                        //  byte  colorkanji_print;       // Support color kanji in printing.
-  true,                         //  byte  cache_displayfont;      // Should we cache or not cache the display font.
-  true,                         //  byte  auto_lookup;            // Should we do auto-lookups in the radical lookup dialog.
-  RGB(255,0,0),                 //  COLORREF info_color;          // Color used for titles in kanji-info box.
-  RGB(0,0,255),                 //  COLORREF colorkanji_color;    // Color to be used with color-kanji.
-  40,                           //  short alloc;                  // Allocation size for lines.
-  0,0,0,0,                      //  int   x,y,xs,ys;              // Dimensions of last saved configuration.
-  TEXT("Arial"),                //  char  font[SIZE_NAME];        // Name of roman font.
-  TEXT("k48x48.f00"),           //  char  print[SIZE_NAME];       // Name of print font.
-  TEXT("k16x16.f00"),           //  char  display[SIZE_NAME];     // Name of display font.
-  16,                           //  short font_size;              // Size of font used for rending TrueType fonts
-  200,                          //  short convert_size;           // Number of entires in user conversion table.
-  35,                           //  short char_width;             // Character width for formatinning.
-  50,                           //  short undo_number;            // Number of levels of undo to keep.
-  72,                           //  short export_length;          // Length of fixed export lines.
-  400,                          //  short font_cache;             // Size of font cache in characters.
-  120,                          //  short print_size;             // Point size of the font to use for printing.
-  0,                            //  short head_left;              // Position of headers to the left of margins
-  0,                            //  short head_right;             // Position of headers to the right of margins.
-  100,                          //  short head_top;               // Position of header lines above margins.
-  100,                          //  short head_bottom;            // Position of header lines below margins.
-  {                             //  PrintSetup page;              // Default printer setup.
-    1.0,1.0,1.0,1.0,            //  float left,right,top,bottom;  // Margins in inches.
-    false,                      //  byte  vertical;               // vertical printing
-    false,                      //  byte  landscape;              // Landscape page
+struct cfg default_config = {
+  CONFIG_MAGIC,                             //  long  magic;                  // Identifies this as a JWPce config file.
+  sizeof(struct cfg),                       //  long  size;                   // Size of structure
+  {                                         //  PrintSetup page;              // Default printer setup.
+    1.0,1.0,1.0,1.0,                        //  float left,right,top,bottom;  // Margins in inches.
+    false,                                  //  byte  vertical;               // vertical printing
+    false,                                  //  byte  landscape;              // Landscape page
   },
+  { TEXT("Ariel")     ,0  ,true,false },    //  struct cfg_font ascii_font;   // Ascii system font.
+  { TEXT("k16x16.f00"),16 ,true,false },    //  struct cfg_font sys_font;     // System font used for text and a few other places.
+  { TEXT("k16x16.f00"),16 ,true,false },    //  struct cfg_font list_font;    // Font for lists.
+  { TEXT("k16x16.f00"),16 ,true,false },    //  struct cfg_font edit_font;    // Font used for Japanese edit constrols.
+  { TEXT("k16x16.f00"),16 ,true,false },    //  struct cfg_font bar_font;     // Font used for kanji bars.
+  { TEXT("k16x16.f00"),16 ,true,false },    //  struct cfg_font file_font;    // Font used for editing files.
+  { TEXT("k48x48.f00"),48 ,true,false },    //  struct cfg_font big_font;     // Font used for big text.
+  { TEXT("k16x16.f00"),16 ,true,false },    //  struct cfg_font jis_font;     // Font used for JIS table.
+  { TEXT("k16x16.f00"),16 ,true,false },    //  struct cfg_font clip_font;    // Font used for clipboard bitmapps.
+  { TEXT("k48x48.f00"),120,true,false },    //  struct cfg_font print_font;   // Font used for big text.
+  { TEXT("k16x16.f00"),16 ,true,false },    //  struct cfg_font extra_font;   // Extra font for later
+  { TEXT("k16x16.f00"),16 ,true,false },    //  struct cfg_font extra_font2;  // Another extra font.
+  { 0,0,0,0 },                              //  struct size_window size_dict; // Size of dictionary window.
+  { 0,0,0,0 },                              //  struct size_window size_user; // Size of user dictionary window;
+  { 0,0,0,0 },                              //  struct size_window size_oount;// Size of count kanji window.
+  { 0,0,0,0 },                              //  struct size_window size_cnvrt;// Size of user kana->kanji conversions window.
+  { 0,0,0,0 },                              //  struct size_window size_info; // Size of info dialog.
+  { 0,0,0,0 },                              //  struct size_window size_more; // Size of more info dialog.
+  { 0,0,0,0 },                              //  struct size_window size_fill; // Unused size structure for later.
+  0,0,0,0,                                  //  int   x,y,xs,ys;              // Dimensions of last saved configuration.
+  20000,                                    //  int   dict_buffer;            // Size of dictionary buffer.
+  RGB(255,0,0),                             //  COLORREF info_color;          // Color used for titles in kanji-info box.
+  RGB(0,0,255),                             //  COLORREF colorkanji_color;    // Color to be used with color-kanji.
+  DICTBITS,                                 //  long  dict_bits;              // Stores the state of all dictionary bits in one place.
+  40,                                       //  short alloc;                  // Allocation size for lines.
+  200,                                      //  short convert_size;           // Number of entires in user conversion table.
+  35,                                       //  short char_width;             // Character width for formatinning.
+  50,                                       //  short undo_number;            // Number of levels of undo to keep.
+  400,                                      //  short font_cache;             // Size of font cache in characters.
+  0,                                        //  short head_left;              // Position of headers to the left of margins
+  0,                                        //  short head_right;             // Position of headers to the right of margins.
+  100,                                      //  short head_top;               // Position of header lines above margins.
+  100,                                      //  short head_bottom;            // Position of header lines below margins.
+  100,                                      //  short scroll_speed;           // Determines the scroll speed.
+  300,                                      //  short history_size;           // Size of history buffer (in characters).
   { '&','y','/','&','M','/','&','D',0 },    //  KANJI date_format[SIZE_DATE]; // Date format string.
   { '&','h',':','&','N',' ','&','A',0 },    //  KANJI time_format[SIZE_DATE]; // Time format string.
   { 'A','M',0 },                            //  KANJI am_format[SIZE_AMPM];   // AM format string.
   { 'P','M',0 },                            //  KAMJI pm_format[SIZE_AMPM];   // PM format string.
-  false,                        // byte  skip_misscodes;         // Search for skip miss-codes.
-  true,                         // byte  bushu_nelson;           // Search for Nelson bushu
-  true,                         // byte  bushu_classical;        // Search for classicla bushu
-  0,                            // byte  index_type;             // Index type for index search.
-  0,                            // byte  reading_type;           // Reading type for reading search
-  true,                         // byte  reading_kun;            // Allow flexable kun readings.
-  false,                        // byte  reading_word            // Allow flexable word matching.
-  false,                        // byte  dict_watchclip;         // Watch clipboard when dictionary is open
-  false,                        // byte  dict_excludeme;         // Exclude me from clibboard tracking.
-  false,                        // byte  dcit_classical;         // Classical dictionary search
-  false,                        // byte  dict_nobeep;            // Makes the dictionary searches quiet
-  false,                        // byte  no_variants;            // Suppresses showing of variants in radical lookups.
-  false,                        // byte  all_fonts;              // Show all fonts in the font selector
-  false,                        // byte  no_toolbar;             // Disable the toolbar.
-  0,                            // byte  button_count;           // Number of buttons in the toolbar
-  false,                        // byte  cache_info;             // Fill for later exapnsion
-  {                             // byte  buttons[100];           // Buttons for the button bar.
+  {                                         //  byte  buttons[100];           // Buttons for the button bar.
     0,BUTTON_FILENEW,BUTTON_FILEOPEN,BUTTON_FILESAVE,0,BUTTON_FILEPRINT,
     0,BUTTON_CUT,BUTTON_COPY,BUTTON_PASTE,0,BUTTON_UNDO,BUTTON_REDO,
     0,BUTTON_SEARCH,BUTTON_REPLACE,BUTTON_NEXT,
     0,BUTTON_KANJI,BUTTON_ASCII,BUTTON_JASCII,BUTTON_CONVERT,
     0,BUTTON_GETINFO,BUTTON_JISTABLE,BUTTON_DICTIONARY,BUTTON_COUNTKANJI,
     0,BUTTON_RADLOOKUP,BUTTON_BUSHULOOKUP,BUTTON_BSLOOKUP,BUTTON_SKIPLOOKUP,BUTTON_HSLOOKUP,BUTTON_FCLOOKUP,BUTTON_READLOOKUP,BUTTON_INDEXLOOKUP,
-    0,BUTTON_PAGELAYOUT,BUTTON_OPTIONS,
+    0,BUTTON_PAGELAYOUT,BUTTON_OPTIONS,0,0
   },
-  false,                        // byte  no_BITMAP;              // Suppress BITMAP clipboard format
-  false,                        // byte  no_UNICODETEXT;         // Suppress UNICODETEXT clipboard format
-  false,                        // byte  info_compress;          // Compress Character information.
-  IME_OFF,                      // byte  ime_mode;               // Determines JWPce's interaction with the Microsoft IME
-
-  { 0 }                                                          // Filler for later expansion.
+#ifndef WINCE_PPC
+  {                                         //  byte  kanji_info[60];         // Character Information dialog items
+    INFO_TYPE,INFO_JIS,INFO_SHIFTJIS,INFO_UNICODE,INFO_STROKE,INFO_GRADE,INFO_NELSON,INFO_HALPERN,INFO_SPAHN,INFO_FOURCORNERS,INFO_MOROHASHI,INFO_PINYIN,INFO_KOREAN,
+    INFO_FREQUENCY,INFO_HENSHALL,INFO_GAKKEN,INFO_HEISIG,INFO_ONEILL,INFO_DEROO,INFO_KANJILEARN,
+    21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60
+#else   WINCE_PPC
+  {                                         //  byte  kanji_info[60];         // Character Information dialog items
+    INFO_JIS,INFO_STROKE,INFO_GRADE,INFO_NELSON,INFO_HALPERN,INFO_SPAHN,
+    INFO_TYPE,INFO_SHIFTJIS,INFO_UNICODE,INFO_FOURCORNERS,INFO_MOROHASHI,INFO_PINYIN,INFO_KOREAN,INFO_FREQUENCY,INFO_HENSHALL,INFO_ONEILL,INFO_GAKKEN,INFO_HEISIG,
+    INFO_DEROO,INFO_KANJILEARN,
+    21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60
+#endif WINCE_PPC
+  },
+//
+//  Dictionary flags
+//
+  false,                                    //  byte  dict_compress;          // Displays diconary search results in compressed form.
+  true,                                     //  byte  dict_auto;              // Automatically attempt a search if the user has selected text.
+  false,                                    //  byte  dict_advanced;          // Use addaptive dictionary search.
+  true,                                     //  byte  dict_iadj;              // Process i-adjitives.
+  true,                                     //  byte  dict_always;            // Even if choices are found do an addpative search.
+  false,                                    //  byte  dict_showall;           // Show all possible choices in an addaptive search.
+  false,                                    //  byte  dict_advmark;           // Separate advanced search entries.
+  false,                                    //  byte  dict_watchclip;         // Watch clipboard when dictionary is open
+  false,                                    //  byte  dcit_classical;         // Classical dictionary search
+  true,                                     //  byte  dict_primaryfirst;      // Move primary entries to the front the dictionary display.
+  false,                                    //  byte  dict_fullascii;         // Causes first/last to select complete entry for ascii 
+  true,                                     //  byte  dict_jascii2ascii;      // Treat JASCII as ascii;
+//
+//  Startup flags
+//
+  true,                                     //  byte  install;                // If set causes check for installed version and file extensions.
+  false,                                    //  byte  maximize;               // Maximaize the file.
+  false,                                    //  byte  usedims;                // Use last saved dimensions.
+  true,                                     //  byte  save_exit;              // Save configuration on exit.     
+  true,                                     //  byte  reload_files;           // Reload files loaded when we exited.
+//
+//  Display flags
+//
+  true,true,                                //  byte  vscroll,hscroll;        // Vertical and horizontal scroll bar.
+  true,                                     //  byte  kscroll;                // Activate scroll bar on bar.
+  false,                                    //  byte  kanjibar_top;           // Places the kanji bar at the top of the screen
+  true,                                     //  byte  status;                 // Display status bar.
+  true,                                     //  byte  toolbar;                // Enable the toolbar.
+  39,                                       //  byte  button_count;           // Number of buttons in the toolbar
+//
+//  Basic operations flags
+//
+  true,                                     //  byte  confirm_exit;           // Require confirmation of exit on closing last file.
+  true,                                     //  byte  close_does_file;        // Window close control, closes just current file.
+  true,                                     //  byte  backup_files;           // Save last version of a file as a backup.
+  DOUBLE_PROMPT,                            //  byte  double_open;            // Determine the action in the case of a double open.
+  IME_OFF,                                  //  byte  ime_mode;               // Determines JWPce's interaction with the Microsoft IME
+  false,                                    //  byte  delete_conversion;      // Causes the delete key to delete current kanji conversion instead of text to right (old action).
+  true,                                     //  byte  auto_scroll;            // Enables or disables the auto-scroll feature.
+  false,                                    //  byte  page_mode_file;         // Uses page scrolling for the file (PPC only)
+  false,                                    //  byte  page_mode_list;         // Uses page scrolling for lists (PPC only)
+//
+//  Clipboard flags
+//
+  FILETYPE_SJS     ,                        //  byte  clip_write;             // Clipboard write type.
+  FILETYPE_AUTODETECT,                      //  byte  clip_read;              // Clipboard read type.
+  false,                                    //  byte  no_BITMAP;              // Suppress BITMAP clipboard format
+  false,                                    //  byte  no_UNICODETEXT;         // Suppress UNICODETEXT clipboard format
+//
+//  Search flags
+//
+  false,                                    //  byte  search_nocase;          // Search: Ignore case
+  false,                                    //  byte  search_jascii;          // Search: JASCII=ascii
+  false,                                    //  byte  search_back;            // Search: Move backward
+  false,                                    //  byte  search_wrap;            // Search: Wrap at end of file.
+  false,                                    //  byte  search_all;             // Search: All files.
+  false,                                    //  byte  search_noconfirm;       // Repalce: Without confirmation.
+  true,                                     //  byte  keep_find;              // Causes the Search/Replace dialog to remain open during searches.
+//
+//  Insert to file flags
+//
+  true,                                     //  byte  paste_newpara;          // When pasting back in the file insert extra lines into new paragraph.
+//
+//  Formatting and printing
+//
+  true,                                     //  byte  relax_pucntuation;      // Allow relaxed punctuation.
+  true,                                     //  byte  relax_smallkana;        // Allow relaxed small kana.
+  WIDTH_DYNAMIC,                            //  byte  width_mode;             // Determines how the width of the display is calculated.
+  true,                                     //  byte  print_justify;          // Justfication for ascii text during printing.
+  false,                                    //  byte  units_cm;               // CM units (or inches).
+//
+//  Info and Color Kanji flags
+//
+  false,                                    //  byte  info_compress;          // Compress Character information.
+  true,                                     //  byte  info_titles;            // Puts titles in the kanji-info list box.
+  false,                                    //  byte  info_onlyone;           // Allows only one info version to open.
+  false,                                    //  byte  cache_info;             // Fill for later exapnsion
+  COLORKANJI_NOMATCH,                       //  byte  colorkanji_mode;        // Determines the way color-fonts are suported.
+  false,                                    //  byte  colorkanji_bitmap;      // Support color kanji in bitmap clipboard format
+  false,                                    //  byte  colorkanji_print;       // Support color kanji in printing.
+//
+//  Kanji lookup flags
+//
+  true,                                     //  byte  auto_lookup;            // Should we do auto-lookups in the radical lookup dialog.
+  false,                                    //  byte  skip_misscodes;         // Search for skip miss-codes.
+  true,                                     //  byte  bushu_nelson;           // Search for Nelson bushu
+  true,                                     //  byte  bushu_classical;        // Search for classicla bushu
+  0,                                        //  byte  index_type;             // Index type for index search.
+  0,                                        //  byte  reading_type;           // Reading type for reading search
+  true,                                     //  byte  reading_kun;            // Allow flexable kun readings.
+  false,                                    //  byte  reading_word            // Allow flexable word matching.
+  false,                                    //  byte  no_variants;            // Suppresses showing of variants in radical lookups.
+//
+//  Font flags
+//
+  true,                                     //  byte  cache_displayfont;      // Should we cache or not cache the display font.
+  false,                                    //  byte  all_fonts;              // Show all fonts in the font selector
+//
+//  Fill
+//
+  false,                                    //  byte  nokanjibar;             // Diables the kanji bar.
+  { 0 }                                                                       // Filler for later expansion.
 };
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Exported data.
 //
@@ -278,7 +346,7 @@ HMENU     popup    = null;      // The popup menu.
 HINSTANCE instance = null;      // Our instance.
 HINSTANCE language = null;      // Language processor instance.
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Static procedures.
 //
@@ -290,6 +358,7 @@ static TCHAR *get_parameter (TCHAR *buffer,TCHAR *ptr); // Utility rotuine to ex
 static int    open_files    (tchar *command);           // Intialization rotuine to open all files.
 static void   terminate     (int    format,...);        // Bail-out routine used if cannot intialize.
 
+//--------------------------------
 //
 //  Stub rotuine used to pass-off to the JWP_file class. for handling 
 //  the format paragraph dialog box.
@@ -298,6 +367,7 @@ static BOOL CALLBACK dialog_formatpara (HWND hwnd,UINT message,WPARAM wParam,LPA
   return (jwp_file->do_formatpara(hwnd,message,wParam));
 }
 
+//--------------------------------
 //
 //  Stub rotuine used to pass-off to the JWP_conv class. for handling 
 //  the user-conversion dialog box.
@@ -306,6 +376,7 @@ static BOOL CALLBACK dialog_userconv (HWND hwnd,UINT message,WPARAM wParam,LPARA
   return (jwp_conv.dlg_userconv(hwnd,message,wParam,lParam));
 }
 
+//--------------------------------
 //
 //  This routine extracts a parameter from a text line.  A parameter is 
 //  defined as a quoted string, or a space deliminated argument.
@@ -335,6 +406,7 @@ static TCHAR *get_parameter (TCHAR *buffer,TCHAR *ptr) {
   return (ptr);
 }
 
+//--------------------------------
 //
 //  This routine is called only once, during startup to open all files
 //  the user has requested.  This includes files from the command line, 
@@ -402,6 +474,7 @@ static int open_files (TCHAR *command) {
   return (!new JWP_file(NULL,FILETYPE_UNNAMED));
 }
 
+//--------------------------------
 //
 //  If things work correctly, this rotuine should never get called.
 //  This is a panic stop.  It is only used until the system is started.
@@ -427,12 +500,16 @@ static void terminate (int format,...) {
   ExitThread (format ? 0 : 1);
 }
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This is a small window class for rendering the color samples used
 //  in the configuration dialog box.
 //
 
+//--------------------------------
+//
+//  Window procedure for a color window.  This window simply displays a color.
+//
 static LRESULT CALLBACK JWP_color_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam) {
   HDC         hdc;
   PAINTSTRUCT ps;
@@ -471,13 +548,14 @@ static LRESULT CALLBACK JWP_color_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM
 //
 //  End color control.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Input mode control routines, variables and procedures.
 //
 
+//--------------------------------
 //
 //  This structure defines a list of windows to update when the input
 //  mode is changed.
@@ -491,6 +569,7 @@ static ModeNode *mode_list = NULL;      // List of windows to update when the mo
                                         //   This contains one entry ofr each dialog box with
                                         //   a mode change button.
 
+//--------------------------------
 //
 //  This routine changes the current editor mode.  Most of this is simply
 //  display changes, the actual mode changes is simply done by setting 
@@ -541,6 +620,7 @@ void set_mode (int mode) {
   return;
 }
 
+//--------------------------------
 //
 //  Window procedeure for the mode buttons located in the dialog boxes.
 //  This button will link itself into the list of buttons to be updated
@@ -618,9 +698,9 @@ static LRESULT CALLBACK JWP_mode_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
 //
 //  End Mode control routines.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This group of routines keeps track of non-modal dialog boxes so we can 
 //  direct messages to these dialog boxes.  As a new non-modal dialog is created,
@@ -632,6 +712,7 @@ static LRESULT CALLBACK JWP_mode_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
 //  This is used during the exit procedures.
 //
 
+//--------------------------------
 //
 //  Structrue is a linked list that keeps track of all open dialog boxes
 //
@@ -643,6 +724,7 @@ typedef struct DIALOG_node {
 
 static DIALOG_node *dialog_list = NULL;     // List instance
 
+//--------------------------------
 //
 //  Add a dialog box to the list of open non-modal dialog boxes.
 //
@@ -660,6 +742,7 @@ void add_dialog (HWND hwnd,int _closeable) {
   return;
 }
 
+//--------------------------------
 //
 //  Remove a dialog from the list.  This is called as a dialog box is destroyed to remove it
 //  from the list of non-modal dialog boxes.
@@ -686,9 +769,9 @@ void remove_dialog (HWND hwnd) {
 //
 //  End dialog list.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Routines for processing the view or file child window.
 //
@@ -699,6 +782,7 @@ void remove_dialog (HWND hwnd) {
 
 HWND file_window = null;                    // Window pointer to edit-window.
 
+//--------------------------------
 //
 //  Window proc assoicated with the view window.
 //
@@ -709,7 +793,11 @@ static LRESULT CALLBACK JWP_view_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
 static LRESULT CALLBACK JWP_view_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam) {
   HDC         hdc;
   PAINTSTRUCT ps;
-
+  static short delta = 1;       // This is a KLUDGE used to get around the fact
+                                //   that mouse_event will not generate an event
+                                //   if the mouse does not move so we generate
+                                //   events that move one micky right and left 
+                                //   alternately, so the average is no motion.
   switch (iMsg) {
     case WM_SETFOCUS:
          SetFocus (main_window);
@@ -719,6 +807,8 @@ static LRESULT CALLBACK JWP_view_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
          return (0);
     case WM_PAINT:
          hdc = BeginPaint (hwnd,&ps);
+         SetBkColor   (hdc,GetSysColor(COLOR_WINDOW));
+         SetTextColor (hdc,GetSysColor(COLOR_WINDOWTEXT));
          if (jwp_file) jwp_file->draw_all (hdc,&ps.rcPaint);
          EndPaint (hwnd,&ps);
          return (0);
@@ -728,10 +818,18 @@ static LRESULT CALLBACK JWP_view_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
     case WM_HSCROLL:
          jwp_file->h_scroll(wParam);
          return (0);
+    case WM_TIMER:
+         if (wParam == TIMER_MOUSEHOLD) jwp_file->do_mouse (iMsg,wParam,lParam);
+           else {
+             KillTimer    (hwnd,TIMER_AUTOSCROLL);
+             mouse_event  (MOUSEEVENTF_MOVE,delta,0,0,0);   // Fake mouse event so window keeps scrolling
+             if (delta == 1) delta = -1; else delta = 1;    // Toggle mouse direction so no net motion occures.
+           }
+         return (0);
     case WM_LBUTTONUP:
+    case WM_LBUTTONDOWN:
     case WM_MOUSEMOVE:
     case WM_LBUTTONDBLCLK: 
-    case WM_LBUTTONDOWN: 
     case WM_RBUTTONDOWN:
          jwp_file->do_mouse (iMsg,wParam,lParam);
          return (0);
@@ -744,6 +842,7 @@ static LRESULT CALLBACK JWP_view_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
   return (DefWindowProc(hwnd,iMsg,wParam,lParam));
 }
 
+//--------------------------------
 //
 //  Adjust the window (prinrally in responce to changes in the window 
 //  size.  
@@ -772,6 +871,7 @@ static void adjust_view (HWND hwnd) {
   return;
 }
 
+//--------------------------------
 //
 //  Initializes the class, and actually enerates the window.
 //
@@ -779,11 +879,12 @@ static int initialize_view (WNDCLASS *wclass) {
   int style;
   if (wclass) {
     wclass->style         = CS_HREDRAW | CS_VREDRAW;                // Mode button class for dialog boxes.
-    wclass->hbrBackground = (HBRUSH) (HBRUSH) (COLOR_MENU+1);
+    wclass->hbrBackground = (HBRUSH) (HBRUSH) (COLOR_BTNFACE+1);
     wclass->lpfnWndProc   = JWP_mode_proc;
     wclass->lpszClassName = TEXT("JWP-Mode");
     if (!RegisterClass(wclass)) return (true);
-    wclass->lpfnWndProc   = JWP_color_proc;                         // Color button class for dialog boxes.
+    wclass->style         = CS_HREDRAW | CS_VREDRAW;                // Color button class for dialog boxes.
+    wclass->lpfnWndProc   = JWP_color_proc;                         
     wclass->lpszClassName = TEXT("JWP-Color");
     if (!RegisterClass(wclass)) return (true);
     wclass->style         = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;   // View class (main editor window)
@@ -803,9 +904,9 @@ static int initialize_view (WNDCLASS *wclass) {
 //
 //  End child window (view) routines.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin Class JWP_config.
 //
@@ -817,6 +918,9 @@ static int initialize_view (WNDCLASS *wclass) {
 //                           magic field indicates the config file version.
 //                           As options are added this field is incremented
 //                           and JWPce will reject old configurations.
+//      diconary history  -- An integer (count filed), followed by a 
+//      search histor        buffer, for each of these.
+//      reaplce history
 //      recent files      -- Next are 9 null terminated strings.  These
 //                           are file names for the recent files list.
 //                           Even if there are less than 9 files in the 
@@ -831,6 +935,7 @@ static int initialize_view (WNDCLASS *wclass) {
 class JWP_config jwp_config;
 #define NAME_CONFIG TEXT("jwpce.cfg")
 
+//--------------------------------
 //
 //  Constructor.
 //
@@ -900,6 +1005,7 @@ JWP_config::JWP_config () {
   return;
 }
 
+//--------------------------------
 //
 //  Geneate a file name for operations.
 //
@@ -915,7 +1021,16 @@ JWP_config::JWP_config () {
 //  files.  The basic opteration invovles determining what mode the 
 //  file needs to be open in and weather it is a user file or a system file.
 //
-TCHAR *JWP_config::name (tchar *file,int mode,int net) {
+//  This routine has been expanded to correctly process names containning a
+//  path.  Such names are not expanded, but used directly.  This was added to
+//  support the new dictionary routines.
+//
+TCHAR *JWP_config::name (TCHAR *file,int mode,int net) {
+#ifdef WINCE
+  if (file[0] == '\\') return (file);
+#else  WINCE
+  if (file[1] == ':') return (file);
+#endif WINCE
   lstrcpy (ptr,file);                               // Single user/system file names
   if (!net || !nptr) return (last_name = buffer);   // Not user file or not netwrok running.
   lstrcpy (nptr,file);                              // Network located file.    
@@ -923,6 +1038,7 @@ TCHAR *JWP_config::name (tchar *file,int mode,int net) {
   return (last_name = buffer);                      // Fall back to single user/system file.
 }
 
+//--------------------------------
 //
 //  Open a file located in the program directory.
 //
@@ -933,7 +1049,7 @@ TCHAR *JWP_config::name (tchar *file,int mode,int net) {
 //
 //      RETURN   -- HANDLE for a file.
 //
-HANDLE JWP_config::open (tchar *filename,int mode,int net) {
+HANDLE JWP_config::open (TCHAR *filename,int mode,int net) {
   TCHAR *ptr;
   HANDLE handle;
 #ifndef WINCE
@@ -951,6 +1067,7 @@ HANDLE JWP_config::open (tchar *filename,int mode,int net) {
   return (handle);
 }
 
+//--------------------------------
 //
 //  Read configuration file.
 //
@@ -962,18 +1079,25 @@ int JWP_config::read () {
   unsigned long done;
   hfile = open(NAME_CONFIG,OPEN_READ,true); 
   if (INVALID_HANDLE_VALUE != hfile) {
-    if (!ReadFile(hfile,&cfg,sizeof(cfg),&done,NULL) || (cfg.magic != CONFIG_MAGIC)) goto ConfigError;
-    ok   = true;
-    i    = GetFileSize(hfile,NULL)-sizeof(cfg);
-    load = (TCHAR *) calloc(i+24,1);        // Enough extra characters to handle UNICODE
-    ReadFile(hfile,load,i,&done,NULL);
-    CloseHandle (hfile);
-    goto AdjustConfig; 
+    if (!ReadFile(hfile,&cfg,sizeof(cfg),&done,NULL) || (cfg.magic != CONFIG_MAGIC)) CloseHandle (hfile);
+      else {
+        ok   = true;
+        dict_history   .read (hfile);                   // Read will do allocation if necessary
+        search_history .read (hfile);
+        replace_history.read (hfile);
+        i    = GetFileSize(hfile,NULL)-3*HISTORY_SIZE-sizeof(cfg);
+        load = (TCHAR *) calloc(i+24,sizeof(TCHAR));    // Enough extra characters to handle UNICODE
+        ReadFile(hfile,load,i,&done,NULL);
+        CloseHandle (hfile);
+        goto AdjustConfig; 
+      }
   }
-ConfigError:
   cfg  = default_config;
   load = NULL;
   err  = true;
+  search_history .alloc (jwp_config.cfg.history_size);
+  replace_history.alloc (jwp_config.cfg.history_size);
+  dict_history   .alloc (jwp_config.cfg.history_size);
   ErrorMessage (false,IDS_START_CONFIGLOAD,name());
 AdjustConfig:
 #ifndef WINCE
@@ -982,6 +1106,7 @@ AdjustConfig:
   return (err);
 }
 
+//--------------------------------
 //
 //  This routine is called to initialize the set values to a new 
 //  configuration.  All the updating that is necessary to perform the 
@@ -1003,8 +1128,7 @@ void JWP_config::set (struct cfg *new_config) {
 //
 //  If new font delete old font and reinitialize.
 //
-  DeleteObject (jwp_font.font);
-  jwp_font.initialize ();
+  initialize_fonts ();
 //
 //  Setup the display and all the other features.
 //
@@ -1016,14 +1140,16 @@ void JWP_config::set (struct cfg *new_config) {
   DestroyWindow (file_window);
   jwp_stat.initialize (NULL);           // Regenerate the status bar.
   jwp_conv.initialize (NULL);           // Regenerate the kana->kanji converter bar.
-  initialize_view (NULL);               // Regenerate the editor/view window.
+  initialize_view     (NULL);           // Regenerate the editor/view window.
   file = jwp_file;                      // We now need to reset the window pointers in 
   do {                                  //   all the open files.  Any Japanese edit 
     file->window = file_window;         //   controls will generate their windows on 
     file = file->next;                  //   the fly, so we don't need to deal with 
   } while (file != jwp_file);           //   them.
 #else  WINCE
+  DestroyWindow       (jwp_conv.window);
   jwp_tool.process    (false);
+  jwp_conv.initialize (NULL);
   jwp_stat.initialize (NULL);
 #endif WINCE
   jwp_stat.adjust (null);
@@ -1054,12 +1180,19 @@ void JWP_config::set (struct cfg *new_config) {
 //
   if (!cfg.cache_info) free_info ();
 //
+//  Reallocate the history buffers if necessary.
+//
+  search_history .alloc (jwp_config.cfg.history_size);
+  replace_history.alloc (jwp_config.cfg.history_size);
+  dict_history   .alloc (jwp_config.cfg.history_size);
+//
 //  Activate top file.
 //
   jwp_file->activate();
   return;
 }
 
+//--------------------------------
 //
 //  Write configuration file.
 //
@@ -1078,8 +1211,8 @@ void JWP_config::write () {
     GetWindowPlacement (main_window,&placement);
     cfg.x  = placement.rcNormalPosition.left;
     cfg.y  = placement.rcNormalPosition.top;
-    cfg.xs = (placement.rcNormalPosition.right -placement.rcNormalPosition.left+1);
-    cfg.ys = (placement.rcNormalPosition.bottom-placement.rcNormalPosition.top +1);
+    cfg.xs = placement.rcNormalPosition.right -placement.rcNormalPosition.left;
+    cfg.ys = placement.rcNormalPosition.bottom-placement.rcNormalPosition.top;
     cfg.maximize = (byte) ((placement.showCmd == SW_MAXIMIZE) || ((placement.showCmd == SW_SHOWMINIMIZED) && (placement.flags == WPF_RESTORETOMAXIMIZED)));
   }
 #endif WINCE
@@ -1087,6 +1220,9 @@ void JWP_config::write () {
   if (INVALID_HANDLE_VALUE != hfile) {
     err = !WriteFile(hfile,&cfg,sizeof(cfg),&done,NULL);
     ok = true;
+    dict_history.write    (hfile);
+    search_history.write  (hfile);
+    replace_history.write (hfile);
     CloseHandle  (hfile);
     if (!err) return;
   }
@@ -1094,6 +1230,7 @@ void JWP_config::write () {
   return;
 }
 
+//--------------------------------
 //
 //  Write file names to the configuration file.
 //
@@ -1119,8 +1256,8 @@ void JWP_config::write_files () {
     QUIET_ERROR ErrorMessage (true,IDS_START_CONFIGWRITE,name());
     return;
   }
-  SetFilePointer (hfile,sizeof(cfg),NULL,FILE_BEGIN);   // Move to end of fixed strucutre.
-  SetEndOfFile   (hfile);                               // Truncate file here.
+  SetFilePointer (hfile,sizeof(cfg)+3*HISTORY_SIZE,NULL,FILE_BEGIN);    // Move to end of fixed strucutre.
+  SetEndOfFile   (hfile);                                               // Truncate file here.
 //
 //  Write the recent files list if we were not given a name.  This means this is the main
 //  configuration and not a user project.
@@ -1156,9 +1293,9 @@ void JWP_config::write_files () {
 //
 //  End Class JWP_config.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  These routines handle the processing of the Utilities/Options...
 //  dialog box.
@@ -1172,9 +1309,10 @@ void JWP_config::write_files () {
 //  implement a reset to default configuration.
 //
 
-static struct cfg *cfg;             // Config structure modified by these routines.
+       struct cfg *cfg;             // Config structure modified by these routines.
 static HFONT font;                  // Indicates new font chosen.
 
+//--------------------------------
 //
 //  This is the dialog box handler for my ChooseColor dialog box.  
 //  This dialog box was gnerated specifically for use on Windows CE
@@ -1200,14 +1338,6 @@ static BOOL CALLBACK dialog_choosecolor (HWND hwnd,UINT msg,WPARAM wParam,LPARAM
            j = (255*(i-IDC_CCBOX13))/(IDC_CCBOX24-IDC_CCBOX13);     // Setup grey-scale colors.
            SendDlgItemMessage (hwnd,i,WMU_SETWINDOWVALUE,0,RGB(j,j,j));
          }
-
-         return (true);
-//
-//  Help 
-//
-    case WM_HELP:
-         do_help (hwnd,IDH_INTERFACE_COLOR);
-         return  (true);
 //
 //  Respond to color change (called on initialize also).  In this case 
 //  one of the color boxes has been clicked and we want to set the color.
@@ -1218,6 +1348,12 @@ static BOOL CALLBACK dialog_choosecolor (HWND hwnd,UINT msg,WPARAM wParam,LPARAM
          SetDlgItemInt (hwnd,IDC_CCGREEN,GetGValue(lParam),false);
          SetDlgItemInt (hwnd,IDC_CCBLUE ,GetBValue(lParam),false);
          return (true);
+//
+//  Help 
+//
+    case WM_HELP:
+         do_help (hwnd,IDH_INTERFACE_COLOR);
+         return  (true);
 //
 //  Main controls
 //
@@ -1248,6 +1384,7 @@ static BOOL CALLBACK dialog_choosecolor (HWND hwnd,UINT msg,WPARAM wParam,LPARAM
 
 #endif USE_MYCHOOSECOLOR
 
+//--------------------------------
 //
 //  Internal routine used to get the color of something.
 //
@@ -1278,26 +1415,17 @@ static COLORREF get_color (HWND hwnd,COLORREF color) {
 #endif USE_MYCHOOSECOLOR
 }
 
+//--------------------------------
 //
 //  Dialog box procedure for the general page.
-//
-//      IDC_OGRESTOREPOS      Restore window poisiton.
-//      IDC_OGRELOADFILES     Reload files.
-//      IDC_OGSAVESETTINGS    Save settings on exit.
-//      IDC_OGCONFIRMEXIT     Confirm exit.
-//      IDC_OGWIDTHDYNAMIC    Dynamic Width (radio)
-//      IDC_OGWIDTHFIXED      Fixed width (radio)
-//      IDC_OGWIDTHPRINTER    Determine width from printer (radio)
-//      IDC_OGCLOSEFILE       Close button does close file (radio)
-//      IDC_OGCLOSEPROGRAM    Close button does close program (radio)
-//      IDC_OGWIDTH           Actuall width (edit)
-//      IDC_OGPRINTWIDTH      Display box for printer width.
-//      IDC_OGINCHES          Use inches as units
-//      IDC_OGCM              Use cm as units
 //
 static BOOL CALLBACK options_general (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lParam) {
   switch (msg) {
     case WM_INITDIALOG:
+#ifdef WINCE_PPC
+         CheckDlgButton (hwnd,IDC_OGPAGEFILE    ,cfg->page_mode_file);
+         CheckDlgButton (hwnd,IDC_OGPAGELIST    ,cfg->page_mode_list);
+#endif WINCE_PPC
          CheckDlgButton (hwnd,IDC_OGRESTOREPOS  ,cfg->usedims);
          CheckDlgButton (hwnd,IDC_OGRELOADFILES ,cfg->reload_files);
          CheckDlgButton (hwnd,IDC_OGCONFIRMEXIT ,cfg->confirm_exit);
@@ -1325,6 +1453,10 @@ static BOOL CALLBACK options_general (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lP
          }
          break;
     case WM_GETDLGVALUES:
+#ifdef WINCE_PPC
+         cfg->page_mode_file  = IsDlgButtonChecked(hwnd,IDC_OGPAGEFILE    );
+         cfg->page_mode_list  = IsDlgButtonChecked(hwnd,IDC_OGPAGELIST    );
+#endif WINCE_PPC
          cfg->usedims         = IsDlgButtonChecked(hwnd,IDC_OGRESTOREPOS  );
          cfg->reload_files    = IsDlgButtonChecked(hwnd,IDC_OGRELOADFILES );
          cfg->confirm_exit    = IsDlgButtonChecked(hwnd,IDC_OGCONFIRMEXIT );
@@ -1340,34 +1472,35 @@ static BOOL CALLBACK options_general (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lP
   return (false);
 }
 
+//--------------------------------
 //
 //  Dialog box Procedure for the Display page.
-//
-//      IDC_ODVSCROLL         Vertical scroll bar (main window).
-//      IDC_ODHSCROLL         Horizontal stroll bar (main window).
-//      IDC_ODKSCROLL         Horizontal scroll bar (kana->kanji convert bar).
-//      IDC_ODSTATUSBAR       Render status bar.
-//      IDC_ODKBARTOP         Kanji bar is at top of screen.
-//      IDC_ODHIGHLIGHT       Set highlight color button.
-//      IDC_ODHIGHLIGHTBOX    Highlite display box.
 //
 static BOOL CALLBACK options_display (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lParam) {
   switch (msg) {
     case WM_INITDIALOG:
-         CheckDlgButton (hwnd,IDC_ODVSCROLL    ,cfg->vscroll);
-         CheckDlgButton (hwnd,IDC_ODHSCROLL    ,cfg->hscroll);
-         CheckDlgButton (hwnd,IDC_ODKSCROLL    ,cfg->kscroll);
-         CheckDlgButton (hwnd,IDC_ODSTATUSBAR  ,cfg->status);
-         CheckDlgButton (hwnd,IDC_ODKBARTOP    ,cfg->kanjibar_top);
+         CheckDlgButton (hwnd,IDC_ODVSCROLL    , cfg->vscroll);
+         CheckDlgButton (hwnd,IDC_ODHSCROLL    , cfg->hscroll);
+         CheckDlgButton (hwnd,IDC_ODKSCROLL    , cfg->kscroll);
+         CheckDlgButton (hwnd,IDC_ODSTATUSBAR  , cfg->status);
+         CheckDlgButton (hwnd,IDC_ODKBARTOP    , cfg->kanjibar_top);
+         CheckDlgButton (hwnd,IDC_ODAUTOSCROLL , cfg->auto_scroll);
+         CheckDlgButton (hwnd,IDC_ODKANJIBAR   ,!cfg->nokanjibar);
+         SetDlgItemInt  (hwnd,IDC_ODSCROLLSPEED, cfg->scroll_speed,false);
 #ifndef WINCE
-         CheckDlgButton (hwnd,IDC_ODTOOLBAR    ,!cfg->no_toolbar);
+         CheckDlgButton (hwnd,IDC_ODTOOLBAR    ,cfg->toolbar);
 #endif  WINCE
          SendDlgItemMessage (hwnd,IDC_ODHIGHLIGHTBOX,WMU_SETWINDOWVALUE,0,cfg->info_color);
+         EnableWindow (GetDlgItem(hwnd,IDC_ODSCROLLSPEED),IsDlgButtonChecked(hwnd,IDC_ODAUTOSCROLL));
          return (true);
     case WMU_COLORCHANGE:                       // User clicked the color box, so select a new color.
          wParam = IDC_ODHIGHLIGHT;
     case WM_COMMAND:        // **** FALL THROUGH ****
          switch (LOWORD(wParam)) {
+           INPUT_CHECK (IDC_ODSCROLLSPEED);
+           case IDC_ODAUTOSCROLL:
+                EnableWindow (GetDlgItem(hwnd,IDC_ODSCROLLSPEED),IsDlgButtonChecked(hwnd,IDC_ODAUTOSCROLL));
+                break;
            case IDC_ODHIGHLIGHT:
                 cfg->info_color = get_color(hwnd,cfg->info_color);
                 SendDlgItemMessage (hwnd,IDC_ODHIGHLIGHTBOX,WMU_SETWINDOWVALUE,0,cfg->info_color);
@@ -1375,47 +1508,182 @@ static BOOL CALLBACK options_display (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lP
          }
          break;
     case WM_GETDLGVALUES:
-         cfg->vscroll      = IsDlgButtonChecked(hwnd,IDC_ODVSCROLL  );
-         cfg->hscroll      = IsDlgButtonChecked(hwnd,IDC_ODHSCROLL  );
-         cfg->kscroll      = IsDlgButtonChecked(hwnd,IDC_ODKSCROLL  );
-         cfg->status       = IsDlgButtonChecked(hwnd,IDC_ODSTATUSBAR);
-         cfg->kanjibar_top = IsDlgButtonChecked(hwnd,IDC_ODKBARTOP  );
+         cfg->vscroll      = IsDlgButtonChecked(hwnd,IDC_ODVSCROLL   );
+         cfg->hscroll      = IsDlgButtonChecked(hwnd,IDC_ODHSCROLL   );
+         cfg->kscroll      = IsDlgButtonChecked(hwnd,IDC_ODKSCROLL   );
+         cfg->status       = IsDlgButtonChecked(hwnd,IDC_ODSTATUSBAR );
+         cfg->kanjibar_top = IsDlgButtonChecked(hwnd,IDC_ODKBARTOP   );
+         cfg->auto_scroll  = IsDlgButtonChecked(hwnd,IDC_ODAUTOSCROLL);
+         cfg->nokanjibar   =!IsDlgButtonChecked(hwnd,IDC_ODKANJIBAR  );
+         cfg->scroll_speed = get_int(hwnd,IDC_ODSCROLLSPEED,0,10000,cfg->scroll_speed);
 #ifndef WINCE
-         cfg->no_toolbar   =!IsDlgButtonChecked(hwnd,IDC_ODTOOLBAR  );
+         cfg->toolbar      = IsDlgButtonChecked(hwnd,IDC_ODTOOLBAR   );
 #endif  WINCE
          return (true);
   }
   return (false);
 }
 
+//--------------------------------
 //
 //  Dialog box procedure for the Fonts page.
 //
-//      IDC_OFASCIINAME   ASCII font name display.
-//      IDC_OFASCIIFONT   ASCII font select button.
-//      IDC_OFDISPLAYFONT Kanji display font selection list.
-//      IDC_OFPRINTFONT   Kanji print font selection list.
-//      IDC_OFRELAXPUNCT  Relax formatting for punctuation.
-//      IDC_OFRELAXSMALL  Relax formatting for small kana.
-//      IDC_OFAUTOFONT    Autmatically chose the printer font.
-//      IDC_OFPRINTSIZE   Printer font size in points.
+                                        // Indexes for font types
+#define FONT_NONE       -1              // No font being worked with (used for initialization)
+#define FONT_JIS        0               // Font used for JIS table.
+#define FONT_SYSTEM     1               // System font
+#define FONT_EDIT       2               // Font used for Japanese edit controls.
+#define FONT_LIST       3               // Font used for Japanese list boxes.
+#define FONT_BAR        4               // Font used for kanji bars.
+#define FONT_FILE       5               // Font used for the editor.
+#define FONT_CLIP       6               // Font used for bitmaps on the clipboard
+#define FONT_PRINT      7               // Font used for printing.
+#define FONT_BIG        8               // Big font.
+
+static short current_font = FONT_NONE;  // Indicates the current font the user is working on.
+
+#define USE_FONTLISTBOX                 // Uses a font list box instead of the font selector.  I like this
+                                        //   better.
+
+static void change_font   (HWND hwnd);
+static void check_height  (HWND hwnd);
+static void select_string (HWND hwnd,int id,tchar *string);
+
+//--------------------------------
 //
+//  This routine handles a change in the font the user is setting.  This is also
+//  used to set the data and to read the data for the current font.  
+//
+//  First this routine reads the data for the out-going font type.  Then sets the
+//  data for the next font type.  
+//
+//  If you call this routine without changing the font type, you will just read the 
+//  values and then put them back into place.
+//
+//  This routine is used to initialize.  The current_font (out-going font) is set 
+//  to FONT_NONE so no data is read, but the new font is initilize.  Simiuarly, the 
+//  routien is used to read the data before the dialog is closed.
+//  
+static void change_font (HWND hwnd) {
+  int   i;
+  struct cfg_font *font;
+//
+//  User is changing the font so lets save the old font information.
+//
+//  We read all information, including the invalid information.  This is safe on the 
+//  read, because we just ignore the fields we don't want.
+//
+  if (current_font != FONT_NONE) {
+    switch (current_font) {
+      case FONT_JIS   : font = &cfg->jis_font;   break;
+      case FONT_SYSTEM: font = &cfg->sys_font;   break;
+      case FONT_EDIT  : font = &cfg->edit_font;  break;
+      case FONT_LIST  : font = &cfg->list_font;  break;
+      case FONT_BAR   : font = &cfg->bar_font;   break;
+      case FONT_FILE  : font = &cfg->file_font;  break;
+      case FONT_CLIP  : font = &cfg->clip_font;  break;
+      case FONT_BIG   : font = &cfg->big_font;   break;
+      case FONT_PRINT : font = &cfg->print_font; break;
+    }
+    if (current_font == FONT_PRINT) font->size = get_float(hwnd,IDC_OFHEIGHT,2,1600,font->size,10,NULL);
+      else font->size = get_int(hwnd,IDC_OFHEIGHT,4,1000,font->size);
+    font->automatic = IsDlgButtonChecked(hwnd,IDC_OFAUTO);
+    font->vertical  = IsDlgButtonChecked(hwnd,IDC_OFVERTICAL);
+    i               = SendDlgItemMessage(hwnd,IDC_OFFONTNAME,CB_GETCURSEL,0,0);
+    if (CB_ERR != i) SendDlgItemMessage (hwnd,IDC_OFFONTNAME,CB_GETLBTEXT,i,(LPARAM) font->name);
+  }
+//  
+//  Now setup the new font information.
+//
+//  Here we need to do each case seperately so we can blank out the fields we dont 
+//  want displayed.
+//
+  switch (current_font = (short) SendDlgItemMessage(hwnd,IDC_OFFONT,CB_GETCURSEL,0,0)) {
+    case FONT_JIS:
+         EnableWindow   (GetDlgItem(hwnd,IDC_OFAUTO  ),true);
+         CheckDlgButton (hwnd,IDC_OFAUTO    ,cfg->jis_font.automatic);
+         select_string  (hwnd,IDC_OFFONTNAME,cfg->jis_font.name);
+         SetDlgItemText (hwnd,IDC_OFHEIGHT  ,TEXT(""));
+         break;         
+    case FONT_SYSTEM:
+         EnableWindow   (GetDlgItem(hwnd,IDC_OFAUTO  ),false);
+         CheckDlgButton (hwnd,IDC_OFAUTO    ,false);
+         select_string  (hwnd,IDC_OFFONTNAME,cfg->sys_font.name);
+         SetDlgItemInt  (hwnd,IDC_OFHEIGHT  ,cfg->sys_font.size,false);
+         break;
+    case FONT_EDIT:
+         EnableWindow   (GetDlgItem(hwnd,IDC_OFAUTO  ),true);
+         CheckDlgButton (hwnd,IDC_OFAUTO    ,cfg->edit_font.automatic);
+         select_string  (hwnd,IDC_OFFONTNAME,cfg->edit_font.name);
+         SetDlgItemInt  (hwnd,IDC_OFHEIGHT  ,cfg->edit_font.size,false);
+         break;
+    case FONT_LIST:
+         EnableWindow   (GetDlgItem(hwnd,IDC_OFAUTO  ),true);
+         CheckDlgButton (hwnd,IDC_OFAUTO    ,cfg->list_font.automatic);
+         select_string  (hwnd,IDC_OFFONTNAME,cfg->list_font.name);
+         SetDlgItemInt  (hwnd,IDC_OFHEIGHT  ,cfg->list_font.size,false);
+         break;
+    case FONT_BAR:
+         EnableWindow   (GetDlgItem(hwnd,IDC_OFAUTO  ),true);
+         CheckDlgButton (hwnd,IDC_OFAUTO    ,cfg->bar_font.automatic);
+         select_string  (hwnd,IDC_OFFONTNAME,cfg->bar_font.name);
+         SetDlgItemInt  (hwnd,IDC_OFHEIGHT  ,cfg->bar_font.size,false);
+         break;
+    case FONT_FILE:
+         EnableWindow   (GetDlgItem(hwnd,IDC_OFAUTO  ),true);
+         CheckDlgButton (hwnd,IDC_OFAUTO    ,cfg->file_font.automatic);
+         select_string  (hwnd,IDC_OFFONTNAME,cfg->file_font.name);
+         SetDlgItemInt  (hwnd,IDC_OFHEIGHT  ,cfg->file_font.size,false);
+         break;
+    case FONT_CLIP:
+         EnableWindow   (GetDlgItem(hwnd,IDC_OFAUTO  ),true);
+         CheckDlgButton (hwnd,IDC_OFAUTO    ,cfg->clip_font.automatic);
+         select_string  (hwnd,IDC_OFFONTNAME,cfg->clip_font.name);
+         SetDlgItemInt  (hwnd,IDC_OFHEIGHT  ,cfg->clip_font.size,false);
+         break;
+    case FONT_PRINT:
+         EnableWindow   (GetDlgItem(hwnd,IDC_OFAUTO  ),true);
+         CheckDlgButton (hwnd,IDC_OFAUTO    ,cfg->print_font.automatic);
+         select_string  (hwnd,IDC_OFFONTNAME,cfg->print_font.name);
+         put_float      (hwnd,IDC_OFHEIGHT  ,cfg->print_font.size,10);
+         break;
+    case FONT_BIG:
+         EnableWindow   (GetDlgItem(hwnd,IDC_OFAUTO  ),true);
+         CheckDlgButton (hwnd,IDC_OFAUTO    ,cfg->big_font.automatic);
+         select_string  (hwnd,IDC_OFFONTNAME,cfg->big_font.name     );
+         SetDlgItemText (hwnd,IDC_OFHEIGHT  ,TEXT(""));
+         break;
+  }
+  if (current_font == FONT_CLIP) {
+    CheckDlgButton (hwnd,IDC_OFVERTICAL,cfg->clip_font.vertical);
+    EnableWindow   (GetDlgItem(hwnd,IDC_OFVERTICAL),true);
+  }
+  else {
+    CheckDlgButton (hwnd,IDC_OFVERTICAL,false);
+    EnableWindow   (GetDlgItem(hwnd,IDC_OFVERTICAL),false);
+  }
+  EnableWindow   (GetDlgItem(hwnd,IDC_OFFONTNAME),!IsDlgButtonChecked(hwnd,IDC_OFAUTO));
+  SetDlgItemText (hwnd,IDC_OFHLABEL,get_string((current_font == FONT_PRINT) ? IDS_OF_POINTS : IDS_OF_PIXELS));
+  check_height   (hwnd);
+  return;
+}
 
-#define USE_FONTLISTBOX     // Uses a font list box instead of the font selector.  I like this
-                            //   better.
-
+//--------------------------------
 //
 //  Small utility routine to check the state of the height box.  If the current display font
 //  is not a TrueType font then this will disable the window, otherwise it will enable the 
 //  window.
 //
 static void check_height (HWND hwnd) {
+  int   i;
   TCHAR buffer[SIZE_BUFFER];
-  SendDlgItemMessage (hwnd,IDC_OFDISPLAYFONT,CB_GETLBTEXT,SendDlgItemMessage(hwnd,IDC_OFDISPLAYFONT,CB_GETCURSEL,0,0),(LPARAM) buffer);
-  EnableWindow (GetDlgItem(hwnd,IDC_OFHEIGHT),(lstrlen(buffer) >= 4) && stricmp(buffer+lstrlen(buffer)-4,TEXT(".f00")));
+  i = SendDlgItemMessage(hwnd,IDC_OFFONT,CB_GETCURSEL,0,0);
+  SendDlgItemMessage (hwnd,IDC_OFFONTNAME,CB_GETLBTEXT,SendDlgItemMessage(hwnd,IDC_OFFONTNAME,CB_GETCURSEL,0,0),(LPARAM) buffer);
+  EnableWindow (GetDlgItem(hwnd,IDC_OFHEIGHT),(FONT_PRINT == i) || (lstrlen(buffer) >= 4) && stricmp(buffer+lstrlen(buffer)-4,TEXT(".f00")) && ((FONT_BIG != i) && (FONT_JIS != i) && !IsDlgButtonChecked(hwnd,IDC_OFAUTO)));
   return;
 }
 
+//--------------------------------
 //
 //  Utility routine used to select only TrueType fonts for the font list.  In the case of 
 //  PPC machines, any font is accepted because the PPC's don't support TT fonts.
@@ -1434,6 +1702,7 @@ static int CALLBACK enum_fonts (ENUMLOGFONT *lpelf,NEWTEXTMETRIC *lpntm,int Font
   return (true);
 } 
   
+//--------------------------------
 //
 //  Utility routine used to locate all Japanese TrueType fonts, so they can be included in 
 //  the print lists.
@@ -1444,12 +1713,11 @@ static int CALLBACK enum_fonts (ENUMLOGFONT *lpelf,NEWTEXTMETRIC *lpntm,int Font
 static int CALLBACK enum_jfonts (ENUMLOGFONT *lpelf,NEWTEXTMETRIC *lpntm,int FontType,LPARAM lParam) {
   if (FontType != TRUETYPE_FONTTYPE) return (true);
   if (!cfg->all_fonts && (lpelf->elfLogFont.lfCharSet != SHIFTJIS_CHARSET)) return (true);
-  SendDlgItemMessage ((HWND) lParam,IDC_OFPRINTFONT  ,CB_ADDSTRING,0,(LPARAM) lpelf->elfLogFont.lfFaceName);
-  SendDlgItemMessage ((HWND) lParam,IDC_OFDISPLAYFONT,CB_ADDSTRING,0,(LPARAM) lpelf->elfLogFont.lfFaceName);
+  SendDlgItemMessage ((HWND) lParam,IDC_OFFONTNAME,CB_ADDSTRING,0,(LPARAM) lpelf->elfLogFont.lfFaceName);
   return (true);
 } 
 
-
+//--------------------------------
 //
 //  Internal routine used to select an exect string from the font
 //  list, this is necessary because the font selection can be wrong, 
@@ -1462,6 +1730,7 @@ static void select_string (HWND hwnd,int id,tchar *string) {
   return;
 }
 
+//--------------------------------
 //
 //  Internal routine to setup the fonts in the Japanese and printer font 
 //  lists.  This routine was sepearated out so it can be called again if 
@@ -1476,13 +1745,11 @@ static void setup_jfonts (HWND hwnd) {
 //
 //  Reset lists to get an empty list.
 //
-  SendDlgItemMessage (hwnd,IDC_OFDISPLAYFONT,CB_RESETCONTENT,0,0);
-  SendDlgItemMessage (hwnd,IDC_OFPRINTFONT  ,CB_RESETCONTENT,0,0);
+  SendDlgItemMessage (hwnd,IDC_OFFONTNAME,CB_RESETCONTENT,0,0);
   handle = FindFirstFile(jwp_config.name(TEXT("*.f00"),OPEN_READ,false),&data);
   if (handle != INVALID_HANDLE_VALUE) {
     do {
-      SendDlgItemMessage (hwnd,IDC_OFDISPLAYFONT,CB_ADDSTRING,0,(LPARAM) data.cFileName);
-      SendDlgItemMessage (hwnd,IDC_OFPRINTFONT  ,CB_ADDSTRING,0,(LPARAM) data.cFileName);
+      SendDlgItemMessage (hwnd,IDC_OFFONTNAME,CB_ADDSTRING,0,(LPARAM) data.cFileName);
     } while (FindNextFile(handle,&data));
     FindClose (handle);
   }
@@ -1492,59 +1759,65 @@ static void setup_jfonts (HWND hwnd) {
   hdc = GetDC(hwnd);
   EnumFontFamilies (hdc,NULL,(FONTENUMPROC) enum_jfonts,(LPARAM) hwnd);
   ReleaseDC        (hwnd,hdc);
-  select_string    (hwnd,IDC_OFDISPLAYFONT,cfg->display);
-  select_string    (hwnd,IDC_OFPRINTFONT  ,cfg->print  );
+  change_font      (hwnd);
   return;
 }
 
+#define NUMBER_FONTS    (sizeof(fonts)/sizeof(short))
 static BOOL CALLBACK options_font (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lParam) {
+  static short fonts[] = { IDS_OF_JIS,IDS_OF_SYSTEM,IDS_OF_EDIT,IDS_OF_LIST,IDS_OF_BAR,IDS_OF_FILE,IDS_OF_CLIP,IDS_OF_PRINT,IDS_OF_BIG };
   switch (msg) {
     case WM_INITDIALOG: {
-           SetDlgItemText     (hwnd,IDC_OFASCIINAME,cfg->font);
-           SendDlgItemMessage (hwnd,IDC_OFASCIINAME,WM_SETFONT,(WPARAM) font,MAKELPARAM(true,0));
+           SetDlgItemText     (hwnd,IDC_OFASCIINAME ,cfg->ascii_font.name);
+           SendDlgItemMessage (hwnd,IDC_OFASCIINAME ,WM_SETFONT,(WPARAM) font,MAKELPARAM(true,0));
            CheckDlgButton     (hwnd,IDC_OFRELAXPUNCT,cfg->relax_punctuation);
            CheckDlgButton     (hwnd,IDC_OFRELAXSMALL,cfg->relax_smallkana);
-           CheckDlgButton     (hwnd,IDC_OFAUTOFONT  ,cfg->print_autofont);
            CheckDlgButton     (hwnd,IDC_OFSHOWALL   ,cfg->all_fonts);
-           SetDlgItemInt      (hwnd,IDC_OFHEIGHT    ,cfg->font_size,false);
-           put_float (hwnd,IDC_OFPRINTSIZE,cfg->print_size,10);
-           EnableWindow (GetDlgItem(hwnd,IDC_OFPRINTFONT),!cfg->print_autofont);
+//
+//  Set list display font.
+//
+           SendDlgItemMessage (hwnd,IDC_OFASCIIFONT,WM_SETFONT,(WPARAM) GetStockObject(SYSTEM_FONT),MAKELPARAM(true,0));
+           SendDlgItemMessage (hwnd,IDC_OFFONTNAME ,WM_SETFONT,(WPARAM) GetStockObject(SYSTEM_FONT),MAKELPARAM(true,0));
+//
+//  Setup the font type list
+//
+           int i;
+           SendDlgItemMessage (hwnd,IDC_OFFONT,CB_RESETCONTENT,0,0);
+           for (i = 0; i < NUMBER_FONTS; i++) SendDlgItemMessage (hwnd,IDC_OFFONT,CB_ADDSTRING,0,(LPARAM) get_string(fonts[i]));
+           SendDlgItemMessage (hwnd,IDC_OFFONT,CB_SETCURSEL,FONT_FILE,0);
 //
 //  Setup the font list.
 //
            HDC hdc;
-           hdc = GetDC(hwnd);
+           hdc          = GetDC(hwnd);
+           current_font = FONT_NONE;
            EnumFontFamilies  (hdc,NULL,(FONTENUMPROC) enum_fonts ,(LPARAM) hwnd);
            ReleaseDC         (hwnd,hdc);
-           select_string     (hwnd,IDC_OFASCIIFONT  ,cfg->font);
+           select_string     (hwnd,IDC_OFASCIIFONT  ,cfg->ascii_font.name);
            setup_jfonts      (hwnd);
-           check_height      (hwnd);
          }
          return (true);
     case WM_COMMAND:
          switch (LOWORD(wParam)) {
            INPUT_CHECK (IDC_OFHEIGHT);
-           INPUT_CHECK (IDC_OFPRINTSIZE);
 //
 //  Change to the font.
 //
            case IDC_OFASCIIFONT:
-                SendDlgItemMessage (hwnd,IDC_OFASCIIFONT,CB_GETLBTEXT,SendDlgItemMessage(hwnd,IDC_OFASCIIFONT,CB_GETCURSEL,0,0),(LPARAM) cfg->font);
+                SendDlgItemMessage (hwnd,IDC_OFASCIIFONT,CB_GETLBTEXT,SendDlgItemMessage(hwnd,IDC_OFASCIIFONT,CB_GETCURSEL,0,0),(LPARAM) cfg->ascii_font.name);
                 DeleteObject (font);
-                font = jwp_font.open_ascii (cfg->font);
-                SetDlgItemText     (hwnd,IDC_OFASCIINAME,cfg->font);
+                font = edit_font.open_ascii (cfg->ascii_font.name);
+                SetDlgItemText     (hwnd,IDC_OFASCIINAME,cfg->ascii_font.name);
                 SendDlgItemMessage (hwnd,IDC_OFASCIINAME,WM_SETFONT,(WPARAM) font,MAKELPARAM(true,0));
                 return (true);
 //
-//  Autofont disables the font selector.
+//  Working with the kanji fonts
 //
-           case IDC_OFAUTOFONT:
-                EnableWindow (GetDlgItem(hwnd,IDC_OFPRINTFONT),!IsDlgButtonChecked(hwnd,IDC_OFAUTOFONT));
+           case IDC_OFAUTO:
+           case IDC_OFFONT:
+                change_font (hwnd);
                 return (true);
-//
-//  Changes to the display font control the edit box for the font height.
-//
-           case IDC_OFDISPLAYFONT:  
+           case IDC_OFFONTNAME:  
                 check_height (hwnd);
                 return (true);
 //
@@ -1552,8 +1825,6 @@ static BOOL CALLBACK options_font (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lPara
 //  then reinitialize the fonts lists.
 //                
            case IDC_OFSHOWALL:
-                SendDlgItemMessage (hwnd,IDC_OFDISPLAYFONT,CB_GETLBTEXT,(SendDlgItemMessage(hwnd,IDC_OFDISPLAYFONT,CB_GETCURSEL,0,0)),(LPARAM) cfg->display);
-                SendDlgItemMessage (hwnd,IDC_OFPRINTFONT  ,CB_GETLBTEXT,(SendDlgItemMessage(hwnd,IDC_OFPRINTFONT  ,CB_GETCURSEL,0,0)),(LPARAM) cfg->print  );
                 cfg->all_fonts = IsDlgButtonChecked(hwnd,IDC_OFSHOWALL);
                 setup_jfonts (hwnd);
                 return (true);
@@ -1562,16 +1833,13 @@ static BOOL CALLBACK options_font (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lPara
     case WM_GETDLGVALUES:
          cfg->relax_punctuation = IsDlgButtonChecked(hwnd,IDC_OFRELAXPUNCT);
          cfg->relax_smallkana   = IsDlgButtonChecked(hwnd,IDC_OFRELAXSMALL);
-         cfg->print_autofont    = IsDlgButtonChecked(hwnd,IDC_OFAUTOFONT);
-         cfg->print_size        = get_float         (hwnd,IDC_OFPRINTSIZE,2,1600,cfg->print_size,10,NULL);
-         cfg->font_size         = GetDlgItemInt     (hwnd,IDC_OFHEIGHT,NULL,false);
-         SendDlgItemMessage (hwnd,IDC_OFDISPLAYFONT,CB_GETLBTEXT,(SendDlgItemMessage(hwnd,IDC_OFDISPLAYFONT,CB_GETCURSEL,0,0)),(LPARAM) cfg->display);
-         SendDlgItemMessage (hwnd,IDC_OFPRINTFONT  ,CB_GETLBTEXT,(SendDlgItemMessage(hwnd,IDC_OFPRINTFONT  ,CB_GETCURSEL,0,0)),(LPARAM) cfg->print  );
+         change_font (hwnd);                        // This forces a read of the font settings.
          return (true);
   }
   return (false);
 }
 
+//--------------------------------
 //
 //  Dialog box handler for File/Clipboard page.
 //
@@ -1623,20 +1891,9 @@ static BOOL CALLBACK options_file (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lPara
   return (false);
 }
 
+//--------------------------------
 //
 //  Dialog box handler for Misc page.
-//
-//      IDC_OMINFOTITLES      Add titles to the kanji-info lists.
-//      IDC_OMRADSELINFO      Double clic/space radical lookup does info.
-//      IDC_OMRADSELINSERT    Double clic/space radical lookup does insert into file.
-//      IDC_OMCOLORKANJI      Use color-kanji.
-//      IDC_OMINLIST          Color kanji in list.
-//      IDC_OMNOTINLIST       Color kanji not in list.
-//      IDC_OMKANJICOLOR      Choose color button.
-//      IDC_OMCOLORBITMAP     Support color kanji in clipboard bitmap
-//      IDC_OMCOLORPRINT      Support color kanji in printer 
-//      IDC_OMINSERTLINE      Inset to file on different lines.
-//      IDC_OMKANJIBOX        Color indicator
 //
 static BOOL CALLBACK options_misc (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lParam) {
   int i;
@@ -1649,6 +1906,7 @@ static BOOL CALLBACK options_misc (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lPara
          CheckDlgButton (hwnd,IDC_OMCOLORPRINT  ,cfg->colorkanji_print);
          CheckDlgButton (hwnd,IDC_OMINSERTLINE  ,cfg->paste_newpara);
          CheckDlgButton (hwnd,IDC_OMINFOCOMPRESS,cfg->info_compress);
+         CheckDlgButton (hwnd,IDC_OMSINGLEINFO  ,cfg->info_onlyone);
          SendMessage (hwnd,WM_COMMAND,IDC_OMCOLORKANJI,0);
          SendDlgItemMessage (hwnd,IDC_OMKANJIBOX,WMU_SETWINDOWVALUE,0,cfg->colorkanji_color);
          return (true);
@@ -1658,6 +1916,9 @@ static BOOL CALLBACK options_misc (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lPara
          switch (LOWORD(wParam)) {
            case IDC_OMCOLORKANJI:
                 for (i = IDC_OMINLIST; i <= IDC_OMCOLORPRINT; i++) EnableWindow (GetDlgItem(hwnd,i),IsDlgButtonChecked(hwnd,IDC_OMCOLORKANJI));
+                return (true);
+           case IDC_OMINFOSETUP:
+                info_config (hwnd);
                 return (true);
            case IDC_OMKANJICOLOR:
                 cfg->colorkanji_color = get_color (hwnd,cfg->colorkanji_color);
@@ -1671,6 +1932,7 @@ static BOOL CALLBACK options_misc (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lPara
          cfg->colorkanji_bitmap = IsDlgButtonChecked(hwnd,IDC_OMCOLORBITMAP);
          cfg->colorkanji_print  = IsDlgButtonChecked(hwnd,IDC_OMCOLORPRINT);
          cfg->info_compress     = IsDlgButtonChecked(hwnd,IDC_OMINFOCOMPRESS);
+         cfg->info_onlyone      = IsDlgButtonChecked(hwnd,IDC_OMSINGLEINFO);
          if (!IsDlgButtonChecked(hwnd,IDC_OMCOLORKANJI)) cfg->colorkanji_mode = COLORKANJI_OFF;
            else cfg->colorkanji_mode = IsDlgButtonChecked(hwnd,IDC_OMINLIST) ? COLORKANJI_MATCH : COLORKANJI_NOMATCH;
          return (true);
@@ -1678,6 +1940,7 @@ static BOOL CALLBACK options_misc (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lPara
   return (false);
 }
 
+//--------------------------------
 //
 //  Dialog handler for Advanced page.
 //
@@ -1690,12 +1953,15 @@ static BOOL CALLBACK options_misc (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lPara
 static BOOL CALLBACK options_advanced (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lParam) {
   switch (msg) {
     case WM_INITDIALOG:
-         SetDlgItemInt  (hwnd,IDC_OAALLOCSIZE   ,cfg->alloc       ,false);
-         SetDlgItemInt  (hwnd,IDC_OACONVERTSIZE ,cfg->convert_size,false);
-         SetDlgItemInt  (hwnd,IDC_OAUNDOLEVELS  ,cfg->undo_number ,false);
-         SetDlgItemInt  (hwnd,IDC_OAFONTCACHE   ,cfg->font_cache  ,false);
-         CheckDlgButton (hwnd,IDC_OACACHEDISPLAY,cfg->cache_displayfont);
-         CheckDlgButton (hwnd,IDC_OACACHEINFO   ,cfg->cache_info);
+         SetDlgItemInt  (hwnd,IDC_OAALLOCSIZE       ,cfg->alloc       ,false);
+         SetDlgItemInt  (hwnd,IDC_OACONVERTSIZE     ,cfg->convert_size,false);
+         SetDlgItemInt  (hwnd,IDC_OAUNDOLEVELS      ,cfg->undo_number ,false);
+         SetDlgItemInt  (hwnd,IDC_OAFONTCACHE       ,cfg->font_cache  ,false);
+         SetDlgItemInt  (hwnd,IDC_OAHISTORY         ,cfg->history_size,false);
+         SetDlgItemInt  (hwnd,IDC_OABUFFER          ,cfg->dict_buffer ,false);
+         CheckDlgButton (hwnd,IDC_OACACHEDISPLAY    ,cfg->cache_displayfont);
+         CheckDlgButton (hwnd,IDC_OACACHEINFO       ,cfg->cache_info);
+         CheckDlgButton (hwnd,IDC_OASEARCHOPEN      ,cfg->keep_find);
          return (true);
 #ifdef WINCE_PPC
     case WM_COMMAND: 
@@ -1703,20 +1969,25 @@ static BOOL CALLBACK options_advanced (HWND hwnd,UINT msg,WPARAM wParam,LPARAM l
          INPUT_CHECK (IDC_OACONVERTSIZE);
          INPUT_CHECK (IDC_OAUNDOLEVELS);
          INPUT_CHECK (IDC_OAFONTCACHE);
+         INPUT_CHECK (IDC_OAHISTORY);
          break;
 #endif WINCE_PPC
     case WM_GETDLGVALUES:
-         cfg->alloc             = get_int(hwnd,IDC_OAALLOCSIZE  ,16 ,1024,cfg->alloc       );
-         cfg->convert_size      = get_int(hwnd,IDC_OACONVERTSIZE,10 ,2000,cfg->convert_size);
-         cfg->undo_number       = get_int(hwnd,IDC_OAUNDOLEVELS , 3 ,1000,cfg->undo_number );
-         cfg->font_cache        = get_int(hwnd,IDC_OAFONTCACHE  ,100,7000,cfg->font_cache  );
+         cfg->alloc             = get_int(hwnd,IDC_OAALLOCSIZE  ,16  ,1024   ,cfg->alloc       );
+         cfg->convert_size      = get_int(hwnd,IDC_OACONVERTSIZE,10  ,2000   ,cfg->convert_size);
+         cfg->undo_number       = get_int(hwnd,IDC_OAUNDOLEVELS , 3  ,1000   ,cfg->undo_number );
+         cfg->font_cache        = get_int(hwnd,IDC_OAFONTCACHE  ,100 ,7000   ,cfg->font_cache  );
+         cfg->history_size      = get_int(hwnd,IDC_OAHISTORY    ,0   ,30000  ,cfg->history_size);
+         cfg->dict_buffer       = get_int(hwnd,IDC_OABUFFER     ,2048,INT_MAX,cfg->dict_buffer );
          cfg->cache_displayfont = IsDlgButtonChecked(hwnd,IDC_OACACHEDISPLAY);
          cfg->cache_info        = IsDlgButtonChecked(hwnd,IDC_OACACHEINFO);
+         cfg->keep_find         = IsDlgButtonChecked(hwnd,IDC_OASEARCHOPEN);
          return (true);
   }
   return (false);
 }
 
+//--------------------------------
 //
 //  Main dirver for the options dialog.
 //
@@ -1740,7 +2011,7 @@ void do_options () {
 //
   new_config = jwp_config.cfg;
   cfg        = &new_config;
-  font       = jwp_font.open_ascii(jwp_config.cfg.font);
+  font       = edit_font.open_ascii(jwp_config.cfg.ascii_font.name);
   i = TabDialog(IDD_OPTIONS,&setup);
   DeleteObject (font);
 //
@@ -1753,9 +2024,9 @@ void do_options () {
 //
 //  End Options Dialog handlers.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Main windows rotuine.  WinMain and the main window procedures.
 //
@@ -1772,6 +2043,7 @@ extern "C" {
 }
 #endif WINELIB
 
+//--------------------------------
 //
 //  Windows main routine.
 //
@@ -1793,6 +2065,14 @@ int WINAPI WinMain (HINSTANCE hInstance,HINSTANCE hPrevInstance,TCHAR *szCmdLine
     return (0);
   }
 #endif WINCE_PPC
+//
+//  Activate the COM libararies
+//
+#ifdef WINCE
+  if (S_OK != CoInitializeEx(NULL,COINIT_MULTITHREADED)) terminate (IDS_TERM_COM);
+#else  wince
+  if (S_OK != CoInitialize(NULL)) terminate (IDS_TERM_COM);
+#endif WINCE
 //
 //  Support for international versions.  Open the language DLL and see if we can read it.
 //
@@ -1839,20 +2119,14 @@ int WINAPI WinMain (HINSTANCE hInstance,HINSTANCE hPrevInstance,TCHAR *szCmdLine
 //  Setup default values for the current directoy.  This will get 
 //  overwritten when the user changes things.
 //
-#ifdef WINCE
-  set_currentdir (TEXT("\\My Documents"),false);                // For CE set directory specificaly as MS says to do
-#else  WINCE
-#ifdef WINELIB
+  TCHAR buffer[SIZE_BUFFER];
+#if   defined(WINELIB)
   SetCurrentDirectory (TEXT("f:\\"));                           // Fixed location for WINELIB
-#else  WINELIB
-  LPITEMIDLIST  item;                                           // Windows, read user preference
-  char buffer[SIZE_BUFFER];
-  SHGetSpecialFolderLocation (null,CSIDL_PERSONAL,&item);
-  SHGetPathFromIDList        (item,buffer); 
-  SHGetMalloc                ((LPMALLOC *) &item);
-  SetCurrentDirectory        (buffer);
-#endif WINELIB
-#endif WINCE
+#elif defined (WINCE)
+  set_currentdir      (get_folder(CSIDL_PERSONAL,buffer),false);
+#else 
+  SetCurrentDirectory (get_folder(CSIDL_PERSONAL,buffer));
+#endif
 //
 //  Read configuration.
 //
@@ -1879,7 +2153,7 @@ int WINAPI WinMain (HINSTANCE hInstance,HINSTANCE hPrevInstance,TCHAR *szCmdLine
 //  Intialize everybody else.
 //
   do_clipboard (WM_CREATE,0);
-  if (jwp_font.initialize())         terminate (IDS_TERM_INITIALIZE,get_string(IDS_TERM_FONTS));
+  if (initialize_fonts())            terminate (IDS_TERM_INITIALIZE,get_string(IDS_TERM_FONTS));
   if (jwp_stat.initialize(wclass))   terminate (IDS_TERM_INITIALIZE,get_string(IDS_TERM_STATUS));
   if (jwp_conv.initialize(wclass))   terminate (IDS_TERM_INITIALIZE,get_string(IDS_TERM_KANAKANJI));
   if (initialize_edit(wclass))       terminate (IDS_TERM_INITIALIZE,get_string(IDS_TERM_CONTROLS));
@@ -1913,16 +2187,35 @@ int WINAPI WinMain (HINSTANCE hInstance,HINSTANCE hPrevInstance,TCHAR *szCmdLine
 #ifdef WINCE_PPC                    // Cleanup for PPC task blocking.
   if (mutex) CloseHandle (mutex);
 #endif WINCE_PPC
+  CoUninitialize ();                // Cleanup COM interface.
   return (msg.wParam);
 }
 
+//--------------------------------
 //
 //  Main window procedure.  Menus, junk, etc.
 //
-static LRESULT CALLBACK winproc_main (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam) {
-  int       ctrl,shift;
 
+static LRESULT CALLBACK winproc_main (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam) {
+  int ctrl,shift;
+//SHACTIVATEINFO sai;
+int working4;
   switch (iMsg) {
+#if 0
+    case WM_SETTINGCHANGE:
+if (SPI_SETSIPINFO == wParam){
+  memset(&sai, 0, sizeof(SHACTIVATEINFO));
+  SHHandleWMSettingChange(hwnd, wParam, lParam, &sai);
+}
+return (0);         
+    case WM_ACTIVATE:
+if (SPI_SETSIPINFO == wParam){
+  memset(&sai, 0, sizeof(SHACTIVATEINFO));
+  SHHandleWMActivate(hwnd, wParam, lParam, &sai, 0);
+}
+int working3;
+return (0);
+#endif
 //
 //  Standard, when the user moves, or changes size we adjust the windows.
 //
@@ -2012,6 +2305,51 @@ static LRESULT CALLBACK winproc_main (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM l
          jwp_file->do_key (wParam,ctrl,shift);
          return (0);
 //
+//  Wheel mouse support.
+//
+#ifndef WINCE
+    case WM_MOUSEWHEEL:
+         static int delta;                                                  // Accumulation point for deltas.
+         int i;
+         shift  = SystemParametersInfo(SPI_GETWHEELSCROLLLINES,0,&ctrl,0);  // Scroll amount.
+         ctrl   = LOWORD(wParam);                                           // Keys
+         delta += (short) HIWORD(wParam);                                   // Delta
+//
+//  Control -- flip through open files.
+//
+         if (ctrl & MK_CONTROL) {
+           if      (delta      > WHEEL_DELTA) { delta = 0; jwp_file->next->activate (); } 
+           else if (abs(delta) > WHEEL_DELTA) { delta = 0; jwp_file->prev->activate (); }
+         }
+//
+//  Shift -- skip pages.
+//
+         else if ((ctrl & MK_SHIFT) || (shift == WHEEL_PAGESCROLL)) {
+           while (delta > WHEEL_DELTA) {
+             jwp_file->v_scroll (SB_PAGEUP);
+             delta -= WHEEL_DELTA;
+           }
+           while (abs(delta) > WHEEL_DELTA) {
+             jwp_file->v_scroll (SB_PAGEDOWN);
+             delta += WHEEL_DELTA;
+           }
+         }
+//
+//  Normal -- skip lines.
+//
+         else {
+           while (delta > WHEEL_DELTA) {
+             for (i = 0; i < shift; i++) jwp_file->v_scroll (SB_LINEUP);
+             delta -= WHEEL_DELTA;
+           }
+           while (abs(delta) > WHEEL_DELTA) {
+             for (i = 0; i < shift; i++) jwp_file->v_scroll (SB_LINEDOWN);
+             delta += WHEEL_DELTA;
+           }
+         }
+         return (0);
+#endif  WINCE
+//
 //  Clipboard support.
 //
     case WM_DESTROYCLIPBOARD:
@@ -2026,7 +2364,7 @@ static LRESULT CALLBACK winproc_main (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM l
 //
 #ifndef WINCE
     case WM_IME_CHAR:
-         jwp_file->ime_char (wParam);
+         jwp_file->ime_char (wParam,IsWindowUnicode(hwnd));
          return (0);
 #endif WINCE
 //
@@ -2041,9 +2379,13 @@ static LRESULT CALLBACK winproc_main (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM l
 //  If we are a PPC we need to check for changes in the input pannel.  We use this to change
 //  the size of the display if the input panel is open or closed.
 //
-#ifdef PPC_INPUT_PANEL
+int working2;
+#ifdef WINCE_PPC
+#if 1
     case WM_CREATE:
-    case WM_SETTINGCHANGE: {
+         wParam = SPI_SETSIPINFO;
+    case WM_SETTINGCHANGE: 
+         if (SPI_SETSIPINFO == wParam) {
            SIPINFO si;
            memset (&si,0,sizeof(si));
            si.cbSize = sizeof(si);
@@ -2051,10 +2393,11 @@ static LRESULT CALLBACK winproc_main (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM l
            MoveWindow (hwnd,si.rcVisibleDesktop.left,si.rcVisibleDesktop.top,si.rcVisibleDesktop.right-si.rcVisibleDesktop.left+1,si.rcVisibleDesktop.bottom-si.rcVisibleDesktop.top+1,true);
            return (0);
          }
-#else
+#endif
+#else  WINCE_PPC
     case WM_CREATE:
          return (0);
-#endif PPC_INPUT_PANEL
+#endif WINCE_PPC
 //
 //  Messages associated with the Windows toolbar (not Windows CE)
 //
@@ -2125,12 +2468,13 @@ static LRESULT CALLBACK winproc_main (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM l
 //
 //  End Main Window routine.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
 
 
 
 
+//--------------------------------
 //
 //  Menu processor routine, does all actual menu commands, which can
 //  only come from the main window anyway.
@@ -2238,7 +2582,7 @@ void JWP_file::do_menu (int wParam) {
          do_key (VK_RETURN,true,false);
          break;
     case IDM_EDIT_SEARCH:
-         jwp_search.do_search ();
+         jwp_search.do_search (NULL);
          break;
     case IDM_EDIT_REPLACE:
          jwp_search.do_replace ();
@@ -2246,7 +2590,7 @@ void JWP_file::do_menu (int wParam) {
     case IDM_EDIT_REVERSESEARCH:
          jwp_config.cfg.search_back = !jwp_config.cfg.search_back;
     case IDM_EDIT_FINDNEXT:         // *** FALL THROUGH ***
-         jwp_search.do_next ();
+         jwp_search.do_next (NULL);
          break;
 // --------------------------------------------- Kanji menu
     case IDM_KANJI_CONVERT:
@@ -2286,15 +2630,23 @@ void JWP_file::do_menu (int wParam) {
          do_kanjicount ();
          break;
     case IDM_KANJI_MAKEKANJILIST:
+         color_kanji.clear ();
+    case IDM_KANJI_APPENDKANJILIST: // *** FALL THROUGH ***
          do_kanjilist ();
          break;
+    case IDM_KANJI_OPENKANJILIST:
+         jwp_conv.clear ();
+         new JWP_file (NULL,FILETYPE_UNNAMED);
+         color_kanji.put ();
+         jwp_file->sysname (IDS_CK_VIEWNAME);
+         break;
+    case IDM_KANJI_ADDSUBKANJILIST:
+         color_kanji.do_adddel ();
+         break;
     case IDM_KANJI_CLEARKANJILIST:
-         if (colorkanji_list) {
-           free (colorkanji_list);
-           colorkanji_list = NULL;
-           colorkanji_size = 0;
-           activate ();
-         }
+         color_kanji.clear ();
+         color_kanji.write ();
+         activate ();
          break;
 // --------------------------------------------- Utilities menu
     case IDM_UTILITIES_FORMATFILE:
@@ -2319,6 +2671,10 @@ break;
          break;
     case IDM_UTILITIES_OPTIONS:
          do_options ();
+         break;
+    case IDM_UTILITIES_CHARINFO:
+         cfg = &jwp_config.cfg;
+         info_config (main_window);
          break;
     case IDM_UTILITIES_DEFAULTOPTIONS:
          jwp_config.set (&default_config);
@@ -2355,8 +2711,8 @@ break;
          break;
     case IDM_HELP_ABOUTJWPCE: {
            TCHAR text[SIZE_BUFFER],title[SIZE_BUFFER];
-           sprintf (text ,get_string(IDS_ABOUT_TEXT ),VERSION_STRING);
-           sprintf (title,get_string(IDS_ABOUT_TITLE),VERSION_STRING);
+           format_string (text ,IDS_ABOUT_TEXT ,VERSION_STRING);
+           format_string (title,IDS_ABOUT_TITLE,VERSION_STRING);
            MessageBox (main_window,text,title,MB_OK);
          }
          break;
@@ -2370,6 +2726,7 @@ break;
   return;
 }
 
+//--------------------------------
 //
 //  Windows CE HPC toolbar routine.  This rotuine sets up the command bar for HPCs.
 //
@@ -2427,11 +2784,13 @@ void do_commandbar () {
   CommandBar_AddToolTips   (command_bar,i+1,tips);
   CommandBar_AddAdornments (command_bar,CMDBAR_HELP,0);
   hmenu = CommandBar_GetMenu(command_bar,0);
+  jwp_config.commandbar_height = CommandBar_Height(command_bar);
 }
 
 #endif WINCE_HPC
 
 
+//--------------------------------
 //
 //  Windows CE PPC toolbar routine.  This rotuine sets up the command bar for PPCs.
 //
@@ -2500,6 +2859,7 @@ void do_commandbar () {
   is_command = !is_command;
   CommandBar_Show (command_bar, is_command);
   CommandBar_Show (button_bar ,!is_command);
+  jwp_config.commandbar_height = CommandBar_Height(command_bar);
   return;
 }
 

@@ -1,6 +1,6 @@
-JWPce version 1.34
+JWPce version 1.42
 
-copyright (c) Glenn Rosenthal, 1997-2000. All Rights Reserved.
+copyright (c) Glenn Rosenthal, 1997-2002,2003. All Rights Reserved.
 
 ============================================================
 Supplemental Information:  Windows CE version extra information
@@ -234,7 +234,7 @@ Version 1.33:
 
 Due to changes in the kana->kanji conversion system, the files 
 WNN.DCT and WNN.IDX have been replaced with the files WNN.DAT and 
-WNN.DIX.  Additionally, the format of the user kana->knaji 
+WNN.DIX.  Additionally, the format of the user kana->kanji 
 conversion file (USER.CNV) has changed to match the format used by 
 WNN.DAT.  UPDATE.EXE will update the format USER.CNV, as well as 
 offer to delete the obsolete files.
@@ -315,7 +315,7 @@ Implementation Decisions:  What is different on PPC's from HPC's
     will allow the use of bitmapped fonts.
 
 4.  Remember that the open and close dialog boxes will only 
-    look for files located in subdirectores or the 
+    look for files located in subdirectories or the 
     \My Documents directory.  This limits were supplemental 
     dictionaries and other things can be located.
 
@@ -366,7 +366,7 @@ JWPce minimum installation includes the following files:
                                English dictionary.
    edict.jdx    -- Index file for edict
                    OPTIONAL -- Required if you include EDICT
-   gnugpl.txt   -- GNU public licence.
+   gnugpl.txt   -- GNU public license.
                    OPTINAL -- Not necessary for JWPce to run.
    k16x16.f00   -- 16x16 bitmapped kanji font.
                    REQUIRED FILE
@@ -385,7 +385,7 @@ JWPce minimum installation includes the following files:
                                Lookup Dialog box will not be
                                able to lookup kanji by stroke
                                count only.
-   wince.txt    -- Aditional Windows CE information
+   wince.txt    -- Additional Windows CE information
                    OPTIONAL -- Not necessary for JWPce to run.
    wnn.dat      -- Kana-to-kanji conversion dictionary
                    REQUIRED FILE
@@ -406,7 +406,7 @@ JWPce full installation files: (these are all technically optional files).
     classical     -- Classical Japanese dictionary.
     classical.euc -- Documentation for CLASSICAL.
     enamdic       -- Japanese name dictionary.
-    enamdic.jdx   -- Index file for japanese name dictioanry.
+    enamdic.jdx   -- Index file for Japanese name dictionary.
     jwpce.doc	-- Documentation (in Word 97 format).
     k24x24.f00    -- 24x24 bitmapped kanji font (if you have a good
                      printer you can delete this one).
@@ -418,8 +418,8 @@ JWPce, and thus may be included with the files you receive):
    colkanji.lst   -- Kanji list used by the color-kanji feature.
    jwpce.cfg      -- JWPce configuration file, this will be generated
                      when you run JWPce.
-   jwpce.dic      -- JWPce dictionary configuation file.  This file
-                     contains information about suplimental dictionaries
+   jwpce.dic      -- JWPce dictionary configuration file.  This file
+                     contains information about supplemental dictionaries
                      you have installed.
    jwpce_lang.dll -- Localization (language support) file, causes 
                      JWPce to change the system interface to 
@@ -439,6 +439,17 @@ Files made obsolete in version 1.33:
 
   wnn.dct - replaced with wnn.dat
   wnn.idx - replaced with wnn.dix
+
+============================================================
+Older Windows CE Versions:  What to do if you have an older machine.
+
+If you get an error starting JWPce on older versions of Windows 
+CE, you will need to use the program version designed for older
+versions of the operating system.  This version of JWPce uses 
+fixed file locations, since early versions of Windows CE did not
+support variable file locations.
+
+
 
 
 

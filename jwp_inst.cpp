@@ -1,11 +1,11 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This modlue handles the install properties of JWPce.
 //
@@ -25,6 +25,8 @@
 #include "shlobj.h"
 
 #include "jwp_misc.h"
+
+//--------------------------------
 //
 //  This routine saves a shell link.  A shell link is the name for 
 //  a link object, in this case it will be an item in the start menu,
@@ -38,28 +40,14 @@
 //               object.
 //
 
+//--------------------------------
 //
 //  Windows CE version of the create link.
 //
 #ifdef WINCE
 static void save_link (TCHAR *target,int place,tchar *dir) {
   TCHAR buffer[SIZE_BUFFER];
-//
-//  Windows CE documentation says these routines should be avialabe,
-//  however, the linker cannot find them, so I have had to hard-code
-//  the directories for WINDOWS CE.
-//
-#ifndef WINCETEMP   
-  LPITEMIDLIST  item;
-  SHGetSpecialFolderLocation (main_window,place,&item);     // Get base dir.
-  SHGetPathFromIDList        (item,buffer); 
-#else WINCETEMP
-#ifdef WINCE_PPC
-  lstrcpy (buffer,TEXT("\\Windows\\Start Menu\\Programs"));
-#else WINCE_PPC
-  if (place == CSIDL_PROGRAMS) lstrcpy (buffer,TEXT("\\Windows\\Programs")); else lstrcpy (buffer,TEXT("\\Windows\\Desktop"));
-#endif WINCE_PPC
-#endif WINCETEMP
+  get_folder (place,buffer);
   if (dir && *dir) {                                        // Add sub-directory
     lstrcat (buffer,TEXT("\\"));
     lstrcat (buffer,dir);
@@ -76,10 +64,8 @@ static void save_link (TCHAR *target,int place,tchar *dir) {
 #else WINCE
 static void save_link (IPersistFile *file,int place,tchar *dir) {
   TCHAR buffer[SIZE_BUFFER];
-  LPITEMIDLIST  item;
 
-  SHGetSpecialFolderLocation (main_window,place,&item);     // Get base dir.
-  SHGetPathFromIDList (item,buffer); 
+  get_folder (place,buffer);                                // Get base dir.
   if (dir && *dir) {                                        // Add sub-directory
     lstrcat (buffer,TEXT("\\"));
     lstrcat (buffer,dir);
@@ -89,7 +75,7 @@ static void save_link (IPersistFile *file,int place,tchar *dir) {
   lstrcat (buffer,TEXT("JWPce.lnk"));
 #ifdef UNICODE
   file->Save (buffer,true);
-#else  UNICODE
+#else
   WORD wbuffer[SIZE_BUFFER];
   MultiByteToWideChar (CP_ACP,0,buffer,-1,wbuffer,SIZE_BUFFER);
   file->Save (wbuffer,true);
@@ -98,23 +84,26 @@ static void save_link (IPersistFile *file,int place,tchar *dir) {
 }
 #endif WINCE
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Static definitions and data.
 //
 
-#define NUMBER_EXT          9   // Number of extensions used possibly used by the program.
+#define NUMBER_EXT          10  // Number of extensions used possibly used by the program.
+#define EXT_JCP             8   // Project extension
+#define EXT_JFC             9   // JFC extension.
 
                                 // First install dialog box return codes.
 #define INSTALL_ABORT       0   // Abort the install
 #define INSTALL_ADVANCED    1   // Go to the advanced install
 #define INSTALL_OK          2   // Causes a simple automatic install.
 
+//--------------------------------
 //
 //  Structure used to pass information to the advanced install dialog box.
 //
 struct adv_install {
-  byte  ext[8];             // Indicates which extensions should be disabled 
+  byte  ext[10];            // Indicates which extensions should be disabled 
                             //   (because they are already associated with JWPce.
   int   start;              // If non-zero causes the program to be placed in the Start Menu.
   int   desktop;            // If non-zero causes the program to be placed on the desktop.
@@ -123,11 +112,12 @@ struct adv_install {
 
 static struct adv_install *adv_install; // Instance.
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Dialog box procedures.
 //
 
+//--------------------------------
 //
 //  Dialog box function for the advnaced install dialog box.
 //
@@ -178,6 +168,7 @@ static BOOL CALLBACK dialog_advinstall (HWND hwnd,UINT message,WPARAM wParam,LPA
   return (false);
 }
 
+//--------------------------------
 //
 //  Dialog box handler for the first install dialog box.  This dialog box 
 //  allows the user to select advanced install, automatic install,
@@ -212,11 +203,12 @@ static BOOL CALLBACK dialog_install (HWND hwnd,UINT message,WPARAM wParam,LPARAM
   return (false);
 }
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Static routines.
 //
 
+//--------------------------------
 //
 //  This routine gets the value of a key from the registry.
 //
@@ -237,6 +229,7 @@ static int get_key (tchar *subkey,TCHAR *buffer) {
   return (false);
 }
 
+//--------------------------------
 //
 //  Sets the value in a registery key.  All keys set by this routine are
 //  in the HKEY_CLASSES_ROOT class.
@@ -259,11 +252,12 @@ static void make_key (tchar *subkey,tchar *format,...) {
   return;
 }
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Exported routines.
 //
 
+//--------------------------------
 //
 //  Checks to see if JWPce is installed, and if it is not allows the 
 //  user to install it.
@@ -272,10 +266,13 @@ static void make_key (tchar *subkey,tchar *format,...) {
 //               used to generate start-menu/desktop items when JWPce 
 //               cannot tell if the item already exists.
 //
+#define EXT_LIMIT   (NUMBER_EXT-2)
 #define REG_COMMAND TEXT("JWPce\\Shell\\Open\\Command")
+#define REG_JFCFILE TEXT("JFC\\Shell\\Edit\\Command")
+#define REG_PROJECT TEXT("JWPce-project\\Shell\\Open\\Command")
 
 void do_install (int force) {
-  static tchar* file_ext[] = {TEXT(".jce"),TEXT(".jwp"),TEXT(".euc"),TEXT(".sjs"),TEXT(".jis"),TEXT(".old"),TEXT(".nec"),TEXT(".utf"),TEXT(".jcp") };
+  static tchar* file_ext[] = {TEXT(".jce"),TEXT(".jwp"),TEXT(".euc"),TEXT(".sjs"),TEXT(".jis"),TEXT(".old"),TEXT(".nec"),TEXT(".utf")  /*,TEXT(".jcp"),TEXT(".jfc")*/ };
   int    ok,i;
   TCHAR  buffer[SIZE_BUFFER],command[SIZE_BUFFER],executable[SIZE_BUFFER];
   struct adv_install install;
@@ -294,16 +291,26 @@ void do_install (int force) {
 //
 //  Check extensions.
 //
-  for (i = 0; i < NUMBER_EXT; i++) {
-    if (get_key(file_ext[i],buffer)) { install.ext[i] = true; ok = false; }
-    else if (!stricmp(TEXT("JWPce"),buffer)) install.ext[i] = false;
-    else { install.ext[i] = true; ok = false; }
+  for (i = 0; i < EXT_LIMIT; i++) {
+    if      (get_key(file_ext[i]   ,buffer)) { install.ext[i] = true; ok = false; }
+    else if (!stricmp(TEXT("JWPce"),buffer)) { install.ext[i] = false;            }
+    else                                     { install.ext[i] = true; ok = false; }
   }
+  if      (get_key(TEXT(".jcp")          ,buffer)) { install.ext[EXT_JCP] = true;  ok = false; }
+  else if (!stricmp(TEXT("JWPce-project"),buffer)) { install.ext[EXT_JCP] = false;             }
+  else                                             { install.ext[EXT_JCP] = false; ok = false; }
+  if      (get_key(TEXT(".jfc")          ,buffer)) { install.ext[EXT_JFC] = true;  ok = false; }
+  else if (!stricmp(TEXT("JFC")          ,buffer)) { install.ext[EXT_JFC] = false;             }
+  else                                             { install.ext[EXT_JFC] = false; ok = false; }
 //
 //  Check executable command.
 //
-  if (get_key(REG_COMMAND,buffer)) ok = false;
-  else if (strnicmp(command,buffer,lstrlen(command))) ok = false;
+  if      (get_key(REG_COMMAND,buffer))               { ok = false;                              }
+  else if (strnicmp(command,buffer,lstrlen(command))) { ok = false;                              }
+  if      (get_key(REG_PROJECT,buffer))               { ok = false; install.ext[EXT_JCP] = true; }
+  else if (strnicmp(command,buffer,lstrlen(command))) { ok = false; install.ext[EXT_JCP] = true; }
+  if      (get_key(REG_JFCFILE,buffer))               { ok = false; install.ext[EXT_JFC] = true; }
+  else if (strnicmp(command,buffer,lstrlen(command))) { ok = false; install.ext[EXT_JFC] = true; }
 //
 //  Do we need to do an install.
 //  
@@ -323,12 +330,28 @@ void do_install (int force) {
 //
 //  Install the extensions and the file association.
 //
-  for (i = 0; i < NUMBER_EXT; i++) {
+  for (i = 0; i < EXT_LIMIT; i++) {
     if (install.ext[i]) make_key (file_ext[i],TEXT("JWPce"));
   }
   make_key (TEXT("JWPce"             ),get_string(IDS_INST_FILETYPE));
   make_key (TEXT("JWPce\\DefaultIcon"),TEXT("%s,-%d"),executable,IDI_FILEICON);
   make_key (REG_COMMAND               ,TEXT("%s \"%%1\""),command);
+//
+//  Install the project extension and file association.
+//
+  if (install.ext[EXT_JCP]) {
+    make_key (TEXT(".jcp"),TEXT("JWPce-project"));
+    make_key (TEXT("JWPce-project"             ),get_string(IDS_INST_PROJECTTYPE));
+    make_key (TEXT("JWPce-project\\DefaultIcon"),TEXT("%s,-%d"),executable,IDI_PROJECTICON);
+    make_key (REG_PROJECT                       ,TEXT("%s \"%%1\""),command);
+  }
+//
+//  Install the JFC file extension and association.
+//
+  if (install.ext[EXT_JFC]) {
+    make_key (TEXT(".jfc"),TEXT("JFC"));
+    make_key (REG_JFCFILE,TEXT("%s \"%%1\""),command);
+  }
 //
 //  Check for start-menu and/or desktop options.
 //
@@ -345,19 +368,16 @@ void do_install (int force) {
 #else WINCE
     IShellLink   *link; 
     IPersistFile *file; 
-    if (S_OK == CoInitialize(NULL)) {           
-      if (S_OK == CoCreateInstance(CLSID_ShellLink,NULL,CLSCTX_INPROC_SERVER,IID_IShellLink,(void **) &link)) {
-        link->SetPath        (executable);      // This is what the shortcut points to.
-        link->SetDescription ("JWPce");         // This is what will show up in the start-menu.
-        if (S_OK == link->QueryInterface(IID_IPersistFile,(void **) &file)) {     // Create file object.
-          if (install.start  ) save_link (file,CSIDL_PROGRAMS,install.group);
-          if (install.desktop) save_link (file,CSIDL_DESKTOP ,NULL         );
-          file->Release ();                     // Done with file.
-        }
+    if (S_OK == CoCreateInstance(CLSID_ShellLink,NULL,CLSCTX_INPROC_SERVER,IID_IShellLink,(void **) &link)) {
+      link->SetPath        (executable);        // This is what the shortcut points to.
+      link->SetDescription ("JWPce");           // This is what will show up in the start-menu.
+      if (S_OK == link->QueryInterface(IID_IPersistFile,(void **) &file)) {     // Create file object.
+        if (install.start  ) save_link (file,CSIDL_PROGRAMS,install.group);
+        if (install.desktop) save_link (file,CSIDL_DESKTOP ,NULL         );
+        file->Release ();                       // Done with file.
       }
-      link->Release ();                         // Done with link.
     }
-    CoUninitialize ();
+    link->Release ();                           // Done with link.
 #endif WINCE
   }
   return;

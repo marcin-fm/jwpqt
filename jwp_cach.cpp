@@ -1,11 +1,11 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This module implements a somewhat generaliezed IO buffering cache.
 //  This cache has the advantage of speeding up both reads and writes.
@@ -34,7 +34,7 @@
 #include "jwp_cach.h"
 #include "jwp_inpt.h"       // For the definition of IS_CRLF
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin Class IO_cache.
 //
@@ -42,6 +42,7 @@
 //  wirting files.
 //  
 
+//--------------------------------
 //
 //  Definition that allows the cache buffer to be accessed as an array
 //  of unsigned short integers.  The offest is stored in byte values, 
@@ -49,6 +50,7 @@
 //
 #define BUFFER(x)   (((unsigned short *)(buffer+x))[0])
 
+//--------------------------------
 //
 //  Flush the buffer to a file and preform any end of write cleanup.
 //
@@ -72,6 +74,7 @@ long IO_cache::flush () {
   return (error);
 }
 
+//--------------------------------
 //
 //  Transfers a block out of an input buffer.  This can also be used 
 //  to skip forward through a cache by setting the data parameter to 
@@ -93,6 +96,7 @@ int IO_cache::get_block (void *data,int bsize) {
   return (IO_OK);
 }
 
+//--------------------------------
 //
 //  Internal routine that reads a character form the input buffer.  If 
 //  necessary, the buffer is refreshed from the data source.
@@ -117,6 +121,7 @@ int IO_cache::get_char () {
   return (i);
 }
 
+//--------------------------------
 //
 //  This routine reads a line from the buffer.  Note, this routine
 //  does not extract the line from the cache, but rather returns a 
@@ -146,6 +151,7 @@ byte *IO_cache::get_line () {
 }
 //### may want to reivise this to not check cr&lf since in the long run this will not be used.
 
+//--------------------------------
 //
 //  Setup an input stream from the clipboard.  Basicaly, this is simply
 //  an input stream entirally confined within a single block of memory.
@@ -163,6 +169,7 @@ void IO_cache::input_clip (HGLOBAL hglobal) {
   return;
 }
 
+//--------------------------------
 //
 //  Small stub routine to cleanup after a write.  This is really only
 //  necassary after a clipboard write.  When used after a file write,
@@ -174,6 +181,7 @@ void IO_cache::input_end () {
   return;
 }
 
+//--------------------------------
 //
 //  Sets the cache to use a file as input.
 //
@@ -194,6 +202,7 @@ void IO_cache::input_file (byte *buf,int bsize,HANDLE file) {
   return;
 }
 
+//--------------------------------
 //
 //  Sets the cache to use a memory block as input.
 //
@@ -212,6 +221,7 @@ void IO_cache::input_memory (byte *memory) {
   return;
 }
 
+//--------------------------------
 //
 //  Setup an output stream to the clipboard.
 //
@@ -233,6 +243,7 @@ HGLOBAL IO_cache::output_clip (long asize) {
   return (block);
 }
 
+//--------------------------------
 //
 //  Setup an output stream for a specialized output when no data is 
 //  wirtten, but rather the number of bytes output is counted.  
@@ -249,6 +260,7 @@ void IO_cache::output_count () {
   return;
 } 
 
+//--------------------------------
 //
 //  Sets the convert to use a file as output.  This routine also clears
 //  the system error flag.
@@ -268,6 +280,7 @@ void IO_cache::output_file (byte *buf,int bsize,HANDLE file) {
   return;
 }
 
+//--------------------------------
 //
 //  Put a block of data into the buffer.
 //
@@ -282,6 +295,7 @@ void IO_cache::put_block (void *data,int bsize) {
   return;
 }
 
+//--------------------------------
 //
 //  Internal rotuine to put a character to an output stream.  If 
 //  necessary, the output stream is flushed to the output device.
@@ -296,6 +310,7 @@ void IO_cache::put_char (int ch) {
   return;
 }
 
+//--------------------------------
 //
 //  Reloads the cache.  This is used for read caches.  This routine 
 //  will move anything remainning in the cache buffer to the beginning
@@ -317,6 +332,7 @@ int IO_cache::reload () {
   return (!size);
 }
 
+//--------------------------------
 //
 //  This routine rewinds an imput buffer to the beginning.  This si 
 //  used to reset the buffer back to the beginning to be used over
@@ -342,6 +358,6 @@ void IO_cache::rewind () {
 //
 //  End Class IO_cache.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
 

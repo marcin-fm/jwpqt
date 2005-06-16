@@ -1,15 +1,15 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
-//                                                                   //   
+//                                                                   //
 //  The database read by JWPce is dirived directly from KANJIDIC     //
 //  database dirived by Jim Breen.  Please see the _cpright.txt file //
 //  for additional information.                                      //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This modlue implements various informational routines.  The 
 //  principle of these are the character-info (kanji info) and the 
@@ -153,7 +153,7 @@
 #include "jwp_inpt.h"
 #include "jwp_misc.h"
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Compile time options.
 //
@@ -192,17 +192,75 @@
                                         //   kun-yomi reading in the count kanji
                                         //   dialog box.
 
-//-------------------------------------------------------------------
+#define INFO_MAXITEM INFO_KANJILEARN    // Last info-item code.
+
+
+#if (!defined(WINCE))
+
+  #define INFO_MAXLINES   20                // Maxinum number of displayable items for info dialog.
+  #define INFO_FIRSTINDEX 0                 // First index into the aray of info dialog items.
+  #define INFO_FIRST      IDC_KILABEL13     // First dynamic control for info dialog.
+  #define INFO_LAST       IDC_KIITEM21      // Last dynamic control for info dialog.
+  #define MORE_MAXLINES   8                 // Maximum number of items for more info dialog
+  #define MORE_FIRSTINDEX 13                // First index into items array for more info dialog.
+  #define MORE_FIRST      0                 // First dynamic control for more info dialog.
+  #define MORE_LAST       0                 // Last dynamic control for more info dialog.
+  #define COLOR_BUSHU     COLOR_BTNFACE     // Bushu background color.
+
+#elif (!defined(WINCE_PPC))
+
+  #define INFO_MAXLINES   9                 // Maxinum number of displayable items for info dialog.
+  #define INFO_FIRSTINDEX 0                 // First index into the aray of info dialog items.
+  #define INFO_FIRST      IDC_KILABEL9      // First dynamic control for info dialog.
+  #define INFO_LAST       IDC_KIITEM10      // Last dynamic control for info dialog.
+  #define MORE_MAXLINES   11                // Maximum number of items for more info dialog
+  #define MORE_FIRSTINDEX 9                 // First index into items array for more info dialog.
+  #define MORE_FIRST      0                 // First dynamic control for more info dialog.
+  #define MORE_LAST       0                 // Last dynamic control for more info dialog.
+  #define COLOR_BUSHU     COLOR_BTNFACE     // Bushu background color
+
+#else
+
+  #define INFO_MAXLINES   6                 // Maxinum number of displayable items for info dialog.
+  #define INFO_FIRSTINDEX 0                 // First index into the aray of info dialog items.
+  #define INFO_FIRST      0                 // First dynamic control for info dialog.
+  #define INFO_LAST       0                 // Last dynamic control for info dialog.
+  #define MORE_MAXLINES   12                // Maximum number of items for more info dialog
+  #define MORE_FIRSTINDEX 6                 // First index into items array for more info dialog.
+  #define MORE_FIRST      0                 // First dynamic control for more info dialog.
+  #define MORE_LAST       0                 // Last dynamic control for more info dialog.
+  #define XREF_MAXLINES   2                 // Maximum number of items for more info dialog
+  #define XREF_FIRSTINDEX 18                // First index into items array for more info dialog.
+  #define XREF_FIRST      0                 // First dynamic control for more info dialog.
+  #define XREF_LAST       0                 // Last dynamic control for more info dialog.
+  #define COLOR_BUSHU     COLOR_WINDOW      // Bushu background color
+
+#endif
+
+//===================================================================
 //
 //  static data and definitions.
 //
 //  These are various static data used in some of the routines.
 //
 
-//static KANJI_info *kanji_info_ptr;  // Static class pointer used for the dialog
-                                    //   this allows the class generate to be 
-                                    //   passed to a dialog box.
+static KANJI_info *single_info = NULL;          // Pointer to info object used when only a single info is used.
+static SIZE_window info_size;                   // Class used to allow dynamic sizing on the info dialog.
+static SIZE_window more_size;                   // Class used to allow dymanic sizing of the more kanji-info dialog.
+static SIZE_window count_size;                  // Class used to allow dynamic sizing of the count kanji dialog.
 
+//--------------------------------
+//
+//  These are the label names for items in the info box.
+//  
+//  I did not count on them being in order because this makes it easier to add a new one.
+//
+static short info_codes[] = { IDS_KI_BLANK,
+                              IDS_KI_ITEMTYPE,IDS_KI_ITEMJISCODE,IDS_KI_ITEMSHIFTJIS,IDS_KI_ITEMUNICODE,IDS_KI_ITEMSTROKES,IDS_KI_ITEMGRADE,IDS_KI_ITEMHELSON,IDS_KI_ITEMHALPERN,IDS_KI_ITEMSPAHN,IDS_KI_ITEMFOURCORNERS,
+                              IDS_KI_ITEMMOROHASHI,IDS_KI_ITEMPINYIN,IDS_KI_ITEMKOREAN,IDS_KI_ITEMFREQUENCY,IDS_KI_ITEMHENSHALL,IDS_KI_ITEMGAKKEN,IDS_KI_ITEMHEISIG,IDS_KI_ITEMONEILL,IDS_KI_ITEMDEROO,IDS_KI_ITEMKANJILEARN
+                            };
+
+//--------------------------------
 //
 //  This table converts bushu numbers into their JIS character codes.
 //  The index into the table is the bushu-1.
@@ -253,7 +311,7 @@ static KANJI bushu_symbols[] = {
     0x736f, 0x4e36, 0x737d, 0x737e,             /* 211 - 214 */
 };
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  static routines.
 //
@@ -266,6 +324,7 @@ static byte *put_reading (EUC_buffer *line,int base,byte *ptr,int index,int last
 static void  put_string  (EUC_buffer *line,tchar *string);                          // Add a string to the list.
 static byte *skip_line   (byte *ptr);                                               // Skip to next line in the buffer.
 
+//--------------------------------
 //
 //  Stub routine for kanji-info dialog box.
 //
@@ -281,6 +340,7 @@ static BOOL CALLBACK dialog_kanjiinfo (HWND hwnd,UINT message,WPARAM wParam,LPAR
   return (info->dlg_kanjiinfo(hwnd,message,wParam,lParam));
 }
 
+//--------------------------------
 //
 //  Stub routine for the more-info dialog box.
 //
@@ -296,6 +356,7 @@ static BOOL CALLBACK dialog_moreinfo (HWND hwnd,UINT message,WPARAM wParam,LPARA
   return (info->dlg_moreinfo(hwnd,message,wParam,lParam));
 }
 
+//--------------------------------
 //
 //  Stub routine for the xref-info dialog box.
 //
@@ -313,6 +374,7 @@ static BOOL CALLBACK dialog_xrefinfo (HWND hwnd,UINT message,WPARAM wParam,LPARA
 }
 #endif WINCE_PPC
 
+//--------------------------------
 //
 //  This utility rotuine formats a string for the list-box containned
 //  in the kanji-info dialog box.  This routine is used for on-yomi, 
@@ -357,19 +419,25 @@ static BOOL CALLBACK dialog_xrefinfo (HWND hwnd,UINT message,WPARAM wParam,LPARA
 static byte *put_line (EUC_buffer *line,int base,byte *ptr,int add) {
   int okurigana = false;
   if (!add) line->clear ();
-  while (*ptr) {
-    if (*ptr == 0x1f) line->put_char (KANJI_DASH);
-      else {
-        if (*ptr & 0x80) { line->put_char(PARAN_LEFT); okurigana = true; }
-        line->put_char (base | (*ptr & 0x7F));
-      }
-    ptr++;
+  if (!base) {                      // If not base then this is a menaing field so the data is EUC.
+    while (*ptr) line->put_char (utf2jis(ptr));
+  }
+  else {                            // If we have a base then this is a single byte EUC type encoding.
+    while (*ptr) {
+      if (*ptr == 0x1f) line->put_char (KANJI_DASH);
+        else {
+          if (*ptr & 0x80) { line->put_char(PARAN_LEFT); okurigana = true; }
+          line->put_char (base | (*ptr & 0x7F));
+        }
+      ptr++;
+    }
   }
   if (okurigana) line->put_char (PARAN_RIGHT);
   if (!add) line->flush (-1);
   return (ptr+1);
 }
 
+//--------------------------------
 //
 //  This is a wrapper for the rotuine put_line() that does special processing for 
 //  putting the reading fields for kanji.   This routine handles the compressed/
@@ -410,6 +478,7 @@ static byte *put_reading (EUC_buffer *line,int base,byte *ptr,int index,int last
   return (ptr);
 }
 
+//--------------------------------
 //
 //  This utility rotuine formats a string for the list-box containned
 //  in the kanji-info dialog box.  This is usd only for simple lines.
@@ -425,6 +494,7 @@ static void put_string (EUC_buffer *line,tchar *ptr) {
   return;
 }
 
+//--------------------------------
 //
 //  Small utility routine used to skip some strings in the line buffer
 //  during processing.  Basically this is used to skip to the meaning 
@@ -444,7 +514,7 @@ static byte *skip_line (byte *ptr) {
   return (ptr);
 }
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Window procedures
 //
@@ -454,6 +524,7 @@ static byte *skip_line (byte *ptr) {
 //
 //
 
+//--------------------------------
 //
 //  Window procedure for window class used to display the bushu character
 //  This class simply accepts a single bit of data that determins the 
@@ -472,7 +543,7 @@ static LRESULT CALLBACK JWP_bushu_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM
 //
     case WM_CREATE:                                 
          create = (CREATESTRUCT *) lParam;
-         MoveWindow (hwnd,create->x,create->y,jwp_font.hwidth,jwp_font.height,true);
+         MoveWindow (hwnd,create->x,create->y,sys_font.hwidth,sys_font.height,true);
          lParam = 0;
 //
 //  This is the set command that sets the color we are to display.
@@ -487,8 +558,10 @@ static LRESULT CALLBACK JWP_bushu_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM
     case WM_PAINT:
          hdc   = BeginPaint (hwnd,&ps);
          bushu = GetWindowLong(hwnd,0);
+         SetBkColor   (hdc,GetSysColor(COLOR_BUSHU));
+         SetTextColor (hdc,GetSysColor(COLOR_WINDOWTEXT));
          if ((bushu >= 1) && (bushu <= 214)) {  
-           kanji->draw (hdc,bushu_symbols[bushu-1],0,kanji->height);
+           sys_font.kanji->draw (hdc,bushu_symbols[bushu-1],0,sys_font.kanji->height);
          }
          EndPaint (hwnd,&ps);
          return (0);
@@ -496,6 +569,7 @@ static LRESULT CALLBACK JWP_bushu_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM
   return (DefWindowProc(hwnd,iMsg,wParam,lParam));
 }
 
+//--------------------------------
 //
 //  Dialog box procedure for the display window that pops up so you can
 //  get a better look at the kanji in the PPC version.  This dialog box
@@ -540,6 +614,7 @@ static BOOL CALLBACK dialog_kanjiview (HWND hwnd,UINT message,WPARAM wParam,LPAR
 }
 #endif WINCE_PPC
 
+//--------------------------------
 //
 //  Window producedure for the control to draw the big kanji character.
 //  This is a relativly simple rendering routine.
@@ -582,16 +657,24 @@ static LRESULT CALLBACK JWP_kanji_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM
          return (0);
 #endif WINCE_PPC
 //
+//  Double click
+//
+    case WM_LBUTTONDBLCLK:
+         SendMessage (GetParent(hwnd),WM_COMMAND,GetWindowLong(hwnd,GWL_ID),0);
+         return (0);
+//
 //  This does the actual redraw.
 //
     case WM_PAINT:
          hdc   = BeginPaint (hwnd,&ps);
          kanji = GetWindowLong(hwnd,0);
+         SetBkColor    (hdc,GetSysColor(COLOR_WINDOW));
+         SetTextColor  (hdc,GetSysColor(COLOR_WINDOWTEXT));
          GetClientRect (hwnd,&full);
-         rect.right  = full.right -jwp_font.hspace;
-         rect.left   = full.left  +jwp_font.hspace;
-         rect.top    = full.top   +jwp_font.vspace;
-         rect.bottom = full.bottom-jwp_font.vspace;
+         rect.right  = full.right -sys_font.hspace;
+         rect.left   = full.left  +sys_font.hspace;
+         rect.top    = full.top   +sys_font.vspace;
+         rect.bottom = full.bottom-sys_font.vspace;
          if (kanji) {  
 //
 //  Render kanji characters.
@@ -609,7 +692,7 @@ static LRESULT CALLBACK JWP_kanji_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM
 //
            else {
              memset (&lf,0,sizeof(lf));
-             lstrcpy (lf.lfFaceName,jwp_config.cfg.font);
+             lstrcpy (lf.lfFaceName,jwp_config.cfg.ascii_font.name);
              lf.lfHeight = rect.top-rect.bottom;
              if (!(font = CreateFontIndirect(&lf))) return (true);
              font = (HFONT) SelectObject (hdc,font);
@@ -638,6 +721,7 @@ static LRESULT CALLBACK JWP_kanji_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM
   return (DefWindowProc(hwnd,iMsg,wParam,lParam));
 }
 
+//--------------------------------
 //
 //  This routine registers the two classes that are used by the kanji
 //  info dialog.
@@ -651,12 +735,13 @@ int initialize_info (WNDCLASS *wclass) {
 //  Register window classes
 //
   if (wclass) {
-    wclass->style         = CS_HREDRAW | CS_VREDRAW;    // Bushu character window
-    wclass->hbrBackground = (HBRUSH) (COLOR_MENU+1);
+    wclass->style         = CS_HREDRAW | CS_VREDRAW;                // Bushu character window
+    wclass->hbrBackground = (HBRUSH) (COLOR_BUSHU+1);
     wclass->lpfnWndProc   = JWP_bushu_proc;
     wclass->lpszClassName = TEXT("JWP-Bushu");
     if (!RegisterClass(wclass)) return (true);
-    wclass->hbrBackground = (HBRUSH) (COLOR_WINDOW+1);  // Large kanji window.
+    wclass->style         = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;   // Large kanji window.
+    wclass->hbrBackground = (HBRUSH) (COLOR_WINDOW+1);  
     wclass->lpfnWndProc   = JWP_kanji_proc;
     wclass->lpszClassName = TEXT("JWP-Kanji");
     if (!RegisterClass(wclass)) return (true);
@@ -674,30 +759,62 @@ int initialize_info (WNDCLASS *wclass) {
   return (false);
 }
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Small service rotuines used to display a particular kind of kanji 
 //  information data.
 //
 
+//--------------------------------
 //
-//  Displays four-corner data, and well as checking to see if the data
-//  needs to be displayed. 
+//  Formats a four-corners entry.  This handles convertin the entry to a black if the
+//  -1 code is in the main field.
 //
-//      hwnd  -- Dialog box pointer.
-//      id    -- ID for location to display.
-//      main  -- Main part of the data (set to -1 to indicate non-data).
-//      index -- Last digiti that resolveds the differences between diffrerent 
-//               entrys with the same main value.
+//      buffer -- Location to store the formatted entry.
+//      main   -- Main entry (4 courners).
+//      index  -- 5th corner.
 //
-static void info_fourcorner (HWND hwnd,int id,int main,int index) {
-  TCHAR buffer[40];
-  if (main == -1) return;
-  wsprintf (buffer,TEXT("%04d.%d"),main,index);
+//      RETURN -- Pointer to buffer.
+//
+static TCHAR *format_fc (TCHAR *buffer,int main,int index) {
+  if (main == -1) buffer[0] = 0; else wsprintf (buffer,TEXT("%04d.%d"),main,index);
+  return (buffer);
+}
+
+//--------------------------------
+//
+//  Formats an integer entry.  This is really designed to be used with format_two(), 
+//  otherwise it is better to use SetDlgItemInt().
+//
+//      buffer -- Buffer to format the integer.
+//      value  -- Value to write.
+//
+//      RETURN -- pointer to buffer.
+//
+static TCHAR *format_int (TCHAR *buffer,int value) {
+  buffer[0] = 0;
+  if (value) wsprintf (buffer,TEXT("%d"),value);
+  return   (buffer);
+}
+
+//--------------------------------
+//
+//  Displays a double entry info entry.  These are like Halpern and ONeill, that have
+//  two reffereces.  A tab character is autmatically inserted between the two entries.
+//
+//      hwnd    -- Dialog box.
+//      id      -- ID to write to.
+//      buffer1 -- Pointer to entry for first element.
+//      buffer2 -- Pointer to entry for second element
+//
+static void format_two (HWND hwnd,int id,TCHAR *buffer1,TCHAR *buffer2) {
+  TCHAR buffer[80];
+  wsprintf       (buffer,TEXT("%s\t%s"),buffer1,buffer2);
   SetDlgItemText (hwnd,id,buffer);
   return;
 }
 
+//--------------------------------
 //
 //  Displays an ASCII coded string.  For CE machines, this must be converted 
 //  to UNICODE before the display.  For NT/98/95 machines, this is simply 
@@ -710,15 +827,17 @@ static void info_fourcorner (HWND hwnd,int id,int main,int index) {
 #ifdef WINCE
 static void info_string (HWND hwnd,int id,byte *string) {
   TCHAR text[SIZE_BUFFER];
-  MultiByteToWideChar (CP_ACP,0,(char *) string,-1,text,SIZE_BUFFER);
-  SetDlgItemText      (hwnd,id,text);
+  int   i;
+  for (i = 0; string[i]; i++) text[i] = ascii2unicode(string[i]);
+  text[i] = 0;
+  SetDlgItemText (hwnd,id,text);
   return;
 }
 #else WINCE
   #define info_string(w,i,s) SetDlgItemText(w,i,(char *) s);
 #endif WINCE
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  begin class KANJI_info
 //
@@ -727,6 +846,7 @@ static void info_string (HWND hwnd,int id,byte *string) {
 
 static byte *info_cache = NULL;     // This location holds the cached kanji information. 
 
+//--------------------------------
 //
 //  Close the resources
 //
@@ -736,39 +856,10 @@ void KANJI_info::close_info () {
   return;
 }
 
+//--------------------------------
 //
 //  This is the main routine.  This basically is the dialog procedure
 //  for the kanji-info dialog box.
-//
-#define CHARTYPE_UNKNOWN    0       // Character types.
-#define CHARTYPE_ASCII      1
-#define CHARTYPE_OEM        2
-#define CHARTYPE_JSYMBOL    3
-#define CHARTYPE_JASCII     4
-#define CHARTYPE_HIRAGANA   5
-#define CHARTYPE_KATAKANA   6
-#define CHARTYPE_GREEK      7
-#define CHARTYPE_RUSSIAN    8
-#define CHARTYPE_RESERVED   9
-#define CHARTYPE_KANJI1     10
-#define CHARTYPE_KANJI2     11
-//
-//      IDC_KIINSERT      Insert button
-//      IDC_KIFROMCLIP    Get character from clipboard.
-//      IDC_KILIST        List box
-//      IDC_KITYPE        Character type
-//      IDC_KIJISCODE     JIS code
-//      IDC_KISTROKES     Scroke count
-//      IDC_KIBUSHU       bushu (radical) by number
-//      IDC_KIGRADE       Character grade
-//      IDC_KINELSON      Nelson reference number
-//      IDC_KIHALPERN     halpern reference number
-//      IDC_KIUNICODE     Unicode value
-//      IDC_KISKIP        SKIP code (NTC dictionary)
-//      IDC_KIPINYIN      PinYin translation
-//      IDC_KISHIFTJIS    Shift-JIS code
-//      IDC_KIBIGKANJI    Big kanji window.
-//      IDC_KIBUSHUCHAR   Bushu character
 //
 int KANJI_info::dlg_kanjiinfo (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam) {
   switch (message) {
@@ -778,16 +869,38 @@ int KANJI_info::dlg_kanjiinfo (HWND hwnd,UINT message,WPARAM wParam,LPARAM lPara
 //  box.
 //
     case WM_INITDIALOG: 
-         add_dialog  (hwnd,true);
-         init_dialog (hwnd);
-         return (false);
+         dialog = hwnd;
+         info_size.wm_init (hwnd,IDC_KILIST,&jwp_config.cfg.size_info,false,INFO_FIRST,INFO_LAST);
+         add_dialog        (hwnd,true);
+         init_dialog       (hwnd);
+         return            (false);
+//
+//  Changing the size
+//
+#ifndef WINCE
+    case WM_SIZING:
+         info_size.wm_sizing ((RECT *) lParam);
+         return              (0);
+#endif  WINCE
+    case WM_SIZE:
+         info_size.wm_size (wParam);
+         return            (0);
 //
 //  Dialog is being destroyed, we need to delete the class for it.
 //
     case WM_DESTROY:
+         if (this == single_info) single_info = NULL;
          remove_dialog (hwnd);
          delete this;
          return (true);           
+//
+//  User is using single mode and wants to change the kanji.
+//
+    case WMU_SETINFOKANJI:
+         ch = (KANJI) lParam;
+         InvalidateRect (hwnd,NULL,true);
+         init_dialog    (hwnd);
+         return         (true);
 //
 //  Process help messages
 //
@@ -818,6 +931,11 @@ int KANJI_info::dlg_kanjiinfo (HWND hwnd,UINT message,WPARAM wParam,LPARAM lPara
                 JDialogBox (IDD_XREFINFO,hwnd,(DLGPROC) dialog_xrefinfo,(LONG) this);
                 return (true);
 #endif WINCE_PPC
+           case IDC_KIBIGKANJI:
+                JWP_file *file;
+                file = file_list.get(NULL);
+                file->insert_string (&ch,1);
+                return (true);
            case IDC_KILIST:
            case IDC_KIINSERT:
                 SendDlgItemMessage (hwnd,IDC_KILIST,JL_INSERTTOFILE,0,0);
@@ -828,20 +946,77 @@ int KANJI_info::dlg_kanjiinfo (HWND hwnd,UINT message,WPARAM wParam,LPARAM lPara
   return (false);
 }
 
+//--------------------------------
 //
 //  This is the dialog box handler for the More Kanji Info dialog.  There are
 //  two copies of this routine.  One for PPC machines and one for all other 
 //  routines (the gneral rotuine has some variation between CE and non-CE 
 //  machines.
 //
-#ifdef WINCE_PPC
-
-//
-//  Dialog box handler for PPC machines for the More Kanji Info dialog.
-//
 int KANJI_info::dlg_moreinfo (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam) {
-  static short types[] = { IDS_KI_TYPEUNKNOWN,IDS_KI_TYPEASCII,IDS_KI_TYPEEXTENDED,IDS_KI_TYPESYMBOL,IDS_KI_TYPEJASCII,IDS_KI_TYPEHIRAGANA,IDS_KI_TYPEKATAKANA,IDS_KI_TYPEGREEK,IDS_KI_TYPERUSSIAN,IDS_KI_TYPERESERVED,IDS_KI_TYPEKANJI1,IDS_KI_TYPEKANJI2 };
-  TCHAR buffer[SIZE_BUFFER];
+  int i;
+  switch (message) {
+//
+//  This is the main part of the routine.  Since this is just an 
+//  informational dialog box, the main part is in making the dialog 
+//  box.
+//
+    case WM_INITDIALOG: 
+         more_size.wm_init (hwnd,IDC_MIXREF,&jwp_config.cfg.size_more,false,MORE_FIRST,MORE_LAST);
+#ifndef WINCE_PPC
+         format_xref       (hwnd);
+#endif  WINCE_PPC
+         for (i = 0; i < MORE_MAXLINES; i++) format_line (hwnd,i,jwp_config.cfg.kanji_info[i+MORE_FIRSTINDEX]);
+         return (false);
+//
+//  Size message processing.
+//
+#ifndef WINCE
+    case WM_SIZING:
+         more_size.wm_sizing ((RECT *) lParam);
+         return (0);
+#endif  WINCE
+    case WM_SIZE:
+         more_size.wm_size (wParam);
+         return (0);
+//
+//  Process help messages
+//
+    case WM_HELP:
+         do_help (hwnd,IDH_KANJI_CHARINFO);
+         return  (true);
+//
+//  Process push buttons.
+//
+    case WM_COMMAND:    
+         switch (LOWORD(wParam)) {
+           case IDOK:
+           case IDCANCEL:
+                EndDialog (hwnd,false);
+                return (true);
+#ifdef WINCE_PPC
+           case IDC_MINEXT:
+                JDialogBox (IDD_XREFINFO,hwnd,(DLGPROC) dialog_xrefinfo,(LONG) this);
+                return (true);
+#endif WINCE_PPC
+           case IDC_MIXREF:
+           case IDC_MIINSERT:
+                SendDlgItemMessage (hwnd,IDC_MIXREF,JL_INSERTTOFILE,0,0);
+                return (true);
+         }
+         break;
+  }
+  return (false);
+}
+
+//--------------------------------
+//
+//  This is the dialog box handler for the Cross-Reference dialog.  This dialog
+//  is only used on PPC machines, and only because there is not sufficient 
+//  room for these items in any of the other dailog pages.
+//
+#ifdef  WINCE_PPC
+int KANJI_info::dlg_xrefinfo (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam) {
   int   i;
   switch (message) {
 //
@@ -850,22 +1025,83 @@ int KANJI_info::dlg_moreinfo (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam
 //  box.
 //
     case WM_INITDIALOG: 
-         SetFocus (GetDlgItem(hwnd,IDC_MINEXT));
+         more_size.wm_init (hwnd,IDC_MIXREF,&jwp_config.cfg.size_more,false,XREF_FIRST,XREF_LAST);
+         format_xref       (hwnd);
+         for (i = 0; i < XREF_MAXLINES; i++) format_line (hwnd,i,jwp_config.cfg.kanji_info[i+XREF_FIRSTINDEX]);
+         return (false);
 //
-//  Do JIS value
-// 
+//  Process help messages
 //
-//  Utility routine to generate the character pattern geneated by varius
-//  Japanese character encodings.  This is used to see what will show 
-//  up when viewing a file.
+    case WM_HELP:
+         do_help (hwnd,IDH_KANJI_CHARINFO);
+         return  (true);
 //
-         wsprintf (buffer,TEXT("%X"),jis2sjis(ch));
-         SetDlgItemText (hwnd,IDC_KISHIFTJIS,buffer);
-         wsprintf (buffer,TEXT("%X"),jis2unicode(ch));
-         SetDlgItemText (hwnd,IDC_KIUNICODE,buffer);
+//  Process push buttons.
 //
-//  Do character type.
+    case WM_COMMAND:    
+         switch (LOWORD(wParam)) {
+           case IDOK:
+           case IDCANCEL:
+                EndDialog (hwnd,false);
+                return (true);
+           case IDC_MIINSERT:
+           case IDC_MIXREF:
+                SendDlgItemMessage (hwnd,IDC_MIXREF,JL_INSERTTOFILE,0,0);
+                return (true);
+         }
+         break;
+  }
+  return (false);
+}
+#endif WINCE_PPC
+
+//--------------------------------
 //
+//  This si the big one.  This routine generates all the line entries except
+//  for bushu.
+//
+//      hwnd -- Pointer to dialog box.
+//      line -- Line number indexed from 0 to display the information.
+//      code -- Information to be displayed on that line.
+//
+//  Acess is based on sequential numbers for the dialog box controls.  The labels are 
+//  first followed by the item.  Thus incrementing by two goes to the next item.
+//
+#define CHARTYPE_UNKNOWN    0       // Character types.
+#define CHARTYPE_ASCII      1
+#define CHARTYPE_OEM        2
+#define CHARTYPE_JSYMBOL    3
+#define CHARTYPE_JASCII     4
+#define CHARTYPE_HIRAGANA   5
+#define CHARTYPE_KATAKANA   6
+#define CHARTYPE_GREEK      7
+#define CHARTYPE_RUSSIAN    8
+#define CHARTYPE_RESERVED   9
+#define CHARTYPE_KANJI1     10
+#define CHARTYPE_KANJI2     11
+
+#define IDC_KIBASE IDC_KILABEL0     // Used as base for accessing dialog box controls.
+
+void KANJI_info::format_line (HWND hwnd,int line,int code) {
+  TCHAR      buffer2[30];               // Buffer for accumulating pin-yin data and ASCII value of JIS code
+  TCHAR      buffer1[30];
+  static short types[] = { IDS_KI_TYPEUNKNOWN,IDS_KI_TYPEASCII,IDS_KI_TYPEEXTENDED,IDS_KI_TYPESYMBOL,IDS_KI_TYPEJASCII,IDS_KI_TYPEHIRAGANA,IDS_KI_TYPEKATAKANA,IDS_KI_TYPEGREEK,IDS_KI_TYPERUSSIAN,IDS_KI_TYPERESERVED,IDS_KI_TYPEKANJI1,IDS_KI_TYPEKANJI2 };
+
+  int i;
+//
+//  Do the label
+//
+  line = IDC_KIBASE+2*line;
+  if (code && (code <= INFO_MAXITEM)) wsprintf (buffer1,TEXT("%s:"),get_string(info_codes[code])); else buffer1[0] = 0;  
+  SetDlgItemText (hwnd,line,buffer1);
+//
+//  Do the item
+//
+  SetDlgItemText (hwnd,++line,TEXT(""));
+  if ((ch < 0x3000) && (code > INFO_UNICODE)) return;
+//  if (!kinfo.extra && (code >= INFO_SPAHN)) return;
+  switch (code) {
+    case INFO_TYPE:
          i = HIBYTE(ch);
          if       (ch == 0)                   i = CHARTYPE_UNKNOWN;
          else if  (ch <= 127)                 i = CHARTYPE_ASCII;
@@ -880,237 +1116,140 @@ int KANJI_info::dlg_moreinfo (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam
          else if ((i >= 0x30) && (i <= 0x4f)) i = CHARTYPE_KANJI1;
          else if ((i >= 0x50) && (i <= 0x74)) i = CHARTYPE_KANJI2;
          else                                 i = CHARTYPE_UNKNOWN;
-         SetDlgItemText (hwnd,IDC_KITYPE,get_string(types[i]));
-         if (i < CHARTYPE_KANJI1) return (false);   // Not kanji we have have no more info.
-//
-//  Process PinYin.
-//
-         if (korean) info_string (hwnd,IDC_KIKOREAN,korean);
-         if (pinyin) info_string (hwnd,IDC_KIPINYIN,pinyin);
-//
-//  Process the entended data entries in the list.
-//
-         if (kinfo.extra) {
-           info_fourcorner (hwnd,IDC_KIFC ,extend.fc_main,extend.fc_index);
-           info_fourcorner (hwnd,IDC_KIFC2,fc_main2      ,extend.fc_index2);
-           if (freq    ) SetDlgItemInt (hwnd,IDC_MIFREQ    ,freq    ,false);
-           if (henshall) SetDlgItemInt (hwnd,IDC_MIHENSHALL,henshall,false);
-           if (gakken  ) SetDlgItemInt (hwnd,IDC_MIGAKKEN  ,gakken  ,false);
-           if (heisig  ) SetDlgItemInt (hwnd,IDC_MIHEISIG  ,heisig  ,false);
-           if (oneill  ) SetDlgItemInt (hwnd,IDC_MIONEILL  ,oneill  ,false);
-           if (extend.md_short1) {
-             wsprintf (buffer,TEXT("%d.%04d"),extend.md_short1,extend.md_short2);
-             SetDlgItemText (hwnd,IDC_KIMDSHORT,buffer);
+         SetDlgItemText (hwnd,line,get_string(types[i]));
+         break;
+    case INFO_JIS:
+         if (ch <= 0x00ff) { buffer2[0] = (byte) ch; buffer2[1] = 0; }
+           else { buffer2[0] = HIBYTE(ch); buffer2[1] = LOBYTE(ch); buffer2[2] = 0; }
+         wsprintf       (buffer1,TEXT("%X (%X) [%s]"),ch,ch | 0x8080,buffer2);
+         SetDlgItemText (hwnd,line,buffer1);
+         break;
+    case INFO_SHIFTJIS:
+         wsprintf       (buffer1,TEXT("%X"),(ch < 0x80) ? ch : jis2sjis(ch));
+         SetDlgItemText (hwnd,line,buffer1);
+         break;
+    case INFO_UNICODE:
+         wsprintf       (buffer1,TEXT("%X"),jis2unicode(ch));
+         SetDlgItemText (hwnd,line,buffer1);
+         break;
+    case INFO_STROKE:
+         SetDlgItemInt (hwnd,line,kinfo.strokes,true);
+         break;
+    case INFO_GRADE:
+         if (kinfo.grade) SetDlgItemInt (hwnd,line,kinfo.grade,false);
+         break;
+    case INFO_NELSON:
+         format_two (hwnd,line,format_int(buffer1,kinfo.nelson),format_int(buffer2,kinfo.haig));
+         break;
+    case INFO_HALPERN:
+         if (kinfo.skip_t) wsprintf (buffer2,TEXT("%d-%d-%d"),kinfo.skip_t,kinfo.skip_1,kinfo.skip_2); else buffer2[0] = 0;
+         format_two (hwnd,line,format_int(buffer1,kinfo.halpern),buffer2);
+         break;
+    case INFO_SPAHN:
+         if (extend.sh_rstroke || extend.sh_ostroke) wsprintf (buffer1,TEXT("%d%c%d.%d"),extend.sh_rstroke,extend.sh_radical+'a',extend.sh_ostroke,extend.sh_index); else buffer1[0] = 0;
+         format_two (hwnd,line,buffer1,format_int(buffer2,sh_kana));
+         break;
+    case INFO_FOURCORNERS:
+         format_two (hwnd,line,format_fc(buffer1,extend.fc_main,extend.fc_index),format_fc(buffer2,fc_main2,extend.fc_index2));
+         break;
+    case INFO_MOROHASHI:
+         if (!extend.md_long) buffer1[0] = 0;
+           else {
+             if      (extend.md_x) wsprintf (buffer1,TEXT("%dX"),extend.md_long);
+             else if (extend.md_p) wsprintf (buffer1,TEXT("%dP"),extend.md_long);
+             else                  wsprintf (buffer1,TEXT("%d") ,extend.md_long);
            }
-           if (extend.md_long) {
-             if      (extend.md_x) wsprintf (buffer,TEXT("%dX"),extend.md_long);
-             else if (extend.md_p) wsprintf (buffer,TEXT("%dP"),extend.md_long);
-             else                  wsprintf (buffer,TEXT("%d") ,extend.md_long);
-             SetDlgItemText (hwnd,IDC_KIMDLONG,buffer);
-           }
-         }
-         return (false);
-//
-//  Process help messages
-//
-    case WM_HELP:
-         do_help (hwnd,IDH_KANJI_CHARINFO);
-         return  (true);
-//
-//  Process push buttons.
-//
-    case WM_COMMAND:    
-         switch (LOWORD(wParam)) {
-           case IDOK:
-           case IDCANCEL:
-                EndDialog (hwnd,false);
-                return (true);
-           case IDC_MINEXT:
-                JDialogBox (IDD_XREFINFO,hwnd,(DLGPROC) dialog_xrefinfo,(LONG) this);
-                return (true);
-         }
+         if (extend.md_short1) wsprintf (buffer2,TEXT("%d.%04d"),extend.md_short1,extend.md_short2); else buffer2[0] = 0;
+         format_two (hwnd,line,buffer1,buffer2);
+         break;
+    case INFO_PINYIN:
+         if (pinyin) info_string (hwnd,line,pinyin);
+         break;
+    case INFO_KOREAN:
+         if (korean) info_string (hwnd,line,korean);
+         break;
+    case INFO_FREQUENCY:
+         if (freq) SetDlgItemInt (hwnd,line,freq,false);
+         break;
+    case INFO_HENSHALL:
+         if (henshall) SetDlgItemInt (hwnd,line,henshall,false);
+         break;
+    case INFO_GAKKEN:
+         if (gakken) SetDlgItemInt (hwnd,line,gakken,false);
+         break;
+    case INFO_HEISIG:   
+         if (heisig) SetDlgItemInt (hwnd,line,heisig,false);
+         break;
+    case INFO_ONEILL:
+         format_two (hwnd,line,format_int(buffer1,oneill),format_int(buffer2,oneill_ek));
+         break;
+    case INFO_DEROO:
+         if (deroo) SetDlgItemInt (hwnd,line,deroo,false);
+         break;
+    case INFO_KANJILEARN:
+         if (halpern_kld) SetDlgItemInt (hwnd,line,halpern_kld,false);
+         break;
+    case INFO_BLANK:
+    default:
          break;
   }
-  return (false);
+  return;
 }
 
-#else WINCE_PPC
-
+//--------------------------------
 //
-//  General dialog box handler for the More Kanji Info dialog.
+//  This routine generates the cross-reference table.  This is only
+//  separated here to make things clearer.  This routine is only used 
+//  in one place, but the place is different for the different versions of
+//  JWPce, so it is easier to put this here.
 //
-int KANJI_info::dlg_moreinfo (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam) {
+//      hwnd -- Pointer to dialog box.
+//
+void KANJI_info::format_xref (HWND hwnd) {
   static short errors[] = { IDS_KI_SKIPPOSITION,IDS_KI_SKIPSTROKE,IDS_KI_SKIPBOTH,IDS_KI_SKIPBREEN };
-  switch (message) {
-//
-//  This is the main part of the routine.  Since this is just an 
-//  informational dialog box, the main part is in making the dialog 
-//  box.
-//
-    case WM_INITDIALOG: 
+  int        i;
+  byte      *ptr;
+  TCHAR      buffer[SIZE_BUFFER];
+  EUC_buffer line;                                  // EUC line buffer used to set strings in the list-box.
+  if (kinfo.extra) {;
+    line.initialize (GetDlgItem(hwnd,IDC_MIXREF));    // Initialize buffer for output.
+    for (ptr = xref; xref && *ptr; ptr += 3) {
+      i = *((ushort *) (ptr+1));
+      switch (*ptr) {
+        case 'n':
+             format_string (buffer,IDS_MI_NELSON,i);
+             break;
+        case 'h':
+             format_string (buffer,IDS_MI_HALPERN,i);
+             break;
+        case 'o':
+             format_string (buffer,IDS_MI_ONEILL,i);
+             break;
+        case 'k':
+             format_string (buffer,IDS_MI_JIS0208,i);
+             break;
+        case 'j':
+             format_string (buffer,IDS_MI_JIS0212,i);
+             break;
+        case 'z':
+             format_string (buffer,IDS_MI_SKIP,((i >> 10) & 0x7),((i >> 5) & 0x1f),(i & 0x1f),get_string(errors[(i >> 13)-1]));
+             break;
+        case 'd':
+             format_string (buffer,IDS_MI_DEROO,i);
+             break;
+      }
 #ifdef WINCE
-         info_fourcorner (hwnd,IDC_KIFC ,extend.fc_main,extend.fc_index);
-         info_fourcorner (hwnd,IDC_KIFC2,fc_main2      ,extend.fc_index2);
-         if (korean) info_string (hwnd,IDC_KIKOREAN,korean);
-         if (pinyin) info_string (hwnd,IDC_KIPINYIN,pinyin);
-#endif WINCE
-         if (kinfo.extra) {
-           byte *ptr;
-           int   i;
-           TCHAR buffer[SIZE_BUFFER];
-           EUC_buffer line;                     // EUC line buffer used to set strings in the list-box.
-           if (freq    ) SetDlgItemInt (hwnd,IDC_MIFREQ    ,freq    ,false);
-           if (henshall) SetDlgItemInt (hwnd,IDC_MIHENSHALL,henshall,false);
-           if (gakken  ) SetDlgItemInt (hwnd,IDC_MIGAKKEN  ,gakken  ,false);
-           if (heisig  ) SetDlgItemInt (hwnd,IDC_MIHEISIG  ,heisig  ,false);
-           if (oneill  ) SetDlgItemInt (hwnd,IDC_MIONEILL  ,oneill  ,false);
-           line.initialize (GetDlgItem(hwnd,IDC_MIXREF));   // Initialize buffer for output.
-           for (ptr = xref; xref && *ptr; ptr += 3) {
-             i = *((ushort *) (ptr+1));
-             switch (*ptr) {
-               case 'n':
-                    format_string (buffer,IDS_MI_NELSON,i);
-                    break;
-               case 'h':
-                    format_string (buffer,IDS_MI_HALPERN,i);
-                    break;
-               case 'o':
-                    format_string (buffer,IDS_MI_ONEILL,i);
-                    break;
-               case 'k':
-                    format_string (buffer,IDS_MI_JIS0208,i);
-                    break;
-               case 'j':
-                    format_string (buffer,IDS_MI_JIS0212,i);
-                    break;
-               case 'z':
-                    format_string (buffer,IDS_MI_SKIP,((i >> 10) & 0x7),((i >> 5) & 0x1f),(i & 0x1f),get_string(errors[(i >> 13)-1]));
-                    break;
-             }
-#ifdef WINCE
-             for (i = 0; buffer[i]; i++) ((byte *) buffer)[i] = (char) buffer[i]; 
-             ((byte *) buffer)[i] = 0;
+      for (i = 0; buffer[i]; i++) ((byte *) buffer)[i] = (char) buffer[i]; 
+      ((byte *) buffer)[i] = 0;
 #endif WINCE        
-             put_line (&line,0,(byte *) buffer,false);
-           }
-#ifdef WINCE
-           if (extend.md_short1) {
-             wsprintf (buffer,TEXT("%d.%04d"),extend.md_short1,extend.md_short2);
-             SetDlgItemText (hwnd,IDC_KIMDSHORT,buffer);
-           }
-           if (extend.md_long) {
-             if      (extend.md_x) wsprintf (buffer,TEXT("%dX"),extend.md_long);
-             else if (extend.md_p) wsprintf (buffer,TEXT("%dP"),extend.md_long);
-             else                  wsprintf (buffer,TEXT("%d") ,extend.md_long);
-             SetDlgItemText (hwnd,IDC_KIMDLONG,buffer);
-           }
-#endif WINCE
-         }
-         SetFocus (GetDlgItem(hwnd,IDC_MIXREF));
-         return (false);
-//
-//  Process help messages
-//
-    case WM_HELP:
-         do_help (hwnd,IDH_KANJI_CHARINFO);
-         return  (true);
-//
-//  Process push buttons.
-//
-    case WM_COMMAND:    
-         switch (LOWORD(wParam)) {
-           case IDOK:
-           case IDCANCEL:
-                EndDialog (hwnd,false);
-                return (true);
-           case IDC_MIINSERT:
-           case IDC_MIXREF:
-                SendDlgItemMessage (hwnd,IDC_MIXREF,JL_INSERTTOFILE,0,0);
-                return (true);
-         }
-         break;
+      put_line (&line,0,(byte *) buffer,false);
+    }
   }
-  return (false);
+  SetFocus (GetDlgItem(hwnd,IDC_MIXREF));
+  return;
 }
 
-#endif WINCE_PPC
-
-//
-//  This is the dialog box handler for the Cross-Reference dialog.  This dialog
-//  is only used on PPC machines, and only because there is not sufficient 
-//  room for these items in any of the other dailog pages.
-//
-#ifdef  WINCE_PPC
-int KANJI_info::dlg_xrefinfo (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam) {
-  static short errors[] = { IDS_KI_SKIPPOSITION,IDS_KI_SKIPSTROKE,IDS_KI_SKIPBOTH,IDS_KI_SKIPBREEN };
-  switch (message) {
-//
-//  This is the main part of the routine.  Since this is just an 
-//  informational dialog box, the main part is in making the dialog 
-//  box.
-//
-    case WM_INITDIALOG: 
-         if (kinfo.extra) {
-           byte *ptr;
-           int   i;
-           TCHAR buffer[SIZE_BUFFER];
-           EUC_buffer line;                     // EUC line buffer used to set strings in the list-box.
-           line.initialize (GetDlgItem(hwnd,IDC_MIXREF));   // Initialize buffer for output.
-           for (ptr = xref; xref && *ptr; ptr += 3) {
-             i = *((ushort *) (ptr+1));
-             switch (*ptr) {
-               case 'n':
-                    format_string (buffer,IDS_MI_NELSON,i);
-                    break;
-               case 'h':
-                    format_string (buffer,IDS_MI_HALPERN,i);
-                    break;
-               case 'o':
-                    format_string (buffer,IDS_MI_ONEILL,i);
-                    break;
-               case 'k':
-                    format_string (buffer,IDS_MI_JIS0208,i);
-                    break;
-               case 'j':
-                    format_string (buffer,IDS_MI_JIS0212,i);
-                    break;
-               case 'z':
-                    format_string (buffer,IDS_MI_SKIP,((i >> 10) & 0x7),((i >> 5) & 0x1f),(i & 0x1f),get_string(errors[(i >> 13)-1]));
-                    break;
-             }
-             for (i = 0; buffer[i]; i++) ((byte *) buffer)[i] = (char) buffer[i]; 
-             ((byte *) buffer)[i] = 0;
-             put_line (&line,0,(byte *) buffer,false);
-           }
-         }
-         SetFocus (GetDlgItem(hwnd,IDC_MIXREF));
-         return (false);
-//
-//  Process help messages
-//
-    case WM_HELP:
-         do_help (hwnd,IDH_KANJI_CHARINFO);
-         return  (true);
-//
-//  Process push buttons.
-//
-    case WM_COMMAND:    
-         switch (LOWORD(wParam)) {
-           case IDOK:
-           case IDCANCEL:
-                EndDialog (hwnd,false);
-                return (true);
-           case IDC_MIINSERT:
-           case IDC_MIXREF:
-                SendDlgItemMessage (hwnd,IDC_MIXREF,JL_INSERTTOFILE,0,0);
-                return (true);
-         }
-         break;
-  }
-  return (false);
-}
-#endif WINCE_PPC
-
+//--------------------------------
 //
 //  Get the kanji-info for a particular kanji.
 //
@@ -1129,12 +1268,12 @@ void KANJI_info::get_info (int ch,int amount) {
 //
 //  Get fixed data elements.
 //
-  ch = (ch & 0x7f7f)-0x3021;
-  ch = HIBYTE(ch)*94+LOBYTE(ch);
-  if (ch > KIMAX_KANJI) {                       // User asked for an invalid character
+  if (ch > last_jis) {                          // User asked for an invalid character
     memset (&kinfo,0,sizeof(kinfo));
     return;
   }
+  ch = (ch & 0x7f7f)-0x3021;
+  ch = HIBYTE(ch)*94+LOBYTE(ch);
   if (info_cache) memcpy (&kinfo,info_cache+KANJIINFO_OFFSET+ch*sizeof(kinfo),sizeof(kinfo));
     else {
       SetFilePointer (handle,KANJIINFO_OFFSET+ch*sizeof(kinfo),NULL,FILE_BEGIN);
@@ -1168,7 +1307,7 @@ void KANJI_info::get_info (int ch,int amount) {
     for (i = 0; i < kinfo.nan; i++) ptr = skip_line(ptr);           // Skip the nanori
     memcpy (&extend,ptr,sizeof(struct extend));                     // Fixed part of the extended data.
     if (amount == INFO_EXTEND) return;
-    freq = sh_kana = henshall = gakken = heisig = oneill = 0;       // Zero out the data fields.
+    freq = sh_kana = henshall = gakken = heisig = oneill = deroo = halpern_kld = oneill_ek = 0;     // Zero out the data fields.
     fc_main2 = -1;
     xref     = NULL;
     for (ptr += sizeof(struct extend); *ptr; ptr += 3) {            // Process the data list.
@@ -1178,13 +1317,16 @@ void KANJI_info::get_info (int ch,int amount) {
       }                                                             //   until later.
       i = (((ushort) ptr[2]) << 8) | ptr[1];                        // Get interger parameter.
       switch (*ptr) {                                               // Common entries 
-        case 'F': freq     = i; break;
-        case 'I': sh_kana  = i; break;
-        case 'E': henshall = i; break;
-        case 'K': gakken   = i; break;
-        case 'L': heisig   = i; break;
-        case 'O': oneill   = i; break;
-        case 'Q': fc_main2 = i; break;
+        case 'F': freq        = i; break;
+        case 'I': sh_kana     = i; break;
+        case 'E': henshall    = i; break;
+        case 'K': gakken      = i; break;
+        case 'L': heisig      = i; break;
+        case 'O': oneill      = i; break;
+        case 'Q': fc_main2    = i; break;
+        case 'D': deroo       = i; break;
+        case 'H': halpern_kld = i; break;
+        case 'N': oneill_ek   = i; break;
         default:
              break;
       }
@@ -1193,6 +1335,7 @@ void KANJI_info::get_info (int ch,int amount) {
   return;
 }
 
+//--------------------------------
 //
 //  This routine simply gets the stroke count for a particular kanji.
 //  This information is used by a number of other routines (especially
@@ -1208,262 +1351,92 @@ int KANJI_info::get_stroke (int ch) {
   return (kinfo.strokes);
 }
 
+//--------------------------------
 //
 //  This is the handler for the WM_INITDIALOG message for the main Kanji Info 
 //  dialog.  This has been seperatred out from the dialog handler to allow for
-//  easier addaptation between the different platforms.  There are two main 
-//  versions (PPC and non-PPC) machines (the non-PPC version has some CE/non-CE
-//  variation.
+//  easier addaptation between the different platforms.  
 //
-#ifdef WINCE_PPC
-
-//
-//  PPC handler for WM_INITDIALOG for the Kanji Info dialog
+//      hwnd -- Pointer to dialog window.
 //
 void KANJI_info::init_dialog (HWND hwnd) {
-  TCHAR      buffer[SIZE_BUFFER];       // Text buffer for building lines.
   EUC_buffer line;                      // EUC line buffer used to set strings in the list-box.
   TCHAR      buffer2[20];               // Buffer for accumulating pin-yin data and ASCII value of JIS code
   byte      *ptr;                       // Pointer to current location within the data buffer.
   int        i;
+
   if (ch > 0x00ff) ch &= 0x7f7f;        // We accept EUC characters.
 //
 //  Blank out all old data.
 //
-  SetDlgItemText (hwnd,IDC_KIJISCODE,TEXT(""));
-  for (i = IDC_KISTROKES; i <= IDC_KISHKANA; i++) SetDlgItemText (hwnd,i,TEXT(""));
-  SendDlgItemMessage (hwnd,IDC_KILIST,JL_RESET,0,0);
-//
-//  Do JIS value
-// 
-//
-//  Utility routine to generate the character pattern geneated by varius
-//  Japanese character encodings.  This is used to see what will show 
-//  up when viewing a file.
-//
-  if (ch <= 0x00ff) { buffer2[0] = (byte) ch; buffer2[1] = 0; }
-    else { buffer2[0] = HIBYTE(ch); buffer2[1] = LOBYTE(ch); buffer2[2] = 0; }
-  wsprintf (buffer,TEXT("%X (%X) [%s]"),ch,ch | 0x8080,buffer2);
-  SetDlgItemText (hwnd,IDC_KIJISCODE,buffer);
+  SetDlgItemText     (hwnd,IDC_KIBUSHU        ,TEXT(""));
+  SendDlgItemMessage (hwnd,IDC_KILIST         ,JL_RESET          ,0,0);
   SendDlgItemMessage (hwnd,IDC_KIBIGKANJI     ,WMU_SETWINDOWVALUE,0,ch);
   SendDlgItemMessage (hwnd,IDC_KIBUSHUCHAR    ,WMU_SETWINDOWVALUE,0,0);
   SendDlgItemMessage (hwnd,IDC_KICLASSICALCHAR,WMU_SETWINDOWVALUE,0,0);
 //
-//  Do character type.
+//  Check for valid character
 //
-  i = HIBYTE(ch);
-  if       (ch == 0)                   i = CHARTYPE_UNKNOWN;
-  else if  (ch <= 127)                 i = CHARTYPE_ASCII;
-  else if  (ch <= 255)                 i = CHARTYPE_OEM;
-  else if ((i == 0x21) || (i == 0x22)) i = CHARTYPE_JSYMBOL;
-  else if  (i == 0x23)                 i = CHARTYPE_JASCII;
-  else if  (i == 0x24)                 i = CHARTYPE_HIRAGANA;
-  else if  (i == 0x25)                 i = CHARTYPE_KATAKANA;
-  else if  (i == 0x26)                 i = CHARTYPE_GREEK;
-  else if  (i == 0x27)                 i = CHARTYPE_RUSSIAN;
-  else if ((i >= 0x28) && (i <= 0x2f)) i = CHARTYPE_RESERVED;
-  else if ((i >= 0x30) && (i <= 0x4f)) i = CHARTYPE_KANJI1;
-  else if ((i >= 0x50) && (i <= 0x74)) i = CHARTYPE_KANJI2;
-  else                                 i = CHARTYPE_UNKNOWN;
-  EnableWindow(GetDlgItem(hwnd,IDC_KIMORE),i >= CHARTYPE_KANJI1);
-  if (i < CHARTYPE_KANJI1) return;          // Not kanji we have have no more info.
+  EnableWindow(GetDlgItem(hwnd,IDC_KIMORE),ch >= 0x3000);
   memset (&kinfo,0,sizeof(kinfo));
-  if (((ch & 0xff) < 0x21) || ((ch & 0xff) > 0x7e)) return;
 //
-//  Open and read kanji information, an display the easy items.
-//        
-  if (open_info(hwnd)) return;
-  get_info (ch,INFO_ALL);
-  close_info ();
-  SendDlgItemMessage (hwnd,IDC_KIBUSHUCHAR,WMU_SETWINDOWVALUE,0,kinfo.bushu);
-  SetDlgItemInt (hwnd,IDC_KISTROKES,kinfo.strokes,true);
-  if (!kinfo.classical) SetDlgItemInt (hwnd,IDC_KIBUSHU,kinfo.bushu,true);
-    else {
-      wsprintf (buffer2,TEXT("%d (%d)"),kinfo.bushu,kinfo.classical);
-      SetDlgItemText     (hwnd,IDC_KIBUSHU,buffer2);
-      SendDlgItemMessage (hwnd,IDC_KICLASSICALCHAR,WMU_SETWINDOWVALUE,0,kinfo.classical);
-    }       
-  if (kinfo.grade  ) SetDlgItemInt  (hwnd,IDC_KIGRADE  ,kinfo.grade  ,false);
-  if (kinfo.nelson ) SetDlgItemInt  (hwnd,IDC_KINELSON ,kinfo.nelson ,false);
-  if (kinfo.halpern) SetDlgItemInt  (hwnd,IDC_KIHALPERN,kinfo.halpern,false);
-  if (kinfo.haig   ) SetDlgItemInt  (hwnd,IDC_KIHAIG   ,kinfo.haig   ,false);
-  wsprintf (buffer2,TEXT("%d-%d-%d"),kinfo.skip_t,kinfo.skip_1,kinfo.skip_2);
-  if (kinfo.skip_t ) SetDlgItemText (hwnd,IDC_KISKIP,buffer2);
-//
-//  Read all of the line type entries all in one big block.  This is 
-//  very brut-force, but it does save time/space, and everything else.
-//
-  line.initialize (GetDlgItem(hwnd,IDC_KILIST));    // Initialize buffer for output.
-//
-//  Process list elements.
-//
-  if (jwp_config.cfg.info_titles) put_line (&line,0,(byte *) "\x01\x1fmeanings\x1f",false);
-  for (ptr = imi, i = 0; i < kinfo.imi; i++) ptr = put_reading(&line,0,ptr,i,kinfo.imi);
-  if (jwp_config.cfg.info_titles && kinfo.on ) put_line (&line,0,(byte *) "\x01\x1fon-yomi\x1f",false);
-  for (ptr = on,  i = 0; i < kinfo.on; i++) ptr = put_reading(&line,BASE_KATAKANA,ptr,i,kinfo.on);
-  if (jwp_config.cfg.info_titles && kinfo.kun) put_line (&line,0,(byte *) "\x01\x1fkun-yomi\x1f",false);
-  for (ptr = kun, i = 0; i < kinfo.kun; i++) ptr = put_reading(&line,BASE_HIRAGANA,ptr,i,kinfo.kun);
-  if (jwp_config.cfg.info_titles && kinfo.nan) put_line (&line,0,(byte *) "\x01\x1fnanori\x1f",false);
-  for (ptr = nan, i = 0; i < kinfo.nan; i++) ptr = put_reading(&line,BASE_HIRAGANA,ptr,i,kinfo.nan);
-//
-//  Process the entended data entries in the list.
-//
-  if (kinfo.extra) {
-    if (extend.sh_rstroke || extend.sh_ostroke) {
-      wsprintf (buffer,TEXT("%d%c%d.%d"),extend.sh_rstroke,extend.sh_radical+'a',extend.sh_ostroke,extend.sh_index);
-      SetDlgItemText (hwnd,IDC_KISHDICT,buffer);
-    }
-    if (sh_kana) SetDlgItemInt (hwnd,IDC_KISHKANA,sh_kana,false);
-  }
-//
-//  Activate the list so the user can use the cursor keys to move 
-//  through the list.  ESC and or ENTER will still exit the dialog.
-//
-  SetFocus (GetDlgItem(hwnd,IDC_KILIST));
-  return;
-}
-
-#else WINCE_PPC
-
-//
-//  Non-PPC handler for the WM_INITDIALOG for the Kanji Info dialog.
+//  Display romaji for kana
 //  
-void KANJI_info::init_dialog (HWND hwnd) {
-  static short types[] = { IDS_KI_TYPEUNKNOWN,IDS_KI_TYPEASCII,IDS_KI_TYPEEXTENDED,IDS_KI_TYPESYMBOL,IDS_KI_TYPEJASCII,IDS_KI_TYPEHIRAGANA,IDS_KI_TYPEKATAKANA,IDS_KI_TYPEGREEK,IDS_KI_TYPERUSSIAN,IDS_KI_TYPERESERVED,IDS_KI_TYPEKANJI1,IDS_KI_TYPEKANJI2 };
-  TCHAR      buffer[SIZE_BUFFER];       // Text buffer for building lines.
-  EUC_buffer line;                      // EUC line buffer used to set strings in the list-box.
-  TCHAR      buffer2[20];               // Buffer for accumulating pin-yin data and ASCII value of JIS code
-  byte      *ptr;                       // Pointer to current location within the data buffer.
-  int        i;
-
-  if (ch > 0x00ff) ch &= 0x7f7f;        // We accept EUC characters.
+  if (ISKANA(ch) && ((ch & 0xff) >= 0x21) && ((ch & 0xff) <= 0x76)) {
+    static byte special[3][4] = { "vu","+ka","+ke" };
+    line.initialize (GetDlgItem(hwnd,IDC_KILIST));
+    for (i = 0; compound_kana[i].kana[0]; i++) {
+      if (!compound_kana[i].kana[1] && ((ch & 0xff) == compound_kana[i].kana[0])) put_reading (&line,0,(byte *) compound_kana[i].string,0,1);
+    }
+    if ((ch & 0xff) <= 0x73) put_reading (&line,0,(byte *) direct_kana[(ch & 0xff)-0x21],0,1); else put_reading (&line,0,special[(ch & 0xff)-0x74],0,1);
+  }
 //
-//  Blank out all old data.
-//
-#ifndef WINCE
-  for (i = IDC_KITYPE; i <= IDC_KIKOREAN; i++) SetDlgItemText (hwnd,i,TEXT(""));
-#else   WINCE
-  for (i = IDC_KITYPE; i <= IDC_KISHKANA; i++) SetDlgItemText (hwnd,i,TEXT(""));
-#endif  WINCE
-  SendDlgItemMessage (hwnd,IDC_KILIST,JL_RESET,0,0);
-//
-//  Do JIS value
-// 
-//
-//  Utility routine to generate the character pattern geneated by varius
-//  Japanese character encodings.  This is used to see what will show 
-//  up when viewing a file.
-//
-  if (ch <= 0x00ff) { buffer2[0] = (byte) ch; buffer2[1] = 0; }
-    else { buffer2[0] = HIBYTE(ch); buffer2[1] = LOBYTE(ch); buffer2[2] = 0; }
-  wsprintf (buffer,TEXT("%X (%X) [%s]"),ch,ch | 0x8080,buffer2);
-  SetDlgItemText (hwnd,IDC_KIJISCODE,buffer);
-  wsprintf (buffer,TEXT("%X"),jis2sjis(ch));
-  SetDlgItemText (hwnd,IDC_KISHIFTJIS,buffer);
-  wsprintf (buffer,TEXT("%X"),jis2unicode(ch));
-  SetDlgItemText (hwnd,IDC_KIUNICODE,buffer);
-  SendDlgItemMessage (hwnd,IDC_KIBIGKANJI     ,WMU_SETWINDOWVALUE,0,ch);
-  SendDlgItemMessage (hwnd,IDC_KIBUSHUCHAR    ,WMU_SETWINDOWVALUE,0,0);
-  SendDlgItemMessage (hwnd,IDC_KICLASSICALCHAR,WMU_SETWINDOWVALUE,0,0);
-//
-//  Do character type.
-//
-  i = HIBYTE(ch);
-  if       (ch == 0)                   i = CHARTYPE_UNKNOWN;
-  else if  (ch <= 127)                 i = CHARTYPE_ASCII;
-  else if  (ch <= 255)                 i = CHARTYPE_OEM;
-  else if ((i == 0x21) || (i == 0x22)) i = CHARTYPE_JSYMBOL;
-  else if  (i == 0x23)                 i = CHARTYPE_JASCII;
-  else if  (i == 0x24)                 i = CHARTYPE_HIRAGANA;
-  else if  (i == 0x25)                 i = CHARTYPE_KATAKANA;
-  else if  (i == 0x26)                 i = CHARTYPE_GREEK;
-  else if  (i == 0x27)                 i = CHARTYPE_RUSSIAN;
-  else if ((i >= 0x28) && (i <= 0x2f)) i = CHARTYPE_RESERVED;
-  else if ((i >= 0x30) && (i <= 0x4f)) i = CHARTYPE_KANJI1;
-  else if ((i >= 0x50) && (i <= 0x74)) i = CHARTYPE_KANJI2;
-  else                                 i = CHARTYPE_UNKNOWN;
-  SetDlgItemText (hwnd,IDC_KITYPE,get_string(types[i]));
-  EnableWindow(GetDlgItem(hwnd,IDC_KIMORE),i >= CHARTYPE_KANJI1);
-  if (i < CHARTYPE_KANJI1) return;          // Not kanji we have have no more info.
-  memset (&kinfo,0,sizeof(kinfo));
-  if (((ch & 0xff) < 0x21) || ((ch & 0xff) > 0x7e)) return;
+//  Deal with kanji.
+//  
+  else if (ISKANJI(ch) && ((ch & 0xff) >= 0x21) && ((ch & 0xff) <= 0x7e)) {
 //
 //  Open and read kanji information, an display the easy items.
 //        
-  if (open_info(hwnd)) return;
-  get_info (ch,INFO_ALL);
-  close_info ();
-  SendDlgItemMessage (hwnd,IDC_KIBUSHUCHAR,WMU_SETWINDOWVALUE,0,kinfo.bushu);
-  SetDlgItemInt (hwnd,IDC_KISTROKES,kinfo.strokes,true);
-  if (!kinfo.classical) SetDlgItemInt (hwnd,IDC_KIBUSHU,kinfo.bushu,true);
-    else {
-      wsprintf (buffer2,TEXT("%d (%d)"),kinfo.bushu,kinfo.classical);
-      SetDlgItemText     (hwnd,IDC_KIBUSHU,buffer2);
-      SendDlgItemMessage (hwnd,IDC_KICLASSICALCHAR,WMU_SETWINDOWVALUE,0,kinfo.classical);
-    }       
-  if (kinfo.grade  ) SetDlgItemInt  (hwnd,IDC_KIGRADE  ,kinfo.grade  ,false);
-  if (kinfo.nelson ) SetDlgItemInt  (hwnd,IDC_KINELSON ,kinfo.nelson ,false);
-  if (kinfo.halpern) SetDlgItemInt  (hwnd,IDC_KIHALPERN,kinfo.halpern,false);
-  if (kinfo.haig   ) SetDlgItemInt  (hwnd,IDC_KIHAIG   ,kinfo.haig   ,false);
-  wsprintf (buffer2,TEXT("%d-%d-%d"),kinfo.skip_t,kinfo.skip_1,kinfo.skip_2);
-  if (kinfo.skip_t ) SetDlgItemText (hwnd,IDC_KISKIP,buffer2);
-//
-//  Process PinYin.
-//
-#ifndef WINCE
-  if (korean) info_string (hwnd,IDC_KIKOREAN,korean);
-  if (pinyin) info_string (hwnd,IDC_KIPINYIN,pinyin);
-#endif WINCE
+    if (open_info(hwnd)) return;
+    get_info (ch,INFO_ALL);
+    close_info ();
+    SendDlgItemMessage (hwnd,IDC_KIBUSHUCHAR,WMU_SETWINDOWVALUE,0,kinfo.bushu);
+    if (!kinfo.classical) SetDlgItemInt (hwnd,IDC_KIBUSHU,kinfo.bushu,true);
+      else {
+        wsprintf (buffer2,TEXT("%d (%d)"),kinfo.bushu,kinfo.classical);
+        SetDlgItemText     (hwnd,IDC_KIBUSHU,buffer2);
+        SendDlgItemMessage (hwnd,IDC_KICLASSICALCHAR,WMU_SETWINDOWVALUE,0,kinfo.classical);
+      }       
 //
 //  Read all of the line type entries all in one big block.  This is 
 //  very brut-force, but it does save time/space, and everything else.
 //
-  line.initialize (GetDlgItem(hwnd,IDC_KILIST));    // Initialize buffer for output.
+    line.initialize (GetDlgItem(hwnd,IDC_KILIST));    // Initialize buffer for output.
 //
 //  Process list elements.
 //
-  if (jwp_config.cfg.info_titles) put_line (&line,0,(byte *) "\x01\x1fmeanings\x1f",false);
-  for (ptr = imi, i = 0; i < kinfo.imi; i++) ptr = put_reading(&line,0,ptr,i,kinfo.imi);
-  if (jwp_config.cfg.info_titles && kinfo.on ) put_line (&line,0,(byte *) "\x01\x1fon-yomi\x1f",false);
-  for (ptr = on,  i = 0; i < kinfo.on; i++) ptr = put_reading(&line,BASE_KATAKANA,ptr,i,kinfo.on);
-  if (jwp_config.cfg.info_titles && kinfo.kun) put_line (&line,0,(byte *) "\x01\x1fkun-yomi\x1f",false);
-  for (ptr = kun, i = 0; i < kinfo.kun; i++) ptr = put_reading(&line,BASE_HIRAGANA,ptr,i,kinfo.kun);
-  if (jwp_config.cfg.info_titles && kinfo.nan) put_line (&line,0,(byte *) "\x01\x1fnanori\x1f",false);
-  for (ptr = nan, i = 0; i < kinfo.nan; i++) ptr = put_reading(&line,BASE_HIRAGANA,ptr,i,kinfo.nan);
-//
-//  Process the entended data entries in the list.
-//
-  if (kinfo.extra) {
-    if (extend.sh_rstroke || extend.sh_ostroke) {
-      wsprintf (buffer,TEXT("%d%c%d.%d"),extend.sh_rstroke,extend.sh_radical+'a',extend.sh_ostroke,extend.sh_index);
-      SetDlgItemText (hwnd,IDC_KISHDICT,buffer);
-    }
-    if (sh_kana) SetDlgItemInt (hwnd,IDC_KISHKANA,sh_kana,false);
-#ifndef WINCE
-    info_fourcorner (hwnd,IDC_KIFC ,extend.fc_main,extend.fc_index);
-    info_fourcorner (hwnd,IDC_KIFC2,fc_main2      ,extend.fc_index2);
-    if (extend.md_long) {
-      if      (extend.md_x) wsprintf (buffer,TEXT("%dX"),extend.md_long);
-      else if (extend.md_p) wsprintf (buffer,TEXT("%dP"),extend.md_long);
-      else                  wsprintf (buffer,TEXT("%d") ,extend.md_long);
-      SetDlgItemText (hwnd,IDC_KIMDLONG,buffer);
-    }
-    if (extend.md_short1) {
-      wsprintf (buffer,TEXT("%d.%04d"),extend.md_short1,extend.md_short2);
-      SetDlgItemText (hwnd,IDC_KIMDSHORT,buffer);
-    }
-#endif WINCE
-  }
+    if (jwp_config.cfg.info_titles)              line.put_label  (IDS_KI_LISTMEANINGS);
+    for (ptr = imi, i = 0; i < kinfo.imi; i++)  ptr = put_reading(&line,0            ,ptr,i,kinfo.imi);
+    if (jwp_config.cfg.info_titles && kinfo.on ) line.put_label  (IDS_KI_LISTONYOMI);
+    for (ptr = on,  i = 0; i < kinfo.on; i++)   ptr = put_reading(&line,BASE_KATAKANA,ptr,i,kinfo.on);
+    if (jwp_config.cfg.info_titles && kinfo.kun) line.put_label  (IDS_KI_LISTKUNYOMI);
+    for (ptr = kun, i = 0; i < kinfo.kun; i++)  ptr = put_reading(&line,BASE_HIRAGANA,ptr,i,kinfo.kun);
+    if (jwp_config.cfg.info_titles && kinfo.nan) line.put_label  (IDS_KI_LISTNANORI);
+    for (ptr = nan, i = 0; i < kinfo.nan; i++)  ptr = put_reading(&line,BASE_HIRAGANA,ptr,i,kinfo.nan);
 //
 //  Activate the list so the user can use the cursor keys to move 
 //  through the list.  ESC and or ENTER will still exit the dialog.
 //
-  SetFocus (GetDlgItem(hwnd,IDC_KILIST));
+    SetFocus (GetDlgItem(hwnd,IDC_KILIST));
+  }
+//
+//  Render the info items.
+//
+  for (i = 0; i <= INFO_MAXLINES; i++) format_line (hwnd,i,jwp_config.cfg.kanji_info[i+INFO_FIRSTINDEX]);
   return;
 }
 
-#endif WINCE_PPC
-
+//--------------------------------
 //
 //  Open the kanji-info file.
 //
@@ -1475,12 +1448,27 @@ void KANJI_info::init_dialog (HWND hwnd) {
 //
 //      RETURN -- Non-zero return indicates an error in opening the file.
 //  
+struct info_header {
+  long  magic;
+  long  flags;
+  short count;
+  short last_jis;
+};
+
+#define INFO_CACHE  ((struct info_header *) info_cache)
+
 int KANJI_info::open_info (HWND hwnd) {
   unsigned long done,magic,size;
 //
 //  If we have a cached information file we do not need to open it.
 //
-  if (info_cache) return (false);
+  if (info_cache) {
+    magic                  = INFO_CACHE->magic;
+    jwp_config.kanji_flags = INFO_CACHE->flags;
+    count                  = INFO_CACHE->count;
+    last_jis               = INFO_CACHE->last_jis;
+    return (false);
+  }
 //
 //  Open the file
 //
@@ -1502,16 +1490,19 @@ int KANJI_info::open_info (HWND hwnd) {
       return      (true);
     }
     ReadFile (handle,info_cache,size,&done,NULL);
-    magic = *((long *) info_cache);
+    magic                  = INFO_CACHE->magic;
+    jwp_config.kanji_flags = INFO_CACHE->flags;
+    count                  = INFO_CACHE->count;
+    last_jis               = INFO_CACHE->last_jis;
   }
 //
 //  Not cached then check the file information.
 //
   else {
     ReadFile (handle,&magic   ,sizeof(long ),&done,NULL);     // Check for database id (magic)
-//    ReadFile (handle,&jwp_config.kanji_flags,sizeof(long),&done,NULL);
-//    ReadFile (handle,&count   ,sizeof(short),&done,NULL);     // Get the number of kanji in database (NOT USED AT THIS TIME)
-//    ReadFile (handle,&last_jis,sizeof(short),&done,NULL);     // Last kanji in the database. (NOT USED AT THIS TIME)
+    ReadFile (handle,&jwp_config.kanji_flags,sizeof(long),&done,NULL);
+    ReadFile (handle,&count   ,sizeof(short),&done,NULL);     // Get the number of kanji in database (NOT USED AT THIS TIME)
+    ReadFile (handle,&last_jis,sizeof(short),&done,NULL);     // Last kanji in the database. (NOT USED AT THIS TIME)
   }
 //
 //  Check the magic inforamtion.
@@ -1530,9 +1521,96 @@ int KANJI_info::open_info (HWND hwnd) {
 //
 //  End Class KANJI_info.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
+//
+//  Configure Character Information dialog box.
+//
+
+//--------------------------------
+//
+//  dialog box handler to configure the character information dialog.
+//
+
+//
+//  Macros to make things clearer.
+//
+#define GETSEL(x)    ((int) SendDlgItemMessage(hwnd,IDC_ICITEM0+(x),CB_GETCURSEL,0,0))      // Get CB select
+#define SETSEL(x,y)  SendDlgItemMessage (hwnd,IDC_ICITEM0+(x),CB_SETCURSEL,y,0)             // Set CB select
+
+int dialog_infoconfig (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam) {
+  int i,j,k;
+  switch (message) {
+    case WM_INITDIALOG:
+         for (i = 0; i < INFO_MAXITEM; i++) {
+           for (j = 0; j <= INFO_MAXITEM; j++) SendDlgItemMessage (hwnd,IDC_ICITEM0+i,CB_ADDSTRING,0,(LPARAM) get_string(info_codes[j]));
+           SETSEL (i,cfg->kanji_info[i]);
+         }
+         return (true);
+//
+//  Process help messages
+//
+    case WM_HELP:
+         do_help (hwnd,IDH_KANJI_CONFIGINFO);
+         return  (true);
+//
+//  Process push buttons.
+//
+    case WM_COMMAND:    
+         switch (LOWORD(wParam)) {
+//
+//  This handles changes to the list.  If the user changes an item to blank we don't have to do anything.  If the user, however
+//  changes an item to anything else then we have some checking to do.  If the user has created a duplicate item then we need to 
+//  fill that item in with one of the missing items.
+//
+//  First step is to find a missing item.  We do this by looking for items 1..INFO_MAXITEM in the list boxes.  If we cannot find 
+//  a missing item then we are done.  Note we do not check for zero becasue we allow any number of these.
+//
+//  Second step is to check the item that got set.  If this got set to blank then we don't have to do anything.  Actually this 
+//  should get picked up in the first test.  This was done second only to save a variable.
+//
+//  Third, we search to find a duplicated item.  If there is no duplicated item then we don't have anything to do either.
+//
+//  Finally we replace the duplicated item with the missing item.
+//          
+           default: 
+                if (HIWORD(wParam) != CBN_SELCHANGE) return (0);
+                wParam = LOWORD(wParam);
+//
+//  Find a missing item
+//
+                for (i = 1; i <= INFO_MAXITEM; i++) {
+                  for (j = 0; (j < INFO_MAXITEM) && (i != GETSEL(j)); j++); 
+                  if (j == INFO_MAXITEM) break;
+                }
+                if (i > INFO_MAXITEM) return (0);                      // No missing items so done.
+//
+//  Get the item that got set.  There should be two of these.
+//
+                j = SendDlgItemMessage(hwnd,wParam,CB_GETCURSEL,0,0);
+                if (j == INFO_BLANK) return (0);                        // Setting to blank so don't do anything.
+//
+//  Find second item, and correct.
+//
+                for (k = 0; (k < INFO_MAXITEM) && ((((int) wParam) == IDC_ICITEM0+k) || (j != GETSEL(k))); k++);
+                if (k != INFO_MAXITEM) SETSEL (k,i);                    // Only maka change if there is a duplicate item.
+                return (0);
+           case IDC_ICDEFAULT:
+                for (i = 0; i < INFO_MAXITEM; i++) SETSEL(i,default_config.kanji_info[i]);
+                return (0);
+           case IDOK:
+                for (i = 0; i < INFO_MAXITEM; i++) cfg->kanji_info[i] = GETSEL(i);
+           case IDCANCEL:
+                EndDialog (hwnd,false);
+                return (0);
+         }
+         break;
+  }
+  return (false);
+}
+
+//===================================================================
 //
 //  begin count-kanji feacture.
 //
@@ -1577,6 +1655,27 @@ KANJI_count *kanji_count = NULL;    // Static structure instance that is used to
                                     //   get data into and out of the dialog box
                                     //   procedure.
 
+//--------------------------------
+//
+//  Do the actual count.
+//
+void KANJI_count::count (int ch) {
+  int i;
+  total++;
+  if (ISHIRAGANA(ch)) { hiragana++; return; }
+  if (ISKATAKANA(ch) || (ch == KANJI_LONGVOWEL)) { katakana++; return; }
+  if (ISASCII(ch)) { ascii++; return; }
+  if (ISJASCII(ch)) { jascii++; return; };
+  if (ISKANJI(ch)) {
+    for (i = 0; list[i].kanji && (list[i].kanji != ch); i++);
+    kanji_count->list[i].kanji = ch;
+    kanji_count->list[i].count++;
+    return;
+  }
+  other++;
+  return;
+}
+
 //-------------------------------------------------------------------
 //
 //  Static routines.
@@ -1586,6 +1685,7 @@ static void  count_block (EUC_buffer *line,int count,byte *ptr,int base);   // F
 static BOOL CALLBACK dialog_kanjicount (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam);
 static int __cdecl kanji_compare (const void *elem1, const void *elem2 );   // Stub for quick-sort routine.
 
+//--------------------------------
 //
 //  Small stub routine to output a block of informaton in the count 
 //  kanji dialog.  This may be information such as on-yomi, kun-yomi, 
@@ -1615,6 +1715,7 @@ static void count_block (EUC_buffer *line,int count,byte *ptr,int base) {
   return;
 }
 
+//--------------------------------
 //
 //  This is the dialog box handler for the count-kanji dialog box.  
 //  For the count-kanji function, this is the big one.
@@ -1638,6 +1739,7 @@ static BOOL CALLBACK dialog_kanjicount (HWND hwnd,UINT message,WPARAM wParam,LPA
 //
     case WM_INITDIALOG: 
          int i;
+         count_size.wm_init (hwnd,IDC_CKLIST,&jwp_config.cfg.size_oount,false,0,0);
          add_dialog (kanji_count->dialog = hwnd,true);
          SetDlgItemText (hwnd,IDC_CKNUMBER,TEXT(""));
          for (i = IDC_CKFREQUENCY; i <= IDC_CKMEANING; i++) CheckDlgButton (hwnd,i,true);
@@ -1650,6 +1752,20 @@ static BOOL CALLBACK dialog_kanjicount (HWND hwnd,UINT message,WPARAM wParam,LPA
          delete kanji_count;
          kanji_count = NULL;
          return (true);
+//
+//  Sizing messages
+//
+#ifndef WINCE
+    case WM_SIZING:
+         count_size.wm_sizing ((RECT *) lParam);
+         return (0);
+#endif  WINCE
+    case WM_SIZE:
+         count_size.wm_size (wParam);
+         return (0);
+    case WM_MOVE:
+         count_size.wm_move ();
+         return (0);
 //
 //  Process help messages
 //
@@ -1693,7 +1809,7 @@ static BOOL CALLBACK dialog_kanjicount (HWND hwnd,UINT message,WPARAM wParam,LPA
                   int        frequency,onyomi;  // List catagories.
                   int        kunyomi,meaning;
                   TCHAR      text[20];          // Formating buffer.
-                  int        i,j;
+                  int        i;
 //
 //  Setup and count.
 //
@@ -1707,16 +1823,13 @@ static BOOL CALLBACK dialog_kanjicount (HWND hwnd,UINT message,WPARAM wParam,LPA
 //
                   for (i = 0; i < SIZE_KANJI; i++) {
                     if (!kanji_count->list[i].count) continue;
-                    for (j = 0; j < colorkanji_size; j++) {
-                      if (colorkanji_list[j] == kanji_count->list[i].kanji) break;
-                    }
-                    if (j == colorkanji_size) {
-                      kanji_count->kanji_nolist += kanji_count->list[i].count; 
-                      kanji_count->kanjis_nolist++;
-                    }
-                    else {
+                    if (color_kanji.in(kanji_count->list[i].kanji)) {
                       kanji_count->kanji_list += kanji_count->list[i].count;
                       kanji_count->kanjis_list++;
+                    }
+                    else {
+                      kanji_count->kanji_nolist += kanji_count->list[i].count; 
+                      kanji_count->kanjis_nolist++;
                     }
                   }
 //
@@ -1724,9 +1837,7 @@ static BOOL CALLBACK dialog_kanjicount (HWND hwnd,UINT message,WPARAM wParam,LPA
 //
                   if (IsDlgButtonChecked(hwnd,IDC_CKEXCLUDE)) {
                     for (i = 0; i < SIZE_KANJI; i++) {
-                      for (j = 0; j < colorkanji_size; j++) {
-                        if (colorkanji_list[j] == kanji_count->list[i].kanji) { kanji_count->list[i].count = 0; break; }
-                      }
+                      if (color_kanji.in(kanji_count->list[i].kanji)) kanji_count->list[i].count = 0; 
                     }
                   }
 //
@@ -1734,10 +1845,7 @@ static BOOL CALLBACK dialog_kanjicount (HWND hwnd,UINT message,WPARAM wParam,LPA
 //
                   if (IsDlgButtonChecked(hwnd,IDC_CKINCLUDE)) {
                     for (i = 0; i < SIZE_KANJI; i++) {
-                      for (j = 0; j < colorkanji_size; j++) {
-                        if (colorkanji_list[j] == kanji_count->list[i].kanji) break;
-                      }
-                      if (j == colorkanji_size) kanji_count->list[i].count = 0;
+                      if (!color_kanji.in(kanji_count->list[i].kanji)) kanji_count->list[i].count = 0;
                     }
                   }
 //
@@ -1799,6 +1907,7 @@ static BOOL CALLBACK dialog_kanjicount (HWND hwnd,UINT message,WPARAM wParam,LPA
   return (false);
 }
 
+//--------------------------------
 //
 //  Stub rotuine used to compare two kanji count values.  This is called
 //  indirectly through the qsort routine.
@@ -1814,6 +1923,7 @@ static int __cdecl kanji_compare (const void *elem1, const void *elem2 ) {
 //  Class JWP_file.
 //
 
+//--------------------------------
 //
 //  This is a service routine called by the count-kanji dialog box to
 //  do the actual counting.  This is done in a class JWP_file routine 
@@ -1837,13 +1947,14 @@ void JWP_file::kanjicount () {
 //
 //  End Count-kanji feature.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Exported routines.
 //
 
+//--------------------------------
 //
 //  This is a stub calling rotuine that does the kanji-count feature.
 //  Prinarally, this routine invokes the count-kanji dialog box after
@@ -1859,6 +1970,7 @@ void do_kanjicount () {
   return;
 }
 
+//--------------------------------
 //
 //  Deallocate memory resource associated with kanji information.
 //
@@ -1868,6 +1980,18 @@ void free_info () {
   return;
 }
 
+//--------------------------------
+//
+//  Entry point for changing the character info configuration.
+//
+//      hwnd -- Parent window.
+//
+void info_config (HWND hwnd) {
+  JDialogBox (IDD_INFOCONFIG,hwnd,(DLGPROC) dialog_infoconfig,0);
+  return;
+}
+
+//--------------------------------
 //
 //  This is the main entry point for the client.  This routine is called
 //  with the character to get the information from.
@@ -1878,29 +2002,24 @@ void free_info () {
 //               field in the from JWP_file class.
 //      kanji -- Character to find info for.
 //
-extern void createdialogparam (int id,HWND hwnd,DLGPROC proc,long param);
-
 void kanji_info (HWND hwnd,int kanji) {
-  KANJI_info *info;
-  if (!(info = new KANJI_info)) { OutOfMemory (hwnd); return; }
-  info->ch = kanji;
-  JCreateDialog (IDD_KANJIINFO,hwnd,(DLGPROC) dialog_kanjiinfo,(LONG) info);
+  if (jwp_config.cfg.info_onlyone && single_info) {
+    SendMessage (single_info->dialog,WMU_SETINFOKANJI,0,kanji);
+  }
+  else {
+    KANJI_info *info;
+    if (!(info = new KANJI_info)) { OutOfMemory (hwnd); return; }
+    info->ch = kanji;
+    JCreateDialog (IDD_KANJIINFO,hwnd,(DLGPROC) dialog_kanjiinfo,(LONG) info);
+    if (jwp_config.cfg.info_onlyone) single_info = info;
+  }
   return;
 }
 
-void KANJI_count::count (int ch) {
-  int i;
-  total++;
-  if (ISHIRAGANA(ch)) { hiragana++; return; }
-  if (ISKATAKANA(ch) || (ch == KANJI_LONGVOWEL)) { katakana++; return; }
-  if (ISASCII(ch)) { ascii++; return; }
-  if (ISJASCII(ch)) { jascii++; return; };
-  if (ISKANJI(ch)) {
-    for (i = 0; list[i].kanji && (list[i].kanji != ch); i++);
-    kanji_count->list[i].kanji = ch;
-    kanji_count->list[i].count++;
-    return;
-  }
-  other++;
-  return;
-}
+
+//%%% The 4-corners, radicial lists (horizontal), HS-list, and the square radicals list are using fixed color systems still.
+
+
+
+
+

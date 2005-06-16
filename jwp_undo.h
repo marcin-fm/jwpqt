@@ -1,11 +1,11 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This modlule implements the undo system.  This system is quite 
 //  complex, because of the constraints of a reasonable system.  In 
@@ -34,6 +34,7 @@
   #define _vert_    
 #endif WINELIB
 
+//--------------------------------
 //
 //  We try to accumulate changes into chuncks that are a nice size for
 //  the user.  Currently, this is refered to as accumulating changes. 
@@ -54,6 +55,7 @@
 #define UNDO_ANY    0x10    // Special code to accept any type of conversion.
 #define UNDO_QUE    0x30    // Special code to push data duing a quing event (see jwp_undo.cpp).
 
+//--------------------------------
 //
 //  Undo data is stored in a chain of UNDO_??? objects.  Each of these 
 //  object stores information necessary to undo a particutlar type of 
@@ -74,6 +76,7 @@ public:
   void virtual undo (JWP_file *file) = 0;   // The actuall undo function (true virtual function)!!
 } UNDO_action;
 
+//--------------------------------
 //
 //  Undo action associated with deletion of a paragraph.
 //
@@ -83,6 +86,7 @@ public:
   void  undo (JWP_file *file);              // REQUIRED: virtual undo function.
 } UNDO_delpara;                             // Data field is unused (NULL).
 
+//--------------------------------
 //
 //  Undo action associated with creation of a paragraph.
 //
@@ -92,6 +96,7 @@ public:
   void  undo (JWP_file *file);              // REQUIRED: virturla undo function.
 } UNDO_newpara;                             // Data field is unused (NULL).
 
+//--------------------------------
 //
 //  Undo action assocated with chaning a paragraph (by far the most common
 //  type of action).
@@ -111,6 +116,7 @@ public:
   void  undo (JWP_file *file);              // REQUIRED: virturla undo function.
 } UNDO_para;                                // Data field points to paragraph data.
 
+//--------------------------------
 //
 //  Undo action assocated with chaning a file's type and/or name.
 //
@@ -120,11 +126,13 @@ public:
   void  undo (JWP_file *file);              // REQUIRED: virturla undo function.
 } UNDO_type;                                // Data field holds file name.
 
+//--------------------------------
 //
 //  Exported Variables
 //
 extern UNDO_action **redo;                  // Redo buffer.
 
+//--------------------------------
 //
 //  Exported functions
 //

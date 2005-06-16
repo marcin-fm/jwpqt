@@ -1,11 +1,11 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This modlues main function is to deal with the system fonts.  
 //  There are three fonts used in the system currently.  These are
@@ -47,13 +47,14 @@
 
 #include "jwpce.h"
 #include "jwp_conf.h"
+#include "jwp_edit.h"
 #include "jwp_file.h"
 #include "jwp_font.h"
 #include "jwp_inpt.h"
 #include "jwp_misc.h"
 #include <winnls.h>
  
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Compile-time options.
 //
@@ -64,14 +65,27 @@
 
 #define SIZE_KANJIBUFFER    1026            // Implies a 128x128 max font size.
 
-//-------------------------------------------------------------------
+//===================================================================
+//
+//  Exported data
+//
+
+class JWP_font clip_font;            // Font used for posting bitmaps on the clipboard.
+class JWP_font bar_font;             // Font used for kanji bars.
+class JWP_font file_font;            // Font used for file information.
+class JWP_font sys_font;             // Font used for system data (bushu, JIS table, etc).
+class JWP_font edit_font;            // Font used for line edit
+class JWP_font list_font;            // Font used for lists.
+short sysfont_height;                // Height of the system font (used for toolbars).
+
+//===================================================================
 //
 //  Static routines.
 //
 //  Provide various reveice capabilities for routines in this module.
 //
 
-//-------------------------------------------------------------------
+//--------------------------------
 //
 //  Data and definitions assoicated with color-kanji.
 //
@@ -79,14 +93,28 @@
 
 #define TEXT_COLORKANJI "Color-Kanji List"  // Text for error messages, just to make sure is it the same.
 
-KANJI *colorkanji_list = NULL;              // Pointer to the actual list.
-short  colorkanji_size = 0;                 // Size of the list in kanji.
+//KANJI *colorkanji_list = NULL;              // Pointer to the actual list.
+//short  colorkanji_size = 0;                 // Size of the list in kanji.
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Static routines.
 //
 
+//--------------------------------
+//
+//  Opens a font or uses the automattic font associated with it.
+//
+//      cfg  -- Configuration font struct, indicates the font to be open.
+//      font -- Font to actually open.
+//      def  -- Font to be used for default.
+//
+static void auto_font (struct cfg_font *cfg,JWP_font *font,JWP_font *def) {
+  if (cfg->automatic || !font->open(cfg->name,cfg->size,jwp_config.cfg.cache_displayfont,NULL,false)) font->copy(def);
+  return;
+}
+
+//--------------------------------
 //
 //  Determines if a kanji is in a specific set.
 //
@@ -104,27 +132,28 @@ static int in_set (int kanji,KANJI *set,int size) {
   return (false);
 }
 
+//--------------------------------
 //
 //  This is a faster version of open_font() that is optimized for opening a bitmapped font.
 //  This was separated out to save some code space.
 //
-//      name   -- Name of font to open.
-//      cache  -- Indicates if the font is to be cahced.
+//      name     -- Name of font to open.
+//      cache    -- Indicates if the font is to be cahced.
+//      vertical -- Print the font vertically.
 //
 //      RETURN -- Pointer to newly open bitmapped font or NULL, if the font could not be open.
 //
-static KANJI_font *open_bitmap (tchar *name,int cache) {
+static KANJI_font *open_bitmap (TCHAR *name,int cache,int vertical) {
   BITMAP_KANJI_font *font;
   if (!(font = new BITMAP_KANJI_font)) return (NULL);
-  if (font->open(name,cache)) {
+  if (font->open(name,cache,vertical)) {
     font->remove ();
     font = NULL;
   }
   return (font);
 }
 
-
-
+//--------------------------------
 //
 //  Attempts to open a font based on a name, and size.  This routine autmatically handles
 //  bot bitmaped and TrueType fonts.
@@ -139,7 +168,7 @@ static KANJI_font *open_bitmap (tchar *name,int cache) {
 //
 //      RETURN -- Pointer to an open font, or NULL if an error occures.
 //
-static KANJI_font *open_font (tchar *name,int size,int cache,HDC hdc,int vertical) {
+static KANJI_font *open_font (TCHAR *name,int size,int cache,HDC hdc,int vertical) {
   KANJI_font *font;
   if ((lstrlen(name) >= 4) && stricmp(name+lstrlen(name)-4,TEXT(".f00"))) {
     HDC display_hdc = null;
@@ -154,12 +183,12 @@ static KANJI_font *open_font (tchar *name,int size,int cache,HDC hdc,int vertica
     if (display_hdc) ReleaseDC (main_window,hdc);           // If we made the dc then get rid of it
   }
   else {
-    font = open_bitmap(name,cache);
+    font = open_bitmap(name,cache,vertical);
   }
   return (font);
 }
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin Class KANJI_font.
 //
@@ -170,11 +199,11 @@ static KANJI_font *open_font (tchar *name,int size,int cache,HDC hdc,int vertica
 #define KANJI_BAD   0x2223      // Black square used for invalid kanji.
 #define NO_CHANGE   0xFFFFFFFF  // Indicates no change for the color (This color is invalid in Windows).
 
-       class KANJI_font *kanji       = NULL;    // We only use one kanji font in this program.
 static class KANJI_font *big_kanji   = NULL;    // Largest font avaialbe, used for big font in character info.
 static class KANJI_font *jist_kanji  = NULL;    // Kanji font for the JIS table
 static class KANJI_font *print_kanji = NULL;    // Kanji font for printing
 
+//--------------------------------
 //
 //  This routine sets the display color based on if a character is in the color-kanji list.
 //
@@ -186,8 +215,8 @@ static class KANJI_font *print_kanji = NULL;    // Kanji font for printing
 void KANJI_font::find_color (int jis,HDC hdc,COLORREF &color) {
   int i;
   color = NO_CHANGE;
-  if (jwp_config.cfg.colorkanji_mode && colorkanji_list && ISKANJI(jis)) {
-    i = in_set(jis,colorkanji_list,colorkanji_size);
+  if (jwp_config.cfg.colorkanji_mode && ISKANJI(jis)) {
+    i = color_kanji.in(jis);
     if (jwp_config.cfg.colorkanji_mode == COLORKANJI_MATCH) {
       if ( i) color = SetTextColor(hdc,jwp_config.cfg.colorkanji_color);
     }
@@ -198,6 +227,7 @@ void KANJI_font::find_color (int jis,HDC hdc,COLORREF &color) {
   return;
 }
 
+//--------------------------------
 //
 //  This is a general routine to close and deallocate any resource associated with a font.
 //  This will work on any supported font type, and will even handle the case of the font
@@ -210,7 +240,7 @@ void KANJI_font::remove () {
   return;
 }
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin Class BITMAP_KANJI_font.
 //
@@ -229,6 +259,7 @@ typedef struct {                // Header structure from font file.
     char extra[6];              // Make it up to 64 bytes  
 } FONTHEADER;
 
+//--------------------------------
 //
 //  Simple constructor that simply clears some of the parameters.
 //
@@ -243,6 +274,7 @@ BITMAP_KANJI_font::BITMAP_KANJI_font () {
   return;
 }
 
+//--------------------------------
 //
 //  Close a font.
 //
@@ -262,6 +294,7 @@ void BITMAP_KANJI_font::close () {
   return;
 }
 
+//--------------------------------
 //
 //  The big one here, this is the kanji rendering engine:
 //
@@ -270,24 +303,35 @@ void BITMAP_KANJI_font::close () {
 //      x,y -- Location in the context.
 //     
 void BITMAP_KANJI_font::draw (HDC hdc,int jis,int x,int y) {
-  long     index;
-  COLORREF color;
-  index  = find_kanji(jis,hdc,color);
+  if (vertfont) {                           // Vertical printing this way is only used for 
+    RECT rect;                              //   writing to the clipboard.  Thus efficiency 
+    rect.top    = y-height+1;               //   is not that important.
+    rect.bottom = y+1;
+    rect.left   = x;
+    rect.right  = rect.left+width;
+    fill (hdc,jis,&rect);
+  }
+  else {
+    long     index;
+    COLORREF color;
+    index  = find_kanji(jis,hdc,color);
 #ifdef WINCE
-  HBITMAP hbitmap,tbitmap;
-  hbitmap = CreateBitmap(width,height,1,1,bitmaps+index);
-  tbitmap = SelectObject (hdcmem,hbitmap);
-  BitBlt       (hdc,x+hshift,y-height,width,height,hdcmem,0,0,SRCAND);
-  SelectObject (hdcmem,tbitmap);
-  DeleteObject (hbitmap);
+    HBITMAP hbitmap,tbitmap;
+    hbitmap = CreateBitmap(width,height,1,1,bitmaps+index);
+    tbitmap = (HBITMAP) SelectObject (hdcmem,hbitmap);
+    BitBlt       (hdc,x+hshift,y-height,width,height,hdcmem,0,0,SRCCOPY);
+    SelectObject (hdcmem,tbitmap);
+    DeleteObject (hbitmap);
 #else  WINCE
-  SetBitmapBits (hbitmap,bmsize,bitmaps+index);
-  BitBlt        (hdc,x+hshift,y-height,width,height,hdcmem,0,0,SRCAND);
+    SetBitmapBits (hbitmap,bmsize,bitmaps+index);
+    BitBlt        (hdc,x+hshift,y-height,width,height,hdcmem,0,0,SRCCOPY);
 #endif WINCE
-  if (color != NO_CHANGE) SetTextColor(hdc,color);
+    if (color != NO_CHANGE) SetTextColor(hdc,color);
+  }
   return;
 }
 
+//--------------------------------
 //
 //  This is a variant on the KANJI_font::draw routine that streatches
 //  the font to fill a given rectange.  This is used for the big 
@@ -296,19 +340,18 @@ void BITMAP_KANJI_font::draw (HDC hdc,int jis,int x,int y) {
 //      hdc      -- Context to render into.
 //      jis      -- JIS code to render (will be converted on the fly).
 //      rect     -- Rectangle that the character should fill to.
-//      vertical -- Non-zero for vertical printing.
 //
 #define SIZE_NOROTATE   (sizeof(no_rotate  )/sizeof(KANJI))
 #define SIZE_NEEDOFFSET (sizeof(need_offset)/sizeof(KANJI))
      
-void BITMAP_KANJI_font::fill (HDC hdc,int jis,RECT *rect,int vertical) {
+void BITMAP_KANJI_font::fill (HDC hdc,int jis,RECT *rect) {
 #ifndef WINCE
   char rotate[SIZE_KANJIBUFFER];    // Buffer used to rotate characters.
   static KANJI no_rotate[] = {      // These characters should not be rotated (Japanese quote, etc.)
     0x213b,0x213c,0x2141,0x2142,0x2143,0x2144,0x2145,0x214a,0x214b,
     0x214c,0x214d,0x214e,0x214f,0x2150,0x2151,0x2152,0x2153,0x2154,0x2155,
     0x2156,0x2157,0x2158,0x2159,0x215a,0x215b,0x2161,0x2162,0x2163,0x2164,
-    0x2165,0x2166,0x2167,0x222a,0x222b,0x222e,
+    0x2165,0x2166,0x2167,0x222a,0x222b,0x222e,0x2127,
   };                                // These characters need to be moved to the upper right corner 
   static KANJI need_offset[] = {    //   (relative to character) after rotate or setup.
     0x2122,0x2123,0x2124,0x2125,0x2421,0x2423,0x2425,0x2427,0x2429,0x2443,
@@ -329,7 +372,7 @@ void BITMAP_KANJI_font::fill (HDC hdc,int jis,RECT *rect,int vertical) {
 //  of other stuff.
 //
 #ifndef WINCE
-  if (vertical) {
+  if (vertfont) {
     int bytes,i,j,k,n;
     bytes = ((width+15)/16)*2;          // Width of a bitmap line in bytes.
 //
@@ -395,18 +438,19 @@ void BITMAP_KANJI_font::fill (HDC hdc,int jis,RECT *rect,int vertical) {
 #ifdef WINCE
   HBITMAP hbitmap,tbitmap;
   hbitmap = CreateBitmap(width,height,1,1,bitmap);
-  tbitmap = SelectObject(hdcmem,hbitmap);
-  StretchBlt   (hdc,rect->left-x,rect->top-y,rect->right-rect->left,rect->bottom-rect->top,hdcmem,0,0,width,height,SRCAND);
+  tbitmap = (HBITMAP) SelectObject(hdcmem,hbitmap);
+  StretchBlt   (hdc,rect->left-x,rect->top-y,rect->right-rect->left,rect->bottom-rect->top,hdcmem,0,0,width,height,SRCCOPY);
   SelectObject (hdcmem,tbitmap);
   DeleteObject (hbitmap);
 #else  WINCE
   SetBitmapBits (hbitmap,bmsize,bitmap);
-  StretchBlt    (hdc,rect->left-x,rect->top-y,rect->right-rect->left,rect->bottom-rect->top,hdcmem,0,0,width,height,SRCAND);
+  StretchBlt    (hdc,rect->left-x,rect->top-y,rect->right-rect->left,rect->bottom-rect->top,hdcmem,0,0,width,height,SRCCOPY);
 #endif WINCE
   if (color != NO_CHANGE) SetTextColor(hdc,color);
   return;
 }
 
+//--------------------------------
 //
 //  This routine finds a kanji value in the font cache.  If the value 
 //  is not already loaded, this rotuine loads it.
@@ -467,6 +511,7 @@ int BITMAP_KANJI_font::find_kanji (int jis,HDC hdc,COLORREF &color) {
   return (jis*bmsize);
 }
 
+//--------------------------------
 //
 //  This routine converts between JIS codes used in the 
 //  program and internal codes used in the fonts.  Note
@@ -518,26 +563,29 @@ BadKanji:
   return (jis_index(KANJI_BAD));
 }
 
+//--------------------------------
 //
 //  This routine opens a font up for operations.
 //
-//      name    -- Name of font to open.
-//      docache -- If non-zero forces font chaching.  
+//      name     -- Name of font to open.
+//      docache  -- If non-zero forces font chaching.  
+//      vertical -- Print fonts vetically
 //
-//      RETURN  -- A non-zero value indicates an error.
+//      RETURN   -- A non-zero value indicates an error.
 //
 //  Not that even if no font caching is requested, JWPce may overide
 //  this request if the font requested has a non-word alighed strucure.
 //  Then to perform the translations, JWPce will implement caching
 //  anyway.
 //
-int BITMAP_KANJI_font::open (tchar *name,int docache) {
+int BITMAP_KANJI_font::open (TCHAR *name,int docache,int vertical) {
   int number;
   FONTHEADER header;
   unsigned long done;
   if (INVALID_HANDLE_VALUE == (file = jwp_config.open(name,OPEN_READ,false))) return (true);
   if (!ReadFile(file,&header,sizeof(header),&done,NULL)) return (true);
   truetype   = false;
+  vertfont   = vertical;
   width      = header.width;
   height     = header.height;
   bmsize     = header.height*sizeof(short)*((header.width/8+1)/sizeof(short));
@@ -590,9 +638,9 @@ int BITMAP_KANJI_font::open (tchar *name,int docache) {
 //
 //  End Class BITMAP_KANJI_font
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin Class TRUETYPE_KANJI_font.
 //
@@ -605,6 +653,7 @@ int BITMAP_KANJI_font::open (tchar *name,int docache) {
 
 #define X   ((char *) &x)
 
+//--------------------------------
 //
 //  Swap byte order within a long int.
 //
@@ -623,6 +672,7 @@ static ulong swap_long (ulong x) {
   return (x);
 }
 
+//--------------------------------
 //
 //  Swap byte order within a short int.
 //
@@ -652,6 +702,7 @@ TRUETYPE_KANJI_font::TRUETYPE_KANJI_font (void) {
   return;
 }
 
+//--------------------------------
 //
 //  Close a font.
 //
@@ -667,6 +718,7 @@ void TRUETYPE_KANJI_font::close () {
   return;
 }
 
+//--------------------------------
 //
 //  Basic render routine for TrueType fonts.
 //
@@ -693,6 +745,7 @@ void TRUETYPE_KANJI_font::draw (HDC hdc,int jis,int x,int y) {
   return;
 }
 
+//--------------------------------
 //
 //  This is a variant on the KANJI_font::draw routine that streatches
 //  the font to fill a given rectange.  This is used for the big 
@@ -701,16 +754,16 @@ void TRUETYPE_KANJI_font::draw (HDC hdc,int jis,int x,int y) {
 //      hdc      -- Context to render into.
 //      jis      -- JIS code to render (will be converted on the fly).
 //      rect     -- Rectangle that the character should fill to.
-//      vertical -- Non-zero for vertical printing.
 //
 //  Because TrueType fonts are generate rotated for vertical printing, the vertical flag is not
 //  used, and this routine simply prints the character in the center of the selected box.
 //
-void TRUETYPE_KANJI_font::fill (HDC hdc,int jis,RECT *rect,int vertical) {
+void TRUETYPE_KANJI_font::fill (HDC hdc,int jis,RECT *rect) {
   draw (hdc,jis,rect->left+(rect->right-rect->left+1-width)/2-hshift,rect->bottom-(rect->bottom-rect->top+1-height)/2);
   return;
 }
 
+//--------------------------------
 //
 //  Convert JIS character code into an glyph index for the font.
 //
@@ -740,6 +793,7 @@ int TRUETYPE_KANJI_font::jis_index (int jis) {
 #endif WINCE
 }
 
+//--------------------------------
 //
 //  This routine opens a font up for operations.
 //
@@ -775,6 +829,7 @@ int TRUETYPE_KANJI_font::open (HDC hdc,tchar *name,int size,int vertical) {
   lf.lfEscapement = lf.lfOrientation = (vertical ? 900 : 0);
   if (!(font = CreateFontIndirect(&lf))) return (true);
   truetype = true;
+  vertfont = vertical;
 //
 //  Access the font thrugh the DC
 //
@@ -787,8 +842,10 @@ int TRUETYPE_KANJI_font::open (HDC hdc,tchar *name,int size,int vertical) {
 //width   = (short) tm.tmAveCharWidth;
 //height  = (short) tm.tmAscent;
 //leading = (short) tm.tmExternalLeading;
-  width   = (short) tm.tmMaxCharWidth;
   height  = size; 
+  width   = (short) tm.tmMaxCharWidth;
+  if (width > height) width = height;
+// HACK -- Need a better system for getting kanji width.  Currently assuming height=width.  This was added to support full UNICODE FONTS.
   leading = height/8; 
   spacing = width/12;
   hshift  = spacing/2-1;            // This -1 seems to give better screen display and should not show up on the printer.
@@ -925,9 +982,9 @@ int TRUETYPE_KANJI_font::open (HDC hdc,tchar *name,int size,int vertical) {
 //
 //  End Class TRUETYPE_KANJI_font
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin Class JWP_font.
 //
@@ -937,16 +994,38 @@ int TRUETYPE_KANJI_font::open (HDC hdc,tchar *name,int size,int vertical) {
 //  program do not need to recalculate these values.
 //
 
-class JWP_font jwp_font;    // Class instance.
-
-JWP_font::~JWP_font () {
-  if (colorkanji_list) free (colorkanji_list);
-  if (font) DeleteObject (font); 
-  colorkanji_list = NULL;
-  font            = null; 
+//--------------------------------
+//
+//  Close the font class and deallocate all resources.
+//
+void JWP_font::close () {
+  if (!duplicate) {
+    kanji->remove ();
+    if (ascii) DeleteObject (ascii);
+  }
+  ascii = NULL;
+  kanji = NULL;
   return;
 }
 
+//--------------------------------
+//
+//  Generates a copy of the font.  This is used because the system font and the 
+//  display font are speparate.  If the user wants to use the same font for each
+//  we just copy the font.  Thus we have only one open copy of the font at a
+//  time.  
+//
+//  This routine just duplicates the JFC_font structure and sets the duplicate flag.
+//
+//      font -- Font to be copied
+//
+void JWP_font::copy (class JWP_font *font) {
+  *this     = *font;
+  duplicate = true;
+  return;
+}
+
+//--------------------------------
 //
 //  Calculate horizontal advance for a character.
 //
@@ -961,29 +1040,31 @@ int JWP_font::hadvance (int x,int ch) {
   return (((x-x_offset)/hwidth+1)*hwidth+x_offset);
 }
 
+//--------------------------------
 //
-//  Intialize the font settings.  This is called during startup, and
-//  is then again called whenever the fonts are changed to reinitizlie 
-//  the system.
+//  This routine opens font system.  This includes a kanji font and an ASCII
+//  font of matched size.  All metrics and dimensions are intialized.
 //
-int JWP_font::initialize () {
-  HDC        hdc;
-  TEXTMETRIC tm;
-  HFONT      tfont;
-  int        i;
-  SIZE       size;
-  TCHAR      string[2];
+//      name   -- Name of font.  If the font ends in ".f00" this is assumed
+//                to be a bitmapped font.  Otherwise it is assumed to be a 
+//                TrueType font.
+//      size   -- Height in pixels of the font.
+//      cache  -- Non-zero for a chached font.  (Only used for bitmapped fonts.)
+//      hdc    -- Display context.  (A value of NULL will assume the main display.)
+//      vert   -- Vertical version of the font.
 //
-//  May be a reinitalize, so we just close some optional fonts.  When
-//  they are used again they will be open with the correct parameters.
+//      RETURN -- Non-zero value indicates success.
 //
-  free_fonts ();
+int JWP_font::open (TCHAR *name,int size,int cache,HDC hdc,int vert) {
 //
-//  Open kanji font and intialize.
+//  Close any open font.
 //
-  if (!(kanji = open_font(jwp_config.cfg.display,jwp_config.cfg.font_size,jwp_config.cfg.cache_displayfont,null,false))) {
-    if (!(kanji = open_bitmap(NAME_KANJI,jwp_config.cfg.cache_displayfont))) return (true); // If we cannot open the user's font
-  }                                                                                         //   try the default bitmapped font
+  close ();
+  duplicate = false;
+//
+//  Try to open the kanji font.
+//
+  if (!(kanji = open_font(name,size,cache,hdc,vert))) return (false);
   height   = kanji->height;
   rheight  = kanji->height+1;
   vspace   = height/4;
@@ -993,42 +1074,36 @@ int JWP_font::initialize () {
   cheight  = vheight-kanji->leading;            // Height of caret (cursor).
   lheight  = vheight;                           // Height of line in a Japanese list box
   loffset  = lheight-height-1;                  // Offset for rendering a line in a list box (for speed this is calcuated here but used only in one place).
-  x_offset = hspace;                            // Parameters used JWP_file class for display.
+  x_offset = hspace;                            // Parameters used JFC_file class for display.
   y_offset = height+vspace;
 //
-//  Generate user main font.
+//  Now open the ASCII font
 //
-  if (!(font = open_ascii(jwp_config.cfg.font))) return (true);
+  LOGFONT    lf;
+  HFONT      tfont;
+  TCHAR      string[2];
+  SIZE       s;
+  int        i;
+  memset  (&lf,0,sizeof(lf));
+  lstrcpy (lf.lfFaceName,jwp_config.cfg.ascii_font.name);
+  lf.lfHeight = -height;
+  if (!(ascii = CreateFontIndirect(&lf))) return (false);
+//
+//  Get font metrics
+//  
   hdc = GetDC (main_window);
-  GetTextMetrics (hdc,&tm);                     // Get system font info for later.
-  tfont = (HFONT) SelectObject (hdc,font);
-  for (i = 0; i <= 255; i++) {                  // Get width occupied by each ASCII
+  tfont = (HFONT) SelectObject (hdc,ascii);
+  for (i = 0; i < 256; i++) {                   // Get width occupied by each ASCII
     string[0] = i;                              //   character.
-    GetTextExtentPoint32 (hdc,string,1,&size);
-    widths[i] = (byte) size.cx;
+    GetTextExtentPoint32 (hdc,string,1,&s);
+    widths[i] = (short) s.cx;
   }
   SelectObject (hdc,tfont);
   ReleaseDC (main_window,hdc);
-//
-//  Get system font height.
-//
-  sysheight = (short) tm.tmHeight;
-//
-//  Read in color-kanji list.
-//
-  HANDLE handle;
-  unsigned long done;
-  if (INVALID_HANDLE_VALUE != (handle = jwp_config.open(COLORKANJI_NAME,OPEN_READ,true))) {
-    i = GetFileSize(handle,NULL)/sizeof(KANJI);
-    if ((colorkanji_list = (KANJI *) malloc(i*sizeof(KANJI)))) {
-      ReadFile (handle,colorkanji_list,i*sizeof(KANJI),&done,NULL);
-      colorkanji_size = i;
-    }
-  }
-  CloseHandle (handle);
-  return (false);
+  return (true);
 }
 
+//--------------------------------
 //
 //  Opens an ascii font with a size that matches the kanji font.
 //
@@ -1036,109 +1111,275 @@ int JWP_font::initialize () {
 //
 HFONT JWP_font::open_ascii (tchar *face) {
   LOGFONT    lf;
-  memset (&lf,0,sizeof(lf));
+  memset  (&lf,0,sizeof(lf));
   lstrcpy (lf.lfFaceName,face);
   lf.lfHeight = -height;
-  return (CreateFontIndirect(&lf));
+  return  (CreateFontIndirect(&lf));
 }
 
 //
 //  End Class JWP_font
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
-//  Begin Class JWP_file.
-//
-//  This modlue only contains the JWP_file::do_kanjilist() function.
-//  because this fuction modifies the color kanji data structures that
-//  are static to this routine.
+//  These routines handle the color-kanji list.
 //
 
+class COLOR_kanji color_kanji;
+static HWND adddel_dialog = NULL;
+
+int jis2index (int ch) {
+  ch = ch-((int) 0x3021);
+  if (ch < 0) return (-1);
+  ch = HIBYTE(ch)*94+LOBYTE(ch);
+  if (ch > MAX_KANJI) return (-1);
+  return (ch);
+}
+
+int index2jis (int ch) {
+  int i,j;
+  i = ch/94;
+  j = ch-(i*94);
+  return (0x3021+((i << 8) | j));
+}
+
+//--------------------------------
+//
+//  Dialog box procedure for the Add & Delete kanji dialog.
+//
+static int adddel_proc (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
+  int    i,length,start;
+  KANJI *kanji;
+  switch (msg) {
+    case WM_INITDIALOG: 
+         add_dialog (hwnd,true);
+         adddel_dialog = hwnd;
+         SendDlgItemMessage (hwnd,IDC_AKKANJI,JE_LOAD,0,(LPARAM) jwp_file);
+         return (true);
+    case WM_DESTROY:
+         remove_dialog (hwnd);
+         adddel_dialog = NULL;
+         return (0);
+    case WM_COMMAND:        
+         switch (LOWORD(wParam)) { 
+           case IDOK:           // Add
+           case IDC_AKDELETE:   // Delete
+                start  = color_kanji.count();
+                length = JEGetDlgItemText(hwnd,IDC_AKKANJI,&kanji);
+                if (LOWORD(wParam) == IDC_AKDELETE) {
+                  for (i = 0; i < length; i++) color_kanji.remove (kanji[i]);
+                  length = color_kanji.count();
+                  JMessageBox (main_window,IDS_CK_REMOVE,IDS_CK_TITLE,MB_OK,length,start-length);
+                }
+                else {
+                  for (i = 0; i < length; i++) color_kanji.add (kanji[i]);
+                  length = color_kanji.count();
+                  JMessageBox (main_window,IDS_CK_APPEND,IDS_CK_TITLE,MB_OK,length,length-start);
+                }
+                color_kanji.write ();
+                DestroyWindow     (hwnd);
+                return (0);
+           case IDCANCEL:
+                DestroyWindow (hwnd);
+                return        (0);
+         }
+  }
+  return (false);
+}
+
+//--------------------------------
+//
+//  Add a kanji to the list.  The routine automatically takes care of 
+//  duplicated kanji and such.
+//
+//      ch     -- Character to add.
+//
+//      return -- Non-zero value indicates the character was valid and
+//                could be added.
+//
+int COLOR_kanji::add (int ch) {
+  int i;
+  i = jis2index(ch);
+  if (i < 0) return (false);
+  data[i] = true;
+  return (true);
+}
+
+//--------------------------------
+//
+//  Clear the color kanji list.
+//
+void COLOR_kanji::clear () { 
+  memset (&data,0,sizeof(data));
+  return;
+}
+
+//--------------------------------
+//
+//  Count number of kanji in the list.
+//
+int COLOR_kanji::count () {
+  int i,j;
+  for (i = j = 0; i <= MAX_KANJI; i++) j += data[i];
+  return (j);
+}
+
+//--------------------------------
+//
+//  This routine implements the add & delete kanji dialog.
+//
+void COLOR_kanji::do_adddel () {
+  if (adddel_dialog) SetForegroundWindow (adddel_dialog); else JCreateDialog (IDD_ADDCOLORKANJI,main_window,(DLGPROC) adddel_proc);
+  return;
+}
+
+//--------------------------------
+//
+//  Determine if a character is in the color-kanji list.
+//
+//      ch     -- Character to check.
+//
+//      RETURN -- Non-zero value indicates the kanji is in the list.
+//
+int COLOR_kanji::in (int ch) {
+  int i;
+  i = jis2index(ch);
+  if (i == -1) return (false);
+  return (data[i]);
+}
+
+//--------------------------------
+//
+//  This routine addes the color kanji to the current file.  This is used to 
+//  edit the color kanji list.
+//
+void COLOR_kanji::put () {
+  int   i;
+  KANJI k;
+  for (i = 0; i <= MAX_KANJI; i++) {
+    if (data[i]) {
+      k = index2jis(i);
+      jwp_file->put_string(&k,1);
+    }
+  }
+  return;
+}
+
+//--------------------------------
+//
+//  Read the color kanji list from the standard file.
+//
+void COLOR_kanji::read () {
+  KANJI  kanji;
+  HANDLE handle;
+  unsigned long done;
+  if (INVALID_HANDLE_VALUE != (handle = jwp_config.open(COLORKANJI_NAME,OPEN_READ,true))) {
+    while (true) {
+      ReadFile (handle,&kanji,sizeof(KANJI),&done,NULL);
+      if (done != sizeof(kanji)) break;
+      kanji = ((kanji & 0xff00) >> 8) | ((kanji & 0x00ff) << 8);    // Swap byte order to get EUC.
+      add (kanji & 0x7f7f);
+    }
+  }
+  CloseHandle (handle);
+}
+
+//--------------------------------
+//
+//  Remove a kanji to the list.  The routine automatically takes care of 
+//  duplicated kanji and such.
+//
+//      ch     -- Character to remove.
+//
+//      return -- Non-zero value indicates the character was valid and
+//                could be removed.
+//
+int COLOR_kanji::remove (int ch) {
+  int i;
+  i = jis2index(ch);
+  if (i < 0) return (false);
+  data[i] = false;
+  return (true);
+}
+
+//--------------------------------
+//
+//  Write the color kanji list to the standard file.
+//
+//      RETURN -- A non-zero return indicates an error writing.
+//
+int COLOR_kanji::write () {
+  int    i;
+  KANJI  kanji;
+  HANDLE handle;
+  unsigned long done;
+  if (INVALID_HANDLE_VALUE == (handle = jwp_config.open(COLORKANJI_NAME,OPEN_NEW,true))) {
+    QUIET_ERROR ErrorMessage (true,IDS_CK_ERROR,jwp_config.name());
+    return (true);
+  }
+  for (i = 0; i <= MAX_KANJI; i++) {
+    if (data[i]) {
+      kanji = index2jis(i) | 0x8080;
+      kanji = ((kanji & 0xff00) >> 8) | ((kanji & 0x00ff) << 8);    // Swap byte order to get EUC.
+      WriteFile(handle,&kanji,sizeof(kanji),&done,NULL);
+    }
+  }
+  CloseHandle (handle);
+  return      (false);
+}
+
+//--------------------------------
 //
 //  This routine implements the Utilities/Make Kanji List
 //
 void JWP_file::do_kanjilist () {
   Paragraph *para;
-  KANJI     *kanji;
-  int        count,i,j,k;
-  HANDLE     handle;
-  unsigned long done;
-//
-//  First count all the kanji.
-//
-  for (count = 0, para = first; para; para = para->next) {
-    for (i = 0; i < para->length; i++) if (ISKANJI(para->text[i])) count++;
+  int        i,start;
+  start = color_kanji.count();
+  for (para = first; para; para = para->next) {
+    for (i = 0; i < para->length; i++) if (ISKANJI(para->text[i])) color_kanji.add(para->text[i]);
   }
-  count++;
-//
-//  Allocate buffer memory.
-//
-  if (!(kanji = (KANJI *) calloc(count,sizeof(KANJI)))) { OutOfMemory (window); return; }
-  for (count = 0, para = first; para; para = para->next) {
-    for (i = 0; i < para->length; i++) if (ISKANJI(para->text[i])) kanji[count++]=para->text[i];
-  }
-//
-//  Remove duplicate kanji.
-//
-  for (i = 0; i < count; i++) {
-    for (j = i+1; j < count; j++) {
-      if (kanji[i] == kanji[j]) {
-        for (k = j; k < count; k++) kanji[k] = kanji[k+1];
-        count--;
-      }
-    }
-  }
-//
-//  Setup new lists.
-//
-  if (!count) {
-    free (kanji);
-    kanji = NULL;
-  }
-  if (colorkanji_list) free (colorkanji_list);
-  colorkanji_list = kanji;
-  colorkanji_size = count;
   redraw_all ();
-  JMessageBox (main_window,IDS_CK_TEXT,IDS_CK_TITLE,MB_OK,count);
-//
-//  Write color-kanji list to a file.
-//
-  if ((INVALID_HANDLE_VALUE == (handle = jwp_config.open(COLORKANJI_NAME,OPEN_NEW,true))) || !WriteFile(handle,colorkanji_list,colorkanji_size*sizeof(KANJI),&done,NULL)) {
-    QUIET_ERROR ErrorMessage (true,IDS_CK_ERROR,jwp_config.name());
-  }
-  CloseHandle (handle);
+  JMessageBox (main_window,start ? IDS_CK_APPEND : IDS_CK_TEXT,IDS_CK_TITLE,MB_OK,color_kanji.count(),color_kanji.count()-start);
+  color_kanji.write ();
   return;
 }
 
 //
-//  End Class JWP_file
+//  End Class COLOR_kanji
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Exported routines.
 //
 
+//--------------------------------
 //
 //  This routine deallocates all kanji fonts.  This is called when we are about to exit and 
 //  when the user changes the font base, since this will require re-evaluating the font 
 //  choics.
 //
 void free_fonts () {
-  kanji      ->remove ();
+  sys_font .close ();
+  list_font.close ();
+  edit_font.close ();
+  file_font.close ();
+  clip_font.close ();
+  bar_font .close ();
   big_kanji  ->remove ();
   jist_kanji ->remove ();
   print_kanji->remove ();
-  kanji       = NULL;
   big_kanji   = NULL;
   jist_kanji  = NULL;
   print_kanji = NULL;
   return;
 }
 
+//--------------------------------
 //
 //  This routine gets the bigest kanji font avilable.  This is ued 
 //  for rendering the large kanji in the characrter info dialog.
@@ -1152,22 +1393,26 @@ void free_fonts () {
 //                a font to open, it will return the main system font.
 //
 KANJI_font *get_bigfont (RECT *rect) {
-  if (big_kanji) return (big_kanji);            // Already have a big font.
-  if (kanji->truetype && rect) {                // TrueType font, so try to make a font to fit in box.
-    int i,j;
-    j = rect->right-rect->left;
-    i = rect->bottom-rect->top;
-    if (j < i) i = j;
-    if ((big_kanji = open_font(jwp_config.cfg.display,i,true,NULL,false))) return (big_kanji);
+  int i,j;
+  j = rect->right-rect->left;
+  i = rect->bottom-rect->top;
+  if (j < i) i = j;
+  if (big_kanji) return (big_kanji);                            // Already have a big font.
+  if (!jwp_config.cfg.big_font.automatic) {                     // User has a chosen font.
+    if (big_kanji = open_font(jwp_config.cfg.big_font.name,i,true,NULL,false)) return (big_kanji);
   }
-  if ((big_kanji = open_bitmap(NAME_BIGFONT,true))) return (big_kanji); // Try 48x48
-  if ((big_kanji = open_bitmap(NAME_MEDFONT,true))) return (big_kanji); // Try 24x24
-  if (kanji->truetype) {
-    if ((big_kanji = open_bitmap(NAME_KANJI,true))) return (big_kanji); // Try 16x16;
+  if (file_font.kanji->truetype) {                              // Try to use user's font face.
+    if ((big_kanji = open_font(jwp_config.cfg.file_font.name,i,true,NULL,false))) return (big_kanji);
   }
-  return (kanji);                                                       // Use the standard font.
+  if (sys_font.kanji->truetype) {                               // Try to use system font face.
+    if ((big_kanji = open_font(jwp_config.cfg.sys_font.name,i,true,NULL,false))) return (big_kanji);
+  }
+  if ((big_kanji = open_bitmap(NAME_BIGFONT,true,false))) return (big_kanji);   // Try 48x48
+  if ((big_kanji = open_bitmap(NAME_MEDFONT,true,false))) return (big_kanji);   // Try 24x24
+  return (sys_font.kanji);
 }
 
+//--------------------------------
 //
 //  This routine selects a font for use in the JIS Table.  Since the table is based on a 16x16
 //  font we will attempt to generate a 16x16 bit version of the current font.
@@ -1175,15 +1420,24 @@ KANJI_font *get_bigfont (RECT *rect) {
 //      RETURN -- Pointer to a font to use.  A valid font is always returned.
 //
 KANJI_font *get_jistfont () {
-  if (jist_kanji) return (jist_kanji);          // Already have a font
-  if (kanji->height == 16) return (kanji);      // We are using a 16x16 font.
-  if (kanji->truetype) {                        // Using a TrueType font so try to make a 16x16 version of this font.
-    if ((jist_kanji = open_font(jwp_config.cfg.display,16,true,NULL,false))) return (jist_kanji);
-  }                                             
-  if ((jist_kanji = open_bitmap(NAME_KANJI,true))) return (jist_kanji); // Try 16x16
-  return (kanji);                               // This is generally going to be a bad choice.
+  if (jist_kanji) return (jist_kanji);                          // Already have a font
+  if (!jwp_config.cfg.jis_font.automatic) {                     // User has a chosen font.
+    if (jist_kanji = open_font(jwp_config.cfg.jis_font.name,16,true,NULL,false)) return (jist_kanji);
+  }
+#if 0                                                           // Removed these to default to 
+  if (file_font.kanji->height == 16) return (file_font.kanji);  // Try the user's chosen font.
+  if (file_font.kanji->truetype) {                              // Try to use user's font face.
+    if ((jist_kanji = open_font(jwp_config.cfg.file_font.name,16,true,NULL,false))) return (jist_kanji);
+  }
+#endif
+  if (sys_font.kanji->height == 16) return (sys_font.kanji);    // Try to use the system font.
+  if (sys_font.kanji->truetype) {                               // Try to use system font face.
+    if ((jist_kanji = open_font(jwp_config.cfg.sys_font.name,16,true,NULL,false))) return (jist_kanji);
+  }
+  return (sys_font.kanji);
 }
 
+//--------------------------------
 //
 //  This rotuine gets a font that is sutable for printing.  Noramlly, the printer font is 
 //  closed every time and reopened.  This allows us to deal with changes made by the user,
@@ -1203,24 +1457,71 @@ KANJI_font *get_printfont (HDC hdc,int vertical) {
   int size;
   print_kanji->remove ();
   print_kanji = NULL;
-  size = (jwp_config.cfg.print_size*GetDeviceCaps(hdc,LOGPIXELSY))/720;
-  if (!jwp_config.cfg.print_autofont) {
-    if ((print_kanji = open_font(jwp_config.cfg.print,size,true,hdc,vertical))) return (print_kanji);
+  size = (jwp_config.cfg.print_font.size*GetDeviceCaps(hdc,LOGPIXELSY))/720;
+  if (!jwp_config.cfg.print_font.automatic) {
+    if ((print_kanji = open_font(jwp_config.cfg.print_font.name,size,true,hdc,vertical))) return (print_kanji);
   }
-  if (kanji->truetype) {
-    if ((print_kanji = open_font(jwp_config.cfg.display,size,true,hdc,vertical))) return (print_kanji);
+  if (file_font.kanji->truetype) {
+    if ((print_kanji = open_font(jwp_config.cfg.file_font.name,size,true,hdc,vertical))) return (print_kanji);
   }
-  if ((print_kanji = open_bitmap(NAME_BIGFONT,true))) return (print_kanji); // Try 48x48
-  if ((print_kanji = open_bitmap(NAME_MEDFONT,true))) return (print_kanji); // Try 24x24
-  if (kanji->truetype) {
-    if ((print_kanji = open_bitmap(NAME_KANJI,true))) return (print_kanji); // Try 16x16;
+  if ((print_kanji = open_bitmap(NAME_BIGFONT,true,vertical))) return (print_kanji);    // Try 48x48
+  if ((print_kanji = open_bitmap(NAME_MEDFONT,true,vertical))) return (print_kanji);    // Try 24x24
+  if (file_font.kanji->truetype) {
+    if ((print_kanji = open_bitmap(NAME_KANJI,true,vertical))) return (print_kanji);    // Try 16x16;
   }
-  return (kanji);                                                           // Use the standard font.
+  return (file_font.kanji);                                                 // Use the standard font.
+}
+
+//--------------------------------
+//
+//  Initialize the fonts structures.
+//
+int initialize_fonts () {
+  HDC        hdc;
+  TEXTMETRIC tm;
+//
+//  May be a reinitalize, so we just close some optional fonts.  When
+//  they are used again they will be open with the correct parameters.
+//
+  free_fonts ();
+//
+//  Open the system font
+//
+  if (!sys_font.open(jwp_config.cfg.sys_font.name,jwp_config.cfg.sys_font.size,jwp_config.cfg.cache_displayfont,NULL,false)) {
+    if (!(sys_font.open(NAME_KANJI,16,jwp_config.cfg.cache_displayfont,NULL,false))) return (true);    // If we cannot open the user's font
+  }                                                                                             //   try the default bitmapped font
+//
+//  Generate the display font.
+//
+  auto_font (&jwp_config.cfg.edit_font,&edit_font,& sys_font);
+  auto_font (&jwp_config.cfg.list_font,&list_font,&edit_font);
+  auto_font (&jwp_config.cfg. bar_font,& bar_font,&edit_font);
+  auto_font (&jwp_config.cfg.file_font,&file_font,& sys_font);
+  if (jwp_config.cfg.clip_font.automatic || !clip_font.open(jwp_config.cfg.clip_font.name,jwp_config.cfg.clip_font.size,true,NULL,jwp_config.cfg.clip_font.vertical)) clip_font.copy(&file_font);
+//
+//  Get system font height.
+//
+  hdc = GetDC (main_window);
+  GetTextMetrics (hdc,&tm);                     // Get system font info for later.
+  ReleaseDC (main_window,hdc);
+  sysfont_height = (short) tm.tmHeight;
+//
+//  Read in color-kanji list.
+//
+  color_kanji.read ();
+  return (false);
 }
 
 
-
 // ### May want to implement a binary search on the color-kanji list.
+
+
+
+
+
+
+
+
 
 
 

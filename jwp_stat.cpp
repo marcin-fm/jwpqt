@@ -1,11 +1,11 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This modlue manages the status bar.  
 //
@@ -19,7 +19,7 @@
 
 #include <commctrl.h> 
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  class JWP_stat.
 //
@@ -30,6 +30,7 @@ class JWP_stat jwp_stat;                        // Class instance.
 
 static LRESULT CALLBACK JWP_stat_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam);
 
+//--------------------------------
 //
 //  Window procedure.
 //
@@ -53,6 +54,7 @@ static LRESULT CALLBACK JWP_stat_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
   return (DefWindowProc(hwnd,iMsg,wParam,lParam));
 }
 
+//--------------------------------
 //
 //  Adjust the size of the window (is a responce to a size change).
 //
@@ -68,13 +70,13 @@ void JWP_stat::adjust (HWND hwnd) {
   int  i;
   if (!hwnd) hwnd = window;                     // No window pointer use the window var.
   if (!hwnd) return;                            // No window still -> no status bar.
-  height  = (3*jwp_font.sysheight)/2;           // Setup window size and move it.
+  height  = (3*sysfont_height)/2;               // Setup window size and move it.
   GetClientRect (main_window,&rect);
   MoveWindow    (hwnd,-1,rect.bottom-height+1,rect.right+2,height,true);
 //
 //  Setup internal size parameters in the window.
 //
-  offset   = (1*jwp_font.sysheight)/5;          // Vertical offset for text.
+  offset   = (1*sysfont_height)/5;              // Vertical offset for text.
   hdc      = GetDC (hwnd);
   ptr      = get_string (IDS_STAT_OVR);
   GetTextExtentPoint32 (hdc,ptr,lstrlen(ptr),&size);
@@ -92,6 +94,7 @@ void JWP_stat::adjust (HWND hwnd) {
   return;
 }
 
+//--------------------------------
 //
 //  Render the status bar.  This routine is not called directly, but
 //  rather is called from the window procedure.
@@ -124,6 +127,7 @@ void JWP_stat::draw (HDC hdc) {
   return;
 }
 
+//--------------------------------
 //
 //  Not called directly, but rather called from the window proc, this 
 //  this routine process the mouse events.  The only events that are 
@@ -142,6 +146,7 @@ void JWP_stat::do_mouse (LPARAM lParam) {
   return;
 }
 
+//--------------------------------
 //
 //  Intialize the class and setup.
 //
@@ -152,7 +157,7 @@ int JWP_stat::initialize (WNDCLASS *wclass) {
   if (wclass) {                                 // Register class.
     wclass->style         = CS_HREDRAW | CS_VREDRAW;
     wclass->lpfnWndProc   = JWP_stat_proc;
-    wclass->hbrBackground = (HBRUSH) (COLOR_MENU+1);
+    wclass->hbrBackground = (HBRUSH) (COLOR_BTNFACE+1);
     wclass->lpszClassName = TEXT("JWP-Stat");
     if (!RegisterClass(wclass)) return (true);
   }
@@ -170,6 +175,7 @@ int JWP_stat::initialize (WNDCLASS *wclass) {
   return (false);
 }
 
+//--------------------------------
 //
 //  Redraw the screen.  This simply checks to see if there is a window
 //  then ivalidates the window.
@@ -179,6 +185,7 @@ void JWP_stat::redraw () {
   return;
 }
 
+//--------------------------------
 //
 //  Updage the text part of the display, which requires a redraw.
 //
@@ -193,9 +200,9 @@ void JWP_stat::update (char *text) {
 //
 //  End class JWP_stat
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin class JWP_tool.
 //
@@ -249,6 +256,7 @@ void JWP_stat::update (char *text) {
 
 #define NT_TOTAL        23      // Total number of buttons in my custom bitmap
 
+//--------------------------------
 //
 //  This is the default button list.
 //
@@ -264,6 +272,7 @@ static byte button_list[] = {
   0,BUTTON_PAGELAYOUT,BUTTON_OPTIONS,
 };
 
+//--------------------------------
 //
 //  All of the user's possible buttons, arranged by order in the menus.  This is used for 
 //  data, and this order is used in the Customize feature.
@@ -330,6 +339,7 @@ static short tips[] = {     //   off by one, because there is no spot for the se
 
 class JWP_tool jwp_tool;        // The actual class instance    
 
+//--------------------------------
 //
 //  Adjust the size of the button bar.  This is a responce to a WM_SIZE message from the 
 //  system.  This should have been inline, but the TB_AUTOSIZE is not defined everywhere,
@@ -340,6 +350,7 @@ void JWP_tool::adjust () {
   return;
 }
 
+//--------------------------------
 //
 //  Controls the check state of a button in the button bar.  Note indexing is via command
 //  id, not button index.  This is because the user may move the buttons then we don't know
@@ -357,6 +368,7 @@ void JWP_tool::check (int id,int state) {
   return;
 }
 
+//--------------------------------
 //
 //  Responds to the Utilities/Cutomize... menu item.  This could have been inlined, but 
 //  the defintiion of TB_CUSTOMIZE cuases problems.
@@ -368,6 +380,7 @@ void JWP_tool::customize () {
   return;
 }
 
+//--------------------------------
 //
 //  Controls the activation state of a button in the button bar.  Note indexing is via command
 //  id, not button index.  This is because the user may move the buttons then we don't know
@@ -385,6 +398,7 @@ void JWP_tool::enable (int id,int state) {
   return;
 }
 
+//--------------------------------
 //
 //  This handles the TB_GETINFO WM_NOTIFY message.  These are issed by the system to find
 //  all the buttons that can be placed in the tool bar when the user is customizing the 
@@ -411,6 +425,7 @@ int JWP_tool::info (NMHDR *pnmh) {
   return (true);
 }
 
+//--------------------------------
 //
 //  For the toolbar, this is the big one.  This both makes and destroys the toolbar.  This 
 //  routine also save the current user settings when the tool bar is destoryed and recreates
@@ -430,11 +445,7 @@ void JWP_tool::process (int exit) {
 //
 //  This handles opeing the toolbar.
 //
-  if (!jwp_config.cfg.no_toolbar && !window) {
-    if (!jwp_config.cfg.button_count) {                                 // This handles the case of the user having an old 
-      memcpy (jwp_config.cfg.buttons,button_list,sizeof(button_list));  //   configuration file.  These files would not have
-      jwp_config.cfg.button_count = sizeof(button_list);                //   a button array so we load the default.  This 
-    }                                                                   //   should be removed later.
+  if (jwp_config.cfg.toolbar && !window) {
     window               = CreateToolbarEx(main_window,WS_CHILD | WS_VISIBLE | CCS_TOP | CCS_ADJUSTABLE | TBSTYLE_TOOLTIPS,IDB_TOOLBAR,16,HINST_COMMCTRL,IDB_STD_SMALL_COLOR,NULL,0,24,22,16,16,sizeof(TBBUTTON));
     custom_bitmaps.hInst = instance;
     custom_bitmaps.nID   = IDB_TOOLBAR;
@@ -443,7 +454,7 @@ void JWP_tool::process (int exit) {
       SendMessage (window,TB_ADDBUTTONS,1,(LPARAM) &buttons[jwp_config.cfg.buttons[i]]); 
     }
     GetWindowRect (window,&rect);                                       // Get button size.
-    jwp_config.commandbar_height = rect.bottom-rect.top+1;
+    jwp_config.commandbar_height = (short) (rect.bottom-rect.top+1);
     EnableMenuItem (hmenu,IDM_UTILITIES_CUSTOMIZE,MF_ENABLED);
     if (jwp_file) jwp_file->edit_menu ();
     set_mode (MODE_NOCHANGE);
@@ -453,7 +464,7 @@ void JWP_tool::process (int exit) {
 //  The buttons are saved by saving their user data field which contains
 //  the button number.  The value of zero is used as a separator.
 //
-  if ((exit || jwp_config.cfg.no_toolbar) && window) {
+  if ((exit || !jwp_config.cfg.toolbar) && window) {
     for (i = 0; i < 100; i++) {                                 // Allow a maximum of 100 buttons
       if (!SendMessage(window,TB_GETBUTTON,i,(LPARAM) &button)) break;
       jwp_config.cfg.buttons[i] = (byte) button.dwData;
@@ -467,6 +478,7 @@ void JWP_tool::process (int exit) {
   return;
 }
 
+//--------------------------------
 //
 //  This resets the buttons to the default button list.
 //
@@ -480,6 +492,7 @@ void JWP_tool::reset () {
   return;
 }
 
+//--------------------------------
 //
 //  This handles the TTN_NEEDTEXT WM_NOTIFY message.  This is basically a request from the
 //  system to get the tooltip for the buttons.

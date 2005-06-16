@@ -73,7 +73,7 @@ BSC32=bscmake.exe
 LINK32=link.exe
 # ADD BASE LINK32 commctrl.lib coredll.lib /nologo /machine:MIPS /nodefaultlib:"$(CENoDefaultLib)" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT BASE LINK32 /pdb:none /nodefaultlib
-# ADD LINK32 aygshell.lib commctrl.lib coredll.lib /nologo /machine:MIPS /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WMIPSRel/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
+# ADD LINK32 aygshell.lib commctrl.lib coredll.lib ceshell.lib ole32.lib /nologo /machine:MIPS /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WMIPSRel/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT LINK32 /pdb:none /nodefaultlib
 
 !ELSEIF  "$(CFG)" == "JWPce_PPC - Win32 (WCE MIPS) Debug"
@@ -104,7 +104,7 @@ BSC32=bscmake.exe
 LINK32=link.exe
 # ADD BASE LINK32 commctrl.lib coredll.lib /nologo /debug /machine:MIPS /nodefaultlib:"$(CENoDefaultLib)" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT BASE LINK32 /pdb:none /nodefaultlib
-# ADD LINK32 commctrl.lib coredll.lib aygshell.lib /nologo /debug /machine:MIPS /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WMIPSDbg/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
+# ADD LINK32 aygshell.lib commctrl.lib coredll.lib ceshell.lib ole32.lib /nologo /debug /machine:MIPS /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WMIPSDbg/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT LINK32 /pdb:none /nodefaultlib
 
 !ELSEIF  "$(CFG)" == "JWPce_PPC - Win32 (WCE SH4) Release"
@@ -135,7 +135,7 @@ BSC32=bscmake.exe
 LINK32=link.exe
 # ADD BASE LINK32 commctrl.lib coredll.lib /nologo /machine:SH4 /nodefaultlib:"$(CENoDefaultLib)" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT BASE LINK32 /pdb:none /nodefaultlib
-# ADD LINK32 commctrl.lib coredll.lib aygshell.lib /nologo /machine:SH4 /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WCESH4Rel/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
+# ADD LINK32 aygshell.lib commctrl.lib coredll.lib ceshell.lib ole32.lib /nologo /machine:SH4 /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WCESH4Rel/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT LINK32 /pdb:none /nodefaultlib
 
 !ELSEIF  "$(CFG)" == "JWPce_PPC - Win32 (WCE SH4) Debug"
@@ -166,7 +166,7 @@ BSC32=bscmake.exe
 LINK32=link.exe
 # ADD BASE LINK32 commctrl.lib coredll.lib /nologo /debug /machine:SH4 /nodefaultlib:"$(CENoDefaultLib)" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT BASE LINK32 /pdb:none /nodefaultlib
-# ADD LINK32 commctrl.lib coredll.lib aygshell.lib /nologo /debug /machine:SH4 /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WCESH4Dbg/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
+# ADD LINK32 aygshell.lib commctrl.lib coredll.lib ceshell.lib ole32.lib /nologo /debug /machine:SH4 /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WCESH4Dbg/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT LINK32 /pdb:none /nodefaultlib
 
 !ELSEIF  "$(CFG)" == "JWPce_PPC - Win32 (WCE SH3) Release"
@@ -197,7 +197,7 @@ BSC32=bscmake.exe
 LINK32=link.exe
 # ADD BASE LINK32 commctrl.lib coredll.lib /nologo /machine:SH3 /nodefaultlib:"$(CENoDefaultLib)" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT BASE LINK32 /pdb:none /nodefaultlib
-# ADD LINK32 commctrl.lib coredll.lib aygshell.lib /nologo /machine:SH3 /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WCESH3Rel/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
+# ADD LINK32 aygshell.lib commctrl.lib coredll.lib ceshell.lib ole32.lib /nologo /machine:SH3 /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WCESH3Rel/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT LINK32 /pdb:none /nodefaultlib
 
 !ELSEIF  "$(CFG)" == "JWPce_PPC - Win32 (WCE SH3) Debug"
@@ -228,7 +228,7 @@ BSC32=bscmake.exe
 LINK32=link.exe
 # ADD BASE LINK32 commctrl.lib coredll.lib /nologo /debug /machine:SH3 /nodefaultlib:"$(CENoDefaultLib)" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT BASE LINK32 /pdb:none /nodefaultlib
-# ADD LINK32 commctrl.lib coredll.lib aygshell.lib /nologo /debug /machine:SH3 /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WCESH3Dbg/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
+# ADD LINK32 aygshell.lib commctrl.lib coredll.lib ceshell.lib ole32.lib /nologo /debug /machine:SH3 /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WCESH3Dbg/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT LINK32 /pdb:none /nodefaultlib
 
 !ELSEIF  "$(CFG)" == "JWPce_PPC - Win32 (WCE ARM) Release"
@@ -259,7 +259,7 @@ BSC32=bscmake.exe
 LINK32=link.exe
 # ADD BASE LINK32 coredll.lib commctrl.lib /nologo /machine:ARM /nodefaultlib:"$(CENoDefaultLib)" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT BASE LINK32 /pdb:none /nodefaultlib
-# ADD LINK32 commctrl.lib coredll.lib /nologo /machine:ARM /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WCEARMRel/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
+# ADD LINK32 commctrl.lib coredll.lib ceshell.lib ole32.lib /nologo /machine:ARM /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WCEARMRel/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT LINK32 /pdb:none /nodefaultlib
 
 !ELSEIF  "$(CFG)" == "JWPce_PPC - Win32 (WCE ARM) Debug"
@@ -290,7 +290,7 @@ BSC32=bscmake.exe
 LINK32=link.exe
 # ADD BASE LINK32 coredll.lib commctrl.lib /nologo /debug /machine:ARM /nodefaultlib:"$(CENoDefaultLib)" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT BASE LINK32 /pdb:none /nodefaultlib
-# ADD LINK32 commctrl.lib coredll.lib aygshell.lib /nologo /debug /machine:ARM /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WCEARMDbg/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
+# ADD LINK32 aygshell.lib commctrl.lib coredll.lib ceshell.lib ole32.lib /nologo /debug /machine:ARM /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WCEARMDbg/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT LINK32 /pdb:none /nodefaultlib
 
 !ELSEIF  "$(CFG)" == "JWPce_PPC - Win32 (WCE MIPSFP) Release"
@@ -321,7 +321,7 @@ BSC32=bscmake.exe
 LINK32=link.exe
 # ADD BASE LINK32 commctrl.lib coredll.lib /nologo /machine:MIPS /nodefaultlib:"$(CENoDefaultLib)" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT BASE LINK32 /pdb:none /nodefaultlib
-# ADD LINK32 commctrl.lib coredll.lib aygshell.lib /nologo /machine:MIPS /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WMIPSFPRel/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
+# ADD LINK32 aygshell.lib commctrl.lib coredll.lib ceshell.lib ole32.lib /nologo /machine:MIPS /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WMIPSFPRel/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT LINK32 /pdb:none /nodefaultlib
 
 !ELSEIF  "$(CFG)" == "JWPce_PPC - Win32 (WCE MIPSFP) Debug"
@@ -352,7 +352,7 @@ BSC32=bscmake.exe
 LINK32=link.exe
 # ADD BASE LINK32 commctrl.lib coredll.lib /nologo /debug /machine:MIPS /nodefaultlib:"$(CENoDefaultLib)" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT BASE LINK32 /pdb:none /nodefaultlib
-# ADD LINK32 commctrl.lib coredll.lib aygshell.lib /nologo /debug /machine:MIPS /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WMIPSFPDbg/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
+# ADD LINK32 aygshell.lib commctrl.lib coredll.lib ceshell.lib ole32.lib /nologo /debug /machine:MIPS /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WMIPSFPDbg/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT LINK32 /pdb:none /nodefaultlib
 
 !ELSEIF  "$(CFG)" == "JWPce_PPC - Win32 (WCE x86) Release"
@@ -383,7 +383,7 @@ BSC32=bscmake.exe
 LINK32=link.exe
 # ADD BASE LINK32 $(CEx86Corelibc) commctrl.lib coredll.lib /nologo /machine:IX86 /nodefaultlib:"$(CENoDefaultLib)" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT BASE LINK32 /pdb:none /nodefaultlib
-# ADD LINK32 $(CEx86Corelibc) commctrl.lib coredll.lib aygshell.lib /nologo /machine:IX86 /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WCEX86Rel/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
+# ADD LINK32 $(CEx86Corelibc) aygshell.lib commctrl.lib coredll.lib ceshell.lib ole32.lib /nologo /machine:IX86 /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WCEX86Rel/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT LINK32 /pdb:none /nodefaultlib
 
 !ELSEIF  "$(CFG)" == "JWPce_PPC - Win32 (WCE x86) Debug"
@@ -414,7 +414,7 @@ BSC32=bscmake.exe
 LINK32=link.exe
 # ADD BASE LINK32 $(CEx86Corelibc) commctrl.lib coredll.lib /nologo /debug /machine:IX86 /nodefaultlib:"$(CENoDefaultLib)" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT BASE LINK32 /pdb:none /nodefaultlib
-# ADD LINK32 $(CEx86Corelibc) commctrl.lib coredll.lib aygshell.lib /nologo /debug /machine:IX86 /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WCEX86Dbg/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
+# ADD LINK32 $(CEx86Corelibc) aygshell.lib commctrl.lib coredll.lib ceshell.lib ole32.lib /nologo /debug /machine:IX86 /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WCEX86Dbg/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT LINK32 /pdb:none /nodefaultlib
 
 !ELSEIF  "$(CFG)" == "JWPce_PPC - Win32 (WCE PPC) Release"
@@ -445,7 +445,7 @@ BSC32=bscmake.exe
 LINK32=link.exe
 # ADD BASE LINK32 commctrl.lib coredll.lib /nologo /machine:PPC /nodefaultlib:"$(CENoDefaultLib)" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT BASE LINK32 /pdb:none /nodefaultlib
-# ADD LINK32 commctrl.lib coredll.lib aygshell.lib /nologo /machine:PPC /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WCEPPCRel/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
+# ADD LINK32 aygshell.lib commctrl.lib coredll.lib ceshell.lib ole32.lib /nologo /machine:PPC /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WCEPPCRel/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT LINK32 /pdb:none /nodefaultlib
 
 !ELSEIF  "$(CFG)" == "JWPce_PPC - Win32 (WCE PPC) Debug"
@@ -476,7 +476,7 @@ BSC32=bscmake.exe
 LINK32=link.exe
 # ADD BASE LINK32 commctrl.lib coredll.lib /nologo /debug /machine:PPC /nodefaultlib:"$(CENoDefaultLib)" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT BASE LINK32 /pdb:none /nodefaultlib
-# ADD LINK32 commctrl.lib coredll.lib aygshell.lib /nologo /debug /machine:PPC /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WCEPPCDbg/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
+# ADD LINK32 aygshell.lib commctrl.lib coredll.lib ceshell.lib ole32.lib /nologo /debug /machine:PPC /nodefaultlib:"$(CENoDefaultLib)" /out:"PPC_WCEPPCDbg/JWPce.exe" /subsystem:$(CESubsystem) /STACK:65536,4096
 # SUBTRACT LINK32 /pdb:none /nodefaultlib
 
 !ENDIF 

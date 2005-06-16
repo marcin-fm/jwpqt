@@ -1,9 +1,9 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 //
 //  This modlue contains a number of special definitalis used by the 
 //  Windows CE versions of the code.  Most of these defintiions, are
@@ -12,16 +12,17 @@
 #ifdef WINCE
 #include "jwpce.h"
 
-#if (defined(WINCE_PPC) && !defined(_ARM_))
-  #include <Aygshell.h>
-#endif 
+#ifdef WINCE_PPC
+  #include <C:\Program Files\Windows CE Tools\wce211\ms palm size pc\include\Aygshell.h>
+#endif WINCE_PPC
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Exported Data.
 //
 TCHAR *currentdir = NULL;   // Our own version fo the current directory.
 
+//--------------------------------
 //
 //  Repalcement for c library routine that allocates and clears memory.
 //
@@ -36,6 +37,7 @@ void *calloc (long s1,long s2) {
   return (mem);
 }
  
+//--------------------------------
 //
 //  Fake stub routine for the system GetCurrentDirectory.  This 
 //  simply gets our own internal current_directory value.
@@ -52,6 +54,7 @@ void GetCurrentDirectory (int size,TCHAR *buffer) {
   return;
 }
 
+//--------------------------------
 //
 //  Get the full path from the relative path.  Since Windows CE always
 //  works with the full path, there is actually very little to do 
@@ -71,6 +74,7 @@ void GetFullPathName (const TCHAR *name,int size,TCHAR *buffer,TCHAR **ptr) {
   return;
 }
 
+//--------------------------------
 //
 //  Replacement for the system routine that inverts a rectangle region.
 //
@@ -84,6 +88,7 @@ void InvertRect (HDC hdc,RECT *rect) {
   return;
 }
 
+//--------------------------------
 //
 //  Save the current directory in our buffer.  This allows us to provide
 //  a current directory even though Windows CE has no such concept.
@@ -104,14 +109,15 @@ void set_currentdir (TCHAR *path,int filename) {
   return;
 }
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Routines specific to PPC's
 //
-#ifdef PPC_INPUT_PANEL
+#ifdef WINCE_PPC
 
 static short input_state = false;   // Memory location for stored input panel state.
 
+//--------------------------------
 //
 //  This routine enables and disables the input panel when you activate a dialog box item.
 //
@@ -126,6 +132,7 @@ void input_check (int wParam) {
   return;
 }
 
+//--------------------------------
 //
 //  This routine controls the input panel.  This allows the program to open and close the
 //  input panel.
@@ -143,6 +150,7 @@ void input_panel (int state) {
   return;
 }
 
+//--------------------------------
 //
 //  Restore the input panel to a saved state.  This is actually not a direct restore, but 
 //  rather clever.  If the panel was open we will open it.  If it was closed we will do 
@@ -153,6 +161,7 @@ void input_restore () {
   return;
 }
 
+//--------------------------------
 //
 //  This rotuine stores the state of the input so it can potentially be restore at a later 
 //  time.
@@ -166,6 +175,6 @@ void input_status () {
   return;
 }
 
-#endif PPC_INPUT_PANEL
+#endif WINCE_PPC
 
 #endif WINCE

@@ -8,13 +8,7 @@ JWPce Program and Documentation
 File Names:     All files distributed with the JWPce package with
                 exceptions as stated below.
 
-Copyright (C):  glenn rosenthal, 1997,1998,1999,2000.  All rights reserved.
-
-                No part(s) of JWPce may be included in any commercial
-                product, nor may any commercial product include
-                portion(s) derived from part(s) of JWPce, without the
-                explicit permission of the respective copyright
-                holder(s).
+Copyright (C):  glenn rosenthal, 1997-2001, 2002.  All rights reserved.
 
                 Distributed under the GNU General Public License.
                 Please read GNUGPL.TXT for copyright details.
@@ -24,9 +18,33 @@ Copyright (C):  glenn rosenthal, 1997,1998,1999,2000.  All rights reserved.
                 provision(s) will take precedence over the GNU General
                 Public License.
 
+JWPce Translation Kit
+=====================
 
+Copyright (c): glenn rosenthal, 2000-2001, 2002.  All rights reserved.
 
-JWP Main Package (JWPce's inteface started as a clone of JWP's interface).
+                Distributed under the GNU General Public License.
+                Please read GNUGPL.TXT for copyright details.
+
+                Whenever a specific copyright notice conflicts with the
+                GNU General Public License, the specific copyright
+                provision(s) will take precedence over the GNU General
+                Public License.
+
+JWPce Utilities and Tools
+========================
+
+Copyright (c): glenn rosenthal, 1997-2001, 2002.  All rights reserved.
+
+                Distributed under the GNU General Public License.
+                Please read GNUGPL.TXT for copyright details.
+
+                Whenever a specific copyright notice conflicts with the
+                GNU General Public License, the specific copyright
+                provision(s) will take precedence over the GNU General
+                Public License.
+
+JWP Main Package (JWPce's interface started as a clone of JWP's interface).
 ================
 
 File Names:     All files distributed with the JWP package with
@@ -107,7 +125,7 @@ File Names: EDICT, EDICT.JDX
 
 Copyright (C) 1994 James William Breen
 
-This licence statement and copyright notice  applies  to  the EDICT
+This license statement and copyright notice  applies  to  the EDICT
 Japanese/English  Dictionary  file,  the  associated documentation file
 EDICT.DOC, and any data files which are derived from them.
 
@@ -149,7 +167,7 @@ Kanji Information Database
 File Names: KINFO.DAT, KINFOSTR.IDX, KINFOBSH.IDX
             (Part of the KANJIDIC package)
 
-This licence statement and copyright notice applies to the KANJIDIC
+This license statement and copyright notice applies to the KANJIDIC
 package, the associated documentation files, and any data files which
 are derived from them.
 
@@ -190,7 +208,7 @@ above conditions, while retaining their copyright over that material:
 
 Jack HALPERN: The SKIP codes and Frequency codes in the KANJIDIC package.
 
-With regard to the SKIP and Frequency codes, Mr Halpern stated as
+With regard to the SKIP and Frequency codes, Mr. Halpern stated as
 follows:
 
     "The commercial utilization of the frequency numbers is prohibited
@@ -227,7 +245,7 @@ Copyright (C): Michael Raine
 Special thanks to Michael Raine for telling me about the idea and
 donating the kanji files necessary to implement the new lookup method.
 He requests that the data files not be re-distributed for use in any
-commerical product without his express written permission.
+commercial product without his express written permission.
 
 
 
@@ -241,14 +259,14 @@ Date: August 12, 1992
 Author: Ken R. Lunde, Adobe Systems Incorporated
  EMAIL: lunde@mv.us.adobe.com
  MAIL : 1585 Charleston Road, P.O. Box 7900, Mountain View, CA 94039-7900
-Type: A tool for converting the Japanese code of Japanese textfiles.
+Type: A tool for converting the Japanese code of Japanese text files.
 Code: ANSI C (portable)
 
 DISTRIBUTION AND RESTRICTIONS ON USAGE:
  1) Please give this source code away to your friends at no charge.
 
  2) Please try to compile this source code on various platforms to check
-    for portablity, and please report back to me with any results be
+    for portability, and please report back to me with any results be
     they good or bad. Suggestions are always welcome.
 
  3) Only use this tool on a copy of a file -- do not use an original.

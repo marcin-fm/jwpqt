@@ -1,9 +1,9 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
 #ifndef jwp_help_h
 #define jwp_help_h
@@ -16,14 +16,9 @@
 #define IDH_DICT_DICTIONARIES           0x0709
 #define IDH_DICT_GENERAL                0x0700
 #define IDH_DICT_LIMITS                 0x0702
-#define IDH_DICT_MOVESTANDARD           0x070e
 #define IDH_DICT_OPTIONS                0x0708
-#define IDH_DICT_ORDER                  0x0711
 #define IDH_DICT_RESULTS                0x0703
 #define IDH_DICT_SEARCHFOR              0x0701
-#define IDH_DICT_SEARCHING              0x070c
-#define IDH_DICT_STANDARD               0x070a
-#define IDH_DICT_SUPPLEMENTAL           0x070b
 #define IDH_DICT_USERDICT               0x0705
 #define IDH_DICT_USEREDIT               0x0706
 #define IDH_EDIT_CLIPBOARD              0x0507
@@ -101,6 +96,7 @@
 #define IDH_KANJI_RADLOOKUP             0x0613
 #define IDH_KANJI_READLOOKUP            0x0614
 #define IDH_KANJI_SKIPLOOKUP            0x0615
+#define IDH_KANJI_CONFIGINFO            0x0616
 #define IDH_OPTIONS_ADVANCED            0x0a06
 #define IDH_OPTIONS_DISPLAY             0x0a02
 #define IDH_OPTIONS_FILE                0x0a04
@@ -134,7 +130,6 @@
 #define IDH_TEXT_KANATABLE              0x0404
 #define IDH_TEXT_KATAKANA               0x0403
 #define IDH_TEXT_USERKANJI              0x0407
-
 
 extern void do_help (HWND hwnd,int id);
 

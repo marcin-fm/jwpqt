@@ -1,6 +1,771 @@
+1.41B->1.42:
+
+1.  Single clicking on the large kanji window will no longer inserts the kanji,
+    you have to double click.
+
+2.  Fixed bug in the sort option for the dictionary.
+
+3.  Fixed bug where JIS table would some times use a very large font.
+
+4.  Fixed small formatting error in UTF-8 dictionaries.  "/" is now correctly
+    turned into ", "
+
+5.  Corrected tab order for "Are You Sure?" dialog box.
+
+6.  Fixed bug that could crash dictionary during resize under some complicated
+    procedures.  (Thanks Gernot Federspiel).
+
+7.  Improved the WINFO utility to be very fast.  Older JWP format is no 
+    longer written.  The code is still there and you can enable it by removing
+    a single comment.
+
+8.  WINFO utility was rewritten to work on an array list.  The utility is now 
+    very fast.  The input format has been made more flexible.  Handling of the 
+    verb iku is much improved.;
+
+9.  When selecting text and moving up over the top of the window JWPce will no
+    longer select all the bottom of the text.  (MS published procedure for the 
+    mouse position is not really correct, it does not properly handle when 
+    the mouse is at a negative coordinate.)  This is fixed for both lists and
+    the main file.
+    
+10. The manual and help were revised to generally use "Windows" for Windows 
+    95/98/... and "Windows CE" for CE platforms.
+    
+11. Help was added to the history dialog.
+
+12. Manual and web updated to use new images from XP.
+
+13. Fixed bug in CE color dialog was not setting the current color correctly.
+
+14. Added ctrl+^ to toggle the input mode.  This was in the manual but never
+    got added.
+    
+15. Corrected problem in handling cached kanji information.
+
+16. Fixed bug in auto-cycle on the dictionary.  Pressing i would bring up
+    character information.  This has been fixed.  The list control now
+    requires pressing ctrl+I.    
+
+17. Removed the setting to delete conversions.
+
+18. Added options to select blank for kanji info you don't want to see.
+
+19. When getting character information for kana characters JWPce will 
+    display the romaji equivalents accepted.      
+    
+20. Fixed bug in the margins dialog box.
+
+21. Added option to remove the kanji bar.
+
+22. JWPce is now compiled with Visual C++.NET (VC++ 7.).
+
+23. Most notes left in the code as undefined variables have been removed.
+    These are now stored as comments using VC++ comment based task feature.
+    This gets rid of warning messages during compilation, but the  comments
+    are harder to find. since they can only be seen when viewing the task
+    list for each file, not for the project.
+
+24. JINDEX utility will now index EUC and UTF-8 dictionaries.  The utility 
+    provides a number of options to control how the index is generated.
+
+25. Fixed bug in searching Mixed dictionaries.  (Thanks Jean-Marc!)
+
+26. Fixed auto-typing for dictionaries, now correctly reconizes most Mixed
+    dictionaries.
+    
+27. Updated translation kits.
+
+1.40B->1.41B:
+
+1.  Fixed bug in IME support.
+
+2.  Fixed minimization of dialog boxes.  This was messing up the display.
+
+3.  Corrected some spelling.
+
+4.  Fixed a problem with getting multiple search messages if you keep searching
+    with the search dialog open.
+
+5.  Cleaned up the past back functions.
+
+6.  Added way to insert the kanji from a kanji-info window back into the file.
+    This can be done by double clicking on the kanji box.
+
+7.  Fixed bug in window placement so if you restore old placement the window will
+    not grow one pixel each time.
+
+8.  "Search" and "Find Next" are now in the popup menu associated with the list
+    control.  Added keyboard shortcuts for search (Ctrl+F, Ctrl+S, and F8), to 
+    match the main text window.  Added keyboard shortcuts for Find Next (Ctr+N
+    and F9), again to match the main window.
+
+9,  Corrected error message reporting for searches in lists (similar to #4).
+
+10. Added memory to size of the info and more info dialog boxes.  This changed
+    the configuration file.  I didn't want to do that but well, you know.
+
+11. Fixed bug in editing user dictionary.
+
+12. Fixed small bug in EDIT_list class processing.
+
+13. Sort option has been added to the user dictionary, main dictionary, and to 
+    the user kana->kanji conversions.  The one in the main dictionary is probably
+    not too useful, but people have asked for it.  All of these sorts work 
+    primarily on the kana.
+
+14. Corrected the install for project files so if you choose not to install it.
+
+15. Added install for .jfc file.  This option installs JWPce to edit (not open)
+    JFC files.  Thanks for the suggestion by Gernot Federspiel.
+
+16. Corrected for difference in XP.  JWPce trapped the mouse events to prevent 
+    generation of a context menu event.  This did not work in XP so this was
+    corrected.
+
+17. Fixed bug in handling some times of clipboard imports.  Most noticeable effect
+    is imports from Outlook will not have extra characters on the end.
+
+18. UNICODETEXT is now the primary import format for clipboard and will be used
+    even over the user selected format.  This format accurately represents
+    all characters possible in JWPce.
+
+19. Added ctrl+shift+A keyboard shortcut to select all in lists.  Also added
+    this to the popup menu.
+
+20. Added ctrl+I as keyboard shortcut to access character information from 
+    lists.
+
+21. Added ctrl+I (actually I) as keyboard shortcut for character information
+    in the JIS table.
+
+22. Changed the word right and left commands so that you no longer see the 
+    carrot move.  This makes these function much faster (particularly on 
+    Windows CE).
+
+23. Changed the way some TrueType fonts are loaded.  This handles fonts with
+    full UNICODE support better (such as Arial Unicode MS).  These fonts 
+    report a large width because of some of the other languages.  JWPce will
+    use the height as the width in this case.  This is not great, but is OK.
+    Probably will drop support for 95 soon, to shift to full UNICODE support.
+
+24. Fixed config structure to long word alignment.
+
+25. Added blank windows size structure to the config system for later expansion.
+
+26. Fixed some small problems in the PPC dialog box layouts.  Updated some of
+    the PPC pages to the newer smaller cleaner format.  
+
+27. Added PPC (PocketPC) options to change the up/down buttons to do page
+    scrolling instead of line scrolling.  These options are on the general
+    options page.  This option is only provided on the PPC systems, since 
+    only these systems don't have separate controls for page down and down.
+    This feature can be controlled separately for the files and for the lists.
+
+28. Fixed bug in change all from search and replace.  (Only was a problem in
+    1.40C.)
+
+29. Added dialog to tell how many changes were made when doing a no-confirm
+    replace.  Also added a dialog to warn that no changes were made if that
+    happens.
+
+30. The Big Font and the Printer Font were reversed in the font settings.  
+    This meant when you were setting the big font you were actually setting 
+    the printer font.
+
+31. Font size for the IME is now set to match the editor font for the same 
+    window.  This was necessary because using the IME in a text box would
+    reduce the IME font to a small size.  Thanks Christophe Verre.
+
+32. The Fonts page of the options dialog now uses the system font.  This
+    allows Japanese systems to correctly display Japanese font names.
+    Thanks Christophe Verre.
+
+33. Mouse selecting now works better.
+
+34. Popup menu can be open by holding down the left mouse button (or the
+    pen).  This is a normal interface element in PocketPC, but it does 
+    not seem to present a problem in Windows or HPC systems.  This also
+    takes care of iPaq type systems that don't have a select/open
+    button.
+
+35. Provided a kludge fix to the XP problem.  Basically the dictionary
+    will not accept a new search for 100 ms after finishing a search.
+    I will keep looking at this to determine if I can fix the actual 
+    problem.
+
+36. The section labels used in the Character Information dialog have been
+    moved to the string table.
+
+37. A standardized label generator has been provided for lists.  This is
+    used in the dictionary and the character information, and simplified
+    line formatting routines.
+
+38. An option to separate direct dictionary matches from advanced 
+    dictionary matches is now provided.  This feature resets the priority
+    sort, if it is used and moves priority items for direct match to the
+    top of the list and priority items for advanced search to the 
+    top of that list.
+
+39. Dynamic controls have been added to the dictionary dialog.  If you 
+    expand the dialog additional controls will become visible.  This 
+    does not work on PPCs (not enough room to expand the dialog), and 
+    is limited on HPCs.  Most of the controls on the dictionary options
+    can be accessed this way.
+
+40. Corrected shift-JIS display in the Character Information for ASCII
+    characters.
+
+41. Fixed small bug in resizable dialog boxes.  The system was requiring
+    both dimensions to be larger than default, instead of just one to 
+    restore the size.
+
+42. Character information now shows more information if you increase the
+    size of the dialog box.
+
+43. Information shown in the character information can now be arranged
+    by the user.  With the exception of the bushu field which is fixed.
+    This can be accessed via the Setup button on the Misc page of the 
+    options dialog, or via the Utilities/Setup Char &Info... menu.
+
+44. Windows CE machines now all correctly display the PinYin codes.
+
+45. Added romaji inputs for dzu, and dsu.  These got missed the first 
+    time.  Added new conversions for tha,thi,the,tho,thu and dha,dhi,
+    dho,dhe,dhu.
+
+46. Got the XP bug fixed!  Instability in the dictionary system should
+    be fixed.
+
+47. Background color for bushu characters in Character Information is
+    now set to white for PPCs.  This matches the PocketPC color 
+    system.
+
+48. Windows CE devices use static text instead of edit boxes for 
+    Character Information.  This is required to support the new 
+    arrangeable dialog.  The loss here is you cannot select the text
+    and copy it to the clipboard.  Probably a small loss.
+
+49. Added exception to dictionary to processing ???? (all in fixed 
+    space JASCII).  This will not do a pattern search, but will search 
+    for the actual string.  This can be used to read the ID from most
+    dictionaries.
+
+50. Kanji info now uses the last kanji marker in the file.  This allows 
+    info for a few more kanji.
+
+51. Fixed bug in the radical lookup dialog.  When working I accidentally
+    disabled the scroll bar.
+
+52. The WINFO utility has been enhanced to accept data in the EDICT 
+    format.  The main kana->kanji conversion database has been augmented
+    by extracting all the priority entries from EDICT.  This has resulted
+    in 6766 additional entries for a total of 37601 unmerged and
+    25481 merged entries (319kB and 116kB).  The previous conversion 
+    database had 30835 unmerged entries or 21210 unmerged entries 
+    (254kB and 105kB). 
+
+    I have also created a large kana->kanji database that contains
+    all the entries in EDICT (entries that do not have kanji are 
+    automatically removed by WINFO).  This large database has 100703
+    unmerged entries or 71131 merged entries (1,068kB and 206kB).
+    Actually, I think this is actually overkill, but some people
+    want it.
+
+    Using the new WINFO, you could process the entire ENAMDICT
+    and then include all names in the conversion.  Just 
+    remember WINFO runs slow.
+
+53. Restructured the string table to make more sense.  Related items
+    are grouped together, and string IDs make more sense.  That was
+    painful, but necessary.
+
+54. Hitting return will execute a kana->kanji conversion if one is
+    pending.  I eventually want to change this to keep the conversion
+    active, but this is better than before.
+
+55. Chanced default clipboard format back to shift-JIS.  Since the 
+    UNICODETEXT format is working correctly in both directions, JWPce
+    will normally communicate with UNICODE applications using this 
+    method, regardless of the set format.
+
+56. Small bug in KINFO utility has been fixed.  KINFO was handling 
+    UTF character correctly everywhere except in the comment line.
+    This has been fixed.  It had no effect on the final result, but
+    prevented names with extended ASCII from being used.
+
+57. By popular request the lists have solid line markers not the 
+    dashed line.
+
+58. Fixed odd little display bug in list boxes.  Selecting part 
+    of a line with the mouse then pressing down incorrectly
+    only highlighted part of a line.
+
+59. The font list in the Fonts options is now a drop list not 
+    a drop box (you cannot edit the name).  Spelling mistake
+    fixed.
+
+60. Chanced the way the spin controls work in some of the lookup
+    dialog boxes (Radical, Bushu, and Bushu/Stroke).  The new 
+    system will automatically skip values associated with the 
+    stroke numbers of the selected radical(s).  For example, if 
+    you have an 11 stroke radical(s) selected, The sequence for 
+    the total stroke count will be: 0, 11, 12, 13, ... 29, 30, 0.
+    Note that stoke counts of 1-10 are automatically skipped.  
+    These combinations will always lead to no matches, because 
+    they have less strokes than the selected radicals.
+
+1.35->1.40B:
+
+1.  Fixed label on Display page of Options dialog (PPC version).
+
+2.  Windows CE programs will now install correctly, as well as recognizing
+    the correct folder locations on Japanese machines.
+
+3.  Small icons have been provided for dialogs and CE machines.
+
+4.  Modified the action of the selector controls.  Using shift+cursor 
+    motions after doing a kanji conversion now changes to doing a 
+    selection correctly.  The partial kanji conversion is not included
+    in the selected text.
+
+5.  Corrected kana input system to correctly process combinations like
+    matcha.  To processes this correctly before you would have had to 
+    enter maccha.
+
+6.  Added romaji inputs for jya, jyu, jyo.
+
+7.  Fixed a crash bug.  If you selected text containing no characters (end 
+    of line) then selected get information JWPce crashed.  This has been
+    fixed.  You get character information for no character.
+
+8.  Changed operation of the del key.  When doing an inline conversion the 
+    del key will delete the kana, but after the conversion has been changed
+    to kanji, the del key will delete characters to the right.  Added a 
+    option to enable the old actions which was to delete the conversion at
+    all times.  (May remove this option later.)
+
+9.  Fixed bug in updating the configuration files.  There was a bug that would
+    prevent updating the configuration.  This has been fixed.
+
+10. The : character was being rotated in vertical printing.  This was not
+    correct.
+
+11. It is now possible to put vertical text on the clipboard as a bitmap.
+    This is done by setting the clipboard font to a vertical font.
+
+12. The following fonts can now be set in the program:
+    
+        system font -- Basic font used only for static Japanese text.
+        edit font   -- Used for Japanese edit controls
+        list font   -- Used for Japanese list controls
+        bar font    -- Used for kanji bars.
+        file font   -- Used to display your file
+        big font    -- Font used to display large kanji in the Info screen
+        jis font    -- Used only for the JIS table (16x16 required)
+        clip font   -- Font used to render bitmaps on the clipboard
+        print font  -- Font used for printing.
+
+    If the fonts are set at automatic they inherit the characteristics for
+    other fonts.
+
+        system font
+         |
+         +--------->edit font
+         |           |
+         |           +-->list font
+         |           |
+         |           +-->bar font
+         |
+         +--------->file font
+         |           |
+         |           +-->clip font
+         |           |
+         |           +-->print font
+         |           |
+         |           +-->big font
+         |
+         +-------------->jis font
+
+13. Internal changes in vertical font handling.
+
+14. Auto-cycling is now installed on the dictionary.  When you enter a word and
+    do a search, the results list is automatically selected.  If you just start 
+    typing again, JWPce will not automatically jump to the input text box for the
+    next search.  This works if you type any printable character, or right, left, 
+    and backspace.
+
+15. Fixed duplicated key code in HPC Kanji menu.
+
+16. Fixed handling of the clipboard tracking, so it no longer hangs up the other
+    programs when you copy something strange onto the clipboard.
+
+17. Fixed programming kludge in the dictionary system, using the WM_PAINT message.
+
+18. Big changes in the color kanji feature:
+
+    a.  Kanji list is now stored in EUC code not JIS code so you can open the list 
+        in JWPce.
+    b.  Kanji/Color Kanji/Make Kanji List -- Make a kanji list, replacing the old list.
+    c.  Kanji/Color Kanji/Append to Kanji List -- Appends to the current kanji list.
+    d.  Kanji/Color Kanji/Add/Remove Kanji -- Opens a small dialog box.  You can 
+        add or remove kanji by entering them into this dialog box.
+    e.  Kanji/Color Kanji/View Kanji List -- Opens a JWPce file and fills it with all
+        the kanji on the kanji list.
+    f.  Kanji/Color Kanji/Clear Kanji List -- Clears the entire kanji list.
+    g.  Color kanji operations are now much faster.
+
+19. Silenced errors generated from clipboard searches in the dictionary.  These include
+    not enough characters, mixed kanji, and kana.  The error messages was not necessary 
+    useful, since often this was generated while you were working on another program, 
+    and would prevent the dictionary from performing another search.
+
+20. Wheel mouse support is now added.  
+
+    Main window --
+        plain   -- Just does scroll
+        shift   -- Scroll by page
+        control -- Scroll through open files.
+
+    Anywhere else --
+        plain   -- Just does scroll
+        shift   -- Scroll by page
+
+    Note, if you have the wheel mouse set to scroll by page, you will always get scroll
+    by page.
+
+21. Improved processing of the kana->kanji converter.  There was a logic error that 
+    prevented verbs such as machigau from being converted correctly, unless you selected
+    the entire verb.
+
+22. File extensions are now used to determine the type of files.  If you wish to load a 
+    file without the correct extensions, you must indicate the type.  The following type
+    indicators are used:
+
+        .jfc    --  JFC file type (preferred UTF-8, but could also be EUC).
+        .euc    --  EUC
+        .sjs    --  shift-JIS
+        .jis    --  JIS
+        .nec    --  NEC JIS
+        .old    --  Old JIS
+        .utf    --  UTF format file, with convert to UTF-7 or UTF-8.  Preference for UTF-8.
+
+    Note, .jwp, .jwc, and .jcp files are always recognized correctly because they contain
+    and ID code in the file.
+
+23. Fixed some more spelling mistakes.
+
+24. Spaces are now quietly skipped in the beginning of dictionary searches.  This should 
+    reduced a number of false mixed kana/kanji & ASCII errors.
+
+25. The dictionary treats JASCII as ASCII.
+
+26. ASCII dictionary searches are slightly faster.
+
+27. Pattern searching is now allowed in the dictionary.  The patterns supported are:
+    
+        * -- Matches any number of characters including zero.
+        ? -- Matches any one character.
+        [ -- Matches only the beginning of the word
+        ] -- Matches only the end of the word
+
+    Note *? Will match one or more characters.  
+    
+    To use the pattern search, you must have at least one kanji in your string.  This limit
+    is based on the current index system and may be changed later.
+
+28. You may now search the dictionary for verbs such as "to read", "to swim", etc.  This will 
+    reduce the number of false matches.
+
+29. Dictionary tracking code removed.  This project is not active, and I can add back the
+    code if it is needed at a later time.
+
+30. Added an option to disable the auto-scroll.  Also provided an option to control the speed 
+    of the auto-scroll.  The auto-scroll regions were also reduced from 1/2 line to 1/3 line.
+    Note that the scrolling speed will never exceed the redraw speed of the screen no mater 
+    how fast you set it for.
+
+31. Oops!  Over optimize error fixed in the find command.  This would not find capitalized 
+    characters if you input a lower case search string.
+
+32. The Find Next command has been changed.  If you attempt to do a Next before doing a 
+    search JWPce will automatically go into the search command.  Previously you would have
+    gotten an error message.
+
+33. The Search and Search and Replace dialog boxes now normally stay on the screen and 
+    can be used to search again.  This action can be controlled by using the "Keep Search
+    Dialogs Open" option on the Advanced page of the Options dialog.
+
+34. You can now search in the User Conversions list, or in the User dictionary list or in any
+    Japanese list.  This search finds entries containing the search string.  The search can be
+    accessed using the ctrl-F and ctrl-N keys.  Note the search for most lists can only
+    be accessed using these keys.
+
+35. Some cleanup on the configuration structure.
+
+36. Program files reformatted to make working with the code somewhat easier.
+
+37. Several unused variables removed from the JWP_config class.
+
+38. Code originally used to initialize the tool bar on older systems has been removed.  This
+    version will force you to reinitialize the configuration files.  This will initialize the
+    tool bar.
+
+39. Parameters in the configuration structure were reorganized to make more sense.
+
+40. Code used to handle a special case of having the incorrect parameters for the bushu
+    kanji searches has been removed.  Again, since the configuration will be reloaded, the 
+    setup will take care of this.
+
+41. JWPce now keeps track of the last several dictionary searches, as well as text searches,
+    and replace string.  These features are called history for these operations.  You can
+    can control the size of the history buffers from the Advanced Options page.  The history
+    is smart and will attempt to avoid duplicating the same entry more than once.  
+
+    The history data is saved in the configuration file so you will have the same history
+    resorted when the program restarts.
+
+    The history can be used in the following way.  In the Japanese edit control you can use
+    the up key to move further into the back of the history.  The down key will move you 
+    toward the more recent history.  If you move down past all history elements JWPce will 
+    open a small window containing all the history elements, and you can select one.
+
+    You can also access the history list by clicking the small "v" button to the right of 
+    the edit control.
+
+    The default 300 buffer will store about 30 lines of text.
+
+42. Fixed small color display problems with Windows XP.  Previously the system color COLOR_MENU
+    was a grey color used in the tool bars.  Under XP this color is white.  Most places, this
+    has been changed to COLOR_BTNFACE, which is the color of a push button, and is the grey 
+    color used for menu strips and tool bars.
+
+43. Kana converter now processes mb and mp combinations a nb and np.  This allows the popular
+    romanization of newspaper to be entered as shinbun or now as shimbun.
+
+44. Color system has been completely redone.  JWPce will correctly respond to changes in the 
+    system colors.  This includes the main windows.  The rendering system has been updated
+    to allow the such thing as rendering white text on a black background.
+
+45. Active Japanese list controls have a dotted line around them in Windows.
+
+46. Position of the kanji bar at the top of the screen for CE is now corrected.  I had 
+    incorrectly accounted for the height of the menu/tool bar.
+
+47. With some more consistent code, some specialized Windows CE code could be removed. 
+    This makes the program easer to work with.
+
+48. The kanji information system has been updated to use the most recent version of 
+    KNAJIDIC.  This includes entries for the following new references:
+
+        P.G. O'Neill's Essential Kanji (ISBN 0-8348-0222-8). 
+        Jack Halpern in his Kanji Learners Dictionary, published by Kodansha in 1999
+        Father Joseph De Roo, and published in his book "2001 Kanji"
+        This includes the De Roo cross-reference codes.
+
+49. The above three indexes have been added to the index lookup for kanji.  The DeRoo
+    system is actually a classification system and a kanji lookup could be built around 
+    it like the other kanji lookup systems.  At the moment I have decided not to do this
+    basically because the system is somewhat hard for me to represent, and only has 
+    2001 classified kanji.  Note this kanjifno.dat file is compatible with the previous 
+    version of JWPce
+
+50. KINFO.EXE now accepts UTF-8 files.  This crates a KANJINFO.DAT file that contains a
+    UTF-8 data for the meanings.  This is supported by JWPce and allows the kanji data 
+    to be translated into other languages.
+    
+51. Note, due to format changes in the current version, older project files will not work.
+    I was not planning on releasing an update utility for these.  If this is really a 
+    problem, let me know and I will create one.
+    
+52. Default clipboard export format is now UNICODE.  This format is more common than 
+    shift-JIS in the Windows world.
+    
+53. The project files have their own icon now.    
+
+54. Big bug fixed in the UNICODETEXT format.  Do to a bug this format has not been
+    working correctly at all!.  I suggest you keep this enabled, it allows JWPce to 
+    exchange data with UNICODE programs.
+
+55. Fixed small bug in the JWPce file write.  This would cause the file to be corrupted if 
+    a zero was written to the file.  Normally there should not be a zero in the file data, but
+    it is possible to get one pasted in from the clipboard.  I have also removed most of the 
+    ways to get a zero pasted into a file.
+
+56. Conversion commands ctrl+up and ctrl+down work now in Japanese edit boxes just
+    as in the main window.
+
+57. Closing the user dictionary dialog box correctly transfers control to the parent 
+    window.
+
+58. Handling of file type strings for open and save file dialogs has been standardized.
+    These strings use the tab_string() routine.  This routine replaces tabs in the string
+    with the zeros required by these routines.
+
+59. PPC machines now save backup copies by default.  This was disabled because early 
+    CE machines had no file explorer or viewer.  PocketPC machines all have a file-
+    explorer.
+
+60. Localization files can specify a string IDS_DICT_LANGUAGE.  If this string is 
+    set to any value that does not begin with '.', if this is defined, it specifies
+    a localization dictionary that is searched before all other dictionaries.  The 
+    characteristics of this dictionary are: UTF-8, Search, Quiet, Use an index if
+    present.  (See below for more details on this.)
+
+61. The processing for the searched dictionaries has been completely rewritten from
+    scratch.   The system is no longer based on a EDIT_list class.  The new routine
+    is based on a memory list of Dictionary class objects.  The list is maintained 
+    with by use of a ViewList.
+
+    The file format used to store dictionaries is completely different.
+
+    All dictionaries are listed in the dictionary list, including the standard 
+    dictionaries.  
+
+    The location of any of the dictionaries (as well as the names) can be changed.
+
+    In the dictionaries dialog, you can move up and down with the cursor keys.  
+    Space will toggle the state of the current dictionary (checked dictionaries
+    are possibly searched).
+
+62. A much larger number of dictionary options are now supported:
+
+        name    -- Name of dictionary
+        file    -- Actual file for the dictionary.
+        Japanese text control contains the meaning for the first entry in the 
+                   dictionary.  For many dictionaries, the first entry contains
+                   the dictionary version and description.
+        refresh -- Update the Japanese text control.
+       
+    Format:
+        EUC     -- EUC format, or classic EDICT format.
+        UTF-8   -- UTF-8 format
+        Mixed   -- Old JWPce format.  For simple ASCII meanings, this is the 
+                   same as EUC, however, this format allows extended ASCII in
+                   the meaning.  This is mixed, because the kana and kanji are
+                   in EUC, and the meaning is in extended ASCII.
+
+    Type:
+        Indexed  -- Dictionary has a index and is searched using the index.
+        Memory   -- Dictionary has no index and is loaded into memory and 
+                    searched in memory.
+        Buffered -- Similar to a memory search, but is searched using a memory
+                    buffer instead of loading the entire dictionary into 
+                    memory.  This is slower than memory, but more suitable 
+                    for large dictionaries.
+
+    Names:
+        No Names   -- Dictionary does not have names.
+        Has Names  -- Dictionary does have names.
+        Only Names -- Dictionary has only names.
+
+    Search this Dictionary   -- Search this dictionary.
+    Quiet handling of errors -- Don't report errors.  You should not use this
+                                flag,  It is meant for default dictionaries to
+                                suppress errors if ENAMEDICT and CLASSICAL are
+                                not installed.
+    Keep dictionary open     -- Keeps dictionary open for faster searching, but
+                                can use more memory and resources.
+    Classical dictionary     -- This is a classical formatted dictionary for 
+                                classical Japanese.  This has a slightly 
+                                different searching algorithm.
+    User dictionary          -- This is the user dictionary, you cannot change
+                                this flag.
+
+63. Keep and Quiet dictionary options have been implemented for all dictionaries.
+
+64. Obsolete dictionary code for filtering has been removed.
+
+65. Dictionary paths using localized characters are supported on all machines.
+
+66. UTF-8 dictionaries are supported.  Buffered dictionaries are not yet, but default
+    to using memory dictionary routines.
+
+67. There is now a dictionary option to convert JASCII->ASCII.  The default is 
+    to have this option on, but you can disable it.  There are a few entries in 
+    EDICT that could require real JASCII to match.
+
+68. There is a option for ASCII searches to look for full entries instead of 
+    just full words.  For example, if you search for "car", without the begin and 
+    end flags you will get a large number of results.  If you include the begin 
+    and end flags you will get less entries, but still some odd ones "car chase",
+    "car horn", "Sweetish car brand".  If you select Full ASCII Entry on the 
+    dictionary options, you will get just 3 entries.  EDICT is really a 
+    Japanese->English dictionary this may help in going the other way.
+        
+69. The size of many of JWPce's dialog boxes can now be changed on the fly.
+    These are:
+
+        Character Information
+        More Character Information
+        Count Kanji
+        User Kana to Kanji Conversions
+        Dictionary
+        User Dictionary
+        History list
+
+    These dialog boxes are indicates by a wider drag border that can be used
+    to change the size of the dialog.  The mouse pointer will also turn into
+    a sizing arrow when held at the edge of the dialog box.  These dialog boxes
+    also have a maximize control.
+
+    We the exception of the Character Information, More character 
+    Information, and history dialog boxes, JWPce will normally member the size and 
+    position you last placed the dialog box and use these to open the dialog 
+    box next time.  If you reduce the size of the dialog box back to the 
+    minimum, the dialog box placement will again be determined by the system.
+
+    The size memory was not implemented for the Character Information 
+    dialog boxes because, generally these are already big enough.  The main
+    reason for changing the size is to see all of the information for a 
+    single kanji at one time.  There are only a small number of kanji that
+    really require this.  Further, Character Information dialog boxes can
+    be open from several locations so this was a problem.
+
+    While changing the size of a dialog box JWPce reformats the information 
+    in the dialog box to fit the new size.  If you are dealing with a dialog
+    box with a lot of information, this can take some time, so please be
+    patient.
+
+    CE does not support dragging the boarders of windows, but you can maximize
+    these dialog boxes.  This does not buy a lot for PPCs, but does buy some
+    for HPCs.
+
+70. Vertical scroll bars now support large files.  All scroll bar math is done
+    at 32 bits for the list boxes and for the main window.  16 bit calculations
+    are used for all other cases, since these don't really require the larger
+    size.  Using the scroll bar to scroll through EDICT was not reasonable 
+    before, because JWPce could not update the location information fast enough.
+    This system has been changed to be very fast.  It is now possible to move 
+    through EDICT using the scroll bar.
+
+71. Dotted boarder is now used on Windows CE machines for list boxes.
+
+72. ARM/StrongARM PPC machines should have control over the input panel.
+    I don't have an ARM machine to test this on, and it is a bit difficult to
+    add, but I think it should work.  Eventually I will create a PocketPC
+    version.
+
+73. Special version was generated for older Windows CE devices that do not
+    support system requests for directory locations.
+
+74. Distribution dictionaries updated.
+
+75. Windows CE versions are now compiled with eMbedded Visual C++.  This 
+    appears to have resulted in a smaller size executable.
+
+76. Option to sort priority dictionary entries to the front of the list. 
+
+1.34->1.35:
+
+1.  Changed how corrupted files are processed.  JWPce now classifies the type
+    of error.  A serious error will be reported just as before.  However, if 
+    JWPce can extract some of the information from the file you will be given 
+    the option of loading the partial file.
+
 1.33->1.34:
 
-1.  Mouse events arce captured in the JIS Table lookup.  This prevents
+1.  Mouse events are captured in the JIS Table lookup.  This prevents
     problems with right clicking on a character and getting two windows.
 
 2.  Fixed a problem where if you closed a parent dialog, children got 
@@ -9,9 +774,9 @@
 3.  Right clicking on the JIS table now correctly leaves the kanji-info
     dialog activated.
 
-4.  Some messages were changed to be more discriptive and fix some spelling.
+4.  Some messages were changed to be more descriptive and fix some spelling.
 
-5.  All strings required for internatialization have been placeed in a
+5.  All strings required for internationalization have been placed in a
     string table.  This moves all parts of JWPce associated with 
     support for language in the resource file.
 
@@ -19,7 +784,7 @@
     this is a very common extension for these types of file form Japan.
 
 7.  A missing text string has been fixed in the list manager.  Removed some
-    unessary code.
+    unnecessary code.
 
 8.  Because of the non-modal dialog boxes, it is possible to have a parent 
     dialog go away and take all the children.  Thus the user dictionary could
@@ -32,13 +797,13 @@
     require that you close these, but will prompt you to save the contents if 
     they have been changed.
 
-10. JWPce now supports internationization.  A file named JWPce_lang.dll can 
+10. JWPce now supports localization.  A file named JWPce_lang.dll can 
     be placed in the same directory as JWPce.  This will replace all menus and 
     dialog boxes with those of a different language.
 
 11. Error in dialog processing list has been fixed.
 
-12. Fixed character info display for extended ascii characters.
+12. Fixed character info display for extended ASCII characters.
 
 13. More Info button is now disabled on non-kanji characters.
 
@@ -46,25 +811,25 @@
     or pressing space will no longer insert a garbage character into 
     the file.
 
-15. Processing of i-adjitives in the kana->kanji converter is more
+15. Processing of i-adjectives in the kana->kanji converter is more
     sophisticated.  The user can also specify a particular conversion is 
-    for an i-adjitive.
+    for an i-adjective.
 
 16. Fixed a major goof.  I had some reports of people having trouble 
-    with the dictionaries list getting corruped, and other such problems.
-    When the list files were being ritten, the old contents of the file
+    with the dictionaries list getting corrupted, and other such problems.
+    When the list files were being written, the old contents of the file
     were not being cleared.  This can cause some major problems if the
     size of the file is getting smaller.  This has been fixed.
 
 17. The Search and Replace dialogs are now modeless.  The handling of 
-    replacement seqyences is better now.  When replacing a->aa JWPce 
+    replacement sequences is better now.  When replacing a->aa JWPce 
     will no longer loop (the old results are excluded from the new 
-    comparion).
+    comparison).
 
 18. The input-mode selection controls are no longer included in the tab
     stops.  Since they do not accept keyboard input they should not be 
     in the tab controls.  This also caused confusion, since when the
-    control was selcted, there was no indication that his was the active
+    control was selected, there was no indication that his was the active
     control.
 
 1.31->1.33:
@@ -75,8 +840,8 @@
 2.  Fixed small problem with closing a file that was not open.
 
 3.  Fixed a bug in the handling of the non-modal dialog boxes.  It 
-    turns out Windows does not deactivate a window before destorying it.
-    This created the possiblity of corrupting the files list.  This 
+    turns out Windows does not deactivate a window before destroying it.
+    This created the possibility of corrupting the files list.  This 
     could be seen from the user dictionary.
 
 4.  Fixed small bug in the Character Information routine that could 
@@ -97,13 +862,13 @@
     These only effected user defined kanji that contained godans.
 
 8.  Fixed a few small memory leaks.  Also fixed a bug in the insert 
-    text rotuines.  Thanks to Vitaly Zagrebelny!
+    text routines.  Thanks to Vitaly Zagrebelny!
 
 9.  Added a copy to clipboard from the JIS Table.  This can be accessed 
     by using the Copy->Clip button, or by pressing C when character is 
     selected in the JIS Table.
 
-10. The user dictionary (and the main dictionary) now support exented
+10. The user dictionary (and the main dictionary) now support extended
     ASCII codes in the meaning fields.  This is a mixed blessing.  This 
     means that European users (and others) can make a user dictionary 
     in an easer manner.  However, there are some problems with this.
@@ -114,21 +879,21 @@
     text.  This is normally not a problem since CLASSICAL is the only
     dictionary I know of with meanings in Japanese.
 
-11. Fixed small inconvenice with the clipboard tracking in the dictionary,
+11. Fixed small inconvenience with the clipboard tracking in the dictionary,
     the Insert to File will no longer insert to the dictionary edit box.
     (The order in which messages get sent from Windows can be a bit 
     baffling!)
 
-12. Fixed small bug in the Insert to file feater.  When inserting a line
+12. Fixed small bug in the Insert to file feaster.  When inserting a line
     that contained a fragment of kana text, an extra space was being 
     inserted.
 
-13. Changed the Insert to File system to prevent insersion into the same
+13. Changed the Insert to File system to prevent insertion into the same
     dialog box.
 
 14. Added option to compresses the display fields in the Character
     Information.  For people using Windows CE machines (or anyone else),
-    this can result in much more displayed inforamtion.  To maximize the
+    this can result in much more displayed information.  To maximize the
     display turn on the compression and turn off the titles, form the 
     Misc page of the options dialog box.
 
@@ -148,7 +913,7 @@
 
 21. New type tchar defined as const TCHAR is now used a lot.
 
-22. Now that I have an SH3 machine, I found a compier error in the 
+22. Now that I have an SH3 machine, I found a compiler error in the 
     character information routines.  This has been fixed much as the 
     the others CE system errors.
 
@@ -159,7 +924,7 @@
     JWPce.
 
 25. Windows determines the size of dialogs based on the size of the system
-    font.  Unformtunaely, Windows CE does the exact same thing, and the 
+    font.  Unfortunately, Windows CE does the exact same thing, and the 
     system font varies from system to system.  On a Jornada 690 many of 
     JWPce's dialog boxes were too big (because the Jornada uses a taller 
     font that the Velo did).  The dialog boxes have been changed to work 
@@ -176,39 +941,39 @@
     the sate of the Begin With and End With boxes.  This has been fixed.
 
 30. Partial IME support is here for Windows 2000/NT/CE users and users of 
-    Asian versions of Windows.  JWPce is only a partialy IME aware program.
+    Asian versions of Windows.  JWPce is only a partially IME aware program.
     I will be fixing this in the future to change JWPce into a fully IME 
     aware program, but his will have to wait until I have an IME system to 
     test on.  Thanks to Gregg Tavares who contributed some pointers to the IME
     coding.  
 
-    I have disabled the IME on input windows that only have a limied input 
-    acceptence (the Radicals, Lookup Results, etc).  I have not done anything
+    I have disabled the IME on input windows that only have a limited input 
+    acceptance (the Radicals, Lookup Results, etc).  I have not done anything
     with some of the windows (the big kanji window from Info, bushu window, etc).
-    These realy accept no input, so I have not blocked the IME, but maybe I 
+    These really accept no input, so I have not blocked the IME, but maybe I 
     should have blocked the IME?
 
 31. Half-width katakana is now converted to full width on Windows CE systems.
 
-32. Added support for additional unicode characters (specifically line drawing
-    characters.  This will also allow better auto-reconition of UNICODE texts.
+32. Added support for additional Unicode characters (specifically line drawing
+    characters.  This will also allow better auto-recognition of UNICODE texts.
 
 33. Processing of invalid JIS codes has been changed.  This corrects the display
     problems on the JIS table when using TrueType fonts.
 
 34. The count kanji feature now contains a summary of the count.  This includes 
-    the total number of kanji, kana, ascii, characters.  For students who have to 
-    write a sakubun containning a specified number of characters this may be helpful.
+    the total number of kanji, kana, ASCII, characters.  For students who have to 
+    write a sakubun containing a specified number of characters this may be helpful.
 
 35. JWPce now captures the mouse when the left button is pressed.  This gets 
-    rid of some odd behavier if you drag the mouse outside an edit box.
+    rid of some odd behavior if you drag the mouse outside an edit box.
 
-36. Problems in the handling of unicode pages for Greek and Cerilic have
+36. Problems in the handling of Unicode pages for Greek and Cyrillic have
     been fixed.
 
-37. The page changes in the JIS table have been revised.  The new algarithum skips
+37. The page changes in the JIS table have been revised.  The new algorithm skips
     pages that contain no valid characters in the current font.  The previous 
-    system skiped pages by fixed values.  This allows the JIS page system to 
+    system skipped pages by fixed values.  This allows the JIS page system to 
     adjust for the different fonts on the system.
 
 38. A newer smaller, more complete kana->kanji conversion dictionary has been 
@@ -224,10 +989,10 @@
     full IME support, I will add support that is only functional in 2.1 systems.
 
 41. The new kana->kanji dictionary has been compressed at a savings of over 50k.
-    This resuslts in a change in the user dictionary.  The utility NewConvert.exe
+    This results in a change in the user dictionary.  The utility NewConvert.exe
     will convert your old user conversion dictionary to the new format.
 
-        New Files       Old Files (opsolite unless using JWP)
+        New Files       Old Files (obsolete unless using JWP)
         ---------       -------------------------------------
         wnn.dat         wnn.dct
         wnn.dix         wnn.idx
@@ -255,8 +1020,8 @@
     to their system.  I have restricted to toolbar to use fixed button
     sizes.  This may cause problems later, but works for now. 
 
-2.  Fixed a small glitch in the intialization sequence that generate a
-    non-sence error (about not being able to save the config) the first 
+2.  Fixed a small glitch in the initialization sequence that generate a
+    non-sense error (about not being able to save the configuration) the first 
     time you ran JWPce. 
 
 3.  Fixed the confusion between the UNDO and CONVERT buttons.
@@ -308,7 +1073,7 @@
         Four-Corner Lookup
         Index Lookup
         Character Information
-        Rdical Lookup
+        Radical Lookup
         Reading Lookup
         SKIP Lookup
         User Dictionary
@@ -370,7 +1135,7 @@
 
 29. Changed addressing into kanji information to get around problems in the 
     Microsoft CE compliers.  This guarantees anything larger than a byte will 
-    be accessed from an aligned addess.
+    be accessed from an aligned address.
 
 30. Option is added to allow the kanji information database be cached.  This
     allows much faster searches using some of the new kanji lookup systems.
@@ -390,7 +1155,7 @@
     This can be done by pasting a kanji from the clipboard onto the radicals window.
     This will select all radicals in the given kanji.
 
-36. The districution version of EDICT has been changed to the most recent version
+36. The distribution version of EDICT has been changed to the most recent version
     
 37. The classical Japanese dictionary CLASSICAL is now being distributed.
 
@@ -409,7 +1174,7 @@
 4.  Fixed memory allocation error that could cause a problem in the user 
     dictionary or the user kana->kanji conversions.
 
-5.  Fixed processing on ascii character 255.  The metric was missing for this
+5.  Fixed processing on ASCII character 255.  The metric was missing for this
     character which caused strange spacing.  This character is used in 
     Russian.
 
@@ -446,11 +1211,11 @@
 13. JWPce now adjust the UNICODE processing to the local code page used by the 
     system.  This will cause UNICODE translations of Russian, Greek, etc to be 
     valid in all systems.  If JWPce cannot identify your code page (or you have
-    and east-asian code page) the USA/Western Europe code page will be used.
+    and east-Asian code page) the USA/Western Europe code page will be used.
 
     A previous mistake in UNICODE data processing caused JWPce to incorrectly 
     process UNICODE data (including UTF-7 and UTF-8) that had characters in the
-    extended ascii space of the code page.  This affects special characters 
+    extended ASCII space of the code page.  This affects special characters 
     such as umlauts and accented characters.  Before installing this version of
     JWPce convert any such files to JWPce/JWP file format, so the characters will
     not be garbled.  --  Sorry for the inconvenience.
@@ -472,8 +1237,8 @@
 
 1.11->1.20:
 
-1.  The line spacing has been adjusted so that the bottom of ascii
-    characters with descenders is not clipped.  The screen line spacing
+1.  The line spacing has been adjusted so that the bottom of ASCII
+    characters with descanters is not clipped.  The screen line spacing
     now matches the printer line spacing.
 
 2.  Font handling is generally improved, with better handling of different
@@ -492,7 +1257,7 @@
     bitmapped 16x16 font.
 
 5.  Due to the way fonts are cached, you will get some very strange display
-    resutls if you change the device resolution (screen size) while JWPce 
+    results if you change the device resolution (screen size) while JWPce 
     is running.
 
 6.  The order of the recent files list, and the order in which files are
@@ -512,7 +1277,7 @@
 
 11. New read and write formats have been added for UTF-7 and UTF-8.  These
     formats are also supported on the clipboard.  The UTF-7 format cannot 
-    be distinguished from ascii text (it was designed that way), so it is 
+    be distinguished from ASCII text (it was designed that way), so it is 
     not auto-detected.  UTF-8 format is auto-detected on the clipboard and 
     on file loads.  JWPce attempts to attach the .utf file extension for the 
     UTF-8 file format.
@@ -522,7 +1287,7 @@
     JWPce is now adding extensions directly.  This seems to solve the extension
     problem.
 
-13. JWPce now formats very long ascii strings without a break correctly.  
+13. JWPce now formats very long ASCII strings without a break correctly.  
     these are now simply placed on one long line that extends past the 
     right margin.  Note that most people would only encounter this when 
     loading data from an incorrectly decoded file.
@@ -531,13 +1296,13 @@
     or to select the kanji conversion.  This is a big improvement and allows 
     the PPC machines to make a really good dictionary.  If you are not in a 
     kanji-conversion the up-down buttons will simply move the cursor up or 
-    donw.
+    down.
 
 15. HPC versions of JWPce now adjust the main window when the input panel is 
     open or closed.
 
 16. Some dialog boxes in the PPC version have been adjusted so that as many 
-    of the input boxes are located above the input_panel as are possible.
+    of the input boxes are located above the input panel as are possible.
 
 17. The PPC version now manipulates the input panel to generally open the input
     panel when input is expected and to close it at other times.
@@ -555,13 +1320,13 @@
 22. Fixed some mappings in the UNICODE translator to support the non-standard
     codes used by Microsoft Applications.
 
-23. Some small revisions to the uinfo and kinfo utilties.
+23. Some small revisions to the uinfo and kinfo utilities.
         
 1.10->1.11:
 
 1.  Fixed a bug in the UNICODE translation, that caused Greek and 
-    Cerilic characters to be translated wrong.  This also caused some
-    kanji to be incorrectly translated to Greek or Cerilic.
+    Cyrillic characters to be translated wrong.  This also caused some
+    kanji to be incorrectly translated to Greek or Cyrillic.
 
 1.02->1.10:
 
@@ -593,7 +1358,7 @@
     you release the button you will be returned to the kanji dialog
 
 10. On PPC versions, you can click on the kanji in the Character 
-    Inforamtion dialog box to get a big view of the kanji.
+    Information dialog box to get a big view of the kanji.
 
 11. Windows CE PPC's do not seem to support mutable types in the 
     file open dialog, thus JWPce/PPC sets up the open dialog box to 
@@ -607,7 +1372,7 @@
     under PPC systems.
 
 14. Alt-^ can be used to toggle the input mode.  This provides better
-    compatablility for people using Japanese Windows
+    compatibility for people using Japanese Windows
 
 15. The JIS table is now accessible from the popup menu.  Since the 
     table initializes to the hiragana page, this allows it to be used
@@ -630,7 +1395,7 @@
     now disabled by default.  You can turn it back on in the Options
     dialog.
 
-20. Due primarally to the lack of a file management system on the PPC's
+20. Due primarily to the lack of a file management system on the PPC's
     a file delete function has been added.  This will allow you to 
     delete the disk copy of the current file.  Because of limited space
     on the HPC's, this function is not in the menu, but can still be 
@@ -725,7 +1490,7 @@
 6.  Big chances in the dictionary.  The No Personal Names and No Place
     Names have been combined into a No Names check box (tri state).  An 
     Advanced check box has been added.  The advanced search will use 
-    gramatical rules to attempt to find a match for the search pattern.  
+    grammatical rules to attempt to find a match for the search pattern.  
     Check boxes have been added to the Dictionary Options dialog
     to control the advanced search.  They are:
 
@@ -739,10 +1504,10 @@
                             results are found.  This will cause the 
                             search to continue until all possible 
                             matches are found.
-        i-Adjitives      -- Attempting to match search strings against
+        i-Adjectives      -- Attempting to match search strings against
                             potentially can lead to a number of 
                             miss-matches.  Clearing this will block
-                            searching for i-adjitives.
+                            searching for i-adjectives.
 
 	7.  Fixed a bug that prevented Windows CE machines from loading 
     supplemental dictionaries.
@@ -774,7 +1539,7 @@
 
 7.  The kana processor has been modified to include the complete 
     Hepburn, Kunrei, and Nippon romanization systems.  As many as is
-    resonable and possible of the odd combinations that are using in 
+    reasonable and possible of the odd combinations that are using in 
     katakana strings have also been included.  Some of there cannot 
     be included because they conflict with the hiragana patterns in 
     one or more of the system.  Other have not been included because
@@ -903,13 +1668,13 @@ Manual, Windows 95/98/NT Help
 8.  I have revised the handling of color-kanji in the bitmap clipboard
     format.  Previously, the bitmap format was a duplicate of the screen.
     This works okay, but makes bitmaps that take too much memory.  This
-    methode is still used if color-kanji is include.  If color-kanji
+    method is still used if color-kanji is include.  If color-kanji
     is not included, JWPce now generates a monochrome bitmap, which is
     smaller.  The default configuration has been changed to disable
     the color kanji in bitmap formats.
 
 9.  Fixed bug in the format routine, that could crash the system.  It
-    was possilbe to delete text, have JWPce reformat the paragraph and
+    was possible to delete text, have JWPce reformat the paragraph and
     end up deleting the line with the cursor.
 
 10. JWPce now accepts negative values for the first indent value for
@@ -921,7 +1686,7 @@ Manual, Windows 95/98/NT Help
 11. Fixed hole in the undo system for reformatting paragraphs, the line
     spacing was not being saved and restored.
 
-12. Fixed display of ascii JIS values in the Character Information
+12. Fixed display of ASCII JIS values in the Character Information
     dialog under Windows CE.
 
 13. Fixed a number of small bugs in the mouse handler (double click,
@@ -932,7 +1697,7 @@ Manual, Windows 95/98/NT Help
 
 15. < and > keys can now shift kanji the Radical Lookup results.
     Selecting a radical in the Radical lookup window will clear the
-    reuslts (Matches) list.  This means the results always represents
+    results (Matches) list.  This means the results always represents
     the state of the radicals buttons.  Shift+click (or shift+right
     click) in the radical results will always get Character Information.
 
@@ -955,7 +1720,7 @@ Manual, Windows 95/98/NT Help
     of the radicals window could cause erratic cursor movements.
 
 20. A bug in the clipboard paste from a list box allowed JWPce to
-    acess such clipboard items, but not other programs.
+    access such clipboard items, but not other programs.
 
 21. Removed the Check if Installed box from the Advanced page of the
     Options dialog.  This was unnecessary since you can simply launch
@@ -1028,7 +1793,7 @@ Manual, Windows 95/98/NT Help
         B. Get character information (for the character under the cursor)
         C. Insert text in the parent file (which may actually be a
            Japanese edit box.
-        D. Rplace text in the parent file (which may actually be a
+        D. Replace text in the parent file (which may actually be a
            Japanese edit box.
         E. Insert text into a newly created file.
         F. Insert text into any open file.
@@ -1065,7 +1830,7 @@ Manual, Windows 95/98/NT Help
     and must be selected with the mouse.
 
     Listbox handler has been expanded to allow drag selecting of
-    multable lines.  Auto-scrolling will enable if the mouse is moved
+    multiple lines.  Auto-scrolling will enable if the mouse is moved
     below the center point of the bottom line or above the center
     point of the top file.
 
@@ -1082,7 +1847,7 @@ Manual, Windows 95/98/NT Help
     bushu codes greater than 127 to be assigned the wrong bushu codes.
     This has been fixed.  The newest version of the kanjinfo file
     contains the corrected version of the bushu codes, and extension
-    fiels are initialized.  These fields will allow added information
+    fields are initialized.  These fields will allow added information
     to be added to the file.  All users will have to update their
     kanjinfo files.
 
@@ -1174,8 +1939,8 @@ Manual, Windows 95/98/NT Help
     TEXT and OEMTEXT clipboard formats are not supported (just UNICODETEXT).
 
     Support for half-width katakana has been dropped.  I have not yet
-    encounterd a file using this and it saves some code space.  In
-    additiona, since I have not encountered a file using this I have not
+    encountered a file using this and it saves some code space.  In
+    addition, since I have not encountered a file using this I have not
     yet been able to test the routines.
 
     Multi-file selects are not supported (Windows CE does not allow)
@@ -1191,9 +1956,9 @@ Manual, Windows 95/98/NT Help
 11. Major restructuring of the Clipboard routines to support Windows CE.
     The new routines provide for better UNICODE support anyway.
 
-12. Restuctured all resource access to use integer coding, this is much
+12. Restructured all resource access to use integer coding, this is much
     smaller in terms of code space, faster in execution, and more
-    elegent.
+    elegant.
 
 13. Many of the menu short-cut keys have been revised.  This is mostly
     to allow better operation on Windows CE machines that have limited
@@ -1297,7 +2062,7 @@ Manual, Windows 95/98/NT Help
     clipboard format, and in printing.
 
 5.  Format paragraph box got overhauled to use the new float math
-    rotuines.  I was avoiding math because of the size, but due to
+    routines.  I was avoiding math because of the size, but due to
     the way JWP kept real number margins I need to follow, so there
     goes 10k of disk space.
 
@@ -1308,8 +2073,8 @@ Manual, Windows 95/98/NT Help
 7.  Tab order in the confirm change dialog box has been corrected.
 
 8.  A bug was reported in the automatic search and replace functions.
-    Bascially if you did a search on space and replaced it with
-    nothing, when you did a replace all, it would skip evey other
+    Basically if you did a search on space and replaced it with
+    nothing, when you did a replace all, it would skip every other
     space on consecutive sequences of spaces.  This has been fixed.
 
     While working on the last bug I found that if you moved the cursor
@@ -1545,7 +2310,7 @@ user.dct     -- User dictionary file.
 
 0.60->0.61:
 
-1.  Found a mistake in the ascii->kana conversion.  "myo, myu, mya"
+1.  Found a mistake in the ASCII->kana conversion.  "myo, myu, mya"
     were not translated correctly.
 
 2.  In version 0.60 is switched from loading the WNN database

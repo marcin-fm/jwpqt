@@ -1,15 +1,15 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
 //  The code do do conversion between ECU, JIS, and Shift-JIS        //
 //  was taken from jconv.c which is copyright by Ken R. Lunde,       //
 //  Adobe Systems Incorporated.  Full copyright notice is below.     //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This module implements the translatin between JWP's internal coding
 //  and various other formats.  These formats include various JIS formats,
@@ -108,12 +108,13 @@
 //                     much.
 //
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Static tables
 //
 //  These are primarally conversion talbes for processing Unicode data.
 //
+
 #define NUMBER_KANJIUNICODE     ((int) (sizeof(kanji_unicode)/sizeof(KANJI)))
 
 static KANJI kanji_unicode[] = {    // Main kanji table.  These are unicode values
@@ -166,11 +167,12 @@ static KANJI cp1258[128] = {        // Vietnamese code page
 
 static KANJI *ext_unicode = cp1252;     // Extended ascii unicode for European character support
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Static functions.
 //
 
+//--------------------------------
 //
 //  Internal routine used to convert Shift-JIS codes into JIS codes.
 //
@@ -190,11 +192,31 @@ static void sjis2jis (int *p1,int *p2) {
   *p2 -= cellOffset;
 }
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Exported functions.
 //
 
+//--------------------------------
+//
+//  This routien is a variant on JIS->UNICODE routine, but it always uses the US
+//  code page.  This is primarally used to decode PinYin characters for UNICODE>
+//
+//      ch     -- Character to be converted.
+//
+//      RETURN -- Unicode value.
+
+int ascii2unicode (int ch) {
+  int    ret;
+  KANJI *old;
+  old         = ext_unicode;
+  ext_unicode = cp1252;
+  ret         = jis2unicode(ch);
+  ext_unicode = old;
+  return (ret);
+}
+
+//--------------------------------
 //
 //  The main function of this routine is to map the UNICODE table used for extneded 
 //  character processing into the table used for the local Code page.  
@@ -214,6 +236,7 @@ void initialize_cp () {
   return;
 }
 
+//--------------------------------
 //
 //  Translates from JIS code to Shift-JIS code.  This is used by the 
 //  shift-JIS file writer and by the Character info screen.
@@ -231,6 +254,7 @@ int jis2sjis (int ch) {
   return ((c1 << 8) | (c2));
 }
 
+//--------------------------------
 //
 //  This routine converts from JIS to Unicode codes.  This is one half
 //  of the core of the Unicode support.
@@ -275,6 +299,35 @@ int jis2unicode (int ch) {
   return (0);
 }
 
+//--------------------------------
+//
+//  Convert JIS code into UTF-8 value.  Because UTF-8 can take up to 4 bytes to store a value, 
+//  this is a varing length conversion.  Further, note that 4 byte values are not supported, since
+//  they lead to extended UNICODE which is not supported.
+//
+//  This routine is called with a pointer to a data array.  A single JIS value is written,
+//  and the pointer is advanced to the next data to be written.
+//
+//      ptr -- On entry a pointer to the start of a UTF-8 encoded character.  On exit, this
+//             will point to the next UTF character.
+//      ch  -- Character value to be written.
+//
+void jis2utf (byte *&ptr,int ch) {
+  ch = jis2unicode(ch);
+  if      (!(ch & UTF8_WRITE1)) *ptr++ = ch;        // Single bite codes 0xxxxxxx
+  else if (!(ch & UTF8_WRITE2)) {                   // Double byte codes 110xxxxx 10yyyyyy   
+    *ptr++ = (UTF8_VALUE2 | (ch >> 6));
+    *ptr++ = (UTF8_VALUEC | (ch & 0x3f));
+  }
+  else {                                            // Three byte codes  1110xxxx 10yyyyyy 10zzzzzz
+    *ptr++ = (UTF8_VALUE3 | (ch >> 12));
+    *ptr++ = (UTF8_VALUEC | ((ch >> 6) & 0x3f));
+    *ptr++ = (UTF8_VALUEC | (ch & 0x3f));
+  }
+  return;
+}
+
+//--------------------------------
 //
 //  This is the shift-JIS to JIS convert packaged to be more like the 
 //  other converters, specifcally so that the JIS-table routines 
@@ -292,15 +345,17 @@ int sjis2jis (int ch) {
   return ((p1 << 8) | p2);
 }
 
+//--------------------------------
 //
 //  This routine converts from Unicode to JIS codes.  This is one half
 //  of the core of the Unicode support.
 //
 //      ch     -- Unicode character.
+//      bad    -- Character returned for untraslateable UNICODE.
 //
 //      RETURN -- JIS character code.
 //
-int unicode2jis (int ch) {
+int unicode2jis (int ch,int bad) {
   int i;
   if ((ch <= 0x007e)                  ) return (ch);                // ASCII
   if ((ch >= 0x3041) && (ch <= 0x3093)) return (ch-0x3041+0x2421);  // Hiragana
@@ -341,11 +396,115 @@ int unicode2jis (int ch) {
   for (i = 0; i < NUMBER_EXTUNICODE; i++) {                         // Extneded ascii codes.
     if (ext_unicode[i] == ch) return (i+0x80);
   }
+//
+//  The Japanese ASCII needs to be here because some puncutation is stored within gaps
+//   in the JASCII table, and if we move this before the misc codes they will not be found!    
+//
   if ((ch >= 0xff10) && (ch <= 0xff5a)) return (ch-0xff10+0x2330);  // Japanese ASCII.
-  return (0);           // The Japanese ASCII needs to be here because some puncutation is stored within gaps
-}                       //   in the JASCII table, and if we move this before the misc codes they will not be found!    
+  if ((ch == 0xfeff) || (ch == 0xfffe)) return (ch);                // UNICODE file markers.
+  return (bad);                                                     // Invalid or untranslated UNICODE
+}                               
 
-//-------------------------------------------------------------------
+//--------------------------------
+//
+//  Convert UNICODE data into UTF-8 value.  Because UTF-8 can take up to 4 bytes to store a value, 
+//  this is a varing length conversion.  Further, note that 4 byte values are not supported, since
+//  they lead to extended UNICODE which is not supported.
+//
+//  This routine is called with a pointer to a data array.  A single UNICODE value is written,
+//  and the pointer is advanced to the next data to be written.
+//
+//      ptr -- On entry a pointer to the start of a UTF-8 encoded character.  On exit, this
+//             will point to the next UTF character.
+//      ch  -- Character value to be written.
+//
+#if 0       // For the moment only the jis2utf is necessary.  This may be required later.
+void unicode2utf (byte *&ptr,int ch) {
+  if      (!(ch & UTF8_WRITE1)) *ptr++ = ch;        // Single bite codes 0xxxxxxx
+  else if (!(ch & UTF8_WRITE2)) {                   // Double byte codes 110xxxxx 10yyyyyy   
+    *ptr++ = (UTF8_VALUE2 | (ch >> 6));
+    *ptr++ = (UTF8_CONT   | (ch & 0x3f));
+  }
+  else {                                            // Three byte codes  1110xxxx 10yyyyyy 10zzzzzz
+    *ptr++ = (UTF8_VALUE3 | (ch >> 12));
+    *ptr++ = (UTF8_CONT   | ((ch >> 6) & 0x3f));
+    *ptr++ = (UTF8_CONT   | (ch & 0x3f));
+  }
+  return;
+}
+#endif
+
+//--------------------------------
+//
+//  Convert UTF-8 data into JIS value.  Because UTF-8 can take up to 4 bytes to store a value, 
+//  this is a varing length conversion.  Further, note that 4 byte values are not supported, since
+//  they lead to extended JIS which is not supported.
+//
+//  This routine is called with a pointer to a data array.  A single JIS value is extracted,
+//  and the pointer is advanced to the next data to be analyzed.
+//
+//      ptr    -- On entry a pointer to the start of a UTF-8 encoded character.  On exit, this
+//                will point to the next UTF character.
+//
+//      RETURN -- JIS charactger value or KANJI_BAD to indicate an error.
+//
+int utf2jis (byte *&ptr) {
+  int i;
+  if      (UTF8_VALUE1 == (*ptr & UTF8_MASK1)) {
+    i = *ptr++;
+  }
+  else if (UTF8_VALUE2 == (*ptr & UTF8_MASK2)) {
+    i = ((ptr[0] & 0x1f) << 6) | (ptr[1] & 0x3f);
+    ptr += 2;
+  }
+  else if (UTF8_VALUE3 == (*ptr & UTF8_MASK3)) {
+    i = ((ptr[0] & 0xf) << 12) | ((ptr[1] & 0x3f) << 6) | (ptr[2] & 0x3f);
+    ptr += 3;
+  }
+  else if (UTF8_VALUE4 == (*ptr & UTF8_MASK4)) {
+    i = 0xffff;
+    ptr += 4;
+  }
+  return (unicode2jis(i,KANJI_BAD));
+}
+
+//--------------------------------
+//
+//  Convert UTF-8 data into UNICODE value.  Because UTF-8 can take up to 4 bytes to store a value, 
+//  this is a varing length conversion.  Further, note that 4 byte values are not supported, since
+//  they lead to extended UNICODE which is not supported.
+//
+//  This routine is called with a pointer to a data array.  A single UNICODE value is extracted,
+//  and the pointer is advanced to the next data to be analyzed.
+//
+//      ptr    -- On entry a pointer to the start of a UTF-8 encoded character.  On exit, this
+//                will point to the next UTF character.
+//
+//      RETURN -- UNICODE charactger value or 0xffff to indicate an error.
+//
+#if 0       // For the moment only the utf2jis is necessary.  This may be required later.
+int utf2unicode (byte *&ptr) {
+  int i;
+  if      (UTF8_VALUE1 == (*ptr & UTF8_MASK1)) {
+    i = *ptr++;
+  }
+  else if (UTF8_VALUE2 == (*ptr & UTF8_MASK2)) {
+    i = ((ptr[0] & 0x1f) << 6) | (ptr[1] & 0x3f);
+    ptr += 2;
+  }
+  else if (UTF8_VALUE3 == (*ptr & UTF8_MASK3)) {
+    i = ((ptr[0] & 0xf) << 12) | ((ptr[1] & 0x3f) << 6) | (ptr[2] & 0x3f);
+    ptr += 3;
+  }
+  else if (UTF8_VALUE4 == (*ptr & UTF8_MASK4)) {
+    i = 0xffff;
+    ptr += 4;
+  }
+  return (i);
+}
+#endif
+
+//===================================================================
 //
 //  Begin Class JIS_convert.
 //
@@ -370,18 +529,7 @@ JIS_convert jis_convert;    // Class instance.
 #define UTF7_SHIFTIN    '+'         // Start UTF-7 shift sequence
 #define UTF7_SHIFTOUT   '-'         // End UTF-7 shift sequence
 
-                                    // UTF-8 Flags and values
-#define UTF8_VALUE1     0x00        // Value for set bits for single byte UTF-8 Code.
-#define UTF8_MASK1      0x80        // Mask (i.e. bits not set by the standard) 0xxxxxxx
-#define UTF8_WRITE1     0xff80      // Mask of bits we cannot allow if we are going to write one byte code
-#define UTF8_VALUE2     0xc0        // Two byte codes
-#define UTF8_MASK2      0xe0        // 110xxxxx 10yyyyyy
-#define UTF8_WRITE2     0xf800      // Mask of mits we cannot allow if we are going to write two byte code
-#define UTF8_VALUE3     0xe0        // Three byte codes    
-#define UTF8_MASK3      0xf0        // 1110xxxx 10yyyyyy 10zzzzzz
-#define UTF8_VALUE4     0xf0        // Four byte values
-#define UTF8_MASK4      0xf8        // 11110xxx ----    (These values are not supported by JWPce).    
-
+//--------------------------------
 //
 //  Attempts to identify the type of a file.  This is done by attempting
 //  to find a distinct escape code sequenc.  
@@ -464,6 +612,7 @@ int JIS_convert::find_type () {
   return (type);
 }
 
+//--------------------------------
 //
 //  This routine gets a number of bits from the bit-buffer.  Currently, the bit-buffer is 
 //  only use by UTF-7 format, but this may change at some time.
@@ -479,6 +628,7 @@ int JIS_convert::get_bits (int count) {
   return ((bit_buffer >> bits) & mask);
 }
 
+//--------------------------------
 //
 //  This routine converts codes for half-width katakana used in the 
 //  Shift-JIS and EUC file types.  These codes are embedded in a 
@@ -583,6 +733,7 @@ void JIS_convert::half2full (int *p1,int *p2) {
 }
 #endif SUPORT_HALFKATA
 
+//--------------------------------
 //
 //  This is the main input driver for reading input streams.  This is
 //  called for each character to be read.  This routine gets characters
@@ -627,7 +778,7 @@ int JIS_convert::input_char () {
                    first = false;                                            // Not first character
                  }
                  if (bits >= 16) {                                      // If there are 16 bits in buffer, get the data.
-                   return (unicode2jis(get_bits(16)));
+                   return (unicode2jis(get_bits(16),KANJI_BAD));
                  }
                }
                else {                                                   // Not in shift sequence.
@@ -660,8 +811,7 @@ int JIS_convert::input_char () {
            }
       case FILETYPE_UNICODE:                        
            if (reverce_bytes) ch = (ch >> 8) | ((ch & 0xff) << 8);  // Do we need to swap the byte order.
-           if ((c2 = unicode2jis(ch))) return (c2); // KLUDGE: If cannot convert to unicode, we return the actual 
-           return (ch);                             //   value.  This prevents NULLs in the file however.
+           return (unicode2jis(ch,KANJI_BAD));                      // I used to return the UNICODE value, but now we return KANJI_BAD.
       case FILETYPE_JFCEUC:
       case FILETYPE_EUC:
            if (IS_EUC(ch)) return (((ch << 8) | get_char()) & 0x7f7f);  // Kanji code
@@ -708,6 +858,7 @@ int JIS_convert::input_char () {
   }
 }
 
+//--------------------------------
 //
 //  Attempt to see if the item connected to the buffer is a Unicode
 //  object.
@@ -721,25 +872,23 @@ int JIS_convert::input_char () {
 //
 int JIS_convert::is_unicode () {
   int ch;
-  int ascii   = true;       // Contains only ascii characters.
   int eucsjis = true;       // Contains only euc/shift-jis charactrers
   int csize   = charsize;   // Current character size.
- 
   set_size (2);                                     // Use two byte reads.
   ch = get_char();
   if (ch == 0xfeff) { charsize = csize; return (FILETYPE_UNICODE ); }   // This is a unicode file because of the ID 
   if (ch == 0xfffe) { charsize = csize; return (FILETYPE_UNICODER); }   // Unicode reverced byte order flag.
   while (ch != JIS_EOF) {
-    if (!unicode2jis(ch)) { charsize = csize; return (false); }     // Not a unicode character!
-    if (ch > 127) ascii = false;                    // A non-ascii character.
-    if ((ch & 0x8080) != 0x8080) eucsjis = false;   // A non-euc/shift-jis character.
+    if (!unicode2jis(ch,0)) { charsize = csize; return (false); }       // Not a unicode character!
+    if ((ch & 0x8080) != 0x8080) eucsjis = false;                       // A non-euc/shift-jis character.
     ch = get_char();
   }
-  charsize = csize;                                 // Back to client chosen character size.
-  if (ascii || eucsjis) return (false);
+  charsize = csize;                                                     // Back to client chosen character size.
+  if (eucsjis) return (false);
   return (FILETYPE_UNICODE);
 }
 
+//--------------------------------
 //
 //  Attempt to see if the item connected to the buffer is in UTF-8 format.
 //
@@ -769,6 +918,7 @@ int JIS_convert::is_utf8 () {
   return (!ascii_only);
 }
 
+//--------------------------------
 //
 //  This is the main output driver for writing output streams.  This is
 //  called for each character to be output.  This routien translates
@@ -831,12 +981,12 @@ void JIS_convert::output_char (int ch) {
          if      (!(ch & UTF8_WRITE1)) put_char (ch);   // Single bite codes 0xxxxxxx
          else if (!(ch & UTF8_WRITE2)) {                // Double byte codes 110xxxxx 10yyyyyy   
            put_char (UTF8_VALUE2 | (ch >> 6));   
-           put_char (0x80 | (ch & 0x3f));
+           put_char (UTF8_VALUEC | (ch & 0x3f));
          }
          else {                                         // Three byte codes  1110xxxx 10yyyyyy 10zzzzzz
            put_char (UTF8_VALUE3 | (ch >> 12));
-           put_char (0x80 | ((ch >> 6) & 0x3f));
-           put_char (0x80 | (ch & 0x3f));
+           put_char (UTF8_VALUEC | ((ch >> 6) & 0x3f));
+           put_char (UTF8_VALUEC | (ch & 0x3f));
          }
          return;
     case FILETYPE_UNICODE: 
@@ -887,6 +1037,7 @@ void JIS_convert::output_char (int ch) {
   return;
 }
 
+//--------------------------------
 //
 //  Internal routine that outputs the appropriate JIS escape sequence 
 //  to end a two-byte sequence.  The routine is smart enough to do 
@@ -905,6 +1056,7 @@ void JIS_convert::put_end () {
   return;
 }
 
+//--------------------------------
 //
 //  This routine puts a number of bits into the bit-buffer.  Currently, the bit-buffer is 
 //  only used by UTF-7 format, but this may change at some time.
@@ -920,6 +1072,7 @@ void JIS_convert::put_bits (int value,int count) {
   return;
 }
 
+//--------------------------------
 //
 //  Internal routine used in the writing of JIS output streams.  This
 //  routine starts an escape sequence that is appropriate for the 
@@ -940,6 +1093,7 @@ void JIS_convert::put_start () {
   return;
 }
 
+//--------------------------------
 //
 //  Setup the type of conversion to be used on the input/output 
 //  stream.
@@ -955,6 +1109,7 @@ void JIS_convert::set_type (int filetype) {
   return;
 }
 
+//--------------------------------
 //
 //  This is a small routine to insert the UNICODE file ID when the
 //  file is written.  The UNICODE id is simply a 0xfeff character
@@ -966,6 +1121,6 @@ void JIS_convert::unicode_write () {
   return;
 }
 
-
+// IMPROVE -- Check JIS ending string.  Maybe expand JIS conversion system.
 
 

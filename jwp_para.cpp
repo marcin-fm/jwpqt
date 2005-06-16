@@ -1,11 +1,11 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This moldue contains routines associated with the maninupation of 
 //  paragraphs.  Most of the routines are the class paragraph, but some
@@ -24,11 +24,12 @@
 #include "jwp_misc.h"
 #include "jwp_para.h"
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Static routines.
 //
 
+//--------------------------------
 //
 //  Determines if the next character can be relaxed.  A relaxed 
 //  character is a character that is actually displayed out of the 
@@ -90,6 +91,10 @@ static int RelaxChar (int ch,int *relaxable) {
 //  an additional routine.
 //
 
+//--------------------------------
+//
+//  Constructor
+//
 Paragraph::Paragraph () {
   memset (this,0,sizeof(Paragraph));
   first = last  = new Line;                 // Line for this paragraph.
@@ -104,6 +109,10 @@ Paragraph::Paragraph () {
   return;
 }
 
+//--------------------------------
+//
+//  Destructor
+//
 Paragraph::~Paragraph () {
   Line *l;
   while ((l = first)) { first = l->next; delete l; }
@@ -111,6 +120,7 @@ Paragraph::~Paragraph () {
   return;
 }
 
+//--------------------------------
 //
 //  Insert a character into the end of a pararaph.  This routine is 
 //  indented primarally for the import_file routines that read JIS,
@@ -124,6 +134,7 @@ void Paragraph::add_char (int ch) {
   return;
 }
 
+//--------------------------------
 //
 //  Reallocate the paragraph buffer to a bigger size.
 //
@@ -139,6 +150,7 @@ int Paragraph::alloc () {
   return (false);
 }
 
+//--------------------------------
 //
 //  Copies the format parameters from one paragraph to this one.
 //
@@ -153,6 +165,7 @@ void Paragraph::copy_format (Paragraph *para) {
   return;
 }
 
+//--------------------------------
 //
 //  Copy a paragraph to this one.  This includes formatting and data.
 //
@@ -165,6 +178,7 @@ int Paragraph::copy_para (Paragraph *para) {
   return (set_text (para->text,para->length));
 }
 
+//--------------------------------
 //
 //  Delete a character from the paragraph.
 //  
@@ -181,6 +195,7 @@ void Paragraph::del_char (JWP_file *file,Line *line,int pos) {
   return;
 }
 
+//--------------------------------
 //
 //  Format a pargraph.
 //
@@ -203,8 +218,8 @@ void Paragraph::format (JWP_file *file,Line *rline,int redraw) {
   int   i,j=0,x2,x3=0;                  // Assignments are to make some compilers happy
   KANJI ch;
   Line *l;
-  int   xmax      = jwp_font.x_offset+jwp_font.hwidth*(file->char_pagewidth-indent_right-indent_left-indent_first);
-  int   x         = jwp_font.x_offset;  // Horzontal position counter.
+  int   xmax      = file_font.x_offset+file_font.hwidth*(file->char_pagewidth-indent_right-indent_left-indent_first);
+  int   x         = file_font.x_offset; // Horzontal position counter.
   Line *line      = first;              // Line pointer.
   int   word      = false;              // Set to true when in an ASCII word.
   int   changed   = false;              // Indicates number of lines has changed.
@@ -215,8 +230,8 @@ void Paragraph::format (JWP_file *file,Line *rline,int redraw) {
                                         //   reformat.
   for (i = 0; i < length; i++) {
     ch = text[i];
-    x2 = jwp_font.hadvance(x,ch);
-    if ((x2 > xmax) && !ISSPACE(ch) && !RelaxChar(ch,&relaxable) && (x3 != jwp_font.x_offset)) { // Past end of buffer, so output a line!
+    x2 = file_font.hadvance(x,ch);
+    if ((x2 > xmax) && !ISSPACE(ch) && !RelaxChar(ch,&relaxable) && (x3 != file_font.x_offset)) { // Past end of buffer, so output a line!
       line->length = j-line->first+1;           // Calculate length of line.
       if (line->next) line = line->next;        // Get next line.
         else {
@@ -225,9 +240,9 @@ void Paragraph::format (JWP_file *file,Line *rline,int redraw) {
         }
       relaxable   = true;                       // New line so we can relax a character again.
       line->first = j+1;
-      xmax        = jwp_font.x_offset+jwp_font.hwidth*(file->char_pagewidth-indent_right-indent_left);
+      xmax        = file_font.x_offset+file_font.hwidth*(file->char_pagewidth-indent_right-indent_left);
       x2         -= x3;
-      x2         += jwp_font.x_offset;
+      x2         += file_font.x_offset;
     }
     if (ISJIS(ch) || ISSPACE(ch)) {         // JIS or SPACE or can be split anywhere            
       word = false;                 
@@ -265,6 +280,7 @@ void Paragraph::format (JWP_file *file,Line *rline,int redraw) {
   return;
 }
 
+//--------------------------------
 //
 //  Insert a string into a paragraph.
 //
@@ -288,6 +304,7 @@ void Paragraph::ins_string (JWP_file *file,Line *line,int pos,KANJI *string,int 
   return;
 }
 
+//--------------------------------
 //
 //  Calculate pixel indent for the current line.  Based on scrolling, 
 //  paragrpah parameters, etc.
@@ -299,11 +316,12 @@ void Paragraph::ins_string (JWP_file *file,Line *line,int pos,KANJI *string,int 
 //
 int Paragraph::line_start (Line *line) {
   int x;
-  x = jwp_font.x_offset+jwp_font.hwidth*indent_left;
-  if (first == line) x += jwp_font.hwidth*indent_first;
+  x = file_font.x_offset+file_font.hwidth*indent_left;
+  if (first == line) x += file_font.hwidth*indent_first;
   return (x);
 }
 
+//--------------------------------
 //
 //  Generate a new line at the end of the paragraph (used by the 
 //  formatting and reading routines.
@@ -319,6 +337,7 @@ Line *Paragraph::new_line () {
   return    (line);
 }
 
+//--------------------------------
 //
 //  Repalce a character within the current paragraph.
 //
@@ -334,6 +353,7 @@ void Paragraph::rep_char (JWP_file *file,Line *line,int pos,int ch) {
   return;
 }
 
+//--------------------------------
 //
 //  Set entire text buffer for a pargaph.  This is generally used 
 //  when importing text or setting a text buffer.  
@@ -354,15 +374,16 @@ int Paragraph::set_text (KANJI *data,int len) {
 //
 //  End Class Paragraph.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin Class JWP_File.
 //
 //  Paragraph manipulation routines form JWP_file class.
 //
 
+//--------------------------------
 //
 //  Delete specifiecd paragraph and relink lists.
 //
@@ -385,6 +406,7 @@ void JWP_file::del_paragraph (Paragraph *para) {
   return;
 }
 
+//--------------------------------
 //
 //  Processes paragraph format dialog box.
 //
@@ -467,6 +489,7 @@ int JWP_file::do_formatpara (HWND hwnd,UINT message,int wParam) {
   return (false);
 }
 
+//--------------------------------
 //
 //  Generate a new paragraph following the indicated paragraph.
 //
@@ -497,6 +520,7 @@ int JWP_file::new_paragraph (Paragraph *para) {
   return       (false);
 }
 
+//--------------------------------
 //
 //  Turns a paragraph into a hard page break.
 //
@@ -515,7 +539,7 @@ void JWP_file::set_page (Paragraph *para,int page) {
 //
 //  End Class JWP_File.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
 
 

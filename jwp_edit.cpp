@@ -1,11 +1,11 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This module implements japanese versions of the windows controls.
 //  In particular, this module implements a japanese edit control, and
@@ -73,6 +73,7 @@
 #include "jwp_conv.h"
 #include "jwp_edit.h"
 #include "jwp_file.h"
+#include "jwp_find.h"
 #include "jwp_flio.h"   // Needed to get definition of choose_file.
 #include "jwp_font.h"
 #include "jwp_help.h"   // Needed for help ID for choose_file call
@@ -80,7 +81,10 @@
 #include "jwp_inpt.h"
 #include "jwp_misc.h"
 
-//-------------------------------------------------------------------
+#include <limits.h>
+
+  static JWP_file *last_insert = NULL;              // The last file that the user inserted into, for popup menu.
+//===================================================================
 //
 //  Compile-time options
 //
@@ -90,12 +94,19 @@
                                         //   character (0x2121) to separate enrities.  The 
                                         //   default is to use tabs.
 
-//-------------------------------------------------------------------
+//===================================================================
+//
+//  Static data
+//
+static SIZE_window hist_size;           // Class used for size changes in the history window.
+
+//===================================================================
 //
 //  Static routines.
 //
 static LRESULT CALLBACK JWP_edit_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam);
 
+//--------------------------------
 //
 //  This is the window proc for the japanes edit box.  This is the big
 //  deal.  
@@ -135,7 +146,7 @@ static LRESULT CALLBACK JWP_edit_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
 //
     case WM_CREATE:                                 
          create = (CREATESTRUCT *) lParam;
-         MoveWindow (hwnd,create->x,create->y,create->cx,jwp_font.height+2*jwp_font.vspace+2*GetSystemMetrics(SM_CYEDGE),true);
+         MoveWindow (hwnd,create->x,create->y,create->cx,edit_font.height+2*edit_font.vspace+2*GetSystemMetrics(SM_CYEDGE),true);
          file = new JWP_file (hwnd);
          SetWindowLong (hwnd,0,(long) file);    // Save JWP_file object for edit box.
          return (0);
@@ -158,16 +169,16 @@ static LRESULT CALLBACK JWP_edit_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
          RECT rect;
          hdc = BeginPaint (hwnd,&ps);
          GetClientRect    (hwnd,&rect);
-         BackFillRect     (hdc,&rect);
+         FillRect         (hdc,&rect,GetSysColorBrush(COLOR_WINDOW));
+         SetBkColor       (hdc,GetSysColor(COLOR_WINDOW));
+         SetTextColor     (hdc,GetSysColor(COLOR_WINDOWTEXT));
          file->draw_all   (hdc,&ps.rcPaint);
          EndPaint         (hwnd,&ps);
          return (0);
+    case WM_TIMER:
+         if (wParam != TIMER_MOUSEHOLD) return (0);
     case WM_LBUTTONUP:                          // Mouse button & move 
-         ReleaseCapture ();
-         file->do_mouse (iMsg,wParam,lParam);
-         return (0);
     case WM_LBUTTONDOWN: 
-         SetCapture (hwnd);
     case WM_MOUSEMOVE:          //*** FALL THOUGHT! ***
     case WM_LBUTTONDBLCLK:
     case WM_RBUTTONDOWN:
@@ -179,7 +190,7 @@ static LRESULT CALLBACK JWP_edit_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
          return (0);
 #ifndef WINCE
     case WM_IME_CHAR:                           // IME support.
-         file->ime_char (wParam);
+         file->ime_char (wParam,IsWindowUnicode(hwnd));
          return (0);
 #endif WINCE
     case WM_GETDLGCODE:                         // We need to get input from windows.
@@ -202,12 +213,19 @@ static LRESULT CALLBACK JWP_edit_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
                 return (0);
 #else  WINCE_PPC
            case VK_UP:                          // Remove this inputs.
+                if (ctrl) break;
+                if (file->history) file->history->up (file);
+                return (0);
            case VK_DOWN:
+                if (ctrl) break;
+                if (file->history) file->history->down (file);
+                return (0);
 #endif WINCE_PPC
            case VK_PRIOR:
            case VK_NEXT:
                 return (0);
            case VK_RETURN:                      // Return has special meaning (invoke dialog event)
+                if (file->sel.type == SELECT_KANJI) file->convert (CONVERT_RIGHT);
                 jwp_conv.clear ();
                 SendMessage (GetParent(hwnd),WM_COMMAND,IDOK,0L);
                 return (0);
@@ -227,8 +245,29 @@ static LRESULT CALLBACK JWP_edit_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
     case JE_GETJWPFILE:                         // This entry point returns the JWP_file object.
          return ((long) file);
     case JE_GETTEXT:                            // Returns the text buffer and file length.
-         *((KANJI **) lParam) = file->edit_gettext();
-         return (file->edit_getlen());
+         KANJI *kanji;
+         int    length;
+         kanji  = file->edit_gettext();
+         length = file->edit_getlen();
+         if (file->history) file->history->add (kanji,length);
+         *((KANJI **) lParam) = kanji;
+         return (length);
+    case JE_SETHIST:                            // Set a history pointer for this edit control.  Also alows use to set attached history button.
+         file->history = (JWP_history *) lParam;
+         if (wParam) {                                  
+           HWND button;                                 // If we have a list button, we will move that button to the edge of the edit control,
+           RECT butrect,jecrect,dlgrect;                //   and set the height to match that of the edit control.
+           button = GetDlgItem(GetParent(hwnd),wParam);
+           GetWindowRect (button,&butrect);
+           GetWindowRect (hwnd  ,&jecrect);
+           GetWindowRect (GetParent(hwnd),&dlgrect);
+           MoveWindow    (button,jecrect.right-dlgrect.left-GetSystemMetrics(SM_CXEDGE)-1,butrect.top-dlgrect.top-GetSystemMetrics(SM_CYCAPTION)-GetSystemMetrics(SM_CYEDGE)-1,butrect.right-butrect.left+1,jecrect.bottom-jecrect.top,true);
+         }
+         return (0);
+    case JE_HISTORYLIST:                        // User hit the history button.
+         if (file->history) file->history->list (file);
+         SetFocus (hwnd);
+         return   (0);
 //
 //  These are the menu commands that can be sent from the popup command.
 //
@@ -246,6 +285,7 @@ static LRESULT CALLBACK JWP_edit_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
   return (DefWindowProc(hwnd,iMsg,wParam,lParam));
 }
 
+//--------------------------------
 //
 //  This is the window proc for the special Japanese edit controls
 //  used in Property Pages.  
@@ -261,7 +301,7 @@ static LRESULT CALLBACK JWP_page_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
   return (JWP_edit_proc(hwnd,iMsg,wParam,lParam));
 }
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  begin class EUC_buffer
 //
@@ -269,6 +309,7 @@ static LRESULT CALLBACK JWP_page_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
 //  strings into lines, for the display.  
 //
 
+//--------------------------------
 //
 //  Clear the buffer.  This sets the x poisiton and character count to zero.
 //
@@ -281,6 +322,7 @@ void EUC_buffer::clear () {
   return;
 }
 
+//--------------------------------
 //
 //  Writes the contents of the buffer to the list box control, up to the 
 //  specified character.  The remainder of the characters are retained in 
@@ -300,6 +342,7 @@ void EUC_buffer::flush (int pos) {
   return;
 }
 
+//--------------------------------
 //
 //  Intialize the buffer system.  This mostly involves caching the list-box
 //  window pointer, and determinining the widht of the list box.
@@ -308,11 +351,11 @@ void EUC_buffer::flush (int pos) {
 //
 void EUC_buffer::initialize (HWND hwnd) {
   list = (JWP_list *) SendMessage(hwnd,JL_GETJWPLIST,0,0);
-  xmax = list->width-jwp_font.hwidth;
   highlight (false);
   return;
 }
 
+//--------------------------------
 //
 //  This is the main routine.  This places a character in the buffer.  
 //  If necessary the contents of the buffer are flushed to make room 
@@ -330,8 +373,8 @@ void EUC_buffer::put_char (int ch) {
 //  this.  If it is an ascii character, we have to backup until we get 
 //  to a space.
 //
-  if (ch != EUC_HIGHLIGHT) x = jwp_font.hadvance(x,ch); // KLUDGE: See top of file, if the character code is 0x01 this is a color shift.
-  if (!ISSPACE(ch) && (x >= xmax)) {
+  if (ch != EUC_HIGHLIGHT) x = list_font.hadvance(x,ch); // KLUDGE: See top of file, if the character code is 0x01 this is a color shift.
+  if (!ISSPACE(ch) && (x >= list->xmax)) {
     if (ISJIS(ch)) flush (count);
       else {
         for (i = count-1; (i >= 0) && !ISJIS(buffer[i]) && !isspace(buffer[i]); i--);
@@ -347,6 +390,7 @@ void EUC_buffer::put_char (int ch) {
   return;
 }
 
+//--------------------------------
 //
 //  Put an entire kanji string into an EUC_buffer.
 //
@@ -359,6 +403,28 @@ void EUC_buffer::put_kanji (KANJI *kanji,int length) {
   return;
 }
 
+//--------------------------------
+//
+//  Generates a label in a list.  The format of the label is:
+//      
+//      -<text>-
+//
+//  and is highlighted.
+//
+//      id -- String table ID
+//
+void EUC_buffer::put_label (int id) {
+  highlight  (true);
+  clear      ();
+  put_char   (KANJI_DASH);
+  put_string (get_string(id));
+  put_char   (KANJI_DASH);
+  highlight  (false);
+  flush      (-1);
+  return;
+}
+
+//--------------------------------
 //
 //  Puts an entire string into an EUC_buffer.  The string is restricted 
 //  to a processing an ascii string.
@@ -373,9 +439,9 @@ void EUC_buffer::put_string (tchar *string) {
 //
 //  End Class EUC_buffer
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------//
+//===================================================================
 //
 //  Begin Class EDIT_list.
 //
@@ -413,6 +479,7 @@ void EUC_buffer::put_string (tchar *string) {
 //  item containning the the slelected line.
 //
 
+//--------------------------------
 //
 //  Routine to implement dragging onto the list.  This basically 
 //  will import a file into the list, by dragging the file.
@@ -432,6 +499,7 @@ void EDIT_list::do_drop (HDROP drop) {
   return;
 }
 
+//--------------------------------
 //
 //  This is the event handler called from the dialog box's window 
 //  procedure.  This will process events having to do with mantainning
@@ -454,11 +522,14 @@ void EDIT_list::do_event (int id) {
          id = IDC_EDITLISTEDIT; 
     case IDC_EDITLISTEDIT:      // **** FALL THROUGH ****
     case IDC_EDITLISTADD:
-         if (LOWORD(id)==IDC_EDITLISTEDIT) j=get_buffer(j); // If edit get data.
-           else {                                                       
-             length = 0;                                    // Else zero buffer and get index for new line.
-             j      = next_item(j);
-           }
+         if (LOWORD(id)==IDC_EDITLISTEDIT) {                // If edit get data.
+           j = begin_item(j);
+           get_buffer (j);
+         }
+         else {                                                       
+           length = 0;                                      // Else zero buffer and get index for new line.
+           j      = next_item(j);
+         }
          if (edit()) {                                      // User liked the edit so put the item.
            changed = true;
            if (id == IDC_EDITLISTEDIT) j = delete_item(j);  // if Edit delete old 
@@ -497,6 +568,12 @@ void EDIT_list::do_event (int id) {
          changed = true;
          move_item (j,next_item(next_item(j)));
          break;
+    case IDC_EDITLISTNEXT:                  // NEXT
+         jwp_search.do_next (list);
+         break;
+    case IDC_EDITLISTFIND:                  // FIND
+         jwp_search.do_search (list);
+         break;    
     case IDC_EDITLISTINSERT:                // INSERT into file.
          list->insert (false);
          return;                            // No reason to go on.   
@@ -562,6 +639,7 @@ void EDIT_list::do_event (int id) {
   return;
 }
 
+//--------------------------------
 //
 //  Generates an error message.
 //
@@ -577,30 +655,7 @@ void EDIT_list::error (int format,...) {
   return;
 }
 
-//
-//  Extracts a complete logical item from the list.
-//  
-//      index  -- Index into item to be extracted.
-//
-//      RETURN -- Actual beginning index for the item.
-//
-//  The extracted string is placed in kbuffer, and the length parameter
-//  is set to indicate the length ofthe extraction.
-//
-int EDIT_list::get_buffer (int index) {
-  KANJI *kptr;
-  int    i,len,start;
-  start = index = begin_item(index);
-  length = 0;
-  while (true) {
-    if (!(len = list->get_text(index++,&kptr))) break;
-    if (length && (*kptr != '\t')) break;   
-    if (*kptr == '\t') { kptr++; len--; }
-    for (i = 0; i < len; i++) kbuffer[length++] = *kptr++;
-  } 
-  return (start);
-}
-
+//--------------------------------
 //
 //  This is simply a utility rotuien that imports a file.  This was 
 //  separated out so that both the drag&drop and the import button 
@@ -620,6 +675,7 @@ void EDIT_list::import_file (tchar *name) {
   return;
 }
 
+//--------------------------------
 //
 //  Initializes the class.  This routine must be called before any 
 //  other class rountines can be safely called.
@@ -651,6 +707,7 @@ void EDIT_list::init (HWND hwnd,byte *data,int import_id) {
   return;
 }
 
+//--------------------------------
 //
 //  Estimates the size of all items in the list.  This is used to 
 //  allocate space for the items.  Return is in number of bytes
@@ -671,9 +728,9 @@ long EDIT_list::size () {
 //
 //  End Class EDIT_list.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  begin class JWP_file
 //
@@ -681,6 +738,7 @@ long EDIT_list::size () {
 //  the list-box and edit functions.
 //
 
+//--------------------------------
 //
 //  This is a construct used to construct a JWP_file object for a edit-box.
 //  The edit-box essentially edits a file that is one paragraph, all in a 
@@ -706,6 +764,7 @@ JWP_file::JWP_file (HWND hwnd) {
   return;
 }
 
+//--------------------------------
 //
 //  This routine copies the selected region from one JWP_file object to
 //  another.  This is really indended to be used in the japanese edit 
@@ -729,6 +788,7 @@ int JWP_file::edit_copy (JWP_file *file) {
   return (length);
 }
 
+//--------------------------------
 //
 //  This routine is used to set the text in a JWP_file object used within
 //  a japanese edit control.  Primallraly, this blanks the first paragraph
@@ -742,18 +802,20 @@ void JWP_file::edit_set (KANJI *kanji,int length) {
   first->length        = 0;
   cursor.pos           = 0;
   first->first->length = 0;
-  put_string (kanji,length);
-  redraw_all ();
-  view_check ();
+  selection_clear ();
+  put_string      (kanji,length);
+  redraw_all      ();
+  view_check      ();
+  changed = false;                  // This works with the history buffer.
   return;
 }
 
 //
 //  End Class JWP_file.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  begin LIST_line
 //
@@ -761,6 +823,7 @@ void JWP_file::edit_set (KANJI *kanji,int length) {
 //  a Japanese List box control.
 //
 
+//--------------------------------
 //
 //  Allocate memory and copy a string into the buffer.
 //
@@ -778,6 +841,7 @@ void LIST_line::alloc (int len,KANJI *line) {
   return;
 }
 
+//--------------------------------
 //
 //  Deallocate all resources used by the line and crear all flags.
 //
@@ -791,13 +855,14 @@ void LIST_line::clear () {
 //
 //  End Class LIST_line.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Exported list hander routines and strctures
 //
 
+//--------------------------------
 //
 //  This structure describes the internal memory format used by the 
 //  list manager.
@@ -809,13 +874,13 @@ typedef struct LIST_list {
   struct LIST_list *next;               // Pointer to next block.
 } LIST_list;
 
+//--------------------------------
 //
 //  Window procedure for Japanese list boxes.
 //
 static LRESULT CALLBACK JWP_list_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam) {
   CREATESTRUCT *create;
   JWP_list     *list;
-  int           i;        
   list = (JWP_list *) GetWindowLong(hwnd,0);        // Get our JWP_List class object.
   switch (iMsg) {
 //
@@ -824,9 +889,7 @@ static LRESULT CALLBACK JWP_list_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
 //
     case WM_CREATE:                                 
          create = (CREATESTRUCT *) lParam;
-         i = (create->cy-2*GetSystemMetrics(SM_CYEDGE))/jwp_font.lheight;   // Calculate viewable lines.
-         MoveWindow (hwnd,create->x,create->y,create->cx,i*jwp_font.lheight+2*GetSystemMetrics(SM_CYEDGE),true);
-         list = new JWP_list (hwnd,i);
+         list = new JWP_list (hwnd);
          SetWindowLong (hwnd,0,(long) list);        // Save JWP_list object for list box.
          ImmAssociateContext (hwnd,NULL);           // Disable the IME for this window
          break;
@@ -839,7 +902,7 @@ static LRESULT CALLBACK JWP_list_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
   return (list->win_proc(hwnd,iMsg,wParam,lParam)); // Call the class windows procedure.
 }
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  begin JWP_list class
 //
@@ -847,24 +910,21 @@ static LRESULT CALLBACK JWP_list_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
 //  managed lists.
 //
 
+//--------------------------------
 //
 //  Constuctor for Japanese list object.
 //
 //      hwnd -- Window containning list.
-//      l    -- Number of lines to be visible in the list
 //
-JWP_list::JWP_list (HWND hwnd,int l) {
-  RECT rect;
+JWP_list::JWP_list (HWND hwnd) {
   memset (this,0,sizeof(JWP_list));     // Zero out structure which sets most variables.
-  GetClientRect (hwnd,&rect);           // Get client rectangle so we can set size.
-  lines   = l;                          // Visible number of lines.
-  width   = rect.right-rect.left;       // Display area width.
-  window  = hwnd;                       // Save window pointer.
-  height  = jwp_font.lheight;           // Height of a display line.
-  exclude = NULL;                       // This field indicates a file excluded from insert operations.
+  window     = hwnd;                    // Save window pointer.
+  height     = list_font.lheight;       // Height of a display line.
+  exclude    = NULL;                    // This field indicates a file excluded from insert operations.
   return;                               //   This is used to support dialogs with Japanese list controls.
 }
 
+//--------------------------------
 //
 //  Deconstructor.
 //
@@ -880,6 +940,7 @@ JWP_list::~JWP_list () {
   return;
 }
 
+//--------------------------------
 //
 //  Put a line into the list.  If necessary the list will be extended 
 //  so the line can be added.
@@ -913,6 +974,105 @@ void JWP_list::add_line (int len,KANJI *text) {
   return;
 }
 
+//--------------------------------
+//
+//  This is called when the size of the control is changd or during creation of
+//  the control to adjust the size of the control.
+//
+void JWP_list::adjust () {
+  int  i;
+  RECT dialog,rect;
+//
+//  Basic parameters.
+//
+  if (!this) return;
+  GetClientRect (window,&rect);
+  width  = rect.right-rect.left;                                                    // Width of display arrea.
+  xmax   = width-list_font.hwidth;
+  GetWindowRect (window,&rect);
+  GetWindowRect (GetParent(window),&dialog);
+  lines  = (rect.bottom-rect.top-2*GetSystemMetrics(SM_CYEDGE))/height;             // Calculate viewable lines.
+  i      = lines*height+2*GetSystemMetrics(SM_CYEDGE);
+//
+//  If window is not an exact number of lines change the window size.  Note, that if
+//  we change the size we will come back here again so we don't do anything else.
+//
+  if (i != rect.bottom-rect.top) {
+#ifndef WINCE
+    MoveWindow (window,rect.left-dialog.left-GetSystemMetrics(SM_CXFRAME),rect.top-dialog.top-GetSystemMetrics(SM_CYCAPTION)-GetSystemMetrics(SM_CYFRAME),rect.right-rect.left,i,true);
+#else   WINCE
+    MoveWindow (window,rect.left-dialog.left-GetSystemMetrics(SM_CXEDGE ),rect.top-dialog.top-GetSystemMetrics(SM_CYCAPTION)-GetSystemMetrics(SM_CYEDGE ),rect.right-rect.left,i,true);
+#endif  WINCE
+  }
+//
+//  If the window is the correct size, we can redisplay the data into the new window.
+//  If we adjusted the window above, windows will send another WM_SIZE message, and
+//  that time we will have the correct window size.  This prevents doing a lot of 
+//  work twice.
+//
+    else {
+      KANJI     *kptr;
+      EUC_buffer line;
+      LIST_list *old,*temp;
+      int        j,len,old_top,old_current,old_count,new_top,new_current,highlight;
+      old_count    = count;                                                     // Save old parameters
+      old_current  = new_current = begin(current);
+      old_top      = new_top     = begin(top);
+      old          = lists;                                                     // Save old lists
+      lists = last = NULL;                                                      // Reinitialize to a blank list.
+      count = top  = current = alloc = 0;
+      highlight    = false;
+      if (old_count) {
+        line.initialize (window);                                               // Setup EUC_buffer.
+        for (i = 0, temp = old; temp; temp = temp->next) {
+          for (j = 0; (i < old_count) && (j < LIST_BLOCK); j++) {
+            kptr = temp->lines[j].text;                                         // Get each line.
+            len  = temp->lines[j].length;
+            if (*kptr == EUC_HIGHLIGHT) {                                       // If line starts with highlight marker we skip marker and set highlight.
+              kptr++; 
+              len--; 
+              highlight = true;
+            }
+            if (*kptr != '\t') {                                                // If line does not begin with a tab, and is not first line, dump buffer,
+              if (i) line.flush     (-1);                                       //   reset highlight, and start a new line.
+              line.highlight (highlight); 
+              line.clear     (); 
+              highlight = false;             
+            }
+            if (*kptr == '\t') line.put_kanji(kptr+1,len-1); else line.put_kanji(kptr,len);   // Output line
+            if (i == old_top    ) new_top     = count;                          // If this line was top, or current save new location.
+            if (i == old_current) new_current = count;
+            i++;
+          }
+          line.flush (-1);                                                      // Flush out last buffer.
+        }
+      }
+//
+//  Dispose of old memory.
+//
+      while (old) {
+        for (i = 0; i < LIST_BLOCK; i++) {
+          if (old->lines[i].text) free (old->lines[i].text);
+        }
+        temp = old;
+        old  = old->next;
+        free (temp);
+      }
+//
+//  Reset display parameters.  Remember a redraw is already qued.
+//
+      top     = new_top;
+      current = new_current;
+      if (top+lines-1 > count) top = count-lines+1;
+      if (top > current) top = current;
+      if (top+lines-1 < current) top = current-lines+1;
+      if (top < 0) top = 0;
+      scroll ();
+    }
+  return;
+}
+
+//--------------------------------
 //
 //  From an index into a block, this routine returns the index of the 
 //  first line in the block.
@@ -933,6 +1093,7 @@ int JWP_list::begin (int line) {
   return (line);
 }
 
+//--------------------------------
 //
 //  Copy the context of the selection to the clipboard.
 //
@@ -942,6 +1103,7 @@ void JWP_list::clip_copy () {
   return;
 }
 
+//--------------------------------
 //
 //  Deletes all lines associated with a block
 //
@@ -958,6 +1120,7 @@ int JWP_list::del_block (int line) {
   return (line);
 }
 
+//--------------------------------
 //
 //  Deletes the indicated line from the list.
 //
@@ -985,6 +1148,7 @@ void JWP_list::del_line (int line) {
   return;
 }
 
+//--------------------------------
 //
 //  This is the main rederming routine.
 //
@@ -1008,21 +1172,24 @@ void JWP_list::draw_line (HDC hdc,int line) {
   rect.left   = 0;
   rect.right  = width;
   if (focus && (line == current)) {
-//    HPEN pen;
-//    pen = SelectObject(hdc,CreatePen(PS_DOT,1,RGB(0,0,0)));
-    Rectangle (hdc,rect.left,rect.top,rect.right,rect.bottom);
-//    DeleteObject (SelectObject(hdc,pen));
+    HPEN   pen; 
+    pen = (HPEN) SelectObject(hdc,CreatePen(PS_SOLID,0,GetSysColor(COLOR_WINDOWTEXT)));
+    SelectObject (hdc,GetSysColorBrush(COLOR_WINDOW));
+    SetBkMode    (hdc,OPAQUE);
+    Rectangle    (hdc,rect.left,rect.top,rect.right,rect.bottom);
+    DeleteObject (SelectObject(hdc,pen));
+    SetBkMode    (hdc,TRANSPARENT);
   }
   else {
-    BackFillRect (hdc,&rect);
+    FillRect (hdc,&rect,GetSysColorBrush(COLOR_WINDOW));
   }
 //
 //  Render text
 //
   text = get_line(line);                    // Get line
-  if (!text) return;                        // No text so exit.
-  x = jwp_font.x_offset;                    // Setup intial position.
-  y = rect.bottom-jwp_font.loffset;         // Only use of loffset.
+  if (!text || !text->text) return;         // No text so exit.
+  x = list_font.x_offset;                   // Setup intial position.
+  y = rect.bottom-list_font.loffset;        // Only use of loffset.
   i = 0;
 //
 //  Chech for highlite line.
@@ -1036,12 +1203,12 @@ void JWP_list::draw_line (HDC hdc,int line) {
 //
   for (; i < text->length; i++) {
     ch = text->text[i];
-    if (ISJIS(ch)) kanji->draw(hdc,ch,x,y);
+    if (ISJIS(ch)) list_font.kanji->draw(hdc,ch,x,y);
     else if (ch != '\t') {
       temp[0] = (TCHAR) ch;
-      TextOut (hdc,x,y-jwp_font.height,temp,1);
+      TextOut (hdc,x,y-list_font.height,temp,1);
     }
-    x = jwp_font.hadvance(x,ch);
+    x = list_font.hadvance(x,ch);
   }
 //
 //  Render selection indicator.
@@ -1057,6 +1224,74 @@ void JWP_list::draw_line (HDC hdc,int line) {
   return;
 }
 
+//--------------------------------
+//
+//  This routine implements a find command in the list.  This command is based on finding a 
+//  string within the block, not the individual string.
+//
+//      search_length -- Length of the search string.
+//
+void JWP_list::find (int search_length) {
+  int   i,index,length,start;
+  KANJI kbuffer[SIZE_BUFFER];
+  start = index = begin(current);                                               // Get starting position.
+  while (true) {                                                                // Continue search until resolved.
+    if (jwp_config.cfg.search_back) {                                           // Backup a line.
+      if (index == 0) {
+        if (jwp_config.cfg.search_wrap) index = count; else goto NotFound;
+      }
+      index = begin(index-1);
+    }
+    else {                                                                      // Go forward a line.
+      index = next(index);
+      if (index > count) {
+        if (jwp_config.cfg.search_wrap) index = 0; else goto NotFound;
+      }
+    }
+    if (index == start) goto NotFound;                                          // Looped back to beginning point -> not found.
+    length = get_buffer (kbuffer,index);                                        // Get block.
+    for (kbuffer, i = 0; i <= length-search_length; i++) {                      // Check for string.
+      if (jwp_search.test(&kbuffer[i])) goto Found;
+    }
+  }
+Found:;                                                                         // Found
+  move (next(index)-1,false);                                                   // This premove makes sure the entire thing should be visible.
+  move (index,true);                                                            // This true causes the block to be highlighted.
+  return;  
+NotFound:;                                                                      // Not found.
+  jwp_search.not_found (window,false);
+  return;
+}
+
+//--------------------------------
+//
+//  Extracts a complete logical item from the list.
+//
+//      buffer -- Location to store the extracted string.  
+//      index  -- Index into item to be extracted.
+//
+//      RETURN -- Length of the string extracted.
+//
+//  The extracted string is placed in kbuffer, and the length parameter
+//  is set to indicate the length ofthe extraction.  The buffer is also
+//  null terminated so both methods can be used.
+//
+int JWP_list::get_buffer (KANJI *buffer,int index) {
+  KANJI *kptr;
+  int    i,len,length;
+  index  = begin(index);
+  length = 0;
+  while (true) {
+    if (!(len = get_text(index++,&kptr))) break;
+    if (length && (*kptr != '\t')) break;   
+    if (*kptr == '\t') { kptr++; len--; }
+    for (i = 0; i < len; i++) buffer[length++] = *kptr++;
+  } 
+  buffer[length] = 0;
+  return (length);
+}
+
+//--------------------------------
 //
 //  This routine deterimes the character that is located under the 
 //  cursor.  The cusor position is passed in the form it is received
@@ -1079,9 +1314,9 @@ int JWP_list::get_char (LPARAM lParam,int *pos,int average) {
   int    i,j,k,x,x1;
   i  = LOWORD(lParam);
   j  = get_text((HIWORD(lParam)-1)/height+top,&kptr);
-  x  = jwp_font.x_offset;
+  x  = list_font.x_offset;
   x1 = 0;                               // Make some sticky compilers happy
-  for (k = 0; (k < j) && (x < i); k++) x = jwp_font.hadvance(x1 = x,kptr[k]);
+  for (k = 0; (k < j) && (x < i); k++) x = list_font.hadvance(x1 = x,kptr[k]);
   if (x < i) {                          // Click is past the end of the line.
     last_char = 0; 
     *pos      = j; 
@@ -1090,7 +1325,7 @@ int JWP_list::get_char (LPARAM lParam,int *pos,int average) {
   if (k <= 0) {                         // Click is to left of the first character
     last_char = kptr[0];
     *pos      = 0;
-    return (jwp_font.x_offset);
+    return (list_font.x_offset);
   }
   if (average && ((x-i) < (i-x1))) {    // Click is in character, but average is on so take right character
     last_char = kptr[k];
@@ -1102,6 +1337,7 @@ int JWP_list::get_char (LPARAM lParam,int *pos,int average) {
   return (x1);
 }
 
+//--------------------------------
 //
 //  Get the LIST_line structure associated with a line.  
 //
@@ -1117,6 +1353,7 @@ LIST_line *JWP_list::get_line (int line) {
   return (&list->lines[line]);
 }
 
+//--------------------------------
 //
 //  This is the major routine clients use to get text from the list
 //  box.  This routine retrieves the list's own memory pointer to 
@@ -1150,6 +1387,7 @@ int JWP_list::get_text (int line,KANJI **text) {
   return (i);
 }
 
+//--------------------------------
 //
 //  Inserts all selected lines into the indicated file.
 //
@@ -1200,6 +1438,7 @@ void JWP_list::insert (int newline,JWP_file *file) {
   return;
 }
 
+//--------------------------------
 //
 //  This is a major routine that is called any time the current position
 //  in the list is changed.  
@@ -1209,7 +1448,8 @@ void JWP_list::insert (int newline,JWP_file *file) {
 //               selected region is being extended.
 //
 void JWP_list::move (int pos,int shift) {
-  int i,j,old;
+  int        i,j,old;
+  KANJI     *kptr;
   LIST_list *list;
   
   old     = current;                        // Save old location for later
@@ -1263,10 +1503,12 @@ void JWP_list::move (int pos,int shift) {
     que_line (current);
   }
   scroll ();                                // Adjust scroll bar
+  last_char = get_text(current,&kptr) ? kptr[0] : 0;        // Get first character for info.
   if ((old != current) && single) SendMessage (GetParent(window),WM_COMMAND,MAKELONG(GetWindowLong(window,GWL_ID),true),0);
   return;
 }
 
+//--------------------------------
 //
 //  Move a block of lines from one location ot another.  The from and 
 //  to parameters do not have to be at the beginning of blocks.
@@ -1324,6 +1566,7 @@ int JWP_list::move_block (int from,int to) {
   return (i);
 }
 
+//--------------------------------
 //
 //  From a given line find the beginning of the next block.
 //
@@ -1341,6 +1584,48 @@ int JWP_list::next (int line) {
   return (line);
 }
 
+//--------------------------------
+//
+//  Routine to handle the popup menu.
+//
+//      x,y -- Location of the menu (within the list window).
+//
+void JWP_list::popup_menu (int x,int y) {
+  int       i,j;
+  HMENU     pmenu;
+  RECT      rect;
+  JWP_file *tfile;
+  TCHAR     buffer[SIZE_BUFFER];
+  SetFocus (window);
+  pmenu = GetSubMenu(popup,1);
+  DeleteMenu (pmenu,IDM_LIST_INSERTTO,MF_BYCOMMAND);
+  if (last_insert) {                                // Check for last insert file is still valid.
+    tfile = jwp_file;
+    do {
+      if (tfile == last_insert) break;
+      tfile = tfile->next;
+    } while (tfile != jwp_file);
+    if (tfile != last_insert) last_insert = NULL;
+  }
+  if (last_insert) {                                // Last insert is still valid so build menu item
+    AppendMenu (pmenu,MF_STRING,IDM_LIST_INSERTTO,format_string(buffer,IDS_LIST_POPUP,last_insert->get_name()));
+  }                                                 // Enable/disable menu items.
+  if (select_count) j = MF_BYCOMMAND | MF_ENABLED; else j = MF_BYCOMMAND | MF_GRAYED;
+  for (i = IDM_LIST_COPY; i <= IDM_LIST_INSERTTO; i++) EnableMenuItem (pmenu,i,j);
+  EnableMenuItem (pmenu,IDM_LIST_REPLACETOFILE,(select_count && file_list.get(exclude)->sel.type) ? (MF_BYCOMMAND | MF_ENABLED) : (MF_BYCOMMAND | MF_GRAYED));
+  GetWindowRect  (window,&rect);                    // Generate popup
+
+  x += rect.left;
+  y += rect.top;
+#ifdef WINCE
+  TrackPopupMenu (pmenu,TPM_LEFTALIGN | TPM_TOPALIGN,x,y,0,window,NULL);
+#else  WINCE
+  TrackPopupMenu (pmenu,TPM_LEFTBUTTON | TPM_RIGHTBUTTON | TPM_LEFTALIGN | TPM_TOPALIGN,x,y,0,window,NULL);
+#endif WINCE
+  return;
+}
+
+//--------------------------------
 //
 //  Marks the rectangle associated with a given line as invlaid.
 //
@@ -1356,6 +1641,7 @@ void JWP_list::que_line (int line) {
   return;
 }
 
+//--------------------------------
 //  
 //  Resets the contents of the list.  All items are reumoved and the 
 //  list is redrawn.
@@ -1377,6 +1663,7 @@ void JWP_list::reset () {
   return;
 }
 
+//--------------------------------
 //
 //  Sets the scroll bar position for the list.
 //
@@ -1388,6 +1675,33 @@ void JWP_list::scroll () {
   return;
 }
 
+//--------------------------------
+//
+//  Sort the list.
+//
+//      proc -- Procedure for comparison.
+//
+void JWP_list::sort (int (*proc)(KANJI *buf1,KANJI *buf2)) {
+  KANJI buf1[SIZE_BUFFER],buf2[SIZE_BUFFER];
+  int i,j,low;
+  for (i = 0; i < count; i = next(i)) {
+    get_buffer (buf1,low = i);
+    for (j = next(i); j < count; j = next(j)) {
+      get_buffer (buf2,j);
+      if ((*proc)(buf1,buf2)) {
+        low = j;
+        get_buffer (buf1,low = j);
+      }
+    } 
+    if (low != i) move_block (low,i);
+  }
+  SetFocus (window);
+  move     (0,false);
+  redraw   ();
+  return;
+}
+
+//--------------------------------
 //
 //  Change (ie set) the selection state of a given line.
 //
@@ -1405,6 +1719,7 @@ void JWP_list::select (int line,int onoff) {
   return;
 }
 
+//--------------------------------
 //
 //  Window procedure for Japanese list-box control
 //
@@ -1415,7 +1730,12 @@ int JWP_list::win_proc (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
   HFONT       font;
   PAINTSTRUCT ps;
   int         i,j;
-  static JWP_file *last_insert = NULL;  // The last file that the user inserted into, for popup menu.
+  static short delta = 1;               // This is a KLUDGE used to get around the fact
+                                        //   that mouse_event will not generate an event
+                                        //   if the mouse does not move so we generate
+                                        //   events that move one micky right and left 
+                                        //   alternately, so the average is no motion.
+  static short mouse_x,mouse_y;         // Last mouse position.
   switch (msg) {
 //```````````````````````````````````````````````````````````````````
 //
@@ -1426,7 +1746,13 @@ int JWP_list::win_proc (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
 //  Crate only generates the scroll bar
 //
     case WM_CREATE:
-         scroll ();
+         adjust ();
+         return (0);
+//
+//  Size changing
+//
+    case WM_SIZE: 
+         adjust ();
          return (0);
 //
 //  Set and Kill focus simply change state and redraw.
@@ -1444,8 +1770,10 @@ int JWP_list::win_proc (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
 //
     case WM_PAINT:
          hdc = BeginPaint (hwnd,&ps);
-         font = (HFONT) SelectObject (hdc,jwp_font.font);
-         SetBkMode (hdc,TRANSPARENT);
+         font = (HFONT) SelectObject (hdc,list_font.ascii);
+         SetBkColor   (hdc,GetSysColor(COLOR_WINDOW));
+         SetTextColor (hdc,GetSysColor(COLOR_WINDOWTEXT));
+         SetBkMode    (hdc,TRANSPARENT);
          for (i = 0; i < lines; i++) draw_line (hdc,i+top);
          SelectObject (hdc,font);
          EndPaint (hwnd,&ps);
@@ -1475,12 +1803,16 @@ int JWP_list::win_proc (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
                 move (count,shift);
                 return (0);
            case VK_UP:                          // Up -> Up one line
+                sel_x1 = 0;
                 if (ctrl) SendMessage (GetParent(hwnd),WM_COMMAND,IDC_EDITLISTUP,0); 
-                  else move (current-1,shift);
+                else if (jwp_config.cfg.page_mode_list) move (current+1-lines,shift);
+                else move (current-1,shift);
                 return (0);
            case VK_DOWN:                        // Donw -> Down one line
+                sel_x1 = 0;
                 if (ctrl) SendMessage (GetParent(hwnd),WM_COMMAND,IDC_EDITLISTDOWN,0); 
-                  else move (current+1,shift);
+                else if (jwp_config.cfg.page_mode_list) move (current+lines-1,shift);
+                else move (current+1,shift);
                 return (0);
            case VK_PRIOR:                       // Page up -> Up one page
                 move (current+1-lines,shift);
@@ -1498,49 +1830,65 @@ int JWP_list::win_proc (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
                 if (ctrl) clip_copy ();         //           Ctrl insert does a copy to clipboard
                   else SendMessage (GetParent(hwnd),WM_COMMAND,IDC_EDITLISTADD,0);
                 return (0);
-           case VK_C:                           // ctrl+Insert/ctrl+C -> Copy to clipboard
-                if (ctrl) clip_copy ();
-                return (0);
            case VK_F23:
                 SendMessage (hwnd,WM_RBUTTONDOWN,0,0xffffffff);
                 return (0);
+           case VK_A:                           // ctrl+shift+A -> Select all.
+                if (ctrl) {
+SelectAll:;
+                  i = top;
+                  j = current;   
+                  move (0,false);
+                  move (count-1,true);
+                  top     = i;
+                  current = j;
+                  scroll ();
+                  redraw ();
+                  return (0);
+                }
+                break;
+           case VK_C:                           // ctrl+Insert/ctrl+C -> Copy to clipboard
+                if (ctrl) {
+                  clip_copy ();
+                  return    (0);
+                }
+                break;
+           case VK_I:
+                if (ctrl) kanji_info (hwnd,last_char);
+                return (0);
+           case VK_F:
+           case VK_S:
+                if (!ctrl) break;
+           case VK_F8:
+                jwp_search.do_search (this);
+                return               (0);
+           case VK_N:
+                if (!ctrl) break;
+           case VK_F9:
+                jwp_search.do_next (this);
+                return             (0);
+           case VK_RIGHT:
+           case VK_LEFT:
+                SendMessage (GetParent(hwnd),WMU_EDITFROMLIST,wParam,lParam);
+                return      (0);
            default:
                 break;
          }
          return (0);
 //```````````````````````````````````````````````````````````````````
 //
-//  Scroll bar messages.
+//  Character messages.  These are used only by the dictionary to go on to the next search.
 //
-    case WM_VSCROLL:
-         switch (LOWORD(wParam)) {
-           case SB_LINEUP:
-                i = -1;
-                break;
-           case SB_LINEDOWN:
-                i = 1;
-                break;
-           case SB_PAGEUP:
-                i = 1-lines;
-                break;
-           case SB_PAGEDOWN:
-                i = lines-1;
-                break;
-           case SB_THUMBTRACK:
-           case SB_THUMBPOSITION:
-                i = HIWORD(wParam)-top;
-                break;
-           default:
-                return (0);
-         }
-         j = top;
-         top += i;
-         if (top > BOTTOM) top = BOTTOM;
-         if (top < 0) top = 0;
-         if (j == top) return (0);
-         scroll ();
-         redraw ();
+    case WM_CHAR:
+         ctrl  = (GetKeyState(VK_CONTROL) < 0);
+         if (ctrl || (wParam == '\t')) return (0);      // Let WM_KEYDOWN handle this one.
+         SendMessage (GetParent(hwnd),WMU_CHARFROMLIST,wParam,lParam);
+         return      (0);
+#ifndef WINCE
+    case WM_IME_CHAR:                                   // IME support.
+         SendMessage (GetParent(hwnd),WMU_IMEFROMLIST,wParam,lParam);
          return (0);
+#endif WINCE
 //```````````````````````````````````````````````````````````````````
 //
 //  Control messages.
@@ -1567,34 +1915,56 @@ int JWP_list::win_proc (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
          return (0);
 //```````````````````````````````````````````````````````````````````
 //
-//  Mouse events.
+//  Timer events.
 //
-
+    case WM_TIMER:
+         if (wParam == TIMER_AUTOSCROLL) {
+           KillTimer    (hwnd,TIMER_AUTOSCROLL);          // Auto-scroll timer.
+           mouse_event  (MOUSEEVENTF_MOVE,delta,0,0,0);   // Fake mouse event so window keeps scrolling
+           if (delta == 1) delta = -1; else delta = 1;    // Toggle mouse direction so no net motion occures.
+         }
+         else {
+           selecting = false; 
+           KillTimer      (hwnd,TIMER_MOUSEHOLD); 
+           ReleaseCapture (); 
+           popup_menu     (mouse_x,mouse_y);
+         }
+         return (0);
+//```````````````````````````````````````````````````````````````````
+//
+//  Mouse events.
 //
 //  Left button up indicates the user is done with the selection.
 //
     case WM_LBUTTONUP:
-         ReleaseCapture ();
          in_select = false;
-         return (0);        
+         KillTimer      (hwnd,TIMER_MOUSEHOLD);
+         ReleaseCapture ();
+         return         (0);        
 //
 //  Left mouse double click -> Send message to parent
 //  
     case WM_LBUTTONDBLCLK: 
          SendMessage (GetParent(hwnd),WM_COMMAND,GetWindowLong(hwnd,GWL_ID),0);
-         return (0);
+         return      (0);
 //
 //  Mouse moves only count if we are in a mouse select.  If we are, we
 //  treat mouse moves simply as if the user shift clicked.
 //
     case WM_MOUSEMOVE:
+         if ((abs(LOWORD(lParam)-mouse_x) > DOUBLE_X) || (abs(HIWORD(lParam)-mouse_y) > DOUBLE_Y)) KillTimer (hwnd,TIMER_MOUSEHOLD);
          if (!in_select) return (0);
          wParam = MK_SHIFT;             
 //
 //  Left mouse button.
 //
     case WM_LBUTTONDOWN:            // **** FALL THROUGH ****
-         if (msg == WM_LBUTTONDOWN) SetCapture (hwnd);
+         if (msg == WM_LBUTTONDOWN) {
+           mouse_x = (short) LOWORD(lParam); 
+           mouse_y = (short) HIWORD(lParam); 
+           SetTimer   (hwnd,TIMER_MOUSEHOLD,GetDoubleClickTime(),NULL);
+           SetCapture (hwnd);
+         }
 //
 //  Set focus to this window.  Translate messages as needed.
 //
@@ -1664,74 +2034,112 @@ int JWP_list::win_proc (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
 //  we generate move up or move down commands necessary to scroll the 
 //  list.
 //
-           if ((HIWORD(lParam) < height/2) && (top > 0)) i = SB_LINEUP;
-           else if ((HIWORD(lParam) >= height*lines-height/2) && (top < BOTTOM)) i = SB_LINEDOWN;
+           if (!jwp_config.cfg.auto_scroll) return (0);
+           if      ((HIWORD(lParam) <  height/3)              && (top > 0     )) i = SB_LINEUP;
+           else if ((HIWORD(lParam) >= height*lines-height/3) && (top < BOTTOM)) i = SB_LINEDOWN;
            else return (0);             // No auto-scroll so exit.
 
-           static short delta = 1;      // This is a KLUDGE used to get around the fact
-                                        //   that mouse_event will not generate an event
-                                        //   if the mouse does not move so we generate
-                                        //   events that move one micky right and left 
-                                        //   alternately, so the average is no motion.
            win_proc     (hwnd,WM_VSCROLL,i,0);          // Scroll list.
            UpdateWindow (hwnd);                         // Force window redraw
-           mouse_event  (MOUSEEVENTF_MOVE,delta,0,0,0); // Fake mouse event so window keeps scrolling
-           if (delta == 1) delta = -1; else delta = 1;  // Toggle mouse direction so no net motion occures.
-           return (0);
+           SetTimer     (hwnd,TIMER_AUTOSCROLL,jwp_config.cfg.scroll_speed,NULL);
+           KillTimer    (hwnd,TIMER_MOUSEHOLD);
+           return       (0);
          }
 //
 //  Right mouse button invokes popup menu.
 //
 #ifndef WINCE
     case WM_CONTEXTMENU:
+         if (lParam != -1) return (0);                  // Want only keyboard events here.
+         popup_menu (width/2,current*height+(height*3)/4);
+         return (0);
 #endif WINCE
-    case WM_RBUTTONDOWN: {      // **** FALL THROUGH ****
-           HMENU     pmenu;
-           RECT      rect;
-           JWP_file *tfile;
-           TCHAR     buffer[SIZE_BUFFER];
-           SetFocus (hwnd);
-           pmenu = GetSubMenu(popup,1);
-           DeleteMenu (pmenu,IDM_LIST_INSERTTO,MF_BYCOMMAND);
-           if (last_insert) {                           // Check for last insert file is still valid.
-             tfile = jwp_file;
-             do {
-               if (tfile == last_insert) break;
-               tfile = tfile->next;
-             } while (tfile != jwp_file);
-             if (tfile != last_insert) last_insert = NULL;
+    case WM_RBUTTONDOWN: 
+         i = LOWORD(lParam);
+         get_char (lParam,&i,false);
+         i = LOWORD(lParam);
+         j = HIWORD(lParam);
+         if (wParam & MK_SHIFT) kanji_info (hwnd,last_char); else popup_menu (i,j);
+         return (0);
+//```````````````````````````````````````````````````````````````````
+//
+//  Wheel mouse support.
+//
+#ifndef WINCE
+    case WM_MOUSEWHEEL:
+         static int delta;                                                  // Accumulation point for deltas.
+         shift  = SystemParametersInfo(SPI_GETWHEELSCROLLLINES,0,&ctrl,0);  // Scroll amount.
+         ctrl   = LOWORD(wParam);                                           // Keys
+         delta += (short) HIWORD(wParam);                                   // Delta
+         i      = 0;                                                        // Default shift.
+//
+//  Shift -- skip pages.
+//
+         if ((ctrl & MK_SHIFT) || (shift == WHEEL_PAGESCROLL)) {
+           while (delta >= WHEEL_DELTA) {
+             i      = 1-lines;
+             delta -= WHEEL_DELTA;
            }
-           if (last_insert) {                           // Last insert is still valid so build menu item
-             AppendMenu (pmenu,MF_STRING,IDM_LIST_INSERTTO,format_string(buffer,IDS_LIST_POPUP,last_insert->get_name()));
-           }                                            // Enable/disable menu items.
-           if (select_count) j = MF_BYCOMMAND | MF_ENABLED; else j = MF_BYCOMMAND | MF_GRAYED;
-           for (i = IDM_LIST_COPY; i <= IDM_LIST_INSERTTO; i++) EnableMenuItem (pmenu,i,j);
-           EnableMenuItem (pmenu,IDM_LIST_REPLACETOFILE,(select_count && file_list.get(exclude)->sel.type) ? (MF_BYCOMMAND | MF_ENABLED) : (MF_BYCOMMAND | MF_GRAYED));
-           GetWindowRect  (window,&rect);               // Generate popup
-
-           i = LOWORD(lParam);
-           j = HIWORD(lParam);
-           if ((i == 0xffff) && (j == 0xffff)) {        // Responce to button, thus we need to 
-#ifndef WINCE                                           //   put the menu in a nice location.
-             i = (width*3)/4;                           //   relative to current selection.
-             j = current*height;                        
-#else   WINCE
-             i = j = 5;
-#endif  WINCE
-             wParam = 0;                                // Button press, so suppress move to info.
+           while (abs(delta) >= WHEEL_DELTA) {
+             i      = lines-1;
+             delta += WHEEL_DELTA;
            }
-           else {
-             get_char (lParam,&i,false);                // Get character under mouse incase the user selects character info.
-           }
-           i += rect.left;
-           j += rect.top;
-           if (wParam & MK_SHIFT) goto DoCharInfo;      // Shift+right click is get character info.
-#ifdef WINCE
-           TrackPopupMenu (pmenu,TPM_LEFTALIGN | TPM_TOPALIGN,i,j,0,hwnd,NULL);
-#else  WINCE
-           TrackPopupMenu (pmenu,TPM_LEFTBUTTON | TPM_RIGHTBUTTON | TPM_LEFTALIGN | TPM_TOPALIGN,i,j,0,hwnd,NULL);
-#endif WINCE
          }
+//
+//  Normal -- skip lines.
+//
+         else {
+           while (delta >= WHEEL_DELTA) {
+             i     = -shift;
+             delta -= WHEEL_DELTA;
+           }
+           while (abs(delta) >= WHEEL_DELTA) {
+             i     =  shift;
+             delta += WHEEL_DELTA;
+           }
+         }
+         j = top;
+         top += i;
+         if (top > BOTTOM) top = BOTTOM;
+         if (top < 0) top = 0;
+         if (j == top) return (0);
+         scroll ();
+         redraw ();
+         return (0);
+#endif  WINCE
+//```````````````````````````````````````````````````````````````````
+//
+//  Scroll bar messages.
+//
+    case WM_VSCROLL:
+         switch (LOWORD(wParam)) {
+           case SB_LINEUP:
+                i = -1;
+                break;
+           case SB_LINEDOWN:
+                i = 1;
+                break;
+           case SB_PAGEUP:
+                i = 1-lines;
+                break;
+           case SB_PAGEDOWN:
+                i = lines-1;
+                break;
+           case SB_THUMBTRACK:
+           case SB_THUMBPOSITION:
+                GetScrollInfo (window,SB_VERT,&scroll_info);
+                i = scroll_info.nTrackPos-top;
+                break;
+           default:
+                return (0);
+         }
+         j = top;
+         top += i;
+         if (top > BOTTOM) top = BOTTOM;
+         if (top < 0) top = 0;
+         if (j == top) return (0);
+         scroll ();
+         redraw ();
          return (0);
 //```````````````````````````````````````````````````````````````````
 //
@@ -1768,13 +2176,20 @@ int JWP_list::win_proc (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
                 }
                 jwp_file->title();              // If the insrt file changed state changed the title will be redrawn.
                 return (0);
-DoCharInfo:;                                    // Entry point for when user does shift-right click
            case IDM_LIST_GETINFO:               // Get character information.
                 kanji_info (hwnd,last_char);
                 return     (0);
            case IDM_LIST_COPY:                  // Copy to clipboard.
                 clip_copy ();
                 break;
+           case IDM_EDIT_SEARCH:
+                jwp_search.do_search (this);
+                break;
+           case IDM_EDIT_FINDNEXT:
+                jwp_search.do_next (this);
+                break;
+           case IDM_EDIT_SELECTALL:
+                goto SelectAll;
            default:
                 break;
 
@@ -1787,13 +2202,305 @@ DoCharInfo:;                                    // Entry point for when user doe
 //
 //  End Class JWP_list
 //
-//-------------------------------------------------------------------
+//===================================================================
 
-//-------------------------------------------------------------------
+//===================================================================
+//
+//  Begin class JWP_history
+//
+//  This class maintains a history buffer for a given Japanese edit control.  A basic history 
+//  consists of a buffer used to store strings and an array of pointers.  The user allocates a 
+//  fixed size block for pointers and data.  10% of the block is used for pointers and the rest
+//  is used for line storage. 
+//
+//  The pointers are indexes into the storage buffer.  The length of an entry is obtained by sutracting
+//  the difference between this pointer and the next pointer up.  This means we always allocate an
+//  extra pointer.  This last pointer always points to the first unused buffer in the array.
+//
+
+#define BUFFER(x)                       (buffer+pointers[x])                            // Pointer to buffer for this index.
+#define LENGTH(x)                       (pointers[x+1]-pointers[x])                     // Length of an entry by index.
+#define KANJIMOVE(dest,source,length)   memmove(dest,source,(length)*(sizeof(KANJI)))   // Move a array of kanji.
+
+//--------------------------------
+//
+//  Stub routine for the history dialog.
+//
+static int dialog_history (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam) {
+  JWP_history *hist;
+  if (message == WM_INITDIALOG) SetWindowLong (hwnd,GWL_USERDATA,lParam);
+  hist = (JWP_history *) GetWindowLong(hwnd,GWL_USERDATA);
+  return (hist->dlg_history(hwnd,message,wParam,lParam));
+}
+
+//--------------------------------
+//
+//  Class constructor.
+//
+JWP_history::JWP_history (int id) {
+  memset (this,0,sizeof(class JWP_history));
+  text_id = id;
+  return;
+}
+
+//--------------------------------
+//
+//  Class destructor
+//
+JWP_history::~JWP_history () {
+  alloc (0);
+  return;
+}
+
+//--------------------------------
+//
+//  Add a line to the history pointer.
+//
+//  Note, we use a smart-add.  If the energy is already in the history, it is not placed in the history again, but
+//  rather the previous entry is moved to the top of the history.  This allows more elements to be stored in the 
+//  same history space.
+//
+//      string -- String to be added.
+//      length -- Length of the string.
+//
+void JWP_history::add (KANJI *string,int length) {
+  int i;
+  if  (!buffer || !length) return;                                          // No string so don't do anyting.
+  if  (length > size) length = size-1;                                      // Handle case when user sends us a very long string.
+  i = find(string,length);                                                  // Is this in the list already.
+  if      (i ==  0) return;                                                 // first entry
+  else if (i != -1) remove (i);                                             // Some other entry.
+  while ((count == ptrmax) || (pointers[count]+length >= size)) count--;    // Create space for the new string.
+  KANJIMOVE (buffer+length,buffer,size-length);                             // Move the old data.
+  for (i = ptrmax; i > 0; i--) pointers[i] = pointers[i-1]+length;
+  KANJIMOVE (buffer,string,length);                                         // Copy the new data.
+  count++;
+  return;
+}
+
+//--------------------------------
+//
+//  Change the size of the allocated buffer.
+//
+//      newsize -- New buffer size in number of kanji characters.
+//
+//      RETURN  -- A non-zero value indicates an allocation error.
+//
+int JWP_history::alloc (int newsize) {
+  int    i;
+  KANJI *newbuf;
+  short *newptr;
+  if (size == newsize) return (false);                                      // Same size as before so do nothing.
+  if (!newsize) {                                                           // Used for the destructor.
+    newbuf      = NULL;
+    newptr      = NULL;
+    count       = 0;
+    ptrmax      = 0;
+  }
+//
+//  Going to allocate a new buffer.   We will divide the buffer into a pointer space (about 10%) and a data space (about 90%).  
+//  We will move over as many of the old pointers and data as we could in the past.
+//
+  else {
+    if (!(newptr = (short *) calloc(newsize,sizeof(KANJI)))) return (true);
+    ptrmax  = (newsize/10)+1;                                   // Size of pointer space.
+    count   = min(count,ptrmax);                                // Is this smaller than previous
+    newbuf  = (KANJI *) (newptr+ptrmax+1);                      // Find buffer space.
+    newsize = newsize-ptrmax-1;                                 // Correct size.
+    i       = min(size,newsize);                                // Move as much of the buffer as possible.
+    if (pointers) {
+      KANJIMOVE (newptr,pointers,count+1);                                    
+      KANJIMOVE (newbuf,buffer,i);
+    }
+    for (i = 0; (i < count) && (pointers[i+1] < newsize); i++); // Correct the count.
+    count = i;
+  }
+  if (pointers) free (pointers);
+  pointers = newptr;
+  buffer   = newbuf;
+  size     = newsize;
+  return (false);
+}
+
+//--------------------------------
+//
+//  Dialog box handler for the listory list.  Not really much to do.
+//
+int JWP_history::dlg_history (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam) {
+  int        i;
+  JWP_list  *list;
+  switch (message) {
+    case WM_INITDIALOG:
+         hist_size.wm_init (hwnd,IDC_HLLIST,NULL,true,0,0);
+         SetWindowText (hwnd,get_string(text_id));
+         list = (JWP_list *) SendDlgItemMessage(hwnd,IDC_HLLIST,JL_GETJWPLIST,0,0);
+         for (i = 0; i < count; i++) list->add_line (LENGTH(i),BUFFER(i));
+         SetFocus (GetDlgItem(hwnd,IDC_HLLIST));
+         return (false);
+    case WM_HELP:
+         do_help (hwnd,IDH_INTERFACE_JEDIT);
+         return  (true);
+#ifndef WINCE
+    case WM_SIZING:
+         hist_size.wm_sizing ((RECT *) lParam);
+         return (0);
+#endif  WINCE
+    case WM_SIZE:
+         hist_size.wm_size (wParam);
+         return (0);
+    case WM_COMMAND:
+         switch (LOWORD(wParam)) { 
+           case IDC_HLLIST:
+           case IDOK:
+                list = (JWP_list *) SendDlgItemMessage(hwnd,IDC_HLLIST,JL_GETJWPLIST,0,0);
+                EndDialog (hwnd,list->current);
+                return    (0);
+           case IDCANCEL:
+                EndDialog (hwnd,-1);
+                return    (0);
+         }
+  }
+  return (false);
+}
+
+//--------------------------------
+//
+//  This routine handles pressing the donw button in the history buffer.  This has the effect of scrolling forward
+//  If at the end of the list a blank line will be generated.  If you pres this again, the list window will be open.
+//
+//      file -- Should point to JWP_file class for the Japanese edit constrol.
+//
+void JWP_history::down (JWP_file *file) {
+  if (!buffer) return;
+  if (file->changed) { list (file); return; }
+  last--;
+  if (last >= 0) file->edit_set (BUFFER(last),LENGTH(last));
+    else {
+      file->edit_set (buffer,0);
+      file->change   ();
+    }
+  return;
+}
+
+//--------------------------------
+//
+//  Find a specific entry in the buffer.
+//
+//      string -- String to be added.
+//      length -- Length of the string.
+//
+//      RETURN -- Index of mathc (requries exact match), or -1 if it cannot be found.
+//
+int JWP_history::find (KANJI *string,int length) {
+  int i,j;
+  if (!length) return (-1);
+  for (i = 0; i < count; i++) {
+    for (j = 0; (j < LENGTH(i)) && (string[j] == BUFFER(i)[j]); j++);
+    if (j == LENGTH(i)) return (i);
+  }
+  return (-1);
+}
+
+//--------------------------------
+//
+//  Main entry point for generating the history list.
+//
+//      file -- Pointer to the JWP_file class object for the Japanese edit control.
+//  
+void JWP_history::list (JWP_file *file) {
+  int i;
+  i = JDialogBox (IDD_HISTORY,file->window,(DLGPROC) dialog_history,(LPARAM) this);
+  if (i != -1) {
+    file->edit_set (BUFFER(i),LENGTH(i));
+    file->change   ();
+  }
+  return;
+} 
+
+//--------------------------------
+//
+//  Read the history from a file.  The history is written into the file as first and integer.  This is a the 
+//  count field.  Then the entire buffer is written.
+//
+//      hfile  -- File to read from.
+//
+//      RETURN -- Non-zero value indicates and error.  Not used.
+//
+int JWP_history::read (HANDLE hfile) {
+  unsigned long done;
+  alloc (jwp_config.cfg.history_size);
+  ReadFile (hfile,&count,sizeof(int),&done,NULL);
+  if (pointers) ReadFile (hfile,pointers,jwp_config.cfg.history_size*sizeof(KANJI),&done,NULL);
+    else SetFilePointer (hfile,jwp_config.cfg.history_size*sizeof(KANJI),NULL,FILE_CURRENT);
+  return (false);
+}
+
+//--------------------------------
+//
+//  Remove an entry by index number.
+//
+//      index -- Index to be removed.
+//
+void JWP_history::remove (int index) {
+  int i,length;
+  length = LENGTH(index);
+  KANJIMOVE (BUFFER(index),BUFFER(index+1),size-pointers[index+1]);
+  for (i = index; i < count; i++) pointers[i] = pointers[i+1]-length;
+  count--;
+  return;
+}
+
+//--------------------------------
+//
+//  This routine handles pressing the up button in the history buffer.  This has the effect of scrolling backward
+//  through the history until the last item in the buffer is found.
+//
+//      file -- Should point to JWP_file class for the Japanese edit constrol.
+//
+void JWP_history::up (JWP_file *file) {
+  if (!buffer) return;                                                      // No history so exit.
+  if      (!file->changed) last++;                                          // Line not changed so move back one.
+  else if (0 == find(file->edit_gettext(),file->edit_getlen())) last = 1;   // Current line is the same as top of buffer, so skip back one.
+  else {                                                                    // Push this line.
+    add (file->edit_gettext(),file->edit_getlen());
+    last = 0; 
+  }
+  if (last >= count) last = count-1;                                        // Copy history to edit control.
+  file->edit_set (BUFFER(last),LENGTH(last));
+  return;
+}
+
+//--------------------------------
+//
+//  Write the history to the file.  The history is written into the file as first and integer.  This is a the 
+//  count field.  Then the entire buffer is written.
+//
+//      hfile  -- File to read from.
+//
+//      RETURN -- Non-zero value indicates and error.  Not used.
+//
+int JWP_history::write (HANDLE hfile) {
+  unsigned long done,zero = 0;
+  int i;
+  WriteFile (hfile,&count,sizeof(int),&done,NULL);
+  if (pointers) WriteFile (hfile,pointers,jwp_config.cfg.history_size*sizeof(KANJI),&done,NULL);
+    else {
+      for (i = 0; i < jwp_config.cfg.history_size; i++) WriteFile (hfile,&zero,2,&done,NULL);
+    }
+  return (false);
+}
+
+//
+//  End class JWP_history
+//
+//===================================================================
+
+//===================================================================
 //
 //  Exported routines
 //
 
+//--------------------------------
 //
 //  This small routine registers the window class used for the japanese
 //  edit-box procedure, and Japanese list box procedures.
@@ -1804,22 +2511,16 @@ int initialize_edit (WNDCLASS *wclass) {
   wclass->lpfnWndProc   = JWP_edit_proc;
   wclass->lpszClassName = TEXT("JWP-Edit");
   if (!RegisterClass(wclass)) return (true);
+  wclass->style         = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
   wclass->lpfnWndProc   = JWP_page_proc;        // Special Japanese edit control used in prop-pages.
   wclass->lpszClassName = TEXT("JWP-Page");
   if (!RegisterClass(wclass)) return (true);
+  wclass->style         = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
   wclass->lpfnWndProc   = JWP_list_proc;
   wclass->lpszClassName = TEXT("JWP-List");
   if (!RegisterClass(wclass)) return (true);
   return (false);
 }
-
-
-
-
-
-
-
-
 
 
 

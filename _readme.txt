@@ -1,6 +1,6 @@
-JWPce version 1.34
+JWPce version 1.42
 
-copyright (c) Glenn Rosenthal, 1997-2000. All Rights Reserved.
+copyright (c) Glenn Rosenthal, 1997-2002,2003. All Rights Reserved.
 
 ============================================================
 Windows CE:  Additional information
@@ -38,7 +38,7 @@ NT, or 2000. Windows 3.x is not supported (I suggest that you
 consider upgrading). The amount of memory required by the 
 program depends primarily on the fonts and dictionaries 
 installed. With minimum font and dictionary installation, 
-JWPce requires less than 8MB of disk space. A full install 
+JWPce requires less than 9MB of disk space. A full install 
 using all of the standard bitmapped fonts, dictionaries, and 
 the manuals, requires approximately 19MB of disk space.  If 
 you install TrueType fonts, the space requirements depend on 
@@ -60,7 +60,7 @@ procedure is very simple, and contains only four steps.
 1. Obtain the distribution .zip files: One way or another obtain 
    the distribution .zip files. Depending on where you obtained 
    your distribution copy you may have different numbers of zip 
-   files.  (Some JWPce files are avaialbe as self-extracting 
+   files.  (Some JWPce files are available as self-extracting 
    .exe files.)
 
 2. Generate a directory: Make a directory that will be your 
@@ -151,7 +151,7 @@ Version 1.33:
 
 Due to changes in the kana->kanji conversion system, the files 
 WNN.DCT and WNN.IDX have been replaced with the files WNN.DAT and 
-WNN.DIX.  Additionally, the format of the user kana->knaji 
+WNN.DIX.  Additionally, the format of the user kana->kanji 
 conversion file (USER.CNV) has changed to match the format used by 
 WNN.DAT.  UPDATE.EXE will update the format USER.CNV, as well as 
 offer to delete the obsolete files.

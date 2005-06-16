@@ -1,11 +1,11 @@
-//-------------------------------------------------------------------//
+//===================================================================//
 //                                                                   //
-//  JWPce Copyright (C) Glenn Rosenthal, 1998,1999,2000.             //
+//  JWPce Copyright (C) Glenn Rosenthal, 1998-2001,2002              //
 //  All rights reserved.                                             //
 //                                                                   //
-//-------------------------------------------------------------------//
+//===================================================================//
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  This modlule implements most of the file IO options.  (See jwp_clip.cpp
 //  for clipboard IO.)  Most of the routines contained in this module 
@@ -42,13 +42,13 @@
 //  the file.
 //
 
-//-------------------------------------------------------------------
+//--------------------------------
 //
 //  Compile time options.
 //
 #define SIZE_JISBUFFER  2000    // Size for buffer used in file import and export.
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Static data and definitions.
 //
@@ -61,6 +61,7 @@
 //
   
 #if 0
+//--------------------------------
 //
 //  Filters for open file only.  These are not used, but are a useful reference
 //
@@ -85,6 +86,7 @@
 "\0\0"
 #endif
 
+//--------------------------------
 //
 //  File extensions.
 //
@@ -183,11 +185,12 @@ typedef struct {                    // JWP native file pharagraph header used af
 } PARA_HEADER;
 #include <poppack.h>
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Static windows procedures.
 //
 
+//--------------------------------
 //
 //  This is the dialog box procedure for the Window/Files... command.
 //  This simply generates a list of all open files and allows the user
@@ -231,7 +234,7 @@ static BOOL CALLBACK dialog_files (HWND hwnd,UINT message,WPARAM wParam,LPARAM l
   return (false);
 }
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Static utility routines.
 //
@@ -239,6 +242,7 @@ static void open_file      (tchar *name,int type);              // Open a new fi
 static KANJI *read_kstring (IO_cache *cache,KANJI *buffer);     // Read a kanji string.
 static int    skip_kstring (IO_cache *cache);                   // Skip through a kanji string.
 
+//--------------------------------
 //
 //  Utiltiy routine used to open files.  This has to do with the fact 
 //  that muli-select files return differently from single select files.
@@ -258,7 +262,7 @@ static void open_file (tchar *name,int type) {
   JWP_file *file;
   if ((file = file_is_open(name))) {
     if ((i = jwp_config.cfg.double_open) == DOUBLE_PROMPT) {    // User wanted us to ask them.
-      switch (ButtonDialog(IDD_DUPLICATE,name,IDH_FILE_DUPLICATE)) {
+      switch (ButtonDialog(null,IDD_DUPLICATE,name,IDH_FILE_DUPLICATE)) {
         case IDOK:                  // Change to file.
              i = DOUBLE_CHANGE;
              break;
@@ -282,6 +286,7 @@ static void open_file (tchar *name,int type) {
   return;
 }
 
+//--------------------------------
 //
 //  This routine skips the contents of a JWP kanji string.  This is 
 //  used to skip data in the undo portion of the file.
@@ -297,11 +302,12 @@ static int skip_kstring (IO_cache *cache) {
   return (true);       
 }
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Exported routines.
 //
 
+//--------------------------------
 //
 //  This routine generates the choose file dialgo box as well as adjusting
 //  the curretn file.  This is used for implementation os some commands,
@@ -327,6 +333,7 @@ JWP_file *choose_file (HWND hwnd,int index,int help) {
   return (file);
 }
 
+//--------------------------------
 //
 //  This routine implements the drag and drop feature.
 //
@@ -345,6 +352,7 @@ void do_drop (HDROP drop) {
 #endif WINCE
 }
 
+//--------------------------------
 //
 //  This routine handles the File/Open... menu item.
 //
@@ -352,18 +360,15 @@ void do_drop (HDROP drop) {
 
 void do_fileopen () {
   OPENFILENAME ofn;
-  TCHAR *ptr,buffer[SIZE_OPENBUFFER],filters[SIZE_BUFFER];
+  TCHAR buffer[SIZE_OPENBUFFER];
   int  type;
   int  first = true;
   memset (&ofn  ,0,sizeof(ofn));
   memset (buffer,0,sizeof(buffer));         // This is not necessary for windows, but WINELIB needs it.
-  lstrcpy (filters,get_string(IDS_FILE_FILTERSOPEN));               // Get both parts of the filters.
-  lstrcat (filters,get_string(IDS_FILE_FILTERSGENERAL));
-  for (ptr = filters; *ptr; ptr++) if (*ptr == '\t') *ptr = 0;      // Convert coded tabs to zeros.
   ofn.lStructSize       = sizeof(ofn);
   ofn.hwndOwner         = main_window;
   ofn.hInstance         = instance;
-  ofn.lpstrFilter       = filters;
+  ofn.lpstrFilter       = tab_string(IDS_FILE_FILTERSOPEN,IDS_FILE_FILTERSGENERAL);
 #ifdef WINCE_PPC
   ofn.nFilterIndex      = FILETYPE_NORMAL;
 #else  WINCE_PPC
@@ -384,7 +389,7 @@ void do_fileopen () {
   set_currentdir (buffer,true);         // Set windows CE current directory.
   open_file (buffer,type);              // Windows CE does not support multi-select
 #else  WINCE
-  TCHAR name[SIZE_BUFFER];              // Multi-select reader for regular files.
+  TCHAR *ptr,name[SIZE_BUFFER];         // Multi-select reader for regular files.
   ptr = buffer+lstrlen(buffer)+1;
   while (*ptr || first) {
     first = false;
@@ -396,6 +401,7 @@ void do_fileopen () {
   return;
 }
 
+//--------------------------------
 //
 //  This routine actually implements the Window/Files... command, and 
 //  The individual files names in the Window menu.  If the argument is
@@ -413,6 +419,7 @@ void do_files (int index) {
   return;
 }
 
+//--------------------------------
 //
 //  This routine opens a file associated with the recent files menu.
 //
@@ -425,6 +432,7 @@ void do_recent (int id) {
   return;
 }
 
+//--------------------------------
 //
 //  Determines if a file is already open.
 //
@@ -445,6 +453,7 @@ JWP_file *file_is_open (tchar *name) {
   return (NULL);
 }
 
+//--------------------------------
 //
 //  This routine processes files into the recent files list.  This 
 //  routine is called whenever a named file is open or closed.
@@ -465,7 +474,7 @@ void recent_files (tchar *name) {
   return;
 }
 
-//-------------------------------------------------------------------
+//===================================================================
 //
 //  Begin class JWP_file:
 //
@@ -473,6 +482,7 @@ void recent_files (tchar *name) {
 //  JWP_file.
 //
 
+//--------------------------------
 //
 //  File constructor.
 //
@@ -483,16 +493,18 @@ void recent_files (tchar *name) {
 //                  name is NULL, this should be FILETYPE_UNNAMED.
 //
 JWP_file::JWP_file (tchar *filename,int type,int recent) {
-  byte          buffer[SIZE_JISBUFFER];     // Buffer for importing files.
-  unsigned long done;                       // Placeholder for bytes read from a file.
-  int           exit = false;               // Non-zero value indicates read error.
-  HANDLE        file;                       // Handle for file to read from.
-  unsigned long magic;                      // Holds magic value from file (used to identify JWP files).
-  TCHAR         temp[40];                   // Scratch for building unnamed file names.
-  static short  unnamed_count = 0;          // Counter for unnamed files.
-  JIS_convert   convert;                    // Class instance used for JIS/EUC file reads
-  IO_cache      cache;                      // IO_cache class instance used to read JWP format files.
-  memset (this,0,sizeof(JWP_file));         // Zero out the entire memory structure.
+  byte          buffer[SIZE_JISBUFFER];             // Buffer for importing files.
+  unsigned long done;                               // Placeholder for bytes read from a file.
+  int           exit = false;                       // Non-zero value indicates read error.
+  HANDLE        file;                               // Handle for file to read from.
+  unsigned long magic;                              // Holds magic value from file (used to identify JWP files).
+  TCHAR        *ext;                                // Points to file name extension, used to check extension.
+  TCHAR         temp[40];                           // Scratch for building unnamed file names.
+  int           type_guess = FILETYPE_AUTODETECT;   // Used to resove some abiguities in auto-file types.
+  static short  unnamed_count = 0;                  // Counter for unnamed files.
+  JIS_convert   convert;                            // Class instance used for JIS/EUC file reads
+  IO_cache      cache;                              // IO_cache class instance used to read JWP format files.
+  memset (this,0,sizeof(JWP_file));                 // Zero out the entire memory structure.
 //
 //  Setup file name and some of the file extensions.
 //
@@ -528,18 +540,30 @@ JWP_file::JWP_file (tchar *filename,int type,int recent) {
 //
   else {
     if (type == FILETYPE_AUTODETECT) {                      // Auto-detect, check for JWP/JWPce/Project files
+      ext = name+lstrlen(name)-4;                           // Get file extension.
       ReadFile (file,&magic,sizeof(magic),&done,NULL);
       if (magic == JWP_MAGIC) {
-        if (!stricmp(name+lstrlen(name)-4,TEXT(".jwp"))) type = FILETYPE_JWP; else type = FILETYPE_NORMAL;
+        if (!stricmp(ext,TEXT(".jwp"))) type = FILETYPE_JWP; else type = FILETYPE_NORMAL;
       }
       else if (magic == CONFIG_MAGIC) type = FILETYPE_PROJECT;      // This is a project file
-      else if (!stricmp(name+lstrlen(name)-4,TEXT(".jfc"))) type = FILETYPE_JFC; 
+      else if (!stricmp(ext,TEXT(".jfc"))) type       = FILETYPE_JFC; 
+      else if (!stricmp(ext,TEXT(".euc"))) type       = FILETYPE_EUC;
+      else if (!stricmp(ext,TEXT(".sjs"))) type       = FILETYPE_SJS;
+      else if (!stricmp(ext,TEXT(".jis"))) type       = FILETYPE_JIS;
+      else if (!stricmp(ext,TEXT(".old"))) type       = FILETYPE_OLD;
+      else if (!stricmp(ext,TEXT(".nec"))) type       = FILETYPE_NEC;
+      else if (!stricmp(ext,TEXT(".utf"))) type_guess = FILETYPE_UTF8;
       SetFilePointer (file,0,NULL,FILE_BEGIN);                      // Rewind file for read.
     }
     if (type == FILETYPE_AUTODETECT) {                      // Auto-detect check for JIS/EUC/Shift-JIS files.
       convert.input_file (buffer,sizeof(buffer),file);
       convert.set_type (FILETYPE_AUTODETECT);
       type = convert.find_type();
+      switch (type_guess) {                                 // Resove type ambiguities.
+        case FILETYPE_UTF8:                                 // UTF8 and UTF7 have the same extensions (default to UTF8).
+             if (type != FILETYPE_UTF7) type = FILETYPE_UTF8;
+             break;
+      }
       SetFilePointer (file,0,NULL,FILE_BEGIN);
     }           
     if (type == FILETYPE_JFC) {                             // Need to deal with EUC JFC files types (boy was that a mistake!)
@@ -566,10 +590,17 @@ JWP_file::JWP_file (tchar *filename,int type,int recent) {
 //  Close handle, and clean up if there is an error.
 //
   CloseHandle (file);
-  if (exit) {
-    JMessageBox (main_window,IDS_FILE_CORRUPTED,IDS_FILE_ERROR,MB_OK | MB_ICONERROR,filename);
-    delete this;
-    return;
+  switch (exit) {
+    case FILEERR_OK:        // File is OK
+         break;
+    case FILEERR_FATAL:     // File has a fatal error
+         JMessageBox (main_window,IDS_FILE_CORRUPTED,IDS_FILE_ERROR,MB_OK | MB_ICONERROR,filename);
+         delete this;
+         return;
+    case FILEERR_ERROR:     // File has some kind of error but some data may be readable.
+         if (IDYES == JMessageBox(main_window,IDS_FILE_DAMMAGED,IDS_FILE_ERROR,MB_YESNO | MB_ICONERROR,filename)) break;
+         delete this;
+         return;
   }
 //
 //  Setup display, and fix up the rest of the dislay.  
@@ -598,6 +629,7 @@ JWP_file::JWP_file (tchar *filename,int type,int recent) {
   return;
 }
 
+//--------------------------------
 //
 //  This is a utitlity routine called whenever the visible file is
 //  changed.  It performs some simple system changes and changes the 
@@ -643,6 +675,7 @@ void JWP_file::activate () {
   return;
 }
 
+//--------------------------------
 //
 //  Close a file.  Generally, this routine needs some wrapper around 
 //  it before closing, to make sure everything is only.  In particular,
@@ -662,7 +695,7 @@ void JWP_file::activate () {
 int JWP_file::close (int exit_ok) {
   class JWP_file *file;
   if (changed) {
-    switch (ButtonDialog(IDD_SAVECHECK,jwp_file->get_name(),IDH_FILE_CLOSE)) {
+    switch (ButtonDialog(null,IDD_SAVECHECK,jwp_file->get_name(),IDH_FILE_CLOSE)) {
       case IDCANCEL:
            return (true);
       case IDOK:
@@ -686,6 +719,7 @@ int JWP_file::close (int exit_ok) {
   return (false);
 }
 
+//--------------------------------
 //
 //  Deletes the disk file associated with the current file.  This routine
 //  was added to provide a way to remove files on Windows CE PPC machines,
@@ -699,6 +733,7 @@ void JWP_file::delete_file () {
   return;
 }
 
+//--------------------------------
 //
 //  Exports the current file to the indicated JIS_convert structrue.
 //
@@ -721,6 +756,7 @@ long JWP_file::export_file (JIS_convert *convert) {
 // ###      fixed line length
 }
 
+//--------------------------------
 //
 //  This routine imports a file from a location indicated by the 
 //  JIS_convert structrue.  
@@ -734,7 +770,7 @@ int JWP_file::import_file (JIS_convert *convert) {
 // ### do I want a statatus bar.
   int last_ch,ch = 0;
   int line_pending = false;
-  if (new_paragraph(last)) return (true);
+  if (new_paragraph(last)) return (FILEERR_FATAL);
   while (true) {
     last_ch = ch;
     ch = convert->input_char ();
@@ -746,7 +782,7 @@ int JWP_file::import_file (JIS_convert *convert) {
     if (((last_ch == '\r') && (ch == '\n')) || ((last_ch == '\n') && (ch == '\r'))) { ch = last_ch; continue; }
     if (line_pending) {
       line_pending = false;
-      if (new_paragraph(last)) return (true);
+      if (new_paragraph(last)) return (FILEERR_ERROR);
     }
     if ((ch == '\n') || (ch == '\r')) {
       line_pending = true;
@@ -754,13 +790,14 @@ int JWP_file::import_file (JIS_convert *convert) {
     }
     last->add_char (ch);
   }
-  return (false);
+  return (FILEERR_OK);
 // ### need to suport inport options
 // ###      align kanji
 // ###      make paragraphs
 // ###      ### indent is new paragraph ??? ###
 }
 
+//--------------------------------
 //
 //  Read a project file.  
 //
@@ -844,6 +881,7 @@ void JWP_file::project_read (tchar *name) {
   return;
 }
 
+//--------------------------------
 //
 //  Save the current configuration as a project file.  
 //
@@ -897,6 +935,7 @@ int JWP_file::project_save (tchar *name) {
   return (false);
 }
 
+//--------------------------------
 //
 //  Read a JWP format file.  This routine is normally not called 
 //  directly, but rather is called through the constructor for a JWP_file.
@@ -921,11 +960,11 @@ int JWP_file::read_jwp_file (IO_cache *cache) {
 //
 //  Read file header.
 //
-  if (cache->get_block(&file_header,sizeof(file_header))) return (true);
+  if (cache->get_block(&file_header,sizeof(file_header))) return (FILEERR_FATAL);
   for (version = 0; version < NUMBER_VERSIONS; version++) {
     if (!strcmp(file_header.version,versions[version])) break;
   }
-  if ((version == NUMBER_VERSIONS) || (file_header.magic != JWP_MAGIC)) { ErrorMessage (true,IDS_FILE_ERRORJWPCE,name); return (true); }
+  if ((version == NUMBER_VERSIONS) || (file_header.magic != JWP_MAGIC)) { ErrorMessage (true,IDS_FILE_ERRORJWPCE,name); return (FILEERR_FATAL); }
 //
 //  Setup formatting parameters.
 //
@@ -941,7 +980,7 @@ int JWP_file::read_jwp_file (IO_cache *cache) {
 //  Read summary lines if in file.
 //
   if (file_header.summary) {
-    for (i = 0; i < NUMBER_SUMMARY; i++) if (summary[i].read(cache)) return (true);
+    for (i = 0; i < NUMBER_SUMMARY; i++) if (summary[i].read(cache)) return (FILEERR_FATAL);
   }
 //
 //  Read header lines within the file.
@@ -949,7 +988,7 @@ int JWP_file::read_jwp_file (IO_cache *cache) {
   if (file_header.headers) {
     for (i = 0; i < NUMBER_HEADERS; i++) {
       for (j = 0; j < NUMBER_POSITIONS; j++) {
-        if (headers[i][j].read(cache)) return (true);
+        if (headers[i][j].read(cache)) return (FILEERR_FATAL);
       }
     }
   }
@@ -957,11 +996,11 @@ int JWP_file::read_jwp_file (IO_cache *cache) {
 //  Read undo information within the file.
 //
   for (i = 0; i < file_header.undo; i++) {
-    if (cache->get_block(&undo_header,sizeof(undo_header))) return (true);
+    if (cache->get_block(&undo_header,sizeof(undo_header))) return (FILEERR_FATAL);
     if (undo_header.action >= 1) {
       do {                      // Read chain of pharagraph structures.
-        if (cache->get_block(&paragraph,sizeof(paragraph))) return (true);
-        if (!skip_kstring(cache)) return (true);
+        if (cache->get_block(&paragraph,sizeof(paragraph))) return (FILEERR_FATAL);
+        if (!skip_kstring(cache)) return (FILEERR_FATAL);
       } while (paragraph.prev);
     }  
     if (!undo_header.next) break;
@@ -973,10 +1012,10 @@ int JWP_file::read_jwp_file (IO_cache *cache) {
     switch (version) {
       case FILEVERSION_130:
       case FILEVERSION_110:
-           if (cache->get_block(&para_header,sizeof(para_header))) return (true);
+           if (cache->get_block(&para_header,sizeof(para_header))) return (FILEERR_ERROR);
            break;
       case FILEVERSION_101:
-           if (cache->get_block(&old_para_header,sizeof(old_para_header))) return (true);
+           if (cache->get_block(&old_para_header,sizeof(old_para_header))) return (FILEERR_ERROR);
            para_header.textsize    = old_para_header.textsize;
            para_header.firstindent = (byte) old_para_header.firstindent;
            para_header.leftindent  = (byte) old_para_header.leftindent;
@@ -985,7 +1024,7 @@ int JWP_file::read_jwp_file (IO_cache *cache) {
            para_header.pagebreak   = false;
            break;
     }
-    if (new_paragraph(last)) { OutOfMemory (window); return (true); }
+    if (new_paragraph(last)) { OutOfMemory (window); return (FILEERR_ERROR); }
     last->indent_first  = para_header.firstindent;
     last->indent_left   = para_header.leftindent;
     last->indent_right  = para_header.rightindent;
@@ -993,17 +1032,18 @@ int JWP_file::read_jwp_file (IO_cache *cache) {
     last->length        = para_header.textsize-1;
     last->first->length = para_header.textsize-1;
     if (para_header.pagebreak) last->page_break = true;
-    while (last->size < para_header.textsize) if (last->alloc()) return (true);
+    while (last->size < para_header.textsize) if (last->alloc()) { last->length = 0; return (FILEERR_ERROR); }
     for (j = 0; j < para_header.textsize; j++) {                // Read paragraph text.
-      if (IO_EOF == (ch = cache->get_char())) return (true);
+      if (IO_EOF == (ch = cache->get_char())) { last->length = j; return (FILEERR_ERROR); }
       if      (ch & 0x80)             { ch = ((ch << 8) | cache->get_char()) & 0x7f7f; }
       else if (ch == HIGH_BIT_ESCAPE) { ch = cache->get_char() | 0x80; }
       last->text[j] = ch;
     }
   }
-  return (false);
+  return (FILEERR_OK);
 }
 
+//--------------------------------
 //
 //  Implements the rever menue option.  This basically reloads the 
 //  last saved version of the file.
@@ -1019,6 +1059,7 @@ void JWP_file::revert () {
   return;
 }
 
+//--------------------------------
 //
 //  Save the current file.
 //
@@ -1103,6 +1144,7 @@ int JWP_file::save (tchar *filename) {
   return     (false);
 }
 
+//--------------------------------
 //
 //  Process the File/Save As... menu item or the File/Save menu item
 //  when the file has no name.
@@ -1115,9 +1157,7 @@ int JWP_file::save_as () {
   OPENFILENAME ofn;
   HANDLE       file;
   int  i;
-  TCHAR *ptr,buffer[SIZE_BUFFER],filters[SIZE_BUFFER];
-  lstrcpy (filters,get_string(IDS_FILE_FILTERSGENERAL));
-  for (ptr = filters; *ptr; ptr++) if (*ptr == '\t') *ptr = 0;      // Convert coded tabs to zeros.
+  TCHAR buffer[SIZE_BUFFER];
 
   if ((filetype == FILETYPE_UNNAMED) || (filetype == FILETYPE_ASCII)) i = FILETYPE_NORMAL-3; else i = filetype-3;
 
@@ -1125,7 +1165,7 @@ int JWP_file::save_as () {
   ofn.lStructSize       = sizeof(ofn);
   ofn.hwndOwner         = main_window;
   ofn.hInstance         = instance;
-  ofn.lpstrFilter       = filters;
+  ofn.lpstrFilter       = tab_string(IDS_FILE_FILTERSGENERAL);
   ofn.nFilterIndex      = i;
   ofn.lpstrFile         = buffer;
   ofn.nMaxFile          = SIZE_BUFFER;
@@ -1162,9 +1202,8 @@ int JWP_file::save_as () {
 //
 //  The user is actually requesting a save project!
 //
-  if (FILETYPE_PROJECT == (i = (ofn.nFilterIndex+3))) { 
-    return (project_save(buffer));
-  }
+  i = ofn.nFilterIndex+3;
+  if (i == FILETYPE_PROJECT) return (project_save(buffer));
 //
 //  This is all other files saves.
 //
@@ -1173,6 +1212,7 @@ int JWP_file::save_as () {
   return (save(buffer));  
 }
 
+//--------------------------------
 //
 //  Write a file in JWP file format (version J1.20).
 //
@@ -1245,7 +1285,7 @@ long JWP_file::write_jwp_file (IO_cache *cache) {
         cache->put_char ((ch >> 8) | 0x80);
         cache->put_char ((ch & 0xff) | 0x80);
       }
-      else if (ch & 0x0080) {
+      else if ((ch & 0x0080) || !ch) {
         cache->put_char (HIGH_BIT_ESCAPE);
         cache->put_char (ch & 0x7f);
       }
@@ -1261,7 +1301,7 @@ long JWP_file::write_jwp_file (IO_cache *cache) {
 //
 //  End Class JWP_file.
 //
-//-------------------------------------------------------------------
+//===================================================================
 
 
 
