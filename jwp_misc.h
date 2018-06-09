@@ -146,6 +146,8 @@ extern byte *load_image (tchar *name);                  // Generates a null term
 extern int  get_int     (HWND hwnd,int id,int min_val,int max_val,int def);   // Get int value from edit control.
 extern int  get_float   (HWND hwnd,int id,float min_val,float max_value,float def,int scale,float *value);   // Get a float value from buffer
 extern void put_float   (HWND hwnd,int id,float value,int scale);             // Put float value into a dialog box.
+extern void SetDialogFocus (HWND dlg,HWND ctl);                               // Proper alternative to SetFocus() for controls.
+extern void SetDialogFocus (HWND dlg,int ctl_id);                             // Overloaded version of the above that calls GetDlgItem() to get the control's handle.
 
 //--------------------------------
 //
@@ -193,6 +195,11 @@ extern class RecentList recent_list;    // Class instance.
 extern TCHAR *get_string    (int id);                   // Get string and return in a pointer to a static buffer.
 extern TCHAR *format_string (TCHAR *buffer,int id,...); // Foramt a string based on an
 extern TCHAR *tab_string    (int id,int id2 = 0);       // Get a string an replace tab characters with ascii 0 (used for requestors).
+extern int ntk_compare      (KANJI *s1,KANJI *s2);      // Compare two null-terminated KANJI strings.
+extern int ntk_compare_n    (KANJI *s1,KANJI *s2,int n);// Compare the first 'n' characters of two null-terminated KANJI strings.
+extern int   k_compare_n    (KANJI *s1,KANJI *s2,int n);// Compare the first 'n' characters of two KANJI strings.
+extern int compare_string   (KANJI *k,int len,TCHAR *s);// Compare a KANJI string with a TCHAR string.
+extern bool matches_label   (KANJI *k,int len,int id);  // Check if a KANJI string matches a label as created by put_label().
 
 //--------------------------------
 //

@@ -113,7 +113,7 @@ public:
   int         count;            // Number of lines in the list.
   int         width;            // Width of the list.
   int         current;          // Current element in the list.
-  int         single;           // Single-select managed list.
+  int         single;           // Single-select managed list (e.g. user conversion, user dictionary).
   int         xmax;             // List wrap point.  Was in EUC_buffer, but is here for resaizable lists.
 //
 //  Constructor/destructor
@@ -133,16 +133,20 @@ public:
 //  General manipulation commands
 //
   void        add_line      (int len,KANJI *text);          // Put a line into the file.
+  void        del_line      (int line,bool fixup=true);     // Delete a line. Use del_block() to remove dictionary results, which can be multi-line.
+  void        del_selected  (void);                         // Delete all selected lines.
   int         get_buffer    (KANJI *buffer,int index);      // Extract an extended data object.
   int         get_text      (int line,KANJI **text);        // Get a line's text and length.
   void        insert        (int newline,JWP_file *file = NULL);    // Insert selected text into a JWP_file structure.
-  void        move          (int pos,int shift);            // Move the cursor.
-  void        sort          (int (*proc)(KANJI *buf1,KANJI *buf2));
+  void        move          (int pos,int shift,int keep=0); // Move the cursor.
+  void        sort          (int (*proc)(KANJI *buf1,KANJI *buf2),bool reverse=false);
+  int         deduplicate   (void);                         // Delete duplicates.
   int         win_proc      (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam);  // Window procedure for the dialog
+  int         get_select_cnt(void) { return select_count; } // Number of selected lines.
+  BOOL        is_selected   (int line);                     // True if line is selected.
 private: 
   void        adjust        (void);                         // Adjust the list box after the size has changed.
   void        clip_copy     (void);                         // Copy selected items to the clipboard.
-  void        del_line      (int line);                     // Delete a line.
   void        draw_line     (HDC hdc,int line);             // Render a specific line
   LIST_line  *get_line      (int line);                     // Find data associated with line
   int         get_char      (LPARAM lParam,int *pos,int average);    // Find character under the cursor.
@@ -202,7 +206,9 @@ public:
   void  put_char   (int ch);                    // Put a character to the buffer.
   void  put_kanji  (KANJI *kanji,int length);   // Put kanji string to buffer.
   void  put_string (tchar *text);               // Put a string to the buffer.
-  void  put_label  (int id);                    // Put a marker label into the list.
+  void  put_label  (int id,int color=1);        // Put a marker label into the list.
+  void  put_label  (TCHAR*s,int color=0);       // Put a marker label into the list.
+  void  del_labels (void);                      // Find and delete any labels in the list.
 private:
   KANJI buffer[256];                            // Buffer to hold the string being built.
   short count;                                  // Current position in the buffer.
@@ -292,14 +298,16 @@ typedef class JWP_history {
 public:
   JWP_history      (int newid);
   ~JWP_history     (void);
-  void add         (KANJI *string,int length);                              // Add line to history
+  int  add         (KANJI *string,int length);                              // Add line to history
   int  alloc       (int newsize);                                           // Allocate history buffer.
   int  dlg_history (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam);    // Dilaog box hander for history list.
+  void up          (JWP_file *file);                                        // Handles the up key-stroke
   void down        (JWP_file *file);                                        // Handles the down key-stroke
   void list        (JWP_file *file);                                        // Creates history list.
-  int  read        (HANDLE hfile);                                          // Writes history to a file.
-  void up          (JWP_file *file);                                        // Handles the up key-stroke
+  int  read        (HANDLE hfile);                                          // Reads the history from a file.
   int  write       (HANDLE hfile);                                          // Writes the history to a file.
+  void safe_remove (KANJI *string,int length);                              // Searches for a string in the history and deletes it if found.
+  void reset       (JWP_file *file);                                        // Resets a few things.
 private:
   KANJI *buffer;                            // Pointer to storage buffer.
   int    count;                             // Number of elements in the history.

@@ -28,6 +28,7 @@ public:
   void do_search   (class JWP_list *list);          // Implement the Edit/Search function
   void not_found   (HWND window,int replace_all);   // Error message for not found.
   int  test        (KANJI *string);                 // Test to see if string matches the search pattern.
+  int  search_leng () { return (search_input && search_length > 0? search_length:0); }  // Returns length of search string, guaranteed to be positive or 0 for absent/invalid string.
 private:
   void   clear     (int rep);                       // Clears the search engine and releases the memory.
   int    changes;                                   // Counter for number of changes.

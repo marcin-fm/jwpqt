@@ -16,6 +16,7 @@
 #include "jwp_cach.h"
 #include "jwp_edit.h"
 #include "jwp_help.h"
+#include "jwp_inpt.h"
 #include "jwp_misc.h"
 #include <commctrl.h>   // Needed for tab controls
 #include <shellapi.h>
@@ -768,6 +769,82 @@ TCHAR *get_string (int id) {
 
 //--------------------------------
 //
+//  Compare two null-terminated KANJI strings.
+//
+//      s1,s2  -- Null-terminated KANJI strings.
+//
+//      RETURN -- Zero if strings match.
+//
+int ntk_compare (KANJI *s1, KANJI *s2) {
+  while (*s1 && *s2 && *s1 == *s2) s1++,s2++;
+  return (*s1 - *s2);
+}
+
+//--------------------------------
+//
+//  Compare the first 'n' characters of two null-terminated KANJI strings.
+//
+//      s1,s2  -- Null-terminated KANJI strings.
+//      n      -- Number of characters to compare.
+//
+//      RETURN -- Zero if strings match.
+//
+int ntk_compare_n (KANJI *s1, KANJI *s2, int n) {
+  ASSERT (n > 0);
+  if (n <= 0) return (0);
+  while (*s1 && *s2 && *s1 == *s2 && --n) s1++,s2++;
+  return (*s1 - *s2);
+}
+
+//--------------------------------
+//
+//  Compare the first 'n' characters of two KANJI strings.
+//
+//      s1,s2  -- KANJI strings.
+//      n      -- Number of characters to compare.
+//
+//      RETURN -- Zero if strings match.
+//
+int k_compare_n (KANJI *s1, KANJI *s2, int n) {
+  ASSERT (n > 0);
+  if (n <= 0) return (0);
+  while (*s1 == *s2 && --n) s1++,s2++;
+  return (*s1 - *s2);
+}
+
+//--------------------------------
+//
+//  Compare a KANJI string with a TCHAR string.
+//
+//      k      -- KANJI string.
+//      leng   -- Length of KANJI string.
+//      s      -- Null-terminated TCHAR string.
+//
+//      RETURN -- Zero if strings match.
+//
+int compare_string (KANJI *k, int leng, TCHAR *s) {
+  if (int d = leng - _tcslen (s)) return (d);
+  for (;leng--;k++,s++) if (*k != *s) return (*k - *s);
+  return (0);
+}
+
+//--------------------------------
+//
+//  Check if a KANJI string matches a label as created by put_label().
+//
+//      k      -- KANJI string.
+//      leng   -- Length of KANJI string.
+//      id     -- String ID.
+//
+//      RETURN -- True if string matches a label created with the string ID.
+//
+bool matches_label (KANJI *k, int leng, int id) {
+  if (*k != KANJI_DASH || k[leng-1] != KANJI_DASH) return (false);
+  return (!compare_string (k+1, leng-2, get_string (id)));
+}
+
+//--------------------------------
+//
 //  This is a replacment for the system routines CreateDialogParam/CreateDialog.  This 
 //  routien supports reading the templete from one source and the dialog from another.
 //  This is necessary to allow custom controls defined in JWPce to be used in dialog 
@@ -812,6 +889,21 @@ int JDialogBox (int id,HWND hwnd,DLGPROC proc,long param) {
   resource = LoadResource(language,handle);
   data     = LockResource(resource);
   return (DialogBoxIndirectParam(instance,(LPCDLGTEMPLATE) data,hwnd,proc,param));
+}
+
+//--------------------------------
+//
+//  This gives better results for dialog controls than SetFocus() does.
+//
+//      dlg -- Handle to dialog containing the control.
+//      ctl -- Handle or ID of the control to receive focus.
+//
+void SetDialogFocus (HWND dlg,HWND ctl) {
+  SendMessage (dlg,WM_NEXTDLGCTL,(WPARAM)ctl,TRUE);
+}
+
+void SetDialogFocus (HWND dlg,int ctl_id) {
+  SetDialogFocus (dlg,GetDlgItem(dlg,ctl_id));
 }
 
 //--------------------------------

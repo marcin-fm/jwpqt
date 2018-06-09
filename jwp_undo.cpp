@@ -170,7 +170,9 @@
 
 #include "jwpce.h"
 #include "jwp_conf.h"
+#include "jwp_conv.h"
 #include "jwp_file.h"
+#include "jwp_inpt.h"
 #include "jwp_stat.h"
 
 //===================================================================
@@ -542,7 +544,8 @@ void JWP_file::do_redo () {
 //  Check for valid redo list list not necessary because of menu selection.
 //  undo_menu will disable the menu item, and thus the keyboard shortcut.
 //
-  if (!redo) return;
+  kana_convert.erase ();                        // Discard anything pending.
+  if (!redo || !redo[0]) return;
   redoing = true;
   undo_pop (redo);
   redoing = false;
@@ -554,10 +557,9 @@ void JWP_file::do_redo () {
 //  This is the user entry point.  This implements the Edit/Undo command.
 //
 void JWP_file::do_undo () {
-//
-//  Check for valid undo list list not necessary because of menu selection.
-//  undo_menu will disable the menu item, and thus the keyboard shortcut.
-//
+  kana_convert.erase ();                        // Discard anything pending.
+  jwp_conv.clear ();                            // Abort any in-progress conversions.
+  if (!undo || !undo[0]) return;                // Check for valid undo list.
   undoing = true;                               // We are in an actuall undo.
   if (!redo) redo = undo_alloc(NULL,0);         // Make a redo list if not one.
   undo_pop (undo);                              // Call the real working routine.

@@ -28,6 +28,7 @@
 #include "jwp_file.h"
 #include "jwp_font.h"
 #include "jwp_info.h"
+#include "jwp_inpt.h"
 #include "jwp_klst.h"
 #include "jwp_misc.h"
 
@@ -117,7 +118,7 @@ void KANJI_list::do_mouse (LPARAM lParam) {
     set_scroll (false);
     if ((x >= sel.left) && (x <= sel.right)) {
       select (selected);
-      sel_char = (short) (selected+(x-sel.left)/bar_font.hwidth);
+    //sel_char = (short) (selected+(x-sel.left)/bar_font.hwidth);    // Can cause problems when selecting the rightmost kanji and then getting info.
       if (list[sel_char] == '/') sel_char--;
       return;
     }
@@ -145,7 +146,7 @@ void KANJI_list::do_scroll (int message) {
          break;
     case SB_PAGEUP:
          if (first == 0) return;
-         i = x_first-width/2;
+         i = x_first-width+bar_font.hwidth;     // Used to be x_first-width/2
          if (i < 0) i = 0;
          while (x_first > i) {
            first = prev(first);
@@ -153,19 +154,36 @@ void KANJI_list::do_scroll (int message) {
          }
          break;
     case SB_PAGEDOWN:
-         i = x_first+width/2;
+         i = x_first+width-bar_font.hwidth;     // Used to be x_first+width/2
          while ((x_first < i) && !next_first()) set_scroll (false);
          break;
     case SB_THUMBTRACK:
-    case SB_THUMBPOSITION:
+  //case SB_THUMBPOSITION:                                                                  // I don't think it's necessary to process this message. It usually (always?) causes a redundant redraw of the list when the mouse button is released.
          GetScrollInfo (window,SB_HORZ,&scroll_info);
-         scroll_info.nPos = HIWORD(message);    // This is a kludge because GetScrollInfo does not return the correct data.
+         if (SB_THUMBTRACK == LOWORD(message)) scroll_info.nPos = scroll_info.nTrackPos;    // This replaces a kludge and fixes a bug where the scrollbar could jump backwards due to 16-bit overflow.
+#ifdef _DEBUG
          first = 0;
          set_scroll (false);
          while (scroll_info.nPos > x_first) {
            first = next(first);
            set_scroll (false);
          }
+         short slowfirst;
+         slowfirst = first;
+#endif
+//
+//  This is intended to be a faster replacement for the above loop. In debug mode, both methods will be executed and the results checked for validation purposes.
+//
+         first = 0;
+         set_scroll (false);
+         while (x_first < scroll_info.nPos) {
+           int delta;
+           delta = next (first) - first;
+           first = next (first);
+           if (delta == 0) break;
+           for (i = 0; i < delta; i++) x_first = hadvance (x_first,list[i]);
+         }
+         ASSERT (slowfirst == first);
          break;
     default:
          return;
@@ -240,6 +258,14 @@ void KANJI_list::draw (HDC hdc) {
   x = bar_font.x_offset-x_first;
   for (i = 0; (i < list_len) && (x < width); i++) {
     if (list[i] != '/') bar_font.kanji->draw (hdc,list[i],x,y_offset);
+    if (jwp_config.cfg.mark_rare_kanji && ISRAREKANJI (list[i])) {                    // Mark uncommon kanji shown in kanji bars (candidates and lookup results).
+      int dx = x + bar_font.hwidth / 2 - 1;
+      int dy = y_offset + 2;
+      int sl = 2;
+      RECT rect;
+      SetRect  (&rect,dx,dy,dx+sl,dy+sl);
+      FillRect (hdc,&rect,(HBRUSH) GetStockObject(BLACK_BRUSH));
+    }
     x = hadvance(x,list[i]);
   }
   InvertRect (hdc,&sel);
@@ -387,6 +413,7 @@ void KANJI_list::select (int s) {
     first++;
   }
   set_scroll (true);                            // Set display and redraw
+//DestroyCaret ();                              // Fixes at least one caret bug. Or rather it did at one point. Hopefully obsolete now, because it causes focus problems with SKIP/4C when you click the icons.
   redraw ();
   return;
 }

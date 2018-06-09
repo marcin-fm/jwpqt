@@ -1,6 +1,6 @@
 //{{NO_DEPENDENCIES}}
-// Microsoft Developer Studio generated include file.
-// Used by jwpce-pocketpc.rc
+// Microsoft Visual C++ generated include file.
+// Used by jwpce.rc
 //
 #define IDS_ABOUT_TEXT                  1
 #define IDS_ABOUT_TITLE                 2
@@ -100,7 +100,7 @@
 #define IDS_FILE_OVERWRITE              96
 #define IDS_FILE_FILTERSGENERAL         97
 #define IDS_FILE_FILTERSOPEN            98
-#define IDS_FILE_DAMMAGED               99
+#define IDS_FILE_DAMAGED                99
 #define IDS_STAT_OVR                    100
 #define IDS_STAT_INS                    101
 #define IDS_STAT_ASCII                  102
@@ -215,7 +215,7 @@
 #define IDS_DO_COLLOQUIAL               211
 #define IDS_DO_MANGA                    212
 #define IDS_DO_SLANG                    213
-#define IDS_DO_MARIAL                   214
+#define IDS_DO_MARTIAL                  214
 #define IDS_DO_IDIOMATIC                215
 #define IDS_DO_ARCHAIC                  216
 #define IDS_DO_OBSOLETE                 217
@@ -530,6 +530,9 @@
 #define IDC_DDADVI                      1098
 #define IDC_DDMARK                      1099
 #define IDC_DDJASCII                    1100
+#define IDC_DDNAME                      1101
+#define IDC_DDNAME2                     1102
+
 #define IDC_DOEXCLUDE                   1120
 #define IDC_DOCOMPRESS                  1121
 #define IDC_DOAUTO                      1122
@@ -992,14 +995,27 @@
 #define ID_HELPX                        40088
 #define IDS_CAP_HELP                    40089
 #define IDS_CAP_MENUITEM40090           40091
+#define IDM_UTILITIES_IMPORTSETTINGS    40092
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        247
-#define _APS_NEXT_COMMAND_VALUE         40092
-#define _APS_NEXT_CONTROL_VALUE         2346
+#define _APS_NEXT_RESOURCE_VALUE        385
+#define _APS_NEXT_COMMAND_VALUE         40093
+#define _APS_NEXT_CONTROL_VALUE         2532
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif
+
+
+
+#define IDS_CE_ERRORLENGTH              376
+#define IDS_CE_ERRORDELETED             377
+#define IDS_FILE_ERROR_RO               378
+#define IDS_DD_PRI_END                  379
+#define IDS_REG_ERROR_WRITE             380
+#define IDS_DD_NO_EXACT_MATCHES         381
+#define IDS_OPTS_RESET_DEFAULT          382
+#define IDS_INI_FILETYPE                383
+#define IDS_ALL_FILETYPE                384

@@ -39,9 +39,25 @@ extern void bushu2_lookup        (JWP_file *from);      // Bushu lookup compress
 extern void fourcorner_lookup    (JWP_file *from);      // Four corners lookup
 extern void index_lookup         (JWP_file *from);      // Lookup by dictionary index
 extern void radical_lookup       (JWP_file *from);      // Actually implements a radical lookup.
+extern void radical_lookup       (HWND hwnd,KANJI ch=0);// Alternate parameters for use in lists.
 extern void reading_lookup       (JWP_file *from);      // Lookup based on dictionary file.
 extern void skip_lookup          (JWP_file *from);      // Actually does the skip lookup
 extern void spahn_lookup         (JWP_file *from);      // Hadamitzky/Spahn Lookup
 extern void jis_table            (JWP_file *from);      // Implements the JIS-table.
+
+//--------------------------------
+//
+// Definitions of the actual search indices.
+//
+#define RLTYPE_ON       0       // on-yomi
+#define RLTYPE_KUN      1       // kun-yomi
+#define RLTYPE_KUNON    2       // kun or on
+#define RLTYPE_MEANING  3       // meaning
+// The following types may not be available depending on the kanjinfo.dat file in use. See also READINGS_FIXED.
+#define RLTYPE_NANORI   4       // nanonri
+#define RLTYPE_PINYIN   5       // pinyin
+#define RLTYPE_KOREAN   6       // korean
+
+#define RLTYPE_NUMBER   7       // Count of all possible types.
 
 #endif jwp_lkup_h

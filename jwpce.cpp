@@ -22,12 +22,12 @@
 #include "jwp_edit.h"
 #include "jwp_file.h"
 #include "jwp_find.h"
+#include "jwp_flio.h"
 #include "jwp_font.h"
 #include "jwp_help.h"
 #include "jwp_info.h"
 #include "jwp_inpt.h"
 #include "jwp_inst.h"
-#include "jwp_flio.h"
 #include "jwp_jisc.h"
 #include "jwp_lkup.h"
 #include "jwp_misc.h"
@@ -35,10 +35,6 @@
 #include "jwp_stat.h"
 #include "jwp_wnce.h"
 #include "shlobj.h"
-
-#ifndef WINCE
-//x=0;
-#endif
 
 #include <commctrl.h> 
 #include <commdlg.h>
@@ -54,6 +50,8 @@ HWND button_bar;
 HMENU hmenu2;
 SHACTIVATEINFO activateinfo;
 #endif WINCE_POCKETPC
+
+static TCHAR startdir[MAX_PATH];  // Saved copy of current path on program start.
 
 //
 //  Window procedure for the window.
@@ -135,6 +133,10 @@ void mprintf (TCHAR *format,...) {
   va_end     (args);
   return;
 }
+#else
+
+void dprintf (TCHAR *format,...) {}
+void mprintf (TCHAR *format,...) {}
 
 #endif DEBUG_ROUTINES
 
@@ -164,6 +166,7 @@ static HWND  button_bar  = null;    // Button bar for PPC's
 //  this structure.
 //
 #define DICTBITS    (DICTBIT_NAMES | DICTBIT_PLACES | DICTBIT_BEGIN)
+#define INT_DKGRAY  88
 
 struct cfg default_config = {
   CONFIG_MAGIC,                             //  long  magic;                  // Identifies this as a JWPce config file.
@@ -187,27 +190,32 @@ struct cfg default_config = {
   { TEXT("k16x16.f00"),16 ,true,false },    //  struct cfg_font extra_font2;  // Another extra font.
   { 0,0,0,0 },                              //  struct size_window size_dict; // Size of dictionary window.
   { 0,0,0,0 },                              //  struct size_window size_user; // Size of user dictionary window;
-  { 0,0,0,0 },                              //  struct size_window size_oount;// Size of count kanji window.
+  { 0,0,0,0 },                              //  struct size_window size_count;// Size of count kanji window.
   { 0,0,0,0 },                              //  struct size_window size_cnvrt;// Size of user kana->kanji conversions window.
   { 0,0,0,0 },                              //  struct size_window size_info; // Size of info dialog.
   { 0,0,0,0 },                              //  struct size_window size_more; // Size of more info dialog.
-  { 0,0,0,0 },                              //  struct size_window size_fill; // Unused size structure for later.
   0,0,0,0,                                  //  int   x,y,xs,ys;              // Dimensions of last saved configuration.
   20000,                                    //  int   dict_buffer;            // Size of dictionary buffer.
   RGB(255,0,0),                             //  COLORREF info_color;          // Color used for titles in kanji-info box.
   RGB(0,0,255),                             //  COLORREF colorkanji_color;    // Color to be used with color-kanji.
+  RGB(INT_DKGRAY,INT_DKGRAY,INT_DKGRAY),    //  COLORREF rarekanji_color;     // Color to be used with "rare" kanji.
+#ifdef BINARY_CONFIG
+  { 0 },
+#endif
   DICTBITS,                                 //  long  dict_bits;              // Stores the state of all dictionary bits in one place.
+  0,                                        //  long  dict_bits_ex;           // Additional dictionary bit flags.
   40,                                       //  short alloc;                  // Allocation size for lines.
   200,                                      //  short convert_size;           // Number of entires in user conversion table.
   35,                                       //  short char_width;             // Character width for formatinning.
   50,                                       //  short undo_number;            // Number of levels of undo to keep.
-  400,                                      //  short font_cache;             // Size of font cache in characters.
+  400,                                      //  short font_cache;             // Size of font cache in characters. Does not affect TrueType fonts.
   0,                                        //  short head_left;              // Position of headers to the left of margins
   0,                                        //  short head_right;             // Position of headers to the right of margins.
   100,                                      //  short head_top;               // Position of header lines above margins.
   100,                                      //  short head_bottom;            // Position of header lines below margins.
   100,                                      //  short scroll_speed;           // Determines the scroll speed.
   300,                                      //  short history_size;           // Size of history buffer (in characters).
+  CODEPAGE_AUTO,                            //  short code_page;              // Code page used for translations.
   { '&','y','/','&','M','/','&','D',0 },    //  KANJI date_format[SIZE_DATE]; // Date format string.
   { '&','h',':','&','N',' ','&','A',0 },    //  KANJI time_format[SIZE_DATE]; // Time format string.
   { 'A','M',0 },                            //  KANJI am_format[SIZE_AMPM];   // AM format string.
@@ -223,8 +231,9 @@ struct cfg default_config = {
   },
 #if (!defined(WINCE_PPC) && !defined(WINCE_POCKETPC))
   {                                         //  byte  kanji_info[60];         // Character Information dialog items
-    INFO_TYPE,INFO_JIS,INFO_SHIFTJIS,INFO_UNICODE,INFO_STROKE,INFO_GRADE,INFO_NELSON,INFO_HALPERN,INFO_SPAHN,INFO_FOURCORNERS,INFO_MOROHASHI,INFO_PINYIN,INFO_KOREAN,
-    INFO_FREQUENCY,INFO_HENSHALL,INFO_GAKKEN,INFO_HEISIG,INFO_ONEILL,INFO_DEROO,INFO_KANJILEARN,
+    INFO_TYPE,INFO_JIS,INFO_SHIFTJIS,INFO_UNICODE,INFO_STROKE,INFO_GRADE,INFO_FREQUENCY,        // Character Information, indented (first eight items, with the Bushu item implied)
+    INFO_HALPERN,INFO_SPAHN,INFO_FOURCORNERS,INFO_MOROHASHI,INFO_PINYIN,INFO_KOREAN,            // Character Information, remainder
+    INFO_NELSON,INFO_HENSHALL,INFO_GAKKEN,INFO_HEISIG,INFO_ONEILL,INFO_DEROO,INFO_KANJILEARN,   // More Character Information (These items can also appear under Character Information if the window is expanded.)
     21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60
 #else   WINCE_PPC
   {                                         //  byte  kanji_info[60];         // Character Information dialog items
@@ -241,14 +250,23 @@ struct cfg default_config = {
   true,                                     //  byte  dict_auto;              // Automatically attempt a search if the user has selected text.
   false,                                    //  byte  dict_advanced;          // Use addaptive dictionary search.
   true,                                     //  byte  dict_iadj;              // Process i-adjitives.
-  true,                                     //  byte  dict_always;            // Even if choices are found do an addpative search.
+  true,                                     //  byte  dict_always;            // Always do an advanced search even if there were matches for the base string.
   false,                                    //  byte  dict_showall;           // Show all possible choices in an addaptive search.
-  false,                                    //  byte  dict_advmark;           // Separate advanced search entries.
+  true,                                     //  byte  dict_advmark;           // Separate advanced search entries.
+  true,                                     //  byte  dict_primark;           // Demarcates priority and non-priority entries if dict_primaryfirst is enabled.
   false,                                    //  byte  dict_watchclip;         // Watch clipboard when dictionary is open
-  false,                                    //  byte  dcit_classical;         // Classical dictionary search
+  false,                                    //  byte  dict_classical;         // Classical dictionary search
   true,                                     //  byte  dict_primaryfirst;      // Move primary entries to the front the dictionary display.
   false,                                    //  byte  dict_fullascii;         // Causes first/last to select complete entry for ascii 
-  true,                                     //  byte  dict_jascii2ascii;      // Treat JASCII as ascii;
+  false,                                    //  byte  dict_jascii2ascii;      // Treat JASCII as ascii;
+  false,                                    //  byte  dict_link_adv_noname;   // Link the Advanced and No Names checkboxes.
+  false,                                    //  byte  dict_contingent;        // Enable "contingent" searches.
+  false,                                    //  byte  dict_sort_always_todo;  // Always run a sort after a completed dictionary search.
+  0,                                        //  char  dict_sort_method_todo;  // Default dictionary sorting method. Negative for inverse.
+#ifdef BINARY_CONFIG
+  0,0,0,0,0,0,0,0,
+  0L,0L,
+#endif
 //
 //  Startup flags
 //
@@ -262,8 +280,9 @@ struct cfg default_config = {
 //
   true,true,                                //  byte  vscroll,hscroll;        // Vertical and horizontal scroll bar.
   true,                                     //  byte  kscroll;                // Activate scroll bar on bar.
-  false,                                    //  byte  kanjibar_top;           // Places the kanji bar at the top of the screen
   true,                                     //  byte  status;                 // Display status bar.
+  true,                                     //  byte  kanjibar;               // Display the kanji bar.
+  false,                                    //  byte  kanjibar_top;           // Places the kanji bar at the top of the screen
   true,                                     //  byte  toolbar;                // Enable the toolbar.
   39,                                       //  byte  button_count;           // Number of buttons in the toolbar
 //
@@ -271,25 +290,31 @@ struct cfg default_config = {
 //
   true,                                     //  byte  confirm_exit;           // Require confirmation of exit on closing last file.
   true,                                     //  byte  close_does_file;        // Window close control, closes just current file.
-  true,                                     //  byte  backup_files;           // Save last version of a file as a backup.
+  false,                                    //  byte  backup_files;           // Save last version of a file as a backup.
+  true,                                     //  byte  save_history;           // Save dictionary/search/replace histories on exit.
+  true,                                     //  byte  save_recent;            // Save recent file list on exit.
   DOUBLE_PROMPT,                            //  byte  double_open;            // Determine the action in the case of a double open.
   IME_OFF,                                  //  byte  ime_mode;               // Determines JWPce's interaction with the Microsoft IME
-  false,                                    //  byte  delete_conversion;      // Causes the delete key to delete current kanji conversion instead of text to right (old action).
   true,                                     //  byte  auto_scroll;            // Enables or disables the auto-scroll feature.
   false,                                    //  byte  page_mode_file;         // Uses page scrolling for the file (PPC only)
   false,                                    //  byte  page_mode_list;         // Uses page scrolling for lists (PPC only)
+  0,                                        //  byte  dir_handling;           // Defines, in part, how the initial directory for the Open dialog is determined.
+#ifdef BINARY_CONFIG
+  0,0,0,0,0,0,0,0,
+  0L,0L,
+#endif
 //
 //  Clipboard flags
 //
-  FILETYPE_SJS     ,                        //  byte  clip_write;             // Clipboard write type.
+  FILETYPE_SJS,                             //  byte  clip_write;             // Clipboard write type.
   FILETYPE_AUTODETECT,                      //  byte  clip_read;              // Clipboard read type.
   false,                                    //  byte  no_BITMAP;              // Suppress BITMAP clipboard format
   false,                                    //  byte  no_UNICODETEXT;         // Suppress UNICODETEXT clipboard format
 //
 //  Search flags
 //
-  false,                                    //  byte  search_nocase;          // Search: Ignore case
-  false,                                    //  byte  search_jascii;          // Search: JASCII=ascii
+  true,                                     //  byte  search_nocase;          // Search: Ignore case
+  true,                                     //  byte  search_jascii;          // Search: JASCII <=> ASCII.
   false,                                    //  byte  search_back;            // Search: Move backward
   false,                                    //  byte  search_wrap;            // Search: Wrap at end of file.
   false,                                    //  byte  search_all;             // Search: All files.
@@ -298,7 +323,7 @@ struct cfg default_config = {
 //
 //  Insert to file flags
 //
-  true,                                     //  byte  paste_newpara;          // When pasting back in the file insert extra lines into new paragraph.
+  true,                                     //  byte  paste_newpara;          // Causes text inserted from a Japanese list box to be inserted into separate lines (actually paragraphs) for each entry. Named "Insert on New Lines" in options.
 //
 //  Formatting and printing
 //
@@ -312,9 +337,9 @@ struct cfg default_config = {
 //
   false,                                    //  byte  info_compress;          // Compress Character information.
   true,                                     //  byte  info_titles;            // Puts titles in the kanji-info list box.
-  false,                                    //  byte  info_onlyone;           // Allows only one info version to open.
-  false,                                    //  byte  cache_info;             // Fill for later exapnsion
-  COLORKANJI_NOMATCH,                       //  byte  colorkanji_mode;        // Determines the way color-fonts are suported.
+  false,                                    //  byte  info_onlyone;           // Reuses an existing kanji-info window if available. Called "Single Dialog" in Options.
+  true,                                     //  byte  cache_info;             // Cache kanji information file.
+  COLORKANJI_OFF,                           //  byte  colorkanji_mode;        // Determines the way color-fonts are suported.
   false,                                    //  byte  colorkanji_bitmap;      // Support color kanji in bitmap clipboard format
   false,                                    //  byte  colorkanji_print;       // Support color kanji in printing.
 //
@@ -325,25 +350,30 @@ struct cfg default_config = {
   true,                                     //  byte  bushu_nelson;           // Search for Nelson bushu
   true,                                     //  byte  bushu_classical;        // Search for classicla bushu
   0,                                        //  byte  index_type;             // Index type for index search.
-  0,                                        //  byte  reading_type;           // Reading type for reading search
+  RLTYPE_KUNON,                             //  byte  reading_type;           // Reading type for reading search
   true,                                     //  byte  reading_kun;            // Allow flexable kun readings.
-  false,                                    //  byte  reading_word            // Allow flexable word matching.
-  false,                                    //  byte  no_variants;            // Suppresses showing of variants in radical lookups.
+  false,                                    //  byte  reading_word            // Allow partial-word matches for meanings in Reading lookup.
+  false,                                    //  byte  no_variants;            // Hides variant/equivalent radicals from radical selection bar.
+  true,                                     //  byte  rare_last;              // List rare kanji at the end. Only needed for the radical lookup.
+#ifdef BINARY_CONFIG
+  0,0,0,0,
+#endif
 //
 //  Font flags
 //
-  true,                                     //  byte  cache_displayfont;      // Should we cache or not cache the display font.
+  false,                                    //  byte  cache_displayfont;      // Should we cache or not cache the display font.
   false,                                    //  byte  all_fonts;              // Show all fonts in the font selector
 //
-//  Fill
+//  Uncommon Kanji
 //
-  false,                                    //  byte  nokanjibar;             // Diables the kanji bar.
-  CODEPAGE_AUTO,                            //  short code_page;              // Code page used for translations
+  false,                                    //  byte  colorize_rare;          // Render rare kanji in a separate color. Only applies if not already affected by the kanji list.
+  false,                                    //  byte  mark_rare_kanji;        // Add a special mark to rare kanji displayed in kanji bars.
 //
-//  Fill
+//  Reserved
 //
-  0,                                        //  short fill1
-  { 0 }                                                                       // Filler for later expansion.
+#ifdef BINARY_CONFIG
+  { 0 }                                                                       // Reserved for later expansion.
+#endif
 };
 
 //===================================================================
@@ -446,13 +476,13 @@ static int open_files (TCHAR *command) {
 //
   if (jwp_config.load) {
     for (ptr = jwp_config.load, i = 0; i < 9; i++, ptr += lstrlen(ptr)+1) {
-      if (*ptr) recent_files (ptr);
+      if (*ptr) recent_files (ptr);                             // Restore entries in Recent Files menu.
     }
     if (jwp_config.cfg.reload_files) {
 #ifdef WINCE
       set_currentdir (ptr,false);
 #else  WINCE
-      if (*ptr) SetCurrentDirectory (ptr);
+      if (*ptr) SetCurrentDirectory (ptr);                      // Restore CD from configuration file if we're also reloading files from last time.
 #endif WINCE
       ptr += lstrlen(ptr)+1;
       for (; *ptr; ptr += lstrlen(ptr)+1) {
@@ -473,9 +503,11 @@ static int open_files (TCHAR *command) {
   }
 #endif  WINCE
   while (ptr && *ptr) {
+    if (startdir[0] && !SetCurrentDirectory(startdir)) break;   // Restore the directory in case relative-path arguments are used.
     ptr = get_parameter(buffer,ptr);
     GetFullPathName (buffer,SIZE_BUFFER,name,&p2);
-    new JWP_file(name,FILETYPE_AUTODETECT);
+    if (!file_is_open(name))                                    // Avoid silently opening the same file twice.
+      new JWP_file(name,FILETYPE_AUTODETECT);
   } 
 //
 //  If no loaded files open first file.
@@ -615,7 +647,7 @@ void set_mode (int mode) {
          break;
   }
   jwp_config.mode = mode;           // Update the actuall mode.
-  jwp_conv.clear ();                // Also redraw the status bar
+  jwp_conv.clear (true);            // Also redraw the status bar
 //
 //  Update mode buttons in the edit boxes.  
 //  Also update the selected mode in the menu.
@@ -943,7 +975,14 @@ static int initialize_view (WNDCLASS *wclass) {
 //
 
 class JWP_config jwp_config;
-#define NAME_CONFIG TEXT("jwpce.cfg")
+#define NAME_CONFIG     TEXT("jwpce.cfg")
+#define NAME_CONFIG_INI TEXT("JWPxp.ini")
+#define NAME_HISTORY    TEXT("JWPxp.his")
+
+#define MAGIC_HISTORY   0x1510BE00
+
+BOOL read_config  ();
+BOOL write_config (HANDLE fh);
 
 //--------------------------------
 //
@@ -970,6 +1009,7 @@ JWP_config::JWP_config () {
 //  option is being loaded.
 //
 #else WINCE
+  memset (&cached_cfg,0,sizeof(cached_cfg));
 #ifndef WINELIB
   TCHAR *p;
   p = get_parameter (buf,GetCommandLine());
@@ -1079,36 +1119,268 @@ HANDLE JWP_config::open (TCHAR *filename,int mode,int net) {
 
 //--------------------------------
 //
-//  Read configuration file.
+//  Read history file.
 //
-//      RETURN -- Non-zero indicates an allocation error.
+//      RETURN -- Zero indicates that an error occurred.
+//
+int JWP_config::read_history () {
+  int success = false;
+  HANDLE hfile = open(NAME_HISTORY,OPEN_READ,true);
+  if (INVALID_HANDLE_VALUE != hfile) {
+    DWORD done, magic;
+    if (!ReadFile(hfile,&magic,sizeof(magic),&done,NULL) || (magic != MAGIC_HISTORY)) goto Error;
+    success = true;
+    dict_history   .read (hfile);                         // Read() will do allocation if necessary.
+    search_history .read (hfile);
+    replace_history.read (hfile);
+    int i = GetFileSize(hfile,NULL)-3*HISTORY_SIZE-sizeof(magic);
+    if (i > 0) {
+      load = (TCHAR *) calloc(i+24,sizeof(TCHAR));
+      ReadFile (hfile,load,i,&done,NULL);
+    }
+    CloseHandle (hfile);
+  } else {
+Error:
+    load = NULL;
+    dict_history   .alloc (jwp_config.cfg.history_size);
+    search_history .alloc (jwp_config.cfg.history_size);
+    replace_history.alloc (jwp_config.cfg.history_size);
+  }
+  return (success);
+}
+
+//--------------------------------
+//
+//  Read configuration file. This method is only called during startup.
+//
+//      RETURN -- Non-zero indicates that the configuration file should be rewritten.
 //
 int JWP_config::read () {
-  int    i,err = false;
   HANDLE hfile;
   unsigned long done;
-  hfile = open(NAME_CONFIG,OPEN_READ,true); 
-  if (INVALID_HANDLE_VALUE != hfile) {
-    if (!ReadFile(hfile,&cfg,sizeof(cfg),&done,NULL) || (cfg.magic != CONFIG_MAGIC)) CloseHandle (hfile);
-      else {
-        ok   = true;
-        dict_history   .read (hfile);                   // Read will do allocation if necessary
-        search_history .read (hfile);
-        replace_history.read (hfile);
-        i    = GetFileSize(hfile,NULL)-3*HISTORY_SIZE-sizeof(cfg);
-        load = (TCHAR *) calloc(i+24,sizeof(TCHAR));    // Enough extra characters to handle UNICODE
-        ReadFile(hfile,load,i,&done,NULL);
-        CloseHandle (hfile);
-        goto AdjustConfig; 
-      }
+  int err = false;
+  ok      = false;                                        // Assume disk based configuration is not valid.
+  if (read_config ()) {                                   // Try text-based format first.
+    read_history ();
+    ok  = true;                                           // Indicates that the configuration file is valid so we don't necessarily need to rewrite it on exit.
+  //err = false;                                          // Do not rewrite the configuration file at this time.
+    cache_config ();                                      // Make a copy of current configuration to help check for unnecessary disk writes.
+    goto AdjustConfig;
   }
-  cfg  = default_config;
-  load = NULL;
+  hfile = open(NAME_CONFIG,OPEN_READ,true); 
+  if (INVALID_HANDLE_VALUE == hfile) goto UseDefault;
+  if (!ReadFile(hfile,&cfg,sizeof(cfg),&done,NULL)) { CloseHandle (hfile); goto UseDefault; }
+#ifdef UNICODE
+//
+//  Convert to the new configuration format.
+//
+  if (cfg.magic == CONFIG_MAGIC_ANSI && done >= sizeof(struct cfg_v150)) {
+    struct cfg_v150 old;
+    memcpy(&old, &cfg, sizeof(old));                      // Make a copy of the old configuration.
+    cfg  = default_config;                                // New configuration: start by initializing with default values.
+//
+    load = NULL;                                          // Don't bother converting list of previously loaded files.
+    dict_history   .alloc (jwp_config.cfg.history_size);  // Don't convert, allocate anew.
+    search_history .alloc (jwp_config.cfg.history_size);
+    replace_history.alloc (jwp_config.cfg.history_size);
+    CloseHandle (hfile);
+    err  = true;                                          // Rewrite configuration file.
+//
+//  This enormous section will copy/convert fields from the old config struct as needed.
+//
+    MultiByteToWideChar (CP_ACP,0,(char*)&old.ascii_font.name,-1,(WCHAR*)&cfg.ascii_font.name,SIZE_NAME);     // ASCII system font.
+    MultiByteToWideChar (CP_ACP,0,(char*)&old.sys_font.name,-1,(WCHAR*)&cfg.sys_font.name,SIZE_NAME);         // System font used for text and a few other places.
+    MultiByteToWideChar (CP_ACP,0,(char*)&old.list_font.name,-1,(WCHAR*)&cfg.list_font.name,SIZE_NAME);       // Font for lists.
+    MultiByteToWideChar (CP_ACP,0,(char*)&old.edit_font.name,-1,(WCHAR*)&cfg.edit_font.name,SIZE_NAME);       // Font used for Japanese edit controls.
+    MultiByteToWideChar (CP_ACP,0,(char*)&old.bar_font.name,-1,(WCHAR*)&cfg.bar_font.name,SIZE_NAME);         // Font used for kanji bars.
+    MultiByteToWideChar (CP_ACP,0,(char*)&old.file_font.name,-1,(WCHAR*)&cfg.file_font.name,SIZE_NAME);       // Font used for editing files.
+    MultiByteToWideChar (CP_ACP,0,(char*)&old.big_font.name,-1,(WCHAR*)&cfg.big_font.name,SIZE_NAME);         // Font used for big text.
+    MultiByteToWideChar (CP_ACP,0,(char*)&old.jis_font.name,-1,(WCHAR*)&cfg.jis_font.name,SIZE_NAME);         // Font used for JIS table.
+    MultiByteToWideChar (CP_ACP,0,(char*)&old.clip_font.name,-1,(WCHAR*)&cfg.clip_font.name,SIZE_NAME);       // Font used for clipboard bitmaps.
+    MultiByteToWideChar (CP_ACP,0,(char*)&old.print_font.name,-1,(WCHAR*)&cfg.print_font.name,SIZE_NAME);     // Font used for printing.
+    MultiByteToWideChar (CP_ACP,0,(char*)&old.extra_font.name,-1,(WCHAR*)&cfg.extra_font.name,SIZE_NAME);     // Extra font for later.
+    MultiByteToWideChar (CP_ACP,0,(char*)&old.extra_font2.name,-1,(WCHAR*)&cfg.extra_font2.name,SIZE_NAME);   // Another extra font.
+    cfg.ascii_font.size  = old.ascii_font.size;
+    cfg.sys_font.size    = old.sys_font.size;
+    cfg.list_font.size   = old.list_font.size;
+    cfg.edit_font.size   = old.edit_font.size;
+    cfg.bar_font.size    = old.bar_font.size;
+    cfg.file_font.size   = old.file_font.size;
+    cfg.big_font.size    = old.big_font.size;
+    cfg.jis_font.size    = old.jis_font.size;
+    cfg.clip_font.size   = old.clip_font.size;
+    cfg.print_font.size  = old.print_font.size;
+    cfg.extra_font.size  = old.extra_font.size;
+    cfg.extra_font2.size = old.extra_font2.size;
+//
+    cfg.ascii_font.automatic  = old.ascii_font.automatic;
+    cfg.sys_font.automatic    = old.sys_font.automatic;
+    cfg.list_font.automatic   = old.list_font.automatic;
+    cfg.edit_font.automatic   = old.edit_font.automatic;
+    cfg.bar_font.automatic    = old.bar_font.automatic;
+    cfg.file_font.automatic   = old.file_font.automatic;
+    cfg.big_font.automatic    = old.big_font.automatic;
+    cfg.jis_font.automatic    = old.jis_font.automatic;
+    cfg.clip_font.automatic   = old.clip_font.automatic;
+    cfg.print_font.automatic  = old.print_font.automatic;
+    cfg.extra_font.automatic  = old.extra_font.automatic;
+    cfg.extra_font2.automatic = old.extra_font2.automatic;
+//
+    cfg.ascii_font.vertical  = old.ascii_font.vertical;
+    cfg.sys_font.vertical    = old.sys_font.vertical;
+    cfg.list_font.vertical   = old.list_font.vertical;
+    cfg.edit_font.vertical   = old.edit_font.vertical;
+    cfg.bar_font.vertical    = old.bar_font.vertical;
+    cfg.file_font.vertical   = old.file_font.vertical;
+    cfg.big_font.vertical    = old.big_font.vertical;
+    cfg.jis_font.vertical    = old.jis_font.vertical;
+    cfg.clip_font.vertical   = old.clip_font.vertical;
+    cfg.print_font.vertical  = old.print_font.vertical;
+    cfg.extra_font.vertical  = old.extra_font.vertical;
+    cfg.extra_font2.vertical = old.extra_font2.vertical;
+    memcpy(&cfg.date_format,&old.date_format,sizeof(cfg.date_format)); // Date format string.
+    memcpy(&cfg.time_format,&old.time_format,sizeof(cfg.time_format)); // Time format string.
+    memcpy(&cfg.am_format,&old.am_format,sizeof(cfg.am_format));   // AM format string.
+    memcpy(&cfg.pm_format,&old.pm_format,sizeof(cfg.pm_format));   // PM format string.
+    memcpy(&cfg.buttons,&old.buttons,sizeof(cfg.buttons));  // Buttons for the button bar.
+    memcpy(&cfg.kanji_info,&old.kanji_info,sizeof(cfg.kanji_info));         // Character Information dialog items
+//
+//  The rest are all simple copies.
+//
+    cfg.page = old.page;              // Default printer setup.
+//
+    cfg.size_dict = old.size_dict; // Size of dictionary window.
+    cfg.size_user = old.size_user; // Size of user dictionary window;
+    cfg.size_count = old.size_count;// Size of count kanji window.
+    cfg.size_cnvrt = old.size_cnvrt;// Size of user kana->kanji conversions window.
+    cfg.size_info = old.size_info; // Size of info dialog.
+    cfg.size_more = old.size_more; // Size of more info dialog.
+    //cfg.size_fill = old.size_fill; // Unused size structure for later
+    cfg.x = old.x;              // Dimensions of last saved configuration.
+    cfg.y = old.y;
+    cfg.xs = old.xs;
+    cfg.ys = old.ys;
+    cfg.dict_buffer = old.dict_buffer;            // Size of dictionary buffer.
+    cfg.info_color = old.info_color;          // Color used for titles in kanji-info box.
+    cfg.colorkanji_color = old.colorkanji_color;    // Color to be used with color-kanji.
+    cfg.dict_bits = old.dict_bits;              // Stores the state of all dictionary bits in one place.
+    cfg.alloc = old.alloc;                  // Allocation size for lines.
+    cfg.convert_size = old.convert_size;           // Number of entires in user conversion table.
+    cfg.char_width = old.char_width;             // Character width for formatting.
+    cfg.undo_number = old.undo_number;            // Number of levels of undo to keep.
+    cfg.font_cache = old.font_cache;             // Size of font cache in characters.
+    cfg.head_left = old.head_left;              // Position of headers to the left of margins
+    cfg.head_right = old.head_right;             // Position of headers to the right of margins.
+    cfg.head_top = old.head_top;               // Position of header lines above margins.
+    cfg.head_bottom = old.head_bottom;            // Position of header lines below margins.
+    cfg.scroll_speed = old.scroll_speed;           // Determines the scroll speed.
+    cfg.history_size = old.history_size;           // Size of history buffer (in characters).
+//
+    cfg.dict_compress = old.dict_compress;          // Displays dictionary search results in compressed form.
+    cfg.dict_auto = old.dict_auto;              // Automatically attempt a search if the user has selected text.
+    cfg.dict_advanced = old.dict_advanced;          // Use adaptive dictionary search.
+    cfg.dict_iadj = old.dict_iadj;              // Process i-adjectives.
+    cfg.dict_always = old.dict_always;            // Even if choices are found do an adaptive search.
+    cfg.dict_showall = old.dict_showall;           // Show all possible choices in an adaptive search.
+    cfg.dict_advmark = old.dict_advmark;           // Separate advanced search entries.
+    cfg.dict_watchclip = old.dict_watchclip;         // Watch clipboard when dictionary is open
+    cfg.dict_classical = old.dict_classical;         // Classical dictionary search
+    cfg.dict_primaryfirst = old.dict_primaryfirst;      // Move primary entries to the front the dictionary display.
+    cfg.dict_fullascii = old.dict_fullascii;         // Causes first/last to select complete entry for ascii 
+    cfg.dict_jascii2ascii = old.dict_jascii2ascii;      // Treat JASCII as ascii
+    cfg.install = old.install;                // If set causes check for installed version and file extensions.
+    cfg.maximize = old.maximize;               // Maximize the file.
+    cfg.usedims = old.usedims;                // Use last saved dimensions.
+    cfg.save_exit = old.save_exit;              // Save configuration on exit.     
+    cfg.reload_files = old.reload_files;           // Reload files loaded when we exited.
+    cfg.vscroll = old.vscroll;        // Vertical and horizontal scroll bar.
+    cfg.hscroll = old.hscroll;
+    cfg.kscroll = old.kscroll;                // Activate scroll bar on bar.
+    cfg.kanjibar_top = old.kanjibar_top;           // Places the kanji bar at the top of the screen
+    cfg.status = old.status;                 // Display status bar.
+    cfg.toolbar = old.toolbar;                // Disable the toolbar.
+    cfg.button_count = old.button_count;           // Number of buttons in the toolbar
+    cfg.confirm_exit = old.confirm_exit;           // Require confirmation of exit on closing last file.
+    cfg.close_does_file = old.close_does_file;        // Window close control, closes just current file.
+    cfg.backup_files = old.backup_files;           // Save last version of a file as a backup.
+    cfg.double_open = old.double_open;            // Determine the action in the case of a double open.
+    cfg.ime_mode = old.ime_mode;               // Determines JWPce's interaction with the Microsoft IME
+    //cfg.fill_unused = old.fill_unused;            // Causes the delete key to delete current kanji conversion instead of text to right (old action).
+    cfg.auto_scroll = old.auto_scroll;            // Enables or disables the auto-scroll feature.
+    cfg.page_mode_file = old.page_mode_file;         // Uses page scrolling for the file (PPC only)
+    cfg.page_mode_list = old.page_mode_list;         // Uses page scrolling for lists (PPC only)
+    cfg.clip_write = old.clip_write;             // Clipboard write type.
+    cfg.clip_read = old.clip_read;              // Clipboard read type.
+    cfg.no_BITMAP = old.no_BITMAP;              // Suppress BITMAP clipboard format
+    cfg.no_UNICODETEXT = old.no_UNICODETEXT;         // Suppress UNICODETEXT clipboard format
+    cfg.search_nocase = old.search_nocase;          // Search: Ignore case
+    cfg.search_jascii = old.search_jascii;          // Search: JASCII=ascii
+    cfg.search_back = old.search_back;            // Search: Move backward (check jwp_find.cpp to see if this is active)
+    cfg.search_wrap = old.search_wrap;            // Search: Wrap at end of file. 
+    cfg.search_all = old.search_all;             // Search: All files.
+    cfg.search_noconfirm = old.search_noconfirm;       // Replace: Without confirmation. (check jwp_find.cpp to see if this is active)
+    cfg.keep_find = old.keep_find;              // Causes the Search/Replace dialog to remain open during searches.
+    cfg.paste_newpara = old.paste_newpara;          // When pasting back in the file insert extra lines into new paragraph.
+    cfg.relax_punctuation = old.relax_punctuation;      // Allow relaxed punctuation.
+    cfg.relax_smallkana = old.relax_smallkana;        // Allow relaxed small kana.
+    cfg.width_mode = old.width_mode;             // Determines how the width of the display is calculated.
+    cfg.print_justify = old.print_justify;          // Justify ASCII text.
+    cfg.units_cm = old.units_cm;               // CM units (or inches).
+    cfg.info_compress = old.info_compress;          // Compress Character information.
+    cfg.info_titles = old.info_titles;            // Puts titles in the kanji-info list box.
+    cfg.info_onlyone = old.info_onlyone;           // Allows only one info version to open.
+    cfg.cache_info = old.cache_info;             // Fill for later expansion
+    cfg.colorkanji_mode = old.colorkanji_mode;        // Determines the way color-fonts are supported.
+    cfg.colorkanji_bitmap = old.colorkanji_bitmap;      // Support color kanji in bitmap clipboard format
+    cfg.colorkanji_print = old.colorkanji_print;       // Support color kanji in printing.
+    cfg.auto_lookup = old.auto_lookup;            // Should we do auto-lookups in the radical lookup dialog.
+    cfg.skip_misscodes = old.skip_misscodes;         // Search for skip miss-codes.
+    cfg.bushu_nelson = old.bushu_nelson;           // Search for Nelson bushu
+    cfg.bushu_classical = old.bushu_classical;        // Search for classical bushu
+    cfg.index_type = old.index_type;             // Index type for index search.
+    if (old.reading_type <= RLTYPE_MEANING) // Only use the old value if it's in the "safe" range.
+      cfg.reading_type = old.reading_type;           // Reading type for reading search
+    cfg.reading_kun = old.reading_kun;            // Allow flexible kun readings.
+    cfg.reading_word = old.reading_word;           // Allow flexible word matching.
+    cfg.no_variants = old.no_variants;            // Suppresses showing of variants in radical lookups.
+    cfg.cache_displayfont = old.cache_displayfont;      // Should we cache or not cache the display font.
+    cfg.all_fonts = old.all_fonts;              // Show all fonts in the font selector
+    cfg.kanjibar = !old.nokanjibar;             // Disables the kanji bar.
+    cfg.code_page = old.code_page;              // Code page used for translations
+    read_history ();                                  // Try to read the history file.
+    goto AdjustConfig;
+  }
+#endif
+//
+//  Read additional configuration fields.
+//
+#ifdef BINARY_CONFIG
+  if ((cfg.magic == CONFIG_MAGIC) && done == sizeof(struct cfg)) {
+    int i;
+    ok   = true;
+    cache_config ();
+    dict_history   .read (hfile);                     // Read will do allocation if necessary.
+    search_history .read (hfile);
+    replace_history.read (hfile);
+    i    = GetFileSize(hfile,NULL)-3*HISTORY_SIZE-sizeof(cfg);
+    if (i > 0) {
+      load = (TCHAR *) calloc(i+24,sizeof(TCHAR));    // Enough extra characters to handle UNICODE.
+      ReadFile(hfile,load,i,&done,NULL);
+    }
+    CloseHandle (hfile);
+    goto AdjustConfig;
+  }
+#endif
+UseDefault:
   err  = true;
-  search_history .alloc (jwp_config.cfg.history_size);
-  replace_history.alloc (jwp_config.cfg.history_size);
-  dict_history   .alloc (jwp_config.cfg.history_size);
-  ErrorMessage (false,IDS_START_CONFIGLOAD,name());
+  cfg  = default_config;
+  if (!read_history ()) {                             // Try to read the history file even though we couldn't read the main configuration.
+    load = NULL;
+    dict_history   .alloc (jwp_config.cfg.history_size);
+    search_history .alloc (jwp_config.cfg.history_size);
+    replace_history.alloc (jwp_config.cfg.history_size);
+  }
+  ErrorMessage (false,IDS_START_CONFIGLOAD,NAME_CONFIG);
 AdjustConfig:
 #ifndef WINCE
   if (!cfg.usedims) cfg.x = cfg.y = cfg.xs = cfg.ys = CW_USEDEFAULT;
@@ -1205,16 +1477,31 @@ void JWP_config::set (struct cfg *new_config) {
 
 //--------------------------------
 //
-//  Write configuration file.
+//  Checks if the cached copy matches (for the most part) what's on the disk.
 //
-//  This routine writes the configuration structure to the config file.
-//  It does not write the file names, write_files() does that.
+//      RETURN -- Zero indicates that the cached configuration matches (within allowed tolerance).
 //
-void JWP_config::write () {
-  HANDLE          hfile;
-  int             err;
-  unsigned long   done;
-  if (!ptr) return;
+int JWP_config::check_cached_cfg (struct cfg*config) {
+//
+//  Account for a small number of fields which aren't normally determined until write() is invoked.
+//
+  save_pos ();
+//
+//  Account for a small number of fields which shouldn't be serialized.
+//
+  cached_cfg.search_back      = config->search_back;
+  cached_cfg.search_noconfirm = config->search_noconfirm;
+//
+//  Return result.
+//
+  return (memcmp(config,&cached_cfg,sizeof(cached_cfg)));
+}
+
+//--------------------------------
+//
+//  Calculates position-related values and writes them to the configuration structure.
+//
+void JWP_config::save_pos () {
 #ifndef WINCE
   if (main_window) {
     WINDOWPLACEMENT placement;
@@ -1227,16 +1514,49 @@ void JWP_config::write () {
     cfg.maximize = (byte) ((placement.showCmd == SW_MAXIMIZE) || ((placement.showCmd == SW_SHOWMINIMIZED) && (placement.flags == WPF_RESTORETOMAXIMIZED)));
   }
 #endif WINCE
-  hfile = open(NAME_CONFIG,OPEN_WRITE,true); 
+}
+
+//--------------------------------
+//
+//  Write configuration file.
+//
+//  This routine writes the configuration structure to the config file.
+//  It does not write the file names, write_files() does that.
+//
+void JWP_config::write () {
+  HANDLE          hfile;
+  int             err;
+  unsigned long   done;
+  if (!ptr) return;
+  save_pos ();
+#ifdef BINARY_CONFIG
+  hfile = open (NAME_CONFIG,OPEN_NEW,true);
   if (INVALID_HANDLE_VALUE != hfile) {
     err = !WriteFile(hfile,&cfg,sizeof(cfg),&done,NULL);
-    ok = true;
     dict_history.write    (hfile);
     search_history.write  (hfile);
     replace_history.write (hfile);
     CloseHandle  (hfile);
-    if (!err) return;
+    if (!err) {
+      ok = true;
+      cache_config ();
+      return;
+    }
   }
+#else
+  hfile = open (NAME_CONFIG_INI,OPEN_NEW,true);
+  if (INVALID_HANDLE_VALUE != hfile) {
+    done = 0; // Shut up compiler.
+    err = write_config (hfile);
+    CloseHandle (hfile);
+    if (!err) {
+      ok = true;
+      cache_config ();
+      return;
+    }
+  }
+#endif
+  ok = false;
   QUIET_ERROR ErrorMessage (true,IDS_START_CONFIGSAVE,name());
   return;
 }
@@ -1262,6 +1582,7 @@ void JWP_config::write_files () {
 //  Open file.  Cannot use JWP_config::open() because we want to maintain
 //  the contents of the file and open() destroys the previous file.
 //
+#ifdef BINARY_CONFIG
   hfile = open(NAME_CONFIG,OPEN_APPEND,true); 
   if (INVALID_HANDLE_VALUE == hfile) {
     QUIET_ERROR ErrorMessage (true,IDS_START_CONFIGWRITE,name());
@@ -1269,18 +1590,45 @@ void JWP_config::write_files () {
   }
   SetFilePointer (hfile,sizeof(cfg)+3*HISTORY_SIZE,NULL,FILE_BEGIN);    // Move to end of fixed strucutre.
   SetEndOfFile   (hfile);                                               // Truncate file here.
+#else
 //
-//  Write the recent files list if we were not given a name.  This means this is the main
-//  configuration and not a user project.
+//  This version writes non-configuration data into a separate file.
+//
+  if (!jwp_config.cfg.save_history && !jwp_config.cfg.save_recent && !jwp_config.cfg.reload_files) return;
+//
+//  Create file and write out history data.
+//
+  hfile = open (NAME_HISTORY,OPEN_NEW,true);
+  if (INVALID_HANDLE_VALUE != hfile) {
+    unsigned long done,magic = MAGIC_HISTORY;
+    int err = !WriteFile (hfile,&magic,sizeof(magic),&done,NULL);
+    err |= dict_history.write    (hfile);
+    err |= search_history.write  (hfile);
+    err |= replace_history.write (hfile);
+    if (err) {
+      SetFilePointer (hfile,0,NULL,FILE_BEGIN);
+      SetEndOfFile   (hfile);
+      CloseHandle    (hfile);
+      return;
+    }
+  }
+#endif
+  if (!jwp_config.cfg.save_recent && !jwp_config.cfg.reload_files) {    // Don't bother writing out unnecessary blank paths.
+    CloseHandle  (hfile);
+    return;
+  }
+//
+//  Write the recent files list.
 //
   for (i = 8; i >= 0; i--) {                            // Write recent files.
-    if (!get_menudata(hmenu,IDM_FILE_FILES_BASE+i,false,buffer)) buffer[3] = 0; 
+    if (!jwp_config.cfg.save_recent || !get_menudata(hmenu,IDM_FILE_FILES_BASE+i,false,buffer)) buffer[3] = 0; 
     WriteFile (hfile,buffer+3,STRINGSIZE(lstrlen(buffer+3)+1),&done,NULL);
   }
 //
 //  Write the current directory
 //
-  GetCurrentDirectory (SIZE_BUFFER,buffer);             // Save current directory.
+  buffer[0] = 0;
+  if (jwp_config.cfg.save_recent) GetCurrentDirectory (SIZE_BUFFER,buffer);
   WriteFile (hfile,buffer,STRINGSIZE(lstrlen(buffer)+1),&done,NULL);
 //
 //  Write the currently loaded files.  This has to be done in the order from the current 
@@ -1288,7 +1636,7 @@ void JWP_config::write_files () {
 //  loaded back in will be the current order.  We are trying to restore the enrionement,
 //  right?
 //
-  if ((file = jwp_file)) {
+  if ((file = jwp_file) && jwp_config.cfg.reload_files) {
     file = file->next;
     while (true) {
       ptr = file->get_name ();
@@ -1416,7 +1764,7 @@ static COLORREF get_color (HWND hwnd,COLORREF color) {
   memset (&choose,0,sizeof(choose));
   choose.lStructSize  = sizeof(choose);
   choose.hwndOwner    = hwnd;
-  choose.hInstance    = null;					// Was, but V++ 6.0 has problems with this instance;
+  choose.hInstance    = null;         // Was, but V++ 6.0 has problems with this instance;
   choose.rgbResult    = color;
   choose.lpCustColors = custom_colors;
   choose.Flags        = CC_ANYCOLOR | CC_RGBINIT | CC_SOLIDCOLOR;
@@ -1459,7 +1807,7 @@ static BOOL CALLBACK options_general (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lP
                 EnableWindow (GetDlgItem(hwnd,IDC_OGWIDTH),IsDlgButtonChecked(hwnd,IDC_OGWIDTHFIXED));
                 return (true);
            case IDC_OGSAVESETTINGS:
-                EnableWindow (GetDlgItem(hwnd,IDC_OGRESTOREPOS),IsDlgButtonChecked(hwnd,IDC_OGSAVESETTINGS));
+              //EnableWindow (GetDlgItem(hwnd,IDC_OGRESTOREPOS),IsDlgButtonChecked(hwnd,IDC_OGSAVESETTINGS));
                 return (true);
          }
          break;
@@ -1496,7 +1844,7 @@ static BOOL CALLBACK options_display (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lP
          CheckDlgButton (hwnd,IDC_ODSTATUSBAR  , cfg->status);
          CheckDlgButton (hwnd,IDC_ODKBARTOP    , cfg->kanjibar_top);
          CheckDlgButton (hwnd,IDC_ODAUTOSCROLL , cfg->auto_scroll);
-         CheckDlgButton (hwnd,IDC_ODKANJIBAR   ,!cfg->nokanjibar);
+         CheckDlgButton (hwnd,IDC_ODKANJIBAR   , cfg->kanjibar);
          SetDlgItemInt  (hwnd,IDC_ODSCROLLSPEED, cfg->scroll_speed,false);
 #ifndef WINCE
          CheckDlgButton (hwnd,IDC_ODTOOLBAR    ,cfg->toolbar);
@@ -1525,7 +1873,7 @@ static BOOL CALLBACK options_display (HWND hwnd,UINT msg,WPARAM wParam,LPARAM lP
          cfg->status       = IsDlgButtonChecked(hwnd,IDC_ODSTATUSBAR );
          cfg->kanjibar_top = IsDlgButtonChecked(hwnd,IDC_ODKBARTOP   );
          cfg->auto_scroll  = IsDlgButtonChecked(hwnd,IDC_ODAUTOSCROLL);
-         cfg->nokanjibar   =!IsDlgButtonChecked(hwnd,IDC_ODKANJIBAR  );
+         cfg->kanjibar     = IsDlgButtonChecked(hwnd,IDC_ODKANJIBAR  );
          cfg->scroll_speed = get_int(hwnd,IDC_ODSCROLLSPEED,0,10000,cfg->scroll_speed);
 #ifndef WINCE
          cfg->toolbar      = IsDlgButtonChecked(hwnd,IDC_ODTOOLBAR   );
@@ -1721,12 +2069,32 @@ static int CALLBACK enum_fonts (ENUMLOGFONT *lpelf,NEWTEXTMETRIC *lpntm,int Font
 //      lParam -- Passed indirectly via call to EnumFontFamilies() contains a pointer to the
 //                dialog window so that messages can be sent to the controls
 //
+#if (WINVER >= 0x0400)
+// These bits represent basic Japanese support for a Unicode font. Typical fonts have additional relevant bits not listed here.
+#define U1_SYMBOLS          0x00010000                      // CJK symbols and punctuation
+#define U1_HIRAGANA         0x00020000                      // Hiragana
+#define U1_KATAKANA         0x00040000                      // Katakana
+#define U1_KANJI            0x08000000                      // Kanji and related CJK ideographs
+#define U1_KANA             (U1_HIRAGANA|U1_KATAKANA)       // Hiragana and katakana
+#define U1_BASIC_JAPANESE   (U1_SYMBOLS|U1_KANA|U1_KANJI)   // Bare minimum we'll accept.
+
+static int CALLBACK enum_jfonts (ENUMLOGFONTEX *lpelf,NEWTEXTMETRICEX *lpntm,int FontType,LPARAM lParam) {
+  if (FontType != TRUETYPE_FONTTYPE) return (true);
+  if (!cfg->all_fonts) {                                                                                                                        // Suppress fonts that don't explicitly support Japanese.
+    if (lpelf->elfLogFont.lfCharSet != SHIFTJIS_CHARSET) return (true);                                                                         // This should be redundant due to the Ex filtering requested elsewhere.
+    if (!(lpntm->ntmFontSig.fsCsb[0] & FS_JISJAPAN) && (lpntm->ntmFontSig.fsUsb[1] & U1_BASIC_JAPANESE) != U1_BASIC_JAPANESE) return (true);    // Some "Shift-JIS" fonts don't actually have Japanese glyphs so inspect code page / Unicode subset.
+  }
+  SendDlgItemMessage ((HWND) lParam,IDC_OFFONTNAME,CB_ADDSTRING,0,(LPARAM) lpelf->elfLogFont.lfFaceName);
+  return (true);
+}
+#else
 static int CALLBACK enum_jfonts (ENUMLOGFONT *lpelf,NEWTEXTMETRIC *lpntm,int FontType,LPARAM lParam) {
   if (FontType != TRUETYPE_FONTTYPE) return (true);
   if (!cfg->all_fonts && (lpelf->elfLogFont.lfCharSet != SHIFTJIS_CHARSET)) return (true);
   SendDlgItemMessage ((HWND) lParam,IDC_OFFONTNAME,CB_ADDSTRING,0,(LPARAM) lpelf->elfLogFont.lfFaceName);
   return (true);
 }  
+#endif
 
 //--------------------------------
 //
@@ -1768,7 +2136,16 @@ static void setup_jfonts (HWND hwnd) {
 //  Process TrueType fonts
 //
   hdc = GetDC(hwnd);
+#if (WINVER >= 0x0400)
+  if (!cfg->all_fonts) {                                                  // User only wants recommended fonts.
+    LOGFONT lf; memset (&lf,0,sizeof(lf));
+    lf.lfCharSet = SHIFTJIS_CHARSET;                                      // This will filter out most of the unusable fonts.
+    EnumFontFamiliesEx (hdc,&lf,(FONTENUMPROC) enum_jfonts,(LPARAM) hwnd,0);
+  } else                                                                  // User wants "all" the fonts. We're not going to list every minor variation that Ex provides though.
+  EnumFontFamilies (hdc,NULL,(FONTENUMPROC) enum_jfonts,(LPARAM) hwnd);   // Gives far fewer duplicates than the Ex version does with DEFAULT_CHARSET specified.
+#else
   EnumFontFamilies (hdc,NULL,(FONTENUMPROC) enum_jfonts,(LPARAM) hwnd);
+#endif
   ReleaseDC        (hwnd,hdc);
   change_font      (hwnd);
   return;
@@ -1997,7 +2374,7 @@ static BOOL CALLBACK options_advanced (HWND hwnd,UINT msg,WPARAM wParam,LPARAM l
          cfg->alloc             = get_int(hwnd,IDC_OAALLOCSIZE  ,16  ,1024   ,cfg->alloc       );
          cfg->convert_size      = get_int(hwnd,IDC_OACONVERTSIZE,10  ,2000   ,cfg->convert_size);
          cfg->undo_number       = get_int(hwnd,IDC_OAUNDOLEVELS , 3  ,1000   ,cfg->undo_number );
-         cfg->font_cache        = get_int(hwnd,IDC_OAFONTCACHE  ,100 ,7000   ,cfg->font_cache  );
+         cfg->font_cache        = get_int(hwnd,IDC_OAFONTCACHE  ,100 ,9000   ,cfg->font_cache  );
          cfg->history_size      = get_int(hwnd,IDC_OAHISTORY    ,0   ,30000  ,cfg->history_size);
          cfg->dict_buffer       = get_int(hwnd,IDC_OABUFFER     ,2048,INT_MAX,cfg->dict_buffer );
          cfg->cache_displayfont = IsDlgButtonChecked(hwnd,IDC_OACACHEDISPLAY);
@@ -2056,6 +2433,7 @@ void do_options () {
 #define WINCLASS_MAIN   TEXT("JWPce-Main")  // Main window class.
 
 HWND main_window = null;                    // THE WINDOW!
+UINT16 winver;
 
 static LRESULT CALLBACK winproc_main (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam);
 
@@ -2069,10 +2447,22 @@ extern "C" {
 //
 //  Windows main routine.
 //
+#ifdef UNICODE
+int WINAPI wWinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,TCHAR *szCmdLine,int iCmdShow) {
+#else
 int WINAPI WinMain (HINSTANCE hInstance,HINSTANCE hPrevInstance,TCHAR *szCmdLine,int iCmdShow) {
+#endif
   MSG      msg;
   WNDCLASS wndclass,*wclass;
   DIALOG_node       *node;
+  DWORD full_ver;
+//
+//  Early initialization.
+//
+  full_ver = GetVersion ();
+  winver = full_ver << 8 & 0xff00 | full_ver >> 8 & 0xff;
+  startdir[0] = '\0';
+  GetCurrentDirectory (MAX_PATH, startdir);                 // Make a copy of the starting directory.
 //
 //  For PPC's check to see if another version of JWPce is running.
 //
@@ -2099,6 +2489,7 @@ int WINAPI WinMain (HINSTANCE hInstance,HINSTANCE hPrevInstance,TCHAR *szCmdLine
 //  Support for international versions.  Open the language DLL and see if we can read it.
 //
   instance = hInstance;
+#ifdef UNSUPPORTED
   if (!(language = LoadLibrary(jwp_config.name(TEXT("JWPce_lang.dll"),OPEN_READ,false)))) language = instance;
     else {
       TCHAR *ptr = get_string(IDS_LANG_ID);
@@ -2108,6 +2499,7 @@ int WINAPI WinMain (HINSTANCE hInstance,HINSTANCE hPrevInstance,TCHAR *szCmdLine
         JMessageBox (NULL,IDS_LANG_ERRORTEXT,IDS_LANG_ERRORTITLE,MB_OK | MB_ICONERROR,jwp_config.name());
       }
     }  
+#endif
 //
 //  Do some initialization.
 //
@@ -2205,6 +2597,25 @@ int working;
 //
   if (open_files(szCmdLine)) terminate (IDS_TERM_INITIALIZE,get_string(IDS_TERM_STARTUP));
   set_mode (MODE_KANJI);
+#ifdef UNICODE            // No ANSI equivalent for CommandLineToArgvW.
+  int argc;
+  TCHAR**argv=CommandLineToArgvW(GetCommandLineW(),&argc);
+//if (argv) while (argc--) mprintf (_T("%s\n"),*argv++);
+  if (argv) LocalFree (argv);
+  argv=0;
+#endif
+//
+//  Proof of concept.
+//
+  //PostMessage (main_window,WM_COMMAND,IDM_UTILITIES_DICTIONARY,0);
+#ifndef WINCE
+  //ImmSimulateHotKey(main_window,IME_JHOTKEY_CLOSE_OPEN);    // Try to activate Japanese IME. Tested to work with other IMEs installed, and found to be harmless if Japanese IME not installed.
+#endif
+//
+//  Newer versions of Windows don't seem to use the current directory for Open/Save dialogs anymore.
+//  Change the current directory to something generic because its path gets locked.
+//
+  if (winver >= 0x500) SetCurrentDirectory (get_folder(CSIDL_PERSONAL,buffer));
 //
 //  Main message loop.
 //
@@ -2257,9 +2668,9 @@ static LRESULT CALLBACK winproc_main (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM l
 //  get here by clicking the close button.
 //
     case WM_CLOSE:
-		 if	     (GetKeyState(VK_MENU   ) < 0) shift = false;   // Alt click -> force close program
-		 else if (GetKeyState(VK_CONTROL) < 0) shift = true;    // ctrl click -> force close file
-		 else                                  shift = jwp_config.cfg.close_does_file;
+     if      (GetKeyState(VK_MENU   ) < 0) shift = false;   // Alt click -> force close program
+     else if (GetKeyState(VK_CONTROL) < 0) shift = true;    // ctrl click -> force close file
+     else                                  shift = jwp_config.cfg.close_does_file;
          SendMessage (hwnd,WM_COMMAND,shift ? IDM_FILE_CLOSE : IDM_FILE_EXIT,0);
          return (0);
 //
@@ -2287,7 +2698,7 @@ static LRESULT CALLBACK winproc_main (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM l
          clear_clipboard ();
          free_fonts      ();            // Close open fonts
          if (language && (language != instance)) FreeLibrary (language);
-         PostQuitMessage (0);           // saiyanara (I hate romaji!!!)
+         PostQuitMessage (0);           // sayonara (I hate romaji!!!)
          return (0);
 //
 //  Handle the caret (man is Windows strange -- the operating system should do this).
@@ -2391,12 +2802,18 @@ int dont_really_like_the_blockout_but_it_works;
          do_clipboard (iMsg,wParam);
          return (0);
 //
-//  IME support.
+//  IME support. Similar message handling also exists in JWP_edit_proc() for edit controls.
 //
 #ifndef WINCE
     case WM_IME_CHAR:
          jwp_file->ime_char (wParam,IsWindowUnicode(hwnd));
          return (0);
+    case WM_IME_STARTCOMPOSITION:
+         jwp_file->ime_start (hwnd);
+         break;
+    case WM_IME_ENDCOMPOSITION:
+         jwp_file->ime_stop (hwnd);
+         break;
 #endif WINCE
 //
 //  Support for drag and drop:
@@ -2533,38 +2950,38 @@ void JWP_file::do_menu (int wParam) {
   switch (LOWORD(wParam)) {
 // --------------------------------------------- File menu
     case IDM_FILE_NEW:
-         jwp_conv.clear ();
+         jwp_conv.clear (true);
          new JWP_file (NULL,FILETYPE_UNNAMED);
          break;
     case IDM_FILE_OPEN:
-         jwp_conv.clear ();
+         jwp_conv.clear (true);
          do_fileopen ();
          break;
     case IDM_FILE_REVERT:
          revert ();
          break;
     case IDM_FILE_CLOSE:
-         jwp_conv.clear     ();
+         jwp_conv.clear     (true);
          close              (false);
          jwp_file->activate ();         // Can't just use activate(), because we just closed!
          break;
     case IDM_FILE_CLOSEALL:
-         jwp_conv.clear ();
+         jwp_conv.clear (true);
          while (jwp_file->next != jwp_file) {                  
            if (jwp_file->close(false)) break;
          }
          if (new JWP_file(NULL,FILETYPE_UNNAMED)) jwp_file->next->close (false);
          break;
     case IDM_FILE_SAVE:
-         jwp_conv.clear ();
+         jwp_conv.clear (true);
          save           (NULL);
          break;
     case IDM_FILE_SAVEAS:
-         jwp_conv.clear ();
+         jwp_conv.clear (true);
          save_as        ();
          break;
     case IDM_FILE_SAVEALL:
-         jwp_conv.clear ();
+         jwp_conv.clear (true);
          file = jwp_file;
          do {
            jwp_file->save (NULL);
@@ -2575,9 +2992,11 @@ void JWP_file::do_menu (int wParam) {
          delete_file ();
          break;
     case IDM_FILE_PRINT:
+         jwp_conv.clear (true);
          print (false);
          break;
     case IDM_FILE_PRINTERSETUP:
+         jwp_conv.clear (true);
          print (true);
          break;
     case IDM_FILE_EXIT:
@@ -2589,7 +3008,7 @@ void JWP_file::do_menu (int wParam) {
            }
            DestroyWindow (dialog_list->hwnd);
          }                                      // This is necessary to prevent a system crash with the modeless dialogs
-         jwp_conv.clear ();
+         jwp_conv.clear (true);
          jwp_config.write_files ();             // Save recent/loaded files.
          while (jwp_file) {                  
            if (jwp_file->close(true)) break;    // Close all files and abort.
@@ -2683,12 +3102,13 @@ void JWP_file::do_menu (int wParam) {
          do_kanjilist ();
          break;
     case IDM_KANJI_OPENKANJILIST:
-         jwp_conv.clear ();
+         jwp_conv.clear (true);
          new JWP_file (NULL,FILETYPE_UNNAMED);
          color_kanji.put ();
          jwp_file->sysname (IDS_CK_VIEWNAME);
          break;
     case IDM_KANJI_ADDSUBKANJILIST:
+         jwp_conv.clear (true);
          color_kanji.do_adddel ();
          break;
     case IDM_KANJI_CLEARKANJILIST:
@@ -2704,6 +3124,7 @@ void JWP_file::do_menu (int wParam) {
          jwp_config.global_effect = false;
          break;
     case IDM_UTILITIES_PAGELAYOUT:
+         jwp_conv.clear (true);
          page_setup ();
          break;
     case IDM_UTILITIES_DICTIONARY:
@@ -2725,10 +3146,13 @@ break;
          info_config (main_window);
          break;
     case IDM_UTILITIES_DEFAULTOPTIONS:
-         jwp_config.set (&default_config);
+         if (IDYES == JMessageBox(main_window,IDS_OPTS_RESET_DEFAULT,IDS_AREYOUSURE,MB_ICONWARNING | MB_YESNOCANCEL | MB_DEFBUTTON2)) jwp_config.set (&default_config);
          break;
     case IDM_UTILITIES_SAVESETTINGS:
          jwp_config.write ();
+         break;
+    case IDM_UTILITIES_IMPORTSETTINGS:
+         {void import_config (); import_config (); }
          break;
     case IDM_UTILITIES_INSTALL:
          do_install (true);
@@ -2745,10 +3169,10 @@ break;
 #endif WINCE
 // --------------------------------------------- Window menu
     case IDM_WINDOW_NEXTFILE:
-         next->activate ();
+         if (next != this) next->activate ();
          break;
     case IDM_WINDOW_PREVIOUSFILE:
-         prev->activate ();
+         if (prev != this) prev->activate ();
          break;
     case IDM_WINDOW_FILES:
          do_files (0);
@@ -2955,4 +3379,357 @@ int possibly_move_this_back_over_by_CreateWindow;
 #endif WINCE_POCKETPC
 
 
+
+
+#include "conf.h"
+
+static BOOL write_error;  // Initialize to false before using the below function one or more times sequentially.
+
+static BOOL wfprintf (HANDLE hFile,char *format,...) {
+  BOOL result;
+  char string[SIZE_BUFFER];
+  char buffer[SIZE_BUFFER],*p=buffer;
+  DWORD i,chars,written;
+  va_list args;
+  va_start           (args,format);
+  chars = wvsprintfA (string,format,args);
+  for (i = 0; i < chars; i++) {             // Convert LF to CRLF.
+    if (string[i] == 0xa) *p++ = 0xd;
+    *p++ = string[i];
+    if (p-buffer >= sizeof(buffer)-4) break;
+  }
+  chars = p-buffer;
+  result = WriteFile (hFile,buffer,chars,&written,NULL);
+  va_end             (args);
+  if (written != chars) result = false;
+  if (!result) write_error = true;
+  return (result);
+}
+
+// This doesn't use TCHAR since we want the file to be ANSI/ASCII formatted.
+
+BOOL write_config (HANDLE fh) {
+  int i,j;
+  long val;
+  byte*bp;
+  CONFIG_TEMPLATE ct;
+  write_error = 0;    // Initialize this to track write errors.
+  for (j = 0; !write_error && j < sizeof(config_template)/sizeof(config_template[0]); j++) {
+    ct = config_template[j];
+    if (ct.type == MT_REMARK) {
+      wfprintf (fh, "%s\n", ct.name);
+      continue;
+    }
+    ASSERT (ct.size);
+    ASSERT (ct.addr);
+    ASSERT (ct.autoname);
+    wfprintf (fh, "%-25s = ", ct.name && ct.name[0]? ct.name:ct.autoname);
+    switch (ct.type) {
+      case MT_BIN: Binary:
+        i = ct.size;
+        bp = (byte*)ct.addr;
+        //wfprintf (fh, "%X (%d) ", i, i);
+        while (i--) wfprintf (fh, "%02X", *bp++);
+        break;
+      case MT_BOOL:
+        val = *(char*)ct.addr;
+        ASSERT (ct.size == 1);
+        ASSERT (val == 0 || val == 1);
+        wfprintf (fh, "%s", val? "true":"false");
+        //if (val != 0 && val != 1) wfprintf (fh, "*");
+        break;
+      case MT_INT:
+        switch (ct.size) {
+          case 1: val = * (char*)ct.addr; break;
+          case 2: val = *(short*)ct.addr; break;
+          case 4: val = * (long*)ct.addr; break;
+          default: ALERT (); break;
+        }
+        wfprintf (fh, ct.flags & CF_HEX ? "0x%X":"%d", val);
+        break;
+      case MT_STR:
+        bp = (byte*)ct.addr;
+#ifdef UNICODE
+        ASSERT (!(ct.size % 2) && ct.size >= sizeof (TCHAR) && sizeof (TCHAR) == 2);
+        for (i = 0; i < ct.size; i += 2) {      // Check if the string appears to require UNICODE, in which case it will be output as a binary sequence.
+          if (!bp[i] && !bp[i+1]) break;        // Wide null - end of string found.
+          if (bp[i+1] || bp[i] < 0x20 || bp[i] >= 0x7F) goto Binary;
+        }
+        ASSERT (i < ct.size);
+        if (i == ct.size) goto Binary;          // No terminator found.
+        wfprintf (fh, "%c", '"');
+        for (i = ct.size; (i -= 2) && *bp; bp += 2) wfprintf (fh, "%c", *bp);
+        wfprintf (fh, "%c", '"');
+#else
+        wfprintf (fh, "%c", '"');
+        for (i = ct.size; i-- && *bp;) wfprintf (fh, "%c", *bp++);
+        wfprintf (fh, "%c", '"');
+#endif
+        break;
+      default:
+        ALERT ();
+        break;
+    }
+    wfprintf (fh, "\n");
+  }
+  return (write_error);
+}
+
+
+long interpret_value (char *s) {
+  int base = 10;
+  if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) { base = 16; s += 2; }
+  if (!isxdigit (s[0])) {
+    switch (toupper(s[0])) {    // Try to interpret it as a Boolean string.
+      case 'T':                 // True/Yes
+      case 'Y':
+        return (1);
+      default: err:             // Unrecognized
+        MPRINTF (_T("Invalid configuration value\n"));
+      case 'F':                 // False/No
+      case 'N':
+        return (0);
+    }
+  }
+  errno = 0;
+  long val = strtol (s,0,base);
+  if (errno) goto err;
+  return (val);
+}
+
+int HexRun (char*s) {
+  int i = 0;
+  while (isxdigit(*s++)) i++;
+  return (i);
+}
+
+bool convert_data (CONFIG_TEMPLATE ct,char*ds) {
+  int c,i,j,len;
+  long val;
+  switch (ct.type) {
+    case MT_BIN: Binary:
+      BYTE buff[0x100];
+      ASSERT (ct.size <= sizeof (buff));
+      if (ct.size > sizeof (buff)) goto size_err;
+      for (j = 0; j < ct.size;) {
+        if (!(c = *ds++)) break;
+        switch (c) {                          // Permissible separators.
+          case ' ':
+          case ',':
+          case '$':
+            continue;
+        }
+        if (!isxdigit(c)) break;              // Anything else is treated as a terminator.
+        if (c == '0' && (*ds == 'x' || *ds == 'X')) { ds++; continue; }
+        ds--;
+        len = HexRun (ds);
+        ASSERT (len > 0); if (len <= 0) break;
+        if (len & 1) {                        // Handle an odd number of digits.
+          char b[2];
+          b[0] = *ds++;
+          b[1] = 0;
+          buff[j++] = (byte)strtoul (b,NULL,16);
+          if (--len) continue;
+        }
+        ASSERT (!(len & 1)); if (len & 1) break;
+        len >>= 1;                            // Size in bytes.
+        if (j + len > ct.size) {
+          MPRINTF (_T("Length of binary data exceeds storage space\n"));
+          return (false);
+        }
+        for (i = 0; i < len; i++) {
+          char b[3];
+          b[0] = *ds++;
+          b[1] = *ds++;
+          b[2] = 0;
+          buff[j++] = (byte)strtoul (b,NULL,16);
+        }
+      }
+      if (j != ct.size) { size_err:           // This also catches a number of other erroneous conditions that can cause the above loop to break.
+        MPRINTF (_T("Length of binary data does not match storage space\n"));
+        break;                                // Abort if the size is unexpected.
+      }
+      memcpy (ct.addr,buff,ct.size);          // Set the configuration item.
+      if (ct.type == MT_STR) {                // If this is actually a string, make sure there is a wide terminator.
+#ifdef UNICODE
+        byte*bp = (byte*)ct.addr;
+        ASSERT (!bp[ct.size-2] && !bp[ct.size-1]);
+        bp[ct.size-2] = 0;
+        bp[ct.size-1] = 0;
+#else
+        You're fucked.
+#endif
+      }
+      return (true);
+    case MT_BOOL:
+      val = interpret_value (ds);
+      ASSERT (ct.size == 1);
+      ASSERT (val == 0 || val == 1);
+      *(char*)ct.addr = !!val;
+      return (true);
+    case MT_INT:
+      val = interpret_value (ds);
+      switch (ct.size) {
+        case 1: * (char*)ct.addr =  (char)val; break;
+        case 2: *(short*)ct.addr = (short)val; break;
+        case 4: * (long*)ct.addr =        val; break;
+        default: ALERT (); return (false);
+      }
+      return (true);
+    case MT_STR:
+      if (ds[0] != '"') goto Binary;
+      ds++;
+      char *eos;
+      if (!(eos = strchr (ds,'"'))) {       // Doesn't account for odious edge cases like a missing closing quote mark paired with a comment containing a quote mark.
+        MPRINTF (_T("Unclosed string value\n"));
+        break;
+      }
+      *eos = 0;
+      len = lstrlenA(ds);
+      for (i = 0; i < len; i++) {
+        if (ds[i] >= 0x20 && ds[i] < 0x7F) continue;
+        MPRINTF (_T("Invalid character found in string\n"));
+        break;
+      }
+      if (i != len) break;
+#ifdef UNICODE
+      ASSERT (sizeof (TCHAR) == 2);
+      if (len > ct.size/2-1) {
+        MPRINTF (_T("String length exceeds storage space\n"));
+        break;
+      }
+      char*dst; dst = (char*)ct.addr;
+      ASSERT (!(ct.size & 1));
+      for (i = 0; i < ct.size; i += 2) {
+        dst[i] = *ds; dst[i+1] = 0;         // Convert to Unicode.
+        if (*ds) ds++;                      // Stay at the terminator for the remainder of the loop to clear out the array.
+      }
+#else
+      if (len > ct.size-1) {
+        MPRINTF (_T("String length exceeds storage space\n"));
+        break;
+      }
+      strcpy(ct.addr,ds);
+#endif
+      return (true);
+    default:
+      ALERT ();
+      break;
+  }
+  return (false);
+}
+
+
+CONFIG_TEMPLATE*match_conf_item (char *id) {
+  CONFIG_TEMPLATE*ctp;
+  for (int j = 0; j < sizeof(config_template)/sizeof(config_template[0]); j++) {
+    ctp = &config_template[j];
+    if (ctp->type != MT_BOOL
+     && ctp->type != MT_BIN
+     && ctp->type != MT_INT
+     && ctp->type != MT_STR)
+      continue;
+    ASSERT (ctp->size);
+    ASSERT (ctp->addr);
+    ASSERT (ctp->autoname);
+    if (ctp->name && ctp->name[0] && !strcmpi(ctp->name, id)) return (ctp);
+    if (ctp->autoname && ctp->autoname[0] && !strcmp(ctp->autoname, id)) return (ctp);
+  }
+  return (0);
+}
+
+
+const char*set_white = " \t"; // Whitespace
+const char*set_sep = "= \t";  // Separators
+
+#define SKIP_SET(set) if (len = strspn(str, set)) str += len;\
+                      if (!*str) return (false)
+
+bool config_interpret (char *line) {
+  CONFIG_TEMPLATE*ctp;
+  char *str=line;
+  char *id,*data;
+  int len;
+  ASSERT (*line);
+  SKIP_SET (set_white);                                   // Skip leading whitespace.
+  id = str;
+  if (!isalpha(*id) && *id != '_') return (true);         // Assume this is a comment.
+  if (!(len = strcspn (str, set_sep))) return (false);    // Find length of identifier.
+  str += len;
+  if (!str[0] || !str[1]) return (false);                 // Make sure there's more.
+  *str++ = 0;                                             // We don't care if we overwrite a separator / whitespace.
+  SKIP_SET (set_sep);
+  data = str;
+  if (!(ctp = match_conf_item (id))) {
+#ifdef UNICODE
+    MPRINTF (_T("Unrecognized identifier\n"));            // Can't use %s without a wide string.
+#else
+    MPRINTF (_T("Unrecognized identifier:\n\n%s\n"), id);
+#endif
+    return (true);                                        // Tolerate unrecognized items for limited forwards compatibility.
+  }
+  if (!convert_data (*ctp,data)) return (false);
+  return (true);
+}
+
+
+const char*set_line_end = "\x0D\x0A";
+
+// conf -- Null-terminated buffer. Will be modified.
+BOOL load_config (char *conf) {
+  int len;
+  char *line;
+  struct cfg backup = jwp_config.cfg;
+  for (; *conf; ) {
+    if (!(len = strcspn (conf, set_line_end))) {            // Find length of line.
+      if (len = strspn(conf, set_line_end)) conf += len;    // Skip line-ending characters.
+      continue;
+    }
+    line = conf;
+    conf += len;
+    if (*conf) *conf++ = 0;                                 // Terminate line and increment pointer unless we're at the end of the string.
+    if (!config_interpret (line)) {
+      MPRINTF (_T("Error in configuration format\n"));
+      jwp_config.cfg = backup;                              // Restore configuration if an error occurred.
+      return (false);
+    }
+  }
+  return (true);
+}
+
+
+
+
+void import_config () {
+  OPENFILENAME ofn;
+  TCHAR buffer[SIZE_BUFFER];
+  memset (&ofn  ,0,sizeof(ofn));
+  memset (buffer,0,sizeof(buffer));         // This is not necessary for windows, but WINELIB needs it.
+  ofn.lStructSize       = sizeof(ofn);
+  ofn.hwndOwner         = main_window;
+  ofn.hInstance         = instance;
+  ofn.lpstrFilter       = tab_string(IDS_INI_FILETYPE,IDS_ALL_FILETYPE);
+  ofn.nFilterIndex      = 1;
+  ofn.lpstrFile         = buffer;
+  ofn.nMaxFile          = SIZE_BUFFER;
+  ofn.lpstrInitialDir   = startdir;         // You got a better idea?
+  ofn.Flags             = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_EXPLORER | OFN_DONTADDTORECENT;
+  if (!GetOpenFileName(&ofn)) return;
+
+  char *file;
+  if (!(file = (char*)load_image (buffer))) return;
+  if (load_config (file)) jwp_config.set (&jwp_config.cfg);
+  free (file);
+  return;
+}
+
+// Used only to read the configuration file on startup.
+BOOL read_config () {
+  char *file;
+  if (!(file = (char*)load_image(jwp_config.name(NAME_CONFIG_INI,OPEN_READ,true)))) return (false);
+  jwp_config.cfg = default_config;      // Start with the defaults in case the new configuration is missing elements. (Which should be the case since it doesn't include a few internal members such as the structure size.)
+  BOOL success = load_config (file);
+  free (file);
+  return (success);
+}
 

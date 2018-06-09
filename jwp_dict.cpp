@@ -155,9 +155,9 @@
 #include "jwp_edit.h"
 #include "jwp_file.h"
 #include "jwp_find.h"
-#include "jwp_jisc.h"
 #include "jwp_help.h"
 #include "jwp_inpt.h"
+#include "jwp_jisc.h"
 #include "jwp_misc.h"
 #include <commctrl.h>
 
@@ -202,18 +202,34 @@
 #define NAME_NAMEDICT       TEXT("enamdict")    // Name of the name dictionary.
 #define NAME_USERDICT       TEXT("user.dct")    // Name of user dictionary file.
 #define NAME_CLASSICAL      TEXT("classical")   // Name of classical dictionary.
+#ifdef UNICODE
+#define NAME_DICTIONARIES   TEXT("JWPxp.dic")   // Name of dictionaries file.
+#define ANSI_DICTIONARIES   TEXT("jwpce.dic")   // Name of old dictionaries file in ANSI format.
+#else
 #define NAME_DICTIONARIES   TEXT("jwpce.dic")   // Name of dictionaries file.
+#endif
 
-#define SIZE_LINE       512                     // Offest into the buffer for the search point.
-#define SIZE_DICTBUFFER 1024                    // Size of the buffer read from the dicitonary.
+#define SIZE_LINE       SIZE_BIG_BUFFER         // Offset into the buffer for the search point.
+#define SIZE_DICTBUFFER (SIZE_LINE*2)           // Size of the buffer read from the dictionary.
+
+#define DSEARCH_NORMAL  0           // Special dictionary search modes.
+#define DSEARCH_NAMES   1           // Explicitly searching for names.
+#define DSEARCH_CONT    2           // Allow contingent searches.
 
 #define HIRAGANA_A      0x2422      // Hiragana values used in the advanced search.
 #define HIRAGANA_I      0x2424      //   These values are simply taken from the 
 #define HIRAGANA_U      0x2426      //   JIS table and are included here because 
-#define HIRAGANA_KU     0x242f      //   it is easy to do so.
+#define HIRAGANA_E      0x2428      //   it is easy to do so.
+#define HIRAGANA_O      0x242a
+#define HIRAGANA_KU     0x242f
 #define HIRAGANA_GU     0x2430
-#define HIRAGANA__TU    0x2443
+#define HIRAGANA_GO     0x2434
+#define HIRAGANA_TA     0x243f
+#define HIRAGANA_DA     0x2440
+#define HIRAGANA__TU    0x2443      // Small tsu / sokuon
 #define HIRAGANA_TSU    0x2444
+#define HIRAGANA_TE     0x2446
+#define HIRAGANA_DE     0x2447
 #define HIRAGANA_NU     0x244c
 #define HIRAGANA_FU     0x2455
 #define HIRAGANA_BU     0x2456
@@ -222,21 +238,23 @@
 #define HIRAGANA_WA     0x246f
 #define HIRAGANA_N      0x2473
 
-#define EUC_CAMA    (KANJI_CAMA  | 0x8080)          // EUC match characters.  
+#define KANJI_GO_GYO    0x3866      // This is the kanji with on-yomi 'go' and 'gyo'
+
+#define EUC_COMMA   (KANJI_COMMA  | 0x8080)         // EUC match characters.  
 #define EUC_SLASH   (KANJI_SLASH | 0x8080)          
-#define UTF_CAMA    (0xefbc8f)                      // UTF match charactes.  
+#define UTF_COMMA   (0xefbc8f)                      // UTF match charactes.  
 #define UTF_SLASH   (0xe38081)
 
 #define EUC_MATCH(p,x)   (((p)[0] == (x>>8)) & ((p)[1] == (x&0xff)))                         // Odd methode necessary for MIPS processor/compiler error
 #define UTF_MATCH(p,x)   (((p)[0] == (x>>16)) & ((p)[1] == ((x>>8)&0xff)) & ((p)[2] == (x&0xff)))
 #define IS_BEGIN(c)      (((c) == '[') || ((c) == ' ') || ((c) == '/') || ISCRLF(c))         // Valid being of entry conditions
 #define IS_END_N(c)      (((c) == ']') || ((c) == ' ') || ((c) == '/'))                      // Normal end of entry conditions
-#define IS_END(p)        (IS_END_N(*(p)) || (classical_part && (((p)[0] == ')') || EUC_MATCH(p,EUC_CAMA) || EUC_MATCH(p,EUC_SLASH))))   // Test for valid end character
-#define IS_UTFEND(p)     (IS_END_N(*(p)) || (classical_part && (((p)[0] == ')') || UTF_MATCH(p,UTF_CAMA) || UTF_MATCH(p,UTF_SLASH))))   // Test for valid end with classical
+#define IS_END(p)        (IS_END_N(*(p)) || (classical_part && (((p)[0] == ')') || EUC_MATCH(p,EUC_COMMA) || EUC_MATCH(p,EUC_SLASH))))   // Test for valid end character
+#define IS_UTFEND(p)     (IS_END_N(*(p)) || (classical_part && (((p)[0] == ')') || UTF_MATCH(p,UTF_COMMA) || UTF_MATCH(p,UTF_SLASH))))   // Test for valid end with classical
 #define IS_ASCIIEND(p)   ((p)[0] == '/')
 #define IS_ASCIIBEGIN(p) (((p)[0] == '/') || (((p)[0] == ' ') && ((p)[-1] == ')')))
 
-#define ISPATTERN(x)    (((x) == '*') || ((x) == '?') || ((x) == '[') || ((x) == ']'))
+#define ISPATTERN(x)    (((x) == '*') || ((x) == '?') || ((x) == '#') || ((x) == '[') || ((x) == ']'))
 
 //===================================================================
 //
@@ -300,7 +318,7 @@ static struct dict_key dict_keys[] = {
   { "col" ,0,IDS_DO_COLLOQUIAL                                                 },
   { "m-sl",0,IDS_DO_MANGA                                                      },
   { "sl"  ,0,IDS_DO_SLANG                                                      },
-  { "MA"  ,0,IDS_DO_MARIAL                                                     },
+  { "MA"  ,0,IDS_DO_MARTIAL                                                    },
   { "id"  ,0,IDS_DO_IDIOMATIC                                                  },
   { "arch",0,IDS_DO_ARCHAIC                                                    },
   { "obs" ,0,IDS_DO_OBSOLETE                                                   },
@@ -411,6 +429,113 @@ static int dictionary_compare (KANJI *buf1,KANJI *buf2) {
 
 //--------------------------------
 //
+//  Compare two dictionary entries for sorting by entry (which is nearly like sorting by headword).
+//
+//      buf1,buf2 -- Pointers to dictionary entries (null terminated).
+//
+//      RETURN    -- Non-zero indicates buf2 should be sorted before buf1.
+//
+static inline int dictionary_compare_entry (KANJI *buf1,KANJI *buf2) {
+  int ntk_compare_special (KANJI *s1, KANJI *s2);
+  if (ntk_compare_special (buf1,buf2) > 0) return (true);
+  return (false);
+}
+
+static KANJI *find_headword_end (KANJI *p) {
+  for (; *p && *p != '\t' && *p != '/' && *p != '[' && *p != KANJI_LBRACKET; p++);
+  return (p);
+}
+
+static int headword_length (KANJI *ptr) {
+  return (find_headword_end (ptr) - ptr);
+}
+
+//--------------------------------
+//
+//  Compare two dictionary entries for sorting by length (of reading or headword, in characters).
+//
+//      buf1,buf2 -- Pointers to dictionary entries (null terminated).
+//
+//      RETURN    -- Non-zero indicates buf2 should be sorted before buf1.
+//
+static int dictionary_compare_length_descending (KANJI *buf1,KANJI *buf2) {
+  KANJI *p1,*p2,*e1,*e2;
+  int len1,len2;
+  p1 = setup_compare (buf1,e1); len1 = e1-p1;
+  p2 = setup_compare (buf2,e2); len2 = e2-p2;
+  if (len1 == len2 && !ntk_compare_n(p1,p2,len1)) { // Identical readings?
+    len1 = headword_length (buf1);                  // Use headword lengths instead. This is mostly for names searched by reading.
+    len2 = headword_length (buf2);
+  }
+  if (len2 > len1) return (true);
+  if (len2 < len1) return (false);
+  return (dictionary_compare_entry (buf1,buf2));    // Same length so use a secondary sorting algorithm.
+}
+static int dictionary_compare_length_ascending (KANJI *buf1,KANJI *buf2) {
+  KANJI *p1,*p2,*e1,*e2;
+  int len1,len2;
+  p1 = setup_compare (buf1,e1); len1 = e1-p1;
+  p2 = setup_compare (buf2,e2); len2 = e2-p2;
+  if (len1 == len2 && !ntk_compare_n(p1,p2,len1)) { // Identical readings?
+    len1 = headword_length (buf1);                  // Use headword lengths instead. This is mostly for names searched by reading.
+    len2 = headword_length (buf2);
+  }
+  if (len2 < len1) return (true);
+  if (len2 > len1) return (false);
+  return (dictionary_compare_entry (buf1,buf2));    // Same length so use a secondary sorting algorithm.
+}
+static int dictionary_compare_length_headword_desc (KANJI *buf1,KANJI *buf2) {
+  int len1 = headword_length (buf1);
+  int len2 = headword_length (buf2);
+  if (len2 > len1) return (true);
+  if (len2 < len1) return (false);
+  if (!k_compare_n (buf1,buf2,len2))
+    return (dictionary_compare_length_descending (buf1,buf2));   // Same headword so sort by reading length.
+  return   (dictionary_compare_entry (buf1,buf2));               // Same length so use a secondary sorting algorithm.
+}
+static int dictionary_compare_length_headword_asc (KANJI *buf1,KANJI *buf2) {
+  int len1 = headword_length (buf1);
+  int len2 = headword_length (buf2);
+  if (len2 < len1) return (true);
+  if (len2 > len1) return (false);
+  if (!k_compare_n (buf1,buf2,len2))
+    return (dictionary_compare_length_ascending (buf1,buf2));   // Same headword so sort by reading length.
+  return   (dictionary_compare_entry (buf1,buf2));              // Same length so use a secondary sorting algorithm.
+}
+
+  static KANJI priority_a[] = { ',', ' ',       '(', 'P', ')', 0 };
+//static KANJI priority_b[] = { ',', ' ', '\t', '(', 'P', ')', 0 };   // This shouldn't be necessary since the tabs at the start of subsequent lines are filtered out by get_buffer().
+
+//--------------------------------
+//
+//  Gives priority to priority entries if that is the only difference between the definitions.
+//
+int ntk_compare_special (KANJI *s1, KANJI *s2) {
+  while (*s1 && *s2 && *s1 == *s2) s1++,s2++;
+  if (*s1 && !*s2 && (!ntk_compare (s1,priority_a) /*|| !ntk_compare (s1,priority_b)*/)) return -*s1;
+  if (*s2 && !*s1 && (!ntk_compare (s2,priority_a) /*|| !ntk_compare (s2,priority_b)*/)) return  *s2;
+  return (*s1 - *s2);
+}
+
+static KANJI *find_definition (KANJI *ptr) {
+  setup_compare (ptr,ptr);                        // Start at end of reading/headword
+  while (*ptr) if (*ptr++ == '\t') return ptr;    // Find beginning of definition
+  return (ptr);                                   // Else return null string
+}
+
+static int dictionary_compare_definition (KANJI *buf1,KANJI *buf2) {
+  KANJI *p1,*p2;
+  int result;
+  p1 = find_definition (buf1);
+  p2 = find_definition (buf2);
+  result = ntk_compare_special (p1,p2);
+  if (result > 0) return (true);
+  if (result < 0) return (false);
+  return (dictionary_compare_entry (buf1,buf2));     // Use a secondary sorting algorithm.
+}
+
+//--------------------------------
+//
 //  Dictionary comparison routine for EUC dictionaries (also used for mixed dictionaries).
 //
 //      key    -- JIS string to be compared with.
@@ -474,6 +599,11 @@ static int euc_post (byte *ptr,KANJI *key,int count) {
          if (IS_END_N(*ptr)) return (-1);
          if (*ptr & 0x80) len = 2; else len = 1;
          break;
+    case '#':                                   // Matches any single kanji (to include noma, the kanji repetition character).
+         if (IS_END_N(*ptr)) return (-1);
+         if (*ptr < 0xb0 && !(ptr[0] == 0xa1 && ptr[1] == 0xb9)) return (-1);   // If outside kanji range and not kanji repetition character, it's not a match.
+         len = 2;
+         break;
     default:                                    // Standard character
          c = *ptr;
          if (c & 0x80) {
@@ -531,6 +661,11 @@ static int euc_pre (byte *ptr,KANJI *key,int count) {
          if (IS_BEGIN(*ptr)) return (-1);
          if (*ptr & 0x80) len = 2; else len = 1;
          break;
+    case '#':                                   // Matches any single kanji (to include noma, the kanji repetition character, which is unlikely to match in a search prefix but contrived examples are possible).
+         if (IS_BEGIN(*ptr) || *ptr < 0x80) return (-1);                            // We're reading backwards this time, so *ptr will either be a narrow character or the second byte of a wide character.
+         if (ptr[-1] < 0xb0 && !(ptr[-1] == 0xa1 && ptr[0] == 0xb9)) return (-1);   // Reject any non-kanji that isn't the kanji repetition character.
+         len = 2;
+         break;
     default:                                    // Standard character
          c = *ptr;
          if (c & 0x80) {
@@ -573,7 +708,7 @@ static byte *format_line (EUC_buffer *line,byte *data,int user,int format) {
   int first_line = true;
   line->clear ();                               // Intialize line buffer.
   for (i = 0; i < SIZE_LINE; i++) {             // Limit string length.
-    if (!*data || ISCRLF(data[1])) break;       // End of line so exit, or error condition (past end of buffer)
+    if (!*data || ISCRLF(data[1]) || ISCRLF(*data)) break; // End of line so exit, or error condition (past end of buffer)
     if ((*data & 0x80) && ((format == DICT_EUC) || first_line)) {  // Output kanji/kana character.
       ch = *data++;
       line->put_char ((ch << 8) | *data);
@@ -782,6 +917,13 @@ static int utf_post (byte *ptr,KANJI *key,int count) {
          if (IS_END_N(*ptr)) return (-1);
          len = utf_size(*ptr);
          break;
+    case '#':                                   // Matches any single kanji
+         if (IS_END_N(*ptr)) return (-1);
+         p   = ptr;
+         c   = utf2jis(p);
+         if (!ISKANJI(c) && c != KANJI_REPT) return (-1);
+         len = p-ptr;
+         break;
     default:                                    // Standard character
          p   = ptr;;
          c   = utf2jis(p);
@@ -833,6 +975,13 @@ static int utf_pre (byte *ptr,KANJI *key,int count) {
     case '?':                                   // Matches any single character
          if (IS_BEGIN(*ptr)) return (-1);
          len = 1-utf_back(ptr,0);
+         break;
+    case '#':                                   // Matches any single kanji
+         if (IS_BEGIN(*ptr)) return (-1);
+         len = 1-utf_back(ptr,0);
+         p   = ptr-len+1;
+         c   = utf2jis(p);
+         if (!ISKANJI(c) && c != KANJI_REPT) return (-1);
          break;
     default:                                    // Standard character
          len = 1-utf_back(ptr,0);
@@ -913,7 +1062,7 @@ void free_dictionary () {
 #define DICTFLAG_BUFFER     'B'         // Uses a buffered search
 #define DICTFLAG_SEARCH     'S'         // Is searched
 #define DICTFLAG_QUIET      'Q'         // Quiet handling of errors
-#define DICTFLAG_KEEP       'K'         // Keep dictionary in memory or open.
+#define DICTFLAG_KEEP       'K'         // Keep dictionary in memory (non-indexed) or keep the file handles open (indexed)
 
 //
 //  Flags used by JWP_dict::add_dict()
@@ -924,7 +1073,12 @@ void free_dictionary () {
 //
 //  Magic id for dictionary configuration file
 //
+#ifdef UNICODE
+#define DICT_MAGIC          0x52bc3eb7  // Magic ID
+#define DICT_MAGIC_ANSI     0x12bc3e76  // ANSI version
+#else
 #define DICT_MAGIC          0x12bc3e76  // Magic ID
+#endif
 
 //-------------------------------------------------------------------
 //
@@ -1054,7 +1208,7 @@ void Dictionary::get_firstline (HWND hwnd,int doname) {
 #else  WINCE
   for (i = 0; i < length; i++) buffer[i] = (byte) (kbuffer[i]);
   buffer[i] = 0;
-  SetDlgItemText (hwnd,IDC_DSNAME,(TCHAR *) buffer);
+  SetDlgItemTextA (hwnd,IDC_DSNAME,(CHAR *) buffer);
 #endif WINCE
   return;
 }
@@ -1369,13 +1523,47 @@ int JWP_dict::add_dict (Dictionary *&base,TCHAR *name,TCHAR *file,TCHAR *flags,i
 //  Attempts to load the dictionaries list.  If the list does not exist, the list will be generated.
 //
 #define SKIP_STRING(x)  ((x)+lstrlen(x)+1)
+#define SKIP_STRING_A(x)((x)+lstrlenA(x)+1)
+#define CBUFSIZ 4096
 
 void JWP_dict::load () {
   TCHAR      *base,*file,*flags,*name,*filename;
-  long        magic;
+  long        magic = 0;
 
   base = file = (TCHAR *) load_image(jwp_config.name(NAME_DICTIONARIES,OPEN_READ,true));
   if (file) memcpy (&magic,file,sizeof(long));
+#ifdef UNICODE
+  else {
+    base = file = (TCHAR *) load_image(jwp_config.name(ANSI_DICTIONARIES,OPEN_READ,true));    // Attempt to load the ANSI version of the file.
+    if (file) memcpy (&magic,file,sizeof(long));
+    else jwp_config.name(NAME_DICTIONARIES,OPEN_READ,true);                                   // Regenerate the correct file name for the error dialog.
+  }
+//
+//  Convert the ANSI file.
+//
+//  Warning: this entire method lacks safeguards against malformed files! If we had the file size, that would be a good start.
+//
+  if (magic == DICT_MAGIC_ANSI) {
+    TCHAR *def_edict_flags ();
+    char *ansi,*flags,*name,*filename;
+    auto WCHAR wflags[CBUFSIZ+2],wname[CBUFSIZ+2],wfilename[CBUFSIZ+2];
+    WCHAR *ename = get_string(IDS_DICT_NAMEEDICT);                              // Cache default EDICT name string.
+    ansi = (char *) (((byte *) file)+sizeof(long));                             // Skip ID.
+    while (*ansi) {
+      flags    = ansi;                                                          // Acquire strings.
+      name     = SKIP_STRING_A (flags);
+      filename = SKIP_STRING_A (name);
+      ansi     = SKIP_STRING_A (filename);
+      MultiByteToWideChar (CP_ACP,0,name,-1,wname,CBUFSIZ);                     // Convert to Unicode.
+      MultiByteToWideChar (CP_ACP,0,flags,-1,wflags,CBUFSIZ);
+      MultiByteToWideChar (CP_ACP,0,filename,-1,wfilename,CBUFSIZ);
+      if (!_tcsnicmp(wname,ename,CBUFSIZ)) _tcscpy(wflags,def_edict_flags());   // Use updated flags for EDICT.
+      add_dict (dicts,wname,wfilename,wflags,false);
+    }
+    write_dictionaries ();                                                      // Write out the newly converted dictionary.
+  }
+  else    // This goes with the following 'if' statement. Do not put any code between them!
+#endif
 //
 //  Initialize with default list.
 //
@@ -1414,11 +1602,12 @@ void JWP_dict::load () {
 //      base -- Pointer to where to build the list.  Normally this would be the global dictioanry
 //              list, but the default option builds a scratch list.
 //
+                                        //
 #define FLAGS_CLASSICAL TEXT("Ec")
-#define FLAGS_EDICT     TEXT("ENIS")
-#define FLAGS_ENAMDIC   TEXT("ENIOQS")
+#define FLAGS_EDICT     TEXT("EISK")    // EUC, Indexed, Search, Keep open, (No Names)
+#define FLAGS_ENAMDIC   TEXT("EISKOQ")  // EUC, Indexed, Search, Keep open, Only names, Quiet
 #define FLAGS_USERDICT  TEXT("NMuSKQ")
-#define FLAGS_LANGUAGE  TEXT("USQ")
+#define FLAGS_LANGUAGE  TEXT("USQ")     // Special localization dictionary
 
 void JWP_dict::def_dictionaries (Dictionary *&base) {
   TCHAR *lang;
@@ -1430,6 +1619,8 @@ void JWP_dict::def_dictionaries (Dictionary *&base) {
   add_dict (base,get_string(IDS_DICT_NAMEUSER     ),NAME_USERDICT ,FLAGS_USERDICT ,false);
   return;
 }
+
+TCHAR *def_edict_flags () { return (FLAGS_EDICT); }   // Kludge to access this symbol earlier without moving things arounds.
 
 //--------------------------------
 //
@@ -1592,12 +1783,12 @@ int EDIT_userdict::dlg_edituser (HWND hwnd,UINT message,WPARAM wParam,LPARAM lPa
                 }
                 if (!lkana || (i != lkana)) {               // Kana string is empty or cotnains space -> ERROR!
                   JMessageBox (hwnd,IDS_DE_ERRORKANA,IDS_DE_ERROR,MB_OK | MB_ICONERROR);
-                  SetFocus   (GetDlgItem(hwnd,IDC_DEKANA));
+                  SetDialogFocus (hwnd,IDC_DEKANA);
                   return (0);
                 }                                           // Kana string contains non-kana chracters -> WARNING!
                 if (j && (IDNO == JMessageBox(hwnd,IDS_DE_ERRORNONKANA,IDS_DE_ERROR,MB_YESNO | MB_ICONWARNING))) {
-                  SetFocus (GetDlgItem(hwnd,IDC_DEKANA));
-                  return   (0);
+                  SetDialogFocus (hwnd,IDC_DEKANA);
+                  return (0);
                 }
 //
 //  Build buffer string.
@@ -1624,7 +1815,7 @@ int EDIT_userdict::dlg_edituser (HWND hwnd,UINT message,WPARAM wParam,LPARAM lPa
                 GetDlgItemText (hwnd,IDC_DEMEANING,buffer,SIZE_BUFFER);
                 if (!lstrlen(buffer)) {      // Make sure the meaning is not empty.
                   JMessageBox (hwnd,IDS_DE_ERRORMEANING,IDS_DE_ERROR,MB_OK | MB_ICONWARNING);
-                  SetFocus   (GetDlgItem(hwnd,IDC_DEMEANING));
+                  SetDialogFocus (hwnd,IDC_DEMEANING);
                   return (0);
                 }
 #ifdef WINCE                                                                    // This was modified to support extended
@@ -2034,9 +2225,9 @@ int JWP_dict::dlg_editdict (HWND hwnd,int message,WPARAM wParam,LPARAM lParam) {
                 dic = get_dictionary(hwnd);
                 dic->get_info      (hwnd);
                 dic->get_firstline (hwnd,true);
-                CheckDlgButton     (hwnd,IDC_DSNAMES  ,true);
+                CheckDlgButton     (hwnd,IDC_DSNAMES  ,false);
                 CheckDlgButton     (hwnd,IDC_DSONLY   ,false);
-                CheckDlgButton     (hwnd,IDC_DSNONAMES,false);
+                CheckDlgButton     (hwnd,IDC_DSNONAMES,true);
                 return (0);
 //
 //  Get file name from requester
@@ -2055,7 +2246,7 @@ int JWP_dict::dlg_editdict (HWND hwnd,int message,WPARAM wParam,LPARAM lParam) {
                 ofn.nFilterIndex    = 1;
                 ofn.lpstrFile       = buffer;
                 ofn.nMaxFile        = SIZE_BUFFER;
-                ofn.Flags           = OFN_FILEMUSTEXIST  | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY  | OFN_EXPLORER;
+                ofn.Flags           = OFN_FILEMUSTEXIST  | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY  | OFN_EXPLORER | OFN_DONTADDTORECENT;
 #ifdef WINCE
                 ofn.lpstrInitialDir = currentdir;                   // Use Windows CE current directory
 #endif WINCE
@@ -2079,7 +2270,7 @@ int JWP_dict::dlg_editdict (HWND hwnd,int message,WPARAM wParam,LPARAM lParam) {
                 j = dic->filename ? lstrlen(dic->filename) : 0;
                 if (!i || !j) {
                   JMessageBox (hwnd,IDS_DS_ERROREMPTY,IDS_DS_ERROR,MB_OK | MB_ICONWARNING);
-                  SetFocus (GetDlgItem(hwnd,i ? IDC_DSFILE : IDC_DSNAME));
+                  SetDialogFocus (hwnd,i ? IDC_DSFILE : IDC_DSNAME);
                   return (0);
                 }
 //
@@ -2263,6 +2454,7 @@ static void insert_column (HWND list,int col,int id,int width) {
 //
 //
 #define  ListView_SetSelected(list,i)   ListView_SetItemState (list,i,LVIS_SELECTED,LVIS_SELECTED)      // Set selected (current) item
+#define  ListView_SetFocused(list,i)    ListView_SetItemState (list,i,LVIS_FOCUSED,LVIS_FOCUSED)        // Focus on item.
 
 int JWP_dict::dlg_dictionaries (HWND hwnd,int message,WPARAM wParam,LPARAM lParam) {
   int         i,j;
@@ -2284,8 +2476,8 @@ int JWP_dict::dlg_dictionaries (HWND hwnd,int message,WPARAM wParam,LPARAM lPara
          insert_column (list,COLUMN_FILE   ,IDS_DC_COLUMNFILE   ,(rect.right-rect.left));
          ListView_SetExtendedListViewStyle (list,LVS_EX_CHECKBOXES | LVS_EX_FULLROWSELECT);
          for (i = 0, dic = dicts; dic; dic = dic->next) dic->addlist (list,i++);
-         ListView_SetSelected (list,0);
-         SetFocus             (list);
+         ListView_SetFocused  (list,0);       // This looks and works better than SetSelected does at this point.
+         SetDialogFocus       (hwnd,list);
          return               (false);
 //
 //  Process help messages
@@ -2517,10 +2709,40 @@ JWP_dict jwp_dict;          // Class instance.
 int JWP_dict::check_abort () {
   MSG  msg; 
   while (PeekMessage(&msg,null,0,0,PM_REMOVE)) {
-    TranslateMessage(&msg);
-    DispatchMessage(&msg);
+    if (!IsDialogMessage(dialog,&msg)) {          // Without this line, shortcuts (e.g. Alt-S for the Search button) won't function during a search.
+      TranslateMessage (&msg);
+      DispatchMessage  (&msg);
+    }
+    if (msg.message == WM_QUIT) {
+      PostQuitMessage (msg.wParam);               // Repost quit message.
+      return (state = DICTSTATE_ABORT);           // Eject! Eject! Eject!
+    }
   }
   return (state == DICTSTATE_ABORT);
+}
+
+//--------------------------------
+//
+//  Move the last entry to the end of the primaries.
+//
+void JWP_dict::move_primary () {
+  int i;
+  if (!jwp_config.cfg.dict_primaryfirst) return;
+  i = list->begin(list->count-1);                           // Find start of last entry (the one most recently added).
+  if (i != primary) list->move_block (i,primary);           // Move it to the end of the primaries unless it's already there.
+  primary = list->next(primary);                            // Update index of last primary.
+  list->move (0,false);                                     // Set cursor back to index 0.
+}
+
+//--------------------------------
+//
+//  Add a marker delineating the boundary between priority ("primary") and non-priority.
+//
+void JWP_dict::mark_priority () {
+  if (!jwp_config.cfg.dict_primaryfirst || !jwp_config.cfg.dict_primark) return;
+  if (!primary || primary == begin_primary || primary == list->begin(list->count)) return;  // No need to mark.
+  put_label (IDS_DD_PRI_END,0);
+  move_primary ();
 }
 
 //--------------------------------
@@ -2553,12 +2775,7 @@ void JWP_dict::check_primary (byte *ptr) {
 //
 //  Yes, so move entry to beginning part of the list.
 //
-  int i;    
-  i = list->begin(list->count-1);                           // Find beginning index for last entry.
-  if (i != primary) list->move_block (i,primary);           // Don't do move it it would not change the location.
-  primary = list->next(primary);                            // Corect primary pointer.
-  list->move (0,false);                                     // Set currsor back to index 0.
-  return;
+  move_primary ();
 }
 
 //--------------------------------
@@ -2579,6 +2796,7 @@ void JWP_dict::check_primary (byte *ptr) {
 
 int JWP_dict::dlg_dictionary (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
   int i;
+  static int rcnt = 0;
   static byte enable_clip;          // This is used to prevent errors when using the clipboard
                                     //   tracking.  This suppresses clipboard searching until
                                     //   after the first search command is received.
@@ -2594,6 +2812,7 @@ int JWP_dict::dlg_dictionary (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
     case WM_INITDIALOG: 
          dict_size.wm_init (hwnd,IDC_DDRESULT,&jwp_config.cfg.size_dict,false,IDC_DICT_FIRST,IDC_DICT_LAST);
          active = true;
+         matches = 0;               // Precautionary now, but fixed a bug at one point.
          add_dialog (hwnd,true);
          for (i = 0; i < NUMBER_DICTKEYS; i++) dict_keys[i].reject = ((jwp_config.cfg.dict_bits & (0x1L << i)) != 0);
          dialog  = hwnd;
@@ -2618,6 +2837,7 @@ int JWP_dict::dlg_dictionary (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
 //
     case WM_DESTROY:
          active = false;
+         rcnt   = 0;
          get_checkboxes ();
          jwp_config.cfg.dict_bits = 0;
          for (i = 0; i < NUMBER_DICTKEYS; i++) {
@@ -2672,11 +2892,11 @@ int JWP_dict::dlg_dictionary (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
 //  This indicate the user is typing into the list box window.
 //
     case WMU_EDITFROMLIST:          // Basic edit commands such as moving the cursor
-         SetFocus           (GetDlgItem(hwnd,IDC_DDSTRING));
+         SetDialogFocus     (hwnd,IDC_DDSTRING);
          SendDlgItemMessage (hwnd,IDC_DDSTRING,WM_KEYDOWN,wParam,lParam);
          return (0);
     case WMU_CHARFROMLIST:          // Basic character
-         SetFocus           (GetDlgItem(hwnd,IDC_DDSTRING));
+         SetDialogFocus     (hwnd,IDC_DDSTRING);
          SendDlgItemMessage (hwnd,IDC_DDSTRING,WM_CHAR,wParam,lParam);
          return (0);
 #ifndef WINCE
@@ -2694,22 +2914,74 @@ int JWP_dict::dlg_dictionary (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
 //
 #ifndef WINCE_POCKETPC
            case IDOK:           // Search
+                if (GetFocus () == GetDlgItem (dialog,IDC_DDRESULT)) {  // Results list in focus?
+                  PostMessage (hwnd,WM_COMMAND,IDC_DDINSERT,0);         // Insert selected text. Will give focus to edit control if no results.
+                  return (0);
+                }                                                       // Else do dictionary search below.
 #endif WINCE_POCKETPC
            case IDSEARCH:
-                search_dict ();
+                if (GetKeyState (VK_SHIFT) < 0) search_dict (DSEARCH_CONT);
+                else search_dict ();
                 return   (0);
+           case IDC_DDNAME2:
+           case IDC_DDNAME:
+                save_names ();
+                search_dict (DSEARCH_NAMES);                            // Special search for names.
+                get_checkboxes ();                                      // Restore settings which will be modified during search_dict ().
+                restore_names ();
+                return (0);
 //
 //  Sort the results.
 //
            case IDC_DDSORT:
-                list->sort (dictionary_compare);
+                if (!matches || !list->count) return (0);   // Nothing to do.
+                SetDialogFocus (hwnd,IDC_DDRESULT);         // This fixes some UI oddities caused by JWP_list's tendency to call SetFocus().
+                del_labels     ();                          // Find and delete any labels, which will no longer be accurate after sorting.
+                if (state == DICTSTATE_IDLE) {              // It's not safe to remove entries while a search is in progress. No problems with sorting though!
+                  if (i = list->deduplicate ()) {           // Delete duplicates.
+                    matches -= i;                           // Update count.
+                    message (NULL);
+                  }
+                }
+                {
+                  struct { int (*alg)(KANJI*,KANJI*); int (*inv)(KANJI*,KANJI*); const TCHAR *name; } sorters[] = {
+                    { dictionary_compare,                   0, _T("Reading")    },
+                    { dictionary_compare_length_descending,                 // If you change the index of this element, update the ternary conditional statements below.
+                      dictionary_compare_length_ascending,     _T("Length")     },
+                  //{ dictionary_compare_length_headword_desc,              // These are swapped in below depending on circumstances.
+                  //  dictionary_compare_length_headword_asc,  _T("Length (H)") },
+                    { dictionary_compare_entry,             0, _T("Entry")      },
+                    { dictionary_compare_definition,        0, _T("Definition") },
+                  };
+                  sorters[1].alg = had_kanji? dictionary_compare_length_headword_desc: dictionary_compare_length_descending;  // Length of reading/headword dependent on the presence of kanji.
+                  sorters[1].inv = had_kanji? dictionary_compare_length_headword_asc : dictionary_compare_length_ascending;
+                  static const int num_sorters = sizeof(sorters)/sizeof(sorters[0]);
+                  if (GetKeyState (VK_CONTROL) < 0) {                       // Control = sort backwards but do not cycle through algorithms.
+                    sort_reverse = !sort_reverse; rcnt++;
+                    if (sort_state < 0) sort_state = 0;                     // Need to initialize in this case.
+                  }
+                  else sort_state += GetKeyState (VK_SHIFT)<0?-1:1;         // Shift = select algorithm in reverse order.
+                  if (sort_state < 0) sort_state = num_sorters - 1;         // Wrap around if necessary.
+                  else if (sort_state >= num_sorters) sort_state = 0;
+                  if (rcnt >= 20) sort_reverse = true;
+                  if (sort_reverse && sorters[sort_state].inv)
+                       list->sort (sorters[sort_state].inv,false);          // Use inverse sorting algorithm if available, otherwise just reverse the results.
+                  else list->sort (sorters[sort_state].alg,sort_reverse);   // Sort results and print status message.
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    if (rcnt >= 20) message (_T("REVERSE\n  CURSE")); else    // What? You were expecting me to hide a GOOD Easter egg when the source is open?
+                  if (state == DICTSTATE_IDLE) message (_T("Matches: %d\n%s%s"),matches,sorters[sort_state].name,sort_reverse?_T(" (rev.)"):_T(""));
+                }
                 return (0);
 //
 //  The user has clicked on the Advanced checkbox.
 //
+           case IDC_DDADVANCED:
+                if (jwp_config.cfg.dict_link_adv_noname && IsDlgButtonChecked(hwnd,IDC_DDADVANCED)) CheckDlgButton (hwnd,IDC_DDNONAME,dict_keys[DICTKEY_PLACES].reject = dict_keys[DICTKEY_NAMES ].reject = true);
+                return (0);
+
            case IDC_DDNONAME:
                 dict_keys[DICTKEY_PLACES].reject = dict_keys[DICTKEY_NAMES ].reject = !IsDlgButtonChecked(hwnd,IDC_DDNONAME);
                 CheckDlgButton (hwnd,IDC_DDNONAME,dict_keys[DICTKEY_PLACES].reject);
+                if (jwp_config.cfg.dict_link_adv_noname && !IsDlgButtonChecked(hwnd,IDC_DDNONAME)) CheckDlgButton (dialog,IDC_DDADVANCED,jwp_config.cfg.dict_advanced = 0);
                 return (0);
 //
 //  History button
@@ -2838,6 +3110,32 @@ int JWP_dict::dlg_dictoptions (HWND hwnd,int msg,int command) {
 
 //--------------------------------
 //
+//  Returns true if current search string comprises one kana. It does not take prefixes into account, but neither does do_search().
+//
+bool JWP_dict::is_single_kana () {
+  ASSERT (postfix_len >= 0 && search_len >= 0);
+  if (postfix_len || search_len != 1) return (0);
+  return (ISKANA (search_ptr[0]));
+}
+
+//--------------------------------
+//
+//  Save/restore state of name filters.
+//
+static int prevdn = -1, prevdp = -1;
+void JWP_dict::save_names () {
+  prevdn = dict_keys[DICTKEY_NAMES ].reject;
+  prevdp = dict_keys[DICTKEY_PLACES].reject;
+}
+void JWP_dict::restore_names () {
+  ASSERT (!prevdn || prevdn == 1);
+  ASSERT (!prevdp || prevdp == 1);
+  dict_keys[DICTKEY_NAMES ].reject = prevdn;
+  dict_keys[DICTKEY_PLACES].reject = prevdp;
+}
+
+//--------------------------------
+//
 //  This routine actually does a search.  The argumetns inciate what 
 //  to be searched for.  In a simple search, this will be called once,
 //  For an advanced search, this can be called many different times as
@@ -2872,7 +3170,8 @@ int JWP_dict::do_search () {
 //  Check key for validity.
 //
   if (ascii && (kana || kanji)) return (DICTSEARCH_MIXED);
-  if ((ascii && (ascii < 3)) || (!ascii && !kanji && (kana < 2))) return (DICTSEARCH_SHORT);
+  if (ascii && (ascii < 3)) return (DICTSEARCH_SHORT);
+  if (ascii <= 0 && kanji <= 0 && kana <= 0) return (DICTSEARCH_SHORT);
 //
 //  Check for classical particles and jodoushi.
 //
@@ -2883,15 +3182,16 @@ int JWP_dict::do_search () {
 //
   for (dict = dicts; dict; dict = dict->next) {
 //
-//  We are not searching this dictionary.
+//  Determine if we are searching this dictionary.
 //
     if (!dict->searched) continue;                                                          // Not searched.
     if ((dict->names == DICT_NAMESONLY) && nonames) continue;                               // Name only dictionary, but no names.
     if (!jwp_config.cfg.dict_classical && (dict->special == DICT_CLASSICAL)) continue;      // Classical dictionaries.
 //
-//  Setup classical and highligh flags.
+//  Activate highlighting for all entries in special dictionaries (i.e. classical and user).
 //
     highlight (dict->special);
+    if (0 && !in_advanced) put_label(dict->name);                                           // Experimental option to label the various dictionaries. More useful when priority sorting is not enabled. Not that useful with only the default dictionaries. Can generate a lot of labels with certain other options in play.
 //
 //  Actual searches
 //
@@ -2901,7 +3201,7 @@ int JWP_dict::do_search () {
       continue;
     }
     dict->search (search_ptr,search_len);
-    if (!dict->keep) dict->close();
+    if (active && !dict->keep) dict->close();
     if (state == DICTSTATE_ABORT) return (DICTSEARCH_ABORT);
   }
 //
@@ -3006,7 +3306,7 @@ void JWP_dict::euc_check (byte *ptr) {
 //
 //      RETURN -- A non-zero value indicates this entry should be rejected.
 //
-#define EUC_CPARTEND(p)     (((p)[0] == ')') || EUC_MATCH(p,EUC_CAMA) || EUC_MATCH(p,EUC_SLASH))
+#define EUC_CPARTEND(p)     (((p)[0] == ')') || EUC_MATCH(p,EUC_COMMA) || EUC_MATCH(p,EUC_SLASH))
 
 int JWP_dict::euc_endbegin (byte *first,byte *last) {
   if (ascii_search) {
@@ -3015,7 +3315,7 @@ int JWP_dict::euc_endbegin (byte *first,byte *last) {
     return (false);
   }
   if (dict_keys[DICTKEY_BEGIN].reject && !((*first == '[') || ISCRLF(*first) || classical_part)) return (true);
-  if (dict_keys[DICTKEY_END  ].reject && !((*last  == ']') || (*last == ' ') || (classical_part && EUC_CPARTEND(last)))) return (true);
+  if (dict_keys[DICTKEY_END  ].reject && !((*last  == ']') || (*last == ' ') || ISCRLF(*last) || (classical_part && EUC_CPARTEND(last)))) return (true);
   return (false);
 }
 
@@ -3029,10 +3329,10 @@ int JWP_dict::euc_endbegin (byte *first,byte *last) {
 //
 //      RETURN -- A nonzero value idnciates this entry should be filtered (ie rejected).
 //
-#define NUMBER_DICTNAME ((int) (sizeof(names)/sizeof(char [6])))
+#define NUMBER_DICTNAME ((int) (sizeof(names)/sizeof(names[0])))
 
 int JWP_dict::filter_entry (byte *ptr) {
-  byte *p,*p2,*p3;
+  byte *p,*p2,*p3,prev=0;
   int i;
 //
 //  This next nasty little section of code handles removing entries, 
@@ -3054,6 +3354,7 @@ int JWP_dict::filter_entry (byte *ptr) {
 //  place name, and a female given name.
 //
   if (!filter) return (false);                              // No filters so nothing to do.
+  if (filter_names_only && !dict->names) return (false);    // Dictionary lacks names, and there are no other applicable filters, so return;
   static char names[][2] = { "u","g","f","m" };             // These are extensions added to the (personal name) type
                                                             //   generally they follow the pn field.  JWPce does not  
                                                             //   do filtering based on the individual type of name, but
@@ -3065,7 +3366,9 @@ int JWP_dict::filter_entry (byte *ptr) {
                                                             //   will force an evaluation of the entry later.
   p = ptr;                                                  // pointer p will advance through the file.
   while (!ISCRLF(*p)) {                                        
-    if (*p != '(') { p++; continue; }                       // We have maybe found a type key, if not off to next charcter.
+    if (*p != '(') { prev = *p++; continue; }               // Scan string for start of possible tag.
+    if (prev != '/' && prev != ' '                          // Require preceding character to be something logical. Fixes a few misidentifications.
+     && prev != ')' && prev != ',') { p++; continue; }      //   I believe only the first two are needed for EDICT. The remainder could plausibly be in other dictionaries.
     while (*p != ')') {                                     // Until we reach the end of the type key we need to keep examining each key.
       for (i=DICTKEY_START; i < NUMBER_DICTKEYS; i++) {     // See if we know what the key is.
         if (len = test_key(p,dict_keys[i].key)) break;
@@ -3138,7 +3441,8 @@ void JWP_dict::get_checkboxes () {
 //
 int JWP_dict::get_last () {
   if (postfix_len) return (postfix_ptr[postfix_len-1]);
-  return (search_ptr[search_len-1]);
+  else if (search_len) return (search_ptr[search_len-1]);
+  else return (JIS_EOF);
 }
 
 //--------------------------------
@@ -3263,8 +3567,17 @@ int JWP_dict::search_add (KANJI kanji) {
 //                              matches were found).
 //
 int JWP_dict::search_end (KANJI kanji) {
+  KANJI last;
+  int abort;
+  ASSERT (postfix_len >= 0 && search_len >= 0 && postfix_len + search_len > 0);
+  if (postfix_len + search_len <= 1) return (0);      // Don't do pointless advanced searches.
+  if (is_single_kana()) return (0);                   // This should be redundant now, but why not?
+  last = get_last ();
+  ASSERT (last != JIS_EOF);
   if (put_last(kanji)) return (0);
-  return (do_search());
+  abort = do_search();
+  put_last (last);                                    // Restore the character that got overwritten.
+  return (abort);
 }
 
 //--------------------------------
@@ -3275,6 +3588,8 @@ int JWP_dict::search_end (KANJI kanji) {
 //  the dialog box handler, however, that is just too hard to deal with,
 //  so I sepated it.
 //
+//      search_type -- Optional parameter enabling special search modes.
+//
 //  Special macros used to modify the search string then actually do the 
 //  search.  These are simply defined to simply the writing of the code.
 //  
@@ -3284,25 +3599,38 @@ int JWP_dict::search_end (KANJI kanji) {
 #define SEARCH_END(x) { if (abort = search_end(x)) break; }
 #define SEARCH_ADD(x) { if (abort = search_add(x)) break; }
 
-void JWP_dict::search_dict () {
+void JWP_dict::search_dict (int search_type) {
   int    i,j;
   int    length;                    // Adjusted length of seach string from the user.
   KANJI  search[MAX_KEY_LENGTH+1];  // Copy of the edit-box search string that can be modified.
   int    first = true;              // Indicates first pass in a best fit search.
   int    abort;                     // Indicates the abort condition from the last search.
   char  *ptr;                       // Holds romaji for kana character at end of search string.
+  int    patcnt = 0;                // Number of pattern characters found in search string.
+  int    kana_cnt = 0;              // Number of kana in search string.
+  int    kanji_cnt = 0;             // Number of kanji in search string.
+  int    no_advanced = false;       // Temporarily disable advanced search.
+  KANJI *orig_str;
+  int    orig_len;
 //
 //  Intitlaize the search parameters.
 //
-  if (is_searching()) { clipsearch = false; return; }           // Already searching.
+  if (is_searching()) { state = DICTSTATE_ABORT; return; }      // Abort search if in progress.
   get_checkboxes ();                                            // Get all the settings.
-  length = JEGetDlgItemText(dialog,IDC_DDSTRING,&search_ptr);
+  length = JEGetDlgItemText(dialog,IDC_DDSTRING,&search_ptr);   // Get search string. Also adds it to the search history.
+  orig_len = length; orig_str = search_ptr;
+  if (!length) SetDialogFocus (dialog,IDC_DDSTRING);            // Focus on edit control so user can input something next time.
   if (!length) return;                                          // No string so exit.
   if (length > MAX_KEY_LENGTH) length = MAX_KEY_LENGTH;         // Truncate user string if necessary.
-  while (ISSPACE(*search_ptr)) { search_ptr++, length--; }      // Kill leading spaces.
-  while (length && ISSPACE(search_ptr[length-1])) length--;     // Kill trailing spaces.
+  if ((length == 4) && (search_ptr[0] == KANJI_SPACE) && (search_ptr[1] == KANJI_QUESTION) && (search_ptr[2] == KANJI_QUESTION) && (search_ptr[3] == KANJI_QUESTION)) {
+    // Permit leading space for this special case: " ???" (new format of version entry in EDICT).
+  }
+  else {
+    while (ISSPACE(*search_ptr)) { search_ptr++, length--; }    // Kill leading spaces.
+    while (length && ISSPACE(search_ptr[length-1])) length--;   // Kill trailing spaces.
+  }
   SendDlgItemMessage (dialog,IDC_DDRESULT,JL_RESET,0,0);        // Clear list.
-  primary = 0;                                                  // Set pointer for prinary entries.
+  begin_primary = primary = 0;                                  // Initialize index of primary (priority) entries.
 //
 //  Pre-pocess key.  
 //
@@ -3314,11 +3642,14 @@ void JWP_dict::search_dict () {
 //
   ascii_search = pattern = false;
 //
-//  Exception for processing of ????  This does not do a search but gets the ID from the dictionaries.
+//  Exception for processing of "????" and " ???".
+//  This does not do a pattern search but instead gets the ID from the dictionaries.
 //
-  ascii_search = pattern = false;
   if ((length == 4) && (search_ptr[0] == KANJI_QUESTION) && (search_ptr[1] == KANJI_QUESTION) && (search_ptr[2] == KANJI_QUESTION) && (search_ptr[3] == KANJI_QUESTION)) {
     search[0] = search[1] = search[2] = search[3] = KANJI_QUESTION;
+  }
+  else if ((length == 4) && (search_ptr[0] == KANJI_SPACE) && (search_ptr[1] == KANJI_QUESTION) && (search_ptr[2] == KANJI_QUESTION) && (search_ptr[3] == KANJI_QUESTION)) {
+    search[0] = KANJI_SPACE; search[1] = search[2] = search[3] = KANJI_QUESTION;
   }
 //
 //  General processing.
@@ -3329,23 +3660,30 @@ void JWP_dict::search_dict () {
       switch (search[i]) {
         case KANJI_LBRACE:
         case '[':
-             pattern   = true;
+             pattern   = true; patcnt++;
              search[i] = '[';
              break;
         case KANJI_RBRACE:
         case ']':
-             pattern   = true;
+             length = i + 1;              // Ignore extraneous characters. Anything right of the bracket will never yield matches.
+             no_advanced = true;          // Emulate old behavior where advanced search truncation stops at the first pattern found.
+             pattern   = true; patcnt++;
              search[i] = ']';
              break;
-        case KANJI_ASTRIC:
+        case KANJI_ASTERISK:
         case '*': 
-             pattern   = true;
+             pattern   = true; patcnt++;
              search[i] = '*'; 
              break;
         case KANJI_QUESTION:
         case '?': 
-             pattern   = true;
+             pattern   = true; patcnt++;
              search[i] = '?'; 
+             break;
+        case KANJI_NUM_SIGN:
+        case '#':
+             pattern   = true; patcnt++;
+             search[i] = '#'; 
              break;
         default:
              if      (ISASCII   (search[i])) { 
@@ -3357,7 +3695,9 @@ void JWP_dict::search_dict () {
                search[i] = tolower(search[i]);
                ascii_search = true;
              }
-             else if (ISKATAKANA(search[i])) search[i] = BASE_HIRAGANA | (search[i] & 0xff);
+             else if (ISKATAKANA(search[i])) { kana_cnt++; search[i] = BASE_HIRAGANA | (search[i] & 0xff); }    // Convert katakana to hiragana.
+             else if (ISHIRAGANA(search[i]))   kana_cnt++;
+             else if (ISKANJI(search[i]))      kanji_cnt++;
              break;
       }
     }
@@ -3381,8 +3721,16 @@ void JWP_dict::search_dict () {
 //  Pickup real pattern searches
 //
   else if (pattern) {
-    for (i = 0; (i < length) && !ISKANJI(search[i]); i++);
-    if (i == length) {
+    for (i = 0; (i < length) && !ISKANJI(search[i]); i++); // Check for kanji in search string key.
+    if (i == length) {                                     // No kanji.
+      if (patcnt == 1 && search[length-1] == '*') {
+        dict_keys[DICTKEY_END].reject = 0;                 // Allow matches with trailing characters.
+        no_advanced = true;
+        length--;                                          // Remove asterisk.
+        search[length] = 0;                                // Fill to prevent some odd errors.
+        pattern = false;
+        goto DefaultSearch;
+      }
       error (IDS_DD_NOKANJI);
       state = DICTSTATE_IDLE;
       return;
@@ -3399,55 +3747,138 @@ void JWP_dict::search_dict () {
 //  Default search
 //
   else {
+DefaultSearch:
+    if (length == 1 && ISKANA(search[0])) dict_keys[DICTKEY_BEGIN].reject = dict_keys[DICTKEY_END].reject = true;   // Force Begin/End With for single-kana searches.
     search_len = length;
     search_ptr = search;
+    prefix_ptr  = 0;    // These lines added as a precaution.
+    prefix_len  = 0;
+    postfix_ptr = 0;
+    postfix_len = 0;    // Fixes a bug where old postfix values could be erroneously used in a new search.
   }
 //
 //  Initialize the search system.
 //
+  in_advanced = false;
+  had_kanji = kanji_cnt;
   matches = rejected = 0;
   state   = DICTSTATE_SEARCH;
   message (get_string(IDS_DD_SEARCHING));
+  sort_state = -1;
+  sort_reverse = false;
 //
 //  Setup search flags out here so if we are doing an advanced search,
 //  we don't have to evaluate these again and again.
 //
+  if (search_type == DSEARCH_NAMES) {                                             // Temporarily change settings to be more appropriate for finding names.
+    jwp_config.cfg.dict_advanced = false;                                         // This setting is restored elsewhere.
+    dict_keys[DICTKEY_NAMES].reject = dict_keys[DICTKEY_PLACES].reject = false;   // These settings are saved/restored elsewhere.
+  }
   filter = false;
   for (i = DICTKEY_START; i < NUMBER_DICTKEYS; i++) if (dict_keys[i].reject) { filter = true; break; }
   nonames = dict_keys[DICTKEY_NAMES].reject && dict_keys[DICTKEY_PLACES].reject;
+  for (filter_names_only = true, i = DICTKEY_START_GEN; i < NUMBER_DICTKEYS; i++) if (dict_keys[i].reject) { filter_names_only = false; break; }
 //
 //  Do the search.
 //
   abort = do_search();
-  if (clipsearch && abort) abort = DICTSEARCH_ABORT;
+  if (clipsearch && abort) abort = DICTSEARCH_ABORT;  // Suppress input errors for clipboard searches.
   clipsearch = false;
   switch (abort) {
     case DICTSEARCH_SHORT:
          error (IDS_DD_ERRORLENGTH); 
-         state = DICTSTATE_IDLE;
-         return;
+         goto SearchError;
     case DICTSEARCH_MIXED:
          error (IDS_DD_ERRORASCIIKANA); 
+         SearchError:
          state = DICTSTATE_IDLE;
-         return;
+         message (_T(""));                                    // Clear the "Searching..." message.
+         dict_history.safe_remove (orig_str, orig_len);       // Remove duff search string from history. Unfortunately it will get immediately re-added if the user presses Up due to the way the history feature is designed.
+         return;                                              // Skip cleanup.
     case DICTSEARCH_ABORT:
          break;
   }
+  if (!abort && matches) mark_priority ();
+//
+//  This is an experimental search stage that retries an unsuccessful "closed" search as an open-ended search.
+//
+//  The Always Search (jwp_config.cfg.dict_always) requirement is to prevent any matches produced by this stage from interfering with the advanced search.
+//
+  if ((jwp_config.cfg.dict_contingent || search_type == DSEARCH_CONT) && !abort && !matches && !pattern && !patcnt && !ascii_search && (!jwp_config.cfg.dict_advanced || jwp_config.cfg.dict_always || search_type == DSEARCH_CONT) && dict_keys[DICTKEY_BEGIN].reject && dict_keys[DICTKEY_END].reject) do {
+    bool limited = false;
+    bool quiet_fruitless = false;
+    bool forced = search_type == DSEARCH_CONT;                  // Determine if user explicitly requested this search stage.
+    if (length < 2) break;
+    if (search_type == DSEARCH_NAMES) break;                    // Not relevant. Also not compatible with save/restore_names used below.
+    if (!kana_cnt  && kanji_cnt < 2) break;                     // Minimum number of kanji for kanji-only searches.
+    if (!kanji_cnt && kana_cnt  < 3) break;                     // Minimum number of kana for kana-only searches.
+    if (!kanji_cnt && kana_cnt  < 4)    limited = true;
+    if (kanji_cnt == 1 && kana_cnt < 2) limited = true;
+    if (jwp_config.cfg.dict_advanced) {                         // Be more selective if there is an upcoming advanced search.
+      KANJI last = search[length-1];
+      KANJI penu = search[length-2];
+      bool conj = false;
+      if (kana_cnt && ISKANA(last)) {                           // Crude check for possible conjugated verbs.
+        if (last == HIRAGANA__TU) conj = true;                  // Sokuon
+        if (last == HIRAGANA_TA || last == HIRAGANA_TE) conj = true;
+        if ((penu == HIRAGANA_N || penu == HIRAGANA_I) && (last == HIRAGANA_DE || last == HIRAGANA_DA)) conj = true;
+      }
+      if (conj) {
+        limited = true;                                         // Tamp down on likely conjugated verbs when advanced mode is enabled.
+        if (!forced) {                                          // Do not apply alternate minimums.
+          if (!kanji_cnt && kana_cnt < 4) break;                // Alternate minimum number of kana for kana-only searches.
+          quiet_fruitless = true;                               // If an advanced search is coming up AND this looks like a deconjugation AND it wasn't a forced contingent search THEN delete the notification label if there were no results.
+        }
+      }
+    }
+    if (forced) limited = false;                                // Suppress limits applied to automatic searches.
+    put_label (IDS_DD_NO_EXACT_MATCHES,0);                      // Mark it. This also serves as notification that the original search was fruitless.
+    begin_primary = primary = list->count;                      // Update primary index to account for the marker.
+    byte prevnn = nonames;                                      // Preserve state.
+    save_names ();
+    nonames = true;                                             // Disable name searching temporarily.
+    dict_keys[DICTKEY_NAMES].reject = dict_keys[DICTKEY_PLACES].reject = true;
+    int abort2 = 0;
+    if (1 && (search[0] == HIRAGANA_O || search[0] == HIRAGANA_GO || search[0] == KANJI_GO_GYO)) {  // This could be made a configuration item but I haven't yet seen any need to disable it.
+      abort2 = search_skip_first (search,length);               // Secondary search that trims the most common honorific prefixes, which are often not included in dictionary entries.
+      if (abort2 || (1 && matches)) goto endcont;               // This part could be made configurable. Currently it always stops if the honorific trim succeeded.
+    }
+    if (kanji_cnt && length + 2 <= MAX_KEY_LENGTH) abort = contsearch (search,length,limited);
+    else if (limited) {                                         // No kanji so we can only try an open-ended search.
+      dict_keys[DICTKEY_END].reject = false;                    // Turn off "End With" only.
+      abort = do_search ();
+    }
+    else {                                                      // Turn off both.
+      dict_keys[DICTKEY_BEGIN].reject = dict_keys[DICTKEY_END].reject = false;
+      abort = do_search ();
+    }
+endcont:
+    dict_keys[DICTKEY_BEGIN].reject = dict_keys[DICTKEY_END].reject = true;
+    nonames = prevnn;                                           // Restore name-related settings.
+    restore_names ();
+    if (abort || abort2) break;                                 // Skip the following neatness tasks on an abort.
+    if (matches) mark_priority ();                              // This is less useful in this case, but might as well be consistent. Note that this method will not add the priority label unnecessarily.
+    if (!matches && quiet_fruitless) del_labels ();             // Remove the notification label if there were no results and this is likely a deconjugation advanced search. The label will still appear briefly before getting replaced with the Advanced Search label.
+  } while (0);
 //''''''''''''''''''''''''''''''''''''''''''
 //
 //  Adaptive search engine
 //
-  KANJI last;
-  if (!abort && !ascii_search && jwp_config.cfg.dict_advanced) {
+  KANJI last, trunc;
+  if (!abort && !ascii_search && jwp_config.cfg.dict_advanced && !no_advanced && !(matches && !jwp_config.cfg.dict_always)) {
+    in_advanced = true;
     if (jwp_config.cfg.dict_advmark) {              // Separate advanced searches from the direct.
       put_label (IDS_DD_ADVANCED);
-      primary = list->count;
+      begin_primary = primary = list->count;
     }
-    while (!matches || (first && jwp_config.cfg.dict_always) || jwp_config.cfg.dict_showall) {
-      if (first) first = false;
-        else {
-          if ((abort = do_search())) break;
+    while (!matches || (first && jwp_config.cfg.dict_always) || (jwp_config.cfg.dict_showall && dict_keys[DICTKEY_END].reject)) {
+      if (first) first = false;                     // Skip (redundant) search on first pass through this loop.
+      else {
+        if (search_len <= 0) break;                 // Quit if string is completely empty. This does not take the prefix portion of pattern searches into account, but neither does do_search()!
+        if (!is_single_kana() && trunc != '*') {    // Do basic searches as long as it's not one kana remaining or immediately following an asterisk.
+          if ((abort = do_search())) break;         // One character was truncated so try searching again.
         }
+      }
 //
 //  Get the last character in the search string.  If the character is a
 //  kana then we have some processing to do.  If the last character is not 
@@ -3455,8 +3886,10 @@ void JWP_dict::search_dict () {
 //
       last = get_last();
       if (!ISKANA(last)) {
-        SEARCH_ADD (HIRAGANA_RU);                               // Could be an ichidan doushi.
-        if (jwp_config.cfg.dict_iadj) SEARCH_ADD (HIRAGANA_I);  // Could be an i-adjative.
+        if (!ISPATTERN(last)) {                                     // Don't try to deconjugate a pattern.
+          SEARCH_ADD (HIRAGANA_RU);                                 // Could be an ichidan doushi.
+          if (jwp_config.cfg.dict_iadj) SEARCH_ADD (HIRAGANA_I);    // Could be an i-adjative.
+        }
       }
 //
 //  Processisng for words ending in kana.
@@ -3464,7 +3897,7 @@ void JWP_dict::search_dict () {
       else if (last == HIRAGANA_I  ) {              // te/ta-forms for ku and gu verbs.
         SEARCH_END (HIRAGANA_KU);
         SEARCH_END (HIRAGANA_GU);
-//        put_last   (HIRAGANA_I);                    // Need to restore the character for later!
+        goto GeneralDeconjugate;                    // Check for other possibilities such as -u godans and ichidans.
       }
       else if (last == HIRAGANA__TU) {              // te/ta-forms for u, tsu, and ru verbs.
         SEARCH_END (HIRAGANA_U);
@@ -3476,13 +3909,14 @@ void JWP_dict::search_dict () {
         SEARCH_END (HIRAGANA_BU);
         SEARCH_END (HIRAGANA_MU);
       }
-      else {
+      else { GeneralDeconjugate:
 //
 //  Get romaji value.
 //
         if (last == HIRAGANA_WA) last = HIRAGANA_A;
         ptr = kana_to_ascii(last);
-        i = strlen(ptr)-1;
+        if (!ptr) goto next;                                        // Fixes some crashes.
+        i = strlen(ptr)-1;                                          // Index of last character.
 //
 //  Try imperative of ichidan doushi.
 //
@@ -3491,37 +3925,96 @@ void JWP_dict::search_dict () {
 //  Try treating as a godan doushi.
 //
         if (ptr[i] != 'u') {
-          i = (!i ? HIRAGANA_U : godan_kana(*ptr));
-          if (i) SEARCH_END (i);
+          int k = (!i ? HIRAGANA_U : godan_kana(*ptr));             // Check first character for possible godan.
+          if (k) SEARCH_END (k);
         }
 //
 //  Try to make an i-adjative.
 //
-//  ### This could be improved. ###
-//
-        if (jwp_config.cfg.dict_iadj) SEARCH_END (HIRAGANA_I);
+        if (jwp_config.cfg.dict_iadj) SEARCH_ADD (HIRAGANA_I);      // Changed to SEARCH_ADD to catch i-adjective stems written in kana.
       }
 //
 //  Shorten the string.
 //
-      if (ISPATTERN(last)) break;
-      if (postfix_len) postfix_len--; else search_len--;
+next: trunc = get_last();                                           // Record character we're about to truncate.
+    //if (ISPATTERN(last) && !jwp_config.cfg.dict_showall) break;   // Stop truncating when a pattern is reached unless Show All is enabled.
+      if (postfix_len) postfix_len--; else search_len--;            // Truncate one character.
+      if (get_last() == '*') break;                                 // Stop if a non-terminal asterisk pattern emerged.
     }
+    if (active && !abort && matches && jwp_config.cfg.dict_advmark) mark_priority ();
   }
 //
 //  The is the cleanup steps.
 //
-  if (abort == DICTSEARCH_ABORT) message (get_string(rejected ? IDS_DD_ABORTREJECT : IDS_DD_ABORT),matches,rejected);
-  if (matches) {                                // Handle results.
-    SendDlgItemMessage (dialog,IDC_DDRESULT,JL_SETSEL,true,0);
-    SetFocus (GetDlgItem(dialog,IDC_DDRESULT)); 
+  if (!active) ;                                // Closing down, so don't bother with the results.
+  else if (abort == DICTSEARCH_ABORT) {         // Search was interrupted.
+    message (get_string(rejected ? IDS_DD_ABORTREJECT : IDS_DD_ABORT),matches,rejected);
+    SetDialogFocus (dialog,IDC_DDSTRING);       // Set focus to edit box instead of list since the results may not be what the user wanted.
+  }
+  else if (matches) {                           // Handle results.
+//  SendDlgItemMessage (dialog,IDC_DDRESULT,JL_SETSEL,true,0);  // This selects the first line, which is inconsistent with Explorer-like behavior.
+    SendDlgItemMessage (dialog,IDC_DDRESULT,JL_SETSEL,false,0);
+    SetDialogFocus     (dialog,IDC_DDRESULT);   // Set focus on results list.
   }
   else {
     if (!rejected) message (get_string(IDS_DD_NOMATCH));
     MessageBeep (MB_ICONASTERISK);
+    SetDialogFocus (dialog,IDC_DDSTRING);
   }
   state = DICTSTATE_IDLE;
   return;
+}
+
+//--------------------------------
+//
+//  Contingent search, for strings that contain kanji.
+//
+//  Rather than turning off Begin/End With, this does a pattern search, which is more versatile, working with strings which have kana on both ends, like ppari.
+//
+int JWP_dict::contsearch (KANJI *search,int length,int mode) {
+  int i,j,abort;
+  KANJI mod_search[MAX_KEY_LENGTH+1];                       // This will be a second copy of the search string.
+  int len = length + 2;                                     // Expanded length was checked up above.
+  memcpy (mod_search + 1,search,length*sizeof(search[0]));
+  mod_search[len] = 0;
+  mod_search[0] = mod_search[len-1] = '*';                  // Add patterns on either side.
+  if (mode) mod_search[0] = '[';                            // Replace with a harmless pattern.
+  pattern = true;
+  for (i = 0; (i < len) && !ISKANJI(mod_search[i]); i++);   // Find first kanji in search string.
+  ASSERT (i < len);
+  prefix_ptr  = mod_search;                                 // Set up a pattern search.
+  prefix_len  = i;
+  search_ptr  = prefix_ptr+prefix_len;
+  for (j = i+1; (j < len) && !ISPATTERN(mod_search[j]); j++);
+  search_len  = j-i;
+  postfix_ptr = search_ptr+search_len;
+  postfix_len = len-j;
+  abort = do_search ();                                     // Rerun search with new string.
+  search_len = length;                                      // Restore original search parameters.
+  search_ptr = search;
+  prefix_ptr = postfix_ptr = 0;
+  prefix_len = postfix_len = 0;
+  pattern = false;
+  return abort;
+}
+
+//--------------------------------
+//
+//  Search for an exact match while skipping the first character.
+//
+int JWP_dict::search_skip_first (KANJI *search,int length) {
+  int abort;
+  ASSERT (length >= 2);
+  search_len = length - 1;                                  // Set up search less the first character.
+  search_ptr = search + 1;
+  pattern = false;
+  prefix_ptr = postfix_ptr = 0;
+  prefix_len = postfix_len = 0;
+  dict_keys[DICTKEY_BEGIN].reject = dict_keys[DICTKEY_END].reject = true;
+  abort = do_search ();                                     // Rerun search with new string.
+  search_len = length;                                      // Restore original search parameters.
+  search_ptr = search;
+  return abort;
 }
 
 //--------------------------------
@@ -3629,13 +4122,14 @@ void JWP_dict::utf_check (byte *ptr,int length) {
 //
 //  This section formats and displays the entry.  Unlike EUC files, the rotuine is included 
 //  here, because this is the only place it is needed.  With EUC we use that formatting line 
-//  for the user dictionary also.
+//  for the user dictionary also. See format_line ().
 //
   int ch;
   int first_line = true;
   clear ();                                     // Intialize line buffer.
   for (i = 0; i < SIZE_LINE; i++) {             // Limit string length.
-    if (!*ptr || ISCRLF(ptr[1])) break;         // End of line so exit, or error condition (past end of buffer)
+    if (!*ptr || ISCRLF(ptr[1]) || ISCRLF(*ptr)) break; // End of line so exit, or error condition (past end of buffer)
+                                                // ISCRLF(ptr[1]) avoids printing the (presumed) final separator slash.
     ch = utf2jis(ptr);
     if (first_line) {                           // First line has special characters.
       switch (ch) {
@@ -3682,7 +4176,7 @@ void JWP_dict::utf_check (byte *ptr,int length) {
 //
 //      RETURN -- A non-zero value indicates this entry should be rejected.
 //
-#define UTF_CPARTEND(p)     (((p)[0] == ')') || UTF_MATCH(p,UTF_CAMA) || UTF_MATCH(p,UTF_SLASH))
+#define UTF_CPARTEND(p)     (((p)[0] == ')') || UTF_MATCH(p,UTF_COMMA) || UTF_MATCH(p,UTF_SLASH))
 
 int JWP_dict::utf_endbegin (byte *first,byte *last) {
   if (ascii_search) {
@@ -3691,7 +4185,7 @@ int JWP_dict::utf_endbegin (byte *first,byte *last) {
     return (false);
   }
   if (dict_keys[DICTKEY_BEGIN].reject && !((*first == '[') || ISCRLF(*first) || classical_part)) return (true);
-  if (dict_keys[DICTKEY_END  ].reject && !((*last  == ']') || (*last == ' ') || (classical_part && EUC_CPARTEND(last)))) return (true);
+  if (dict_keys[DICTKEY_END  ].reject && !((*last  == ']') || (*last == ' ') || ISCRLF(*last) || (classical_part && EUC_CPARTEND(last)))) return (true);
   return (false);
 }
 
@@ -3923,7 +4417,8 @@ int JWP_file::edit_clip () {
 
 static Dictionary *new_dictionary (TCHAR *name,TCHAR *file,TCHAR *flags) {
   TCHAR      *ptr;
-  Dictionary *dic;
+  Dictionary *dict;
+  void *dic;
   int    type   = DICT_MEMORY;
   int    format = DICT_EUC;
   for (ptr = flags; *ptr; ptr++) {
@@ -3955,8 +4450,9 @@ static Dictionary *new_dictionary (TCHAR *name,TCHAR *file,TCHAR *flags) {
          }
          break;
   }
-  dic->init(name,file,flags);
-  return (dic);
+  dict = (Dictionary*)dic;
+  dict->init(name,file,flags);
+  return (dict);
 }
 
 //--------------------------------

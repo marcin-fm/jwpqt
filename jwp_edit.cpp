@@ -81,6 +81,7 @@
 #include "jwp_help.h"   // Needed for help ID for choose_file call
 #include "jwp_info.h"
 #include "jwp_inpt.h"
+#include "jwp_lkup.h"
 #include "jwp_misc.h"
 
 #include <limits.h>
@@ -160,7 +161,8 @@ static LRESULT CALLBACK JWP_edit_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
          return (0);
     case WM_SETFOCUS:                           // Set the focus.
          SIP_ON         ();
-         file->do_key   (VK_A,true,true);
+         if (file->edit_getlen())               // Anything to highlight?
+           file->do_key   (VK_A,true,true);     // Select all the text.
          file->caret_on ();
          file_list.add  (file);
          return (0);
@@ -168,6 +170,7 @@ static LRESULT CALLBACK JWP_edit_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
          SIP_OFF         ();
          jwp_conv.clear  ();
          file->caret_off ();
+         file->selection_clear ();              // Warning: While this statement makes things much neater, it has caused problems in the past when attempting to load text into a dialog. The selection gets cleared so JE_LOAD cannot identify the text to be loaded.
          return (0);
     case WM_PAINT:                              // Render.
          RECT rect;
@@ -196,11 +199,28 @@ static LRESULT CALLBACK JWP_edit_proc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
     case WM_IME_CHAR:                           // IME support.
          file->ime_char (wParam,IsWindowUnicode(hwnd));
          return (0);
+    case WM_IME_STARTCOMPOSITION:
+         file->ime_start (hwnd);
+         break;
+    case WM_IME_ENDCOMPOSITION:
+         file->ime_stop (hwnd);
+         break;
 #endif WINCE
     case WM_GETDLGCODE:                         // We need to get input from windows.
          return (DLGC_WANTARROWS | DLGC_WANTALLKEYS | DLGC_WANTCHARS);
 
 
+    case WM_SYSKEYDOWN:
+         switch (wParam) {
+           MSG msg;
+           case VK_X:
+                if (GetKeyState(VK_MENU) < 0) {
+                  while (PeekMessage(&msg,hwnd,WM_KEYFIRST,WM_KEYLAST,PM_REMOVE));
+                  SendMessage (main_window,WM_COMMAND,IDM_FILE_EXIT,0);
+                  return (0);
+                }
+         }
+         break;                                 // This is necessary for Alt-F4 to continue to work on most dialogs.
 #if    (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
     case WM_KEYUP:
          if (wParam == VK_F23) { block = false; jwp_file->do_key (wParam,false,false); }
@@ -243,11 +263,16 @@ int dont_really_like_the_blockout_but_it_works;
            case VK_RETURN:                      // Return has special meaning (invoke dialog event)
                 if (file->sel.type == SELECT_KANJI) file->convert (CONVERT_RIGHT);
                 jwp_conv.clear ();
+                if (ctrl && file->sel.type == SELECT_CONVERT) { file->selection_clear (); return (0); }
                 SendMessage (GetParent(hwnd),WM_COMMAND,IDSEARCH,0L);       // Used to be IDOK, but was changed to work with PocketPC, which requires IDOK to close some dialogs.
                 return (0);
            case VK_ESCAPE:                      // Escape has special meaning (abort dialog)
                 jwp_conv.clear ();
                 SendMessage (GetParent(hwnd),WM_COMMAND,IDCANCEL,0L);
+                return (0);
+           case VK_F4:                          // Close parent window on Ctrl-F4. Works for most dialogs using this type of control but not Page Layout.
+                if (!ctrl) break;
+                SendMessage (GetParent(hwnd),WM_CLOSE,0,0);
                 return (0);
            case VK_F23:
                 file->do_mouse (WM_RBUTTONDOWN,0,0xffffffff);
@@ -269,7 +294,9 @@ int dont_really_like_the_blockout_but_it_works;
          *((KANJI **) lParam) = kanji;
          return (length);
     case JE_SETHIST:                            // Set a history pointer for this edit control.  Also alows use to set attached history button.
+         if (!lParam) return (0);
          file->history = (JWP_history *) lParam;
+         file->history->reset (file);
          if (wParam) {                                  
            HWND button;                                 // If we have a list button, we will move that button to the edge of the edit control,
            RECT butrect,jecrect,dlgrect;                //   and set the height to match that of the edit control.
@@ -431,17 +458,36 @@ void EUC_buffer::put_kanji (KANJI *kanji,int length) {
 //
 //  and is highlighted.
 //
-//      id -- String table ID
+//      id    -- String table ID
+//      color -- 1 (default) for highlighted, 0 for not highlighted
 //
-void EUC_buffer::put_label (int id) {
-  highlight  (true);
+void EUC_buffer::put_label (int id,int color) {
+  put_label (get_string(id),color);
+}
+
+void EUC_buffer::put_label (TCHAR *s,int color) {
+  highlight  (color);
   clear      ();
   put_char   (KANJI_DASH);
-  put_string (get_string(id));
+  put_string (s);
   put_char   (KANJI_DASH);
   highlight  (false);
   flush      (-1);
   return;
+}
+
+//--------------------------------
+//
+//  Find and delete any labels in a list.
+//
+void EUC_buffer::del_labels () {
+  KANJI *p;
+  int i,leng;
+  for (i = 0; i < list->count; i++) {
+    leng = list->get_text (i,&p);
+    if (leng < 3 || *p != KANJI_DASH || p[leng-1] != KANJI_DASH) continue;
+    list->del_line (i--);               // The post-decrement counteracts the loop increment.
+  }
 }
 
 //--------------------------------
@@ -510,7 +556,7 @@ void EUC_buffer::put_string (tchar *string) {
 void EDIT_list::do_drop (HDROP drop) {
 #ifndef WINCE                           // Windos Ce does not support file drag and drop!
   int  i;           
-  char buffer[SIZE_BUFFER];
+  TCHAR buffer[SIZE_BUFFER];
   for (i = 0; DragQueryFile(drop,i,buffer,SIZE_BUFFER) > 0; i++) {
     import_file (buffer);
   }
@@ -573,18 +619,21 @@ void EDIT_list::do_event (int id) {
            put_kanji  (kbuffer+line_break,length-line_break);
            flush      (-1);
            move_item  (i,j);                                // Move the item.
+           break;                                           // Update buttons.
          }
-         break;
+         return;                                            // No changes so skip button updates. Prevents crashes if user exited program.
     case IDC_EDITLISTDELETE:                // DELETE.
          changed = true;
          move (delete_item(j));
          break;
     case IDC_EDITLISTUP:                    // UP
+         if (j <= 0) break;
          changed = true;
          j = begin_item(j);
          move_item (j,begin_item(j-1));
          break;                             // DOWN
     case IDC_EDITLISTDOWN:
+         if (next_item(j) >= count()) break;
          changed = true;
          move_item (j,next_item(next_item(j)));
          break;
@@ -622,7 +671,7 @@ void EDIT_list::do_event (int id) {
            ofn.Flags             = OFN_FILEMUSTEXIST  | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY  | OFN_EXPLORER;
            ofn.lpstrInitialDir   = currentdir;  // Use Windows CE current directory
 #else WINCE
-           ofn.Flags             = OFN_FILEMUSTEXIST  | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY  | OFN_ALLOWMULTISELECT | OFN_EXPLORER;
+           ofn.Flags             = OFN_FILEMUSTEXIST  | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY  | OFN_ALLOWMULTISELECT | OFN_EXPLORER | OFN_DONTADDTORECENT;
 #endif WINCE
            buffer[0] = 0;
            if (!GetOpenFileName(&ofn)) return;  // User canclled!
@@ -774,7 +823,6 @@ JWP_file::JWP_file (HWND hwnd) {
 //sel.type       = SELECT_NONE;
 //name           = NULL;
 //first = last   = NULL;
-  ime_y          = GetSystemMetrics(SM_CYEDGE);
   new_paragraph (NULL);
   cursor.para    = view_top.para = first;
   cursor.line    = view_top.line = first->first;            
@@ -822,6 +870,7 @@ void JWP_file::edit_set (KANJI *kanji,int length) {
   first->length        = 0;
   cursor.pos           = 0;
   first->first->length = 0;
+  jwp_conv.clear (true);            // Fixes the situation where a mid-conversion kanji is loaded into a dialog (dictionary, search, etc.) but remains in the SELECT_CONVERT state without a candidate bar.
   selection_clear ();
   put_string      (kanji,length);
   redraw_all      ();
@@ -867,8 +916,9 @@ void LIST_line::alloc (int len,KANJI *line) {
 //
 void LIST_line::clear () {
   if (text) free (text);
-  length = 0;
-  text   = NULL;
+  text     = NULL;
+  length   = 0;
+  selected = false;         // Precautionary.
   return;
 }
 
@@ -1144,9 +1194,16 @@ int JWP_list::del_block (int line) {
 //
 //  Deletes the indicated line from the list.
 //
-//      line -- Line to delete.
+//  A Boolean value (defaulting to true) was added to control
+//  whether the current position gets update if it goes out of
+//  range due to the deletion. The update has the side effect of
+//  disabling all line selections, which interferes with multi-line
+//  deletions.
 //
-void JWP_list::del_line (int line) {
+//      line  -- Line to delete.
+//      fixup -- Keeps the current position valid if true (the default value)
+//
+void JWP_list::del_line (int line,bool fixup) {
   LIST_line *data,*data2;
   if (!(data = get_line(line))) return;         // Line does not exist
   if (data->selected) select_count--;           // Keep track of number of selected lines.
@@ -1156,14 +1213,15 @@ void JWP_list::del_line (int line) {
     data2 = get_line(++line);
     que_line (line);
     if (!data2) {
-      data->text = NULL;
-      data->clear ();
+      data->text = NULL;                        // Prevent clear() from freeing this pointer since it got copied into the previous line.
+      data->clear ();                           // Clear last line in list.
       break;
     }
     *data = *data2;
     data  = data2;
   }
   count--;                                      // Decrement count.
+  if (!fixup) return;                           // This keeps move() from changing the selection state of any lines, but you must adjust the current line yourself.
   if (current >= count) move (current-1,false); // Process move.
   return;
 }
@@ -1400,6 +1458,7 @@ int JWP_list::get_text (int line,KANJI **text) {
   if (!(data = get_line(line))) { *text = &none; return (0); }
   i    = data->length;
   kptr = data->text;
+  if (!i || !kptr)              { *text = &none; return (0); }
   if (*kptr == EUC_HIGHLIGHT) { kptr++; i--; }
   *text = kptr;
   return (i);
@@ -1430,6 +1489,9 @@ void JWP_list::insert (int newline,JWP_file *file) {
                                                                 //   the next line begins with a space we do not need to add
                                                                 //   one. 
   if (!select_count) { MessageBeep (MB_ICONASTERISK); return; } // Nothing found so make a warning
+  if (select_count > 1) newline = true;                         // Add a linefeed if pasting multiple lines
+  if (!sel_x1 || sel_pos1 == sel_pos2) newline = true;          // Add a linefeed if pasting entire line(s) (nothing selected)
+  jwp_conv.clear (true);                                        // Fixes problems when attempting to insert text with an active conversion.
   file->selection_clear();                                      // Clear selection so it dosen't get wipped out
   file->undo_start ();                                          // Allow this to be undone
   file->undo_para  (UNDO_QUE);  
@@ -1455,7 +1517,37 @@ void JWP_list::insert (int newline,JWP_file *file) {
   if (newline && new_para) file->do_key (VK_RETURN,false,false);    // Insert end CR when pasting to other file.
   file->undo_end   ();                                  // Done with the undo.
   file->view_check ();
+  file->caret_off ();                                           // Stops the cursor from appearing in the other window, which is distracting and confusing.
   return;
+}
+
+//--------------------------------
+//
+//  Deletes all selected lines.
+//
+void JWP_list::del_selected (void) {
+  int i,j;
+  if (!select_count || !count) return;
+  ASSERT (select_count > 0 && count >= select_count);
+  j = current;
+  for (i = 0; select_count && i < count; i++) {
+    if (!get_line(i)->selected) continue;
+    del_line (i,false);                                     // Delete selected line. The second parameter makes sure the selection won't get interfered with.
+    if (j > i) j--;                                         // Keep track of where the current position should be.
+    i--;                                                    // Counteract the loop increment since the line numbers have changed.
+  }
+  move (j,false);                                           // Set the new current position in the list.
+  return;
+}
+
+//--------------------------------
+//
+//  Gets the selection state of a line.
+//
+BOOL JWP_list::is_selected (int line) {
+  if (!select_count) return (false);
+  ASSERT (count && line < count);
+  return (get_line(line)->selected);
 }
 
 //--------------------------------
@@ -1466,8 +1558,9 @@ void JWP_list::insert (int newline,JWP_file *file) {
 //      pos   -- New current position.
 //      shift -- Set to non-zero if the shift key is held down, or the 
 //               selected region is being extended.
+//      keep  -- Maintain selections.
 //
-void JWP_list::move (int pos,int shift) {
+void JWP_list::move (int pos,int shift,int keep) {
   int        i,j,old;
   KANJI     *kptr;
   LIST_list *list;
@@ -1479,7 +1572,8 @@ void JWP_list::move (int pos,int shift) {
 //
 //  No shift, so clear all selections and make a single selection.
 //
-  if (!shift) {
+  if (keep) ;                               // Do not change selections at all.
+  else if (!shift) {
     selecting = false;                      // Not doing a selection.
     for (j = 0, list = lists; list; list = list->next) {
       for (i = 0; i < LIST_BLOCK; i++) {
@@ -1492,7 +1586,7 @@ void JWP_list::move (int pos,int shift) {
     }
     select_count = 0;
     sel_x1 = sel_xf = 0;                    // Clear selection for a single line
-    select (current,true);
+    select (current,single? true:true);     // We might want to deselect the line under certain (configurable) circumstances in the future.
   }
 //
 //  We are doing an extended select, so pay attetion.
@@ -1701,17 +1795,14 @@ void JWP_list::scroll () {
 //
 //      proc -- Procedure for comparison.
 //
-void JWP_list::sort (int (*proc)(KANJI *buf1,KANJI *buf2)) {
-  KANJI buf1[SIZE_BUFFER],buf2[SIZE_BUFFER];
+void JWP_list::sort (int (*s)(KANJI *buf1,KANJI *buf2),bool rev) {
+  KANJI buf1[SIZE_BIG_BUFFER],buf2[SIZE_BIG_BUFFER];
   int i,j,low;
   for (i = 0; i < count; i = next(i)) {
     get_buffer (buf1,low = i);
     for (j = next(i); j < count; j = next(j)) {
       get_buffer (buf2,j);
-      if ((*proc)(buf1,buf2)) {
-        low = j;
-        get_buffer (buf1,low = j);
-      }
+      if (rev?(*s)(buf2,buf1):(*s)(buf1,buf2)) get_buffer (buf1,low = j);
     } 
     if (low != i) move_block (low,i);
   }
@@ -1719,6 +1810,32 @@ void JWP_list::sort (int (*proc)(KANJI *buf1,KANJI *buf2)) {
   move     (0,false);
   redraw   ();
   return;
+}
+
+//--------------------------------
+//
+//  Delete duplicates.
+//
+//      RETURN -- Number of blocks deleted.
+//
+int JWP_list::deduplicate () {
+  KANJI buf1[SIZE_BIG_BUFFER],buf2[SIZE_BIG_BUFFER];
+  int i,j,low,deleted=0;
+  for (i = 0; i < count; i = next(i)) {
+    get_buffer (buf1,low = i);
+    for (j = next(i); j < count; j = next(j)) {
+      get_buffer (buf2,j);
+      //if (!wcscmp((wchar_t*)buf1,(wchar_t*)buf2)) del_block (j);
+      if (!ntk_compare (buf1,buf2)) {
+        del_block (j);
+        deleted++;
+      }
+    }
+  }
+  SetFocus (window);
+  move     (0,false);
+  redraw   ();
+  return   (deleted);
 }
 
 //--------------------------------
@@ -1802,6 +1919,17 @@ int JWP_list::win_proc (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
 //
 //  Keyboard events.
 //
+    case WM_SYSKEYDOWN:
+         switch (wParam) {
+           MSG msg;
+           case VK_X:
+                if (GetKeyState(VK_MENU) < 0) {
+                  while (PeekMessage(&msg,hwnd,WM_KEYFIRST,WM_KEYLAST,PM_REMOVE));
+                  SendMessage (main_window,WM_COMMAND,IDM_FILE_EXIT,0);
+                  return (0);
+                }
+         }
+         break;                                 // This is necessary for Alt-F4 to continue to work on most dialogs.
     case WM_KEYDOWN:
          int shift,ctrl;
          shift = (GetKeyState(VK_SHIFT)   < 0);
@@ -1817,44 +1945,58 @@ int JWP_list::win_proc (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
                 SendMessage (GetParent(hwnd),WM_COMMAND,IDCANCEL,0L);
                 return (0);
            case VK_HOME:                        // Home -> top of list
-                move (0,shift);
+                move (0,shift,ctrl);
                 return (0);
            case VK_END:                         // End -> Bottom of list
-                move (count,shift);
+                move (count-1,shift,ctrl);
                 return (0);
            case VK_UP:                          // Up -> Up one line
                 sel_x1 = 0;
-                if (ctrl) SendMessage (GetParent(hwnd),WM_COMMAND,IDC_EDITLISTUP,0); 
+                if (ctrl && single) SendMessage (GetParent(hwnd),WM_COMMAND,IDC_EDITLISTUP,0);    // If present, activate the Up control, which moves lines upward in user dictionaries/conversions.
+                else if (ctrl && !single && !shift)     move (current-1,false,true);              // Change the current line without affecting any selections.
                 else if (jwp_config.cfg.page_mode_list) move (current+1-lines,shift);
                 else move (current-1,shift);
                 return (0);
            case VK_DOWN:                        // Donw -> Down one line
                 sel_x1 = 0;
-                if (ctrl) SendMessage (GetParent(hwnd),WM_COMMAND,IDC_EDITLISTDOWN,0); 
+                if (ctrl && single) SendMessage (GetParent(hwnd),WM_COMMAND,IDC_EDITLISTDOWN,0); 
+                else if (ctrl && !single && !shift)     move (current+1,false,true);
                 else if (jwp_config.cfg.page_mode_list) move (current+lines-1,shift);
                 else move (current+1,shift);
                 return (0);
-           case VK_PRIOR:                       // Page up -> Up one page
-                move (current+1-lines,shift);
+           case VK_PRIOR:                       // Page Up -> Back one page. Hold Ctrl to maintain current selection(s) or for easier scanning through a multi-page list.
+                move (current+1-lines,shift,ctrl);
                 return (0);
-           case VK_NEXT:                        // Page down -> Down one page
-                move (current+lines-1,shift);
+           case VK_NEXT:                        // Page Down -> Forward one page. Hold Ctrl to maintain current selection(s) or for easier scanning through a multi-page list.
+                move (current+lines-1,shift,ctrl);
                 return (0);
            case VK_DELETE:                      // Delete -> Delete entry (single select list only)
                 SendMessage (GetParent(hwnd),WM_COMMAND,IDC_EDITLISTDELETE,0);
                 return (0);
            case VK_SPACE:                       // Space -> Add entry (single select list only)
+                if (!single) {
+                  if (ctrl) select (current,!is_selected(current));                               // Toggle selection state of current line.
+                  else      select (current,true);                                                // Select current line.
+                  return (0);
+                }
                 SendMessage (GetParent(hwnd),WM_COMMAND,IDC_EDITLISTEDIT,0);
                 return (0);
            case VK_INSERT:                      // Insert -> Add entry (single select list only)
                 if (ctrl) clip_copy ();         //           Ctrl insert does a copy to clipboard
                   else SendMessage (GetParent(hwnd),WM_COMMAND,IDC_EDITLISTADD,0);
                 return (0);
+           case VK_F4:                          // Close parent window on Ctrl-F4. Toggle mode on F4.
+                if (ctrl) SendMessage (GetParent(hwnd),WM_CLOSE,0,0);
+                  else    set_mode    (MODE_TOGGLE);
+                return (0);
            case VK_F23:
                 SendMessage (hwnd,WM_RBUTTONDOWN,0,0xffffffff);
                 return (0);
-           case VK_A:                           // ctrl+shift+A -> Select all.
-                if (ctrl) {
+           case VK_6:                           // This is intended to be the caret key, not six.
+                if (ctrl) set_mode (MODE_TOGGLE);
+                return (0);
+           case VK_A:                           // Ctrl-A -> Select all.
+                if (ctrl && count) {            // Don't bother if the list is empty.
 SelectAll:;
                   i = top;
                   j = current;   
@@ -1866,15 +2008,37 @@ SelectAll:;
                   redraw ();
                   return (0);
                 }
+                else if (ctrl) set_mode (MODE_ASCII);
                 break;
            case VK_C:                           // ctrl+Insert/ctrl+C -> Copy to clipboard
-                if (ctrl) {
+                if (ctrl) {                     // NOTE: Previous version of code only called clip_copy() and returned.
+                  int selec = is_selected (current);
+                  if (!selec) select (current, true);
                   clip_copy ();
-                  return    (0);
+                  if (!selec) select (current, false);
+                  return (0);
                 }
                 break;
            case VK_I:
-                if (ctrl) kanji_info (hwnd,last_char);
+                if (!ctrl) break;
+                kanji_info (hwnd,last_char);
+                return (0);
+           case VK_J:                           // Ctrl-J -> Change input mode. Might as well.
+                if (ctrl) set_mode (MODE_JASCII);
+                return (0);
+           case VK_K:                           // Ctrl-K -> Change input mode. This is a convenience function for immediately switching back after an ASCII dictionary search.
+                if (ctrl) set_mode (MODE_KANJI);
+                return (0);
+           case VK_L:                           // Ctrl-L or F5 -> Examine kanji radicals.
+                if (!ctrl) break;
+           case VK_F5:
+                radical_lookup (hwnd,last_char);
+                return (0);
+           case VK_D:
+                if (!ctrl) break;
+           case VK_F6:
+                HWND hdlg,hctl;
+                if (hctl = GetDlgItem(hdlg=GetParent(hwnd),IDC_DDSTRING)) SetDialogFocus (hdlg,hctl);
                 return (0);
            case VK_F:
            case VK_S:
@@ -1884,6 +2048,7 @@ SelectAll:;
                 return               (0);
            case VK_N:
                 if (!ctrl) break;
+           case VK_F3:
            case VK_F9:
                 jwp_search.do_next (this);
                 return             (0);
@@ -1891,6 +2056,82 @@ SelectAll:;
            case VK_LEFT:
                 SendMessage (GetParent(hwnd),WMU_EDITFROMLIST,wParam,lParam);
                 return      (0);
+           case VK_E:                               // Copy headword to clipboard.
+           case VK_R:                               // Copy reading to clipboard.
+           case VK_W:                               // Select first word in current line.
+                if (single || !ctrl) return (0);    // Ignore single-select lists (e.g. user conversion/dictionary)
+                if (wParam == VK_W && shift) {      // Select entire line for Ctrl-Shift-W
+                  move (current, 0);
+                  return (0);
+                }
+                KANJI c,*kptr;
+                int cc, klen;
+                klen = get_text(current,&kptr);     // Get string associated with current line.
+                if (!klen) return (0);
+                sel_pos1 = sel_pos2 = sel_x1 = 0;   // Reset selection.
+                //
+                //  VK_E -- Copy dictionary headword (or first word in line) to clipboard, or empty the clipboard if not found.
+                //
+                //  We don't care if the resulting selection is invalid. That will empty the clipboard.
+                //  At this point we're just setting up the selection. The copy will be done later.
+                //
+                if (wParam == VK_E || wParam == VK_R) {
+                  for (i = 0; i < klen; i++) {          // Find end of headword (will also ignore lines that start with whitespace).
+                    cc = char_class(kptr[i]);
+                    if (cc == CLASS_SPACE || cc == CLASS_JUNK) break;
+                  }
+                  sel_pos2 = i;                         // Selection is exclusive of character in final position.
+                }
+                //
+                //  VK_R -- If found, copy dictionary reading to clipboard, else use previous selection (dictionary headword or invalid).
+                //
+                //  This could furnish unintended results if the line is malformed, but who cares?
+                //
+                if (wParam == VK_R) {
+                  for (; i < klen; i++) {               // Find start/end of reading, if present. It's fine if the resulting selection is invalid.
+                    c = kptr[i];
+                    if (!c) break;
+                    if (c == KANJI_LBRACKET || c == KANJI_LBRACE || c == '[') { sel_pos1 = ++i; sel_pos2 = 0; }
+                    if (c == KANJI_RBRACKET || c == KANJI_RBRACE || c == ']') { sel_pos2 =   i; break; }
+                  }
+                }
+                //
+                //  Shared epilog for Ctrl-E & Ctrl-R. Write to clipboard and return.
+                //
+                if (wParam == VK_E || wParam == VK_R) {
+                  int selec = is_selected (current);
+                  if (!selec) select (current, true);   // Ditto --v
+                  sel_x1 = 1;                           // sel_x1 must be non-zero or the selected region will be ignored.
+                  clip_copy ();                         // Copy to clipboard (or empty it) then reset selection.
+                  sel_x1 = 0;
+                  if (!selec) select (current, false);  // Revert selection state.
+                  return (0);
+                }
+                //
+                //  VK_W -- Select the first word in the line.
+                //
+                //  This behavior is different from when Ctrl-W is used elsewhere.
+                //  Selecting the next word upon subsequent invocations is a possible future expansion.
+                //
+                if (!is_selected(current)) select (current, true);
+                sel_x1 = list_font.x_offset;
+                for (sel_pos1 = 0; sel_pos1 < klen; sel_pos1++) {           // Skip leading whitespace.
+                  cc = char_class(kptr[sel_pos1]);
+                  if (cc != CLASS_SPACE && cc != CLASS_JUNK) break;
+                  sel_x1 = list_font.hadvance(sel_x1,kptr[sel_pos1]);
+                  continue;
+                }
+                sel_x2 = sel_x1;
+                for (sel_pos2 = sel_pos1; sel_pos2 < klen; sel_pos2++) {    // Find end of word.
+                  cc = char_class(kptr[sel_pos2]);
+                  if (cc == CLASS_SPACE || cc == CLASS_JUNK) break;
+                  sel_x2 = list_font.hadvance(sel_x2,kptr[sel_pos2]);
+                }
+                if (sel_pos1 == sel_pos2) return (0);
+                sel_xf   = sel_x1;      // Set fixed point.
+                sel_posf = sel_pos1;    // Associated character index.
+                que_line (current);     // Redraw line.
+                return (0);
            default:
                 break;
          }
@@ -1902,6 +2143,7 @@ SelectAll:;
     case WM_CHAR:
          ctrl  = (GetKeyState(VK_CONTROL) < 0);
          if (ctrl || (wParam == '\t')) return (0);      // Let WM_KEYDOWN handle this one.
+         if (        (wParam ==  ' ')) return (0);
          SendMessage (GetParent(hwnd),WMU_CHARFROMLIST,wParam,lParam);
          return      (0);
 #ifndef WINCE
@@ -2283,18 +2525,34 @@ JWP_history::~JWP_history () {
 //      string -- String to be added.
 //      length -- Length of the string.
 //
-void JWP_history::add (KANJI *string,int length) {
+int JWP_history::add (KANJI *string,int length) {
   int i;
-  if  (!buffer || !length) return;                                          // No string so don't do anyting.
+  if  (!buffer || !length || !string) return (0);                           // No string so don't do anyting.
   if  (length > size) length = size-1;                                      // Handle case when user sends us a very long string.
   i = find(string,length);                                                  // Is this in the list already.
-  if      (i ==  0) return;                                                 // first entry
+  if      (i ==  0) return (0);                                             // Found at the first entry.
   else if (i != -1) remove (i);                                             // Some other entry.
   while ((count == ptrmax) || (pointers[count]+length >= size)) count--;    // Create space for the new string.
   KANJIMOVE (buffer+length,buffer,size-length);                             // Move the old data.
   for (i = ptrmax; i > 0; i--) pointers[i] = pointers[i-1]+length;
   KANJIMOVE (buffer,string,length);                                         // Copy the new data.
   count++;
+  return (1);
+}
+
+//--------------------------------
+//
+//  Searches for a string in the history and deletes it if found. Based on the add() method.
+//
+//      string -- String to be deleted.
+//      length -- Length of the string.
+//
+void JWP_history::safe_remove (KANJI *string,int length) {
+  int i;
+  if  (!buffer || !length) return;
+  if  (length > size) length = size-1;
+  i = find(string,length);
+  if (i != -1) remove (i);
   return;
 }
 
@@ -2347,7 +2605,7 @@ int JWP_history::alloc (int newsize) {
 //  Dialog box handler for the listory list.  Not really much to do.
 //
 int JWP_history::dlg_history (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam) {
-  int        i;
+  int        i,j;
   JWP_list  *list;
   switch (message) {
     case WM_INITDIALOG:
@@ -2355,7 +2613,7 @@ int JWP_history::dlg_history (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam
          SetWindowText (hwnd,get_string(text_id));
          list = (JWP_list *) SendDlgItemMessage(hwnd,IDC_HLLIST,JL_GETJWPLIST,0,0);
          for (i = 0; i < count; i++) list->add_line (LENGTH(i),BUFFER(i));
-         SetFocus (GetDlgItem(hwnd,IDC_HLLIST));
+         SetDialogFocus (hwnd,IDC_HLLIST);
          return (false);
     case WM_HELP:
          do_help (hwnd,IDH_INTERFACE_JEDIT);
@@ -2373,33 +2631,33 @@ int JWP_history::dlg_history (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam
            case IDC_HLLIST:
            case IDOK:
                 list = (JWP_list *) SendDlgItemMessage(hwnd,IDC_HLLIST,JL_GETJWPLIST,0,0);
-                EndDialog (hwnd,list->current);
+                EndDialog (hwnd, list->current >= list->count? -1: 1+list->current);      // The +1 is to keep 0 from being returned, since that is the value used if you quit the program during the dialog.
                 return    (0);
            case IDCANCEL:
                 EndDialog (hwnd,-1);
                 return    (0);
+           case IDC_EDITLISTDELETE:                 // Note that this isn't actually an edit list.
+                list = (JWP_list *) SendDlgItemMessage(hwnd,IDC_HLLIST,JL_GETJWPLIST,0,0);
+                ASSERT (count == list->count);
+                if (!count || !list->count) return (0);
+                if (!list->get_select_cnt()) {      // If nothing selected then delete current line.
+                  remove (list->current);           // Remove from history.
+                  list->del_line (list->current);   // Remove the line from the list control and redraw.
+                  return (0);
+                }
+                j = list->current;
+                for (i = 0; i < list->count; i++) {
+                  if (!list->is_selected(i)) continue;
+                  list->del_line (i,false);         // Delete selected line. The second parameter makes sure the selection won't get interfered with.
+                  remove (i);                       // Remove corresponding history line.
+                  if (j > i) j--;                   // Keep track of where the current position should be.
+                  i--;                              // Counteract the loop increment since the line numbers have changed.
+                }
+                list->move (j,false);               // Set the new current position in the list. This is only needed when deleting multiple lines.
+                return (0);
          }
   }
   return (false);
-}
-
-//--------------------------------
-//
-//  This routine handles pressing the donw button in the history buffer.  This has the effect of scrolling forward
-//  If at the end of the list a blank line will be generated.  If you pres this again, the list window will be open.
-//
-//      file -- Should point to JWP_file class for the Japanese edit constrol.
-//
-void JWP_history::down (JWP_file *file) {
-  if (!buffer) return;
-  if (file->changed) { list (file); return; }
-  last--;
-  if (last >= 0) file->edit_set (BUFFER(last),LENGTH(last));
-    else {
-      file->edit_set (buffer,0);
-      file->change   ();
-    }
-  return;
 }
 
 //--------------------------------
@@ -2413,10 +2671,11 @@ void JWP_history::down (JWP_file *file) {
 //
 int JWP_history::find (KANJI *string,int length) {
   int i,j;
-  if (!length) return (-1);
+  if (!length || !string) return (-1);
   for (i = 0; i < count; i++) {
-    for (j = 0; (j < LENGTH(i)) && (string[j] == BUFFER(i)[j]); j++);
-    if (j == LENGTH(i)) return (i);
+    if (LENGTH(i) != length) continue;
+    for (j = 0; (j < length) && (string[j] == BUFFER(i)[j]); j++);
+    if (j == length) return (i);
   }
   return (-1);
 }
@@ -2429,8 +2688,9 @@ int JWP_history::find (KANJI *string,int length) {
 //  
 void JWP_history::list (JWP_file *file) {
   int i;
-  i = JDialogBox (IDD_HISTORY,file->window,(DLGPROC) dialog_history,(LPARAM) this);
-  if (i != -1) {
+  if (!buffer || !pointers) return;   // History cache size set to zero?
+  i = -1+JDialogBox (IDD_HISTORY,file->window,(DLGPROC) dialog_history,(LPARAM) this);
+  if (i >= 0 && i < count) {
     file->edit_set (BUFFER(i),LENGTH(i));
     file->change   ();
   }
@@ -2463,6 +2723,7 @@ int JWP_history::read (HANDLE hfile) {
 //
 void JWP_history::remove (int index) {
   int i,length;
+  if (index >= count || count <= 0) { ALERT(); return; }
   length = LENGTH(index);
   KANJIMOVE (BUFFER(index),BUFFER(index+1),size-pointers[index+1]);
   for (i = index; i < count; i++) pointers[i] = pointers[i+1]-length;
@@ -2478,15 +2739,57 @@ void JWP_history::remove (int index) {
 //      file -- Should point to JWP_file class for the Japanese edit constrol.
 //
 void JWP_history::up (JWP_file *file) {
-  if (!buffer) return;                                                      // No history so exit.
-  if      (!file->changed) last++;                                          // Line not changed so move back one.
+  if (!buffer || !count) return;                                            // No history so exit.
+  ASSERT (count > 0);
+  if (!file->changed) last++;                                               // Line not changed so move back one.
   else if (0 == find(file->edit_gettext(),file->edit_getlen())) last = 1;   // Current line is the same as top of buffer, so skip back one.
   else {                                                                    // Push this line.
-    add (file->edit_gettext(),file->edit_getlen());
-    last = 0; 
+    if (add (file->edit_gettext(),file->edit_getlen()) > 0)
+      last = 1;                                                             // Move backward past the history item we just added (which is now at index 0).
+    else
+      last = 0;                                                             // Go to start of history if the addition failed (usually because the line is blank).
   }
-  if (last >= count) last = count-1;                                        // Copy history to edit control.
-  file->edit_set (BUFFER(last),LENGTH(last));
+  if (last >= count) last = count-1;
+  if (last < 0)      last = 0;
+  ASSERT (last < count);
+  file->edit_set (BUFFER(last),LENGTH(last));                               // Copy history to edit control. Also clears the "changed" flag.
+  return;
+}
+
+//--------------------------------
+//
+//  This is intended to be called whenever a Japanese edit control with a history buffer is created.
+//
+//      file -- The JWP_file object for the Japanese edit control.
+//
+void JWP_history::reset (JWP_file *file) {
+  file->changed = false;
+  last = -1;
+  return;
+}
+
+//--------------------------------
+//
+//  This routine handles pressing the down button in the history buffer.  This has the effect of scrolling forward.
+//  If at the start of the histoy list, a blank line will be generated.  And if pressed once more, the list window will open.
+//
+//      file -- Should point to JWP_file class for the Japanese edit constrol.
+//
+void JWP_history::down (JWP_file *file) {
+  if (!buffer) return;
+  ASSERT (last >= -1 && last < count);
+  if (file->changed) last = -1;                       // I guess this gives you a means to jump back to the start of the history.
+  if (last == -1) {
+    list (file);                                      // Open history list window.
+    return;
+  }
+  if (--last < 0) {                                   // Move "forward" in the history.
+    last = -1;                                        // This is the pseudo-index for the blank history line.
+    file->edit_set (buffer,0);
+    file->change   ();
+  }
+  else if (count > 0 && last < count)                 // Make sure this is a valid history line.
+    file->edit_set (BUFFER(last),LENGTH(last));       // Display history line. Also clears the "changed" flag.
   return;
 }
 
@@ -2502,8 +2805,9 @@ void JWP_history::up (JWP_file *file) {
 int JWP_history::write (HANDLE hfile) {
   unsigned long done,zero = 0;
   int i;
+  if (!jwp_config.cfg.save_history) count = 0;
   WriteFile (hfile,&count,sizeof(int),&done,NULL);
-  if (pointers) WriteFile (hfile,pointers,jwp_config.cfg.history_size*sizeof(KANJI),&done,NULL);
+  if (pointers && jwp_config.cfg.save_history) WriteFile (hfile,pointers,jwp_config.cfg.history_size*sizeof(KANJI),&done,NULL);
     else {
       for (i = 0; i < jwp_config.cfg.history_size; i++) WriteFile (hfile,&zero,2,&done,NULL);
     }

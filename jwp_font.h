@@ -38,6 +38,11 @@ typedef unsigned short KANJI;       // Type for a kanji/kana character.
 
 //#define ONLY_16                     // Allows only the F16X16.F00 kanji font.  This allows some optimizations.
 
+#define HADV_ORIG 0
+#define HADV_START -1
+#define HADV_PEEK -2
+#define HADV_CONT 1
+
 //-------------------------------------------------------------------
 //
 //  class KANJI_font.
@@ -59,6 +64,7 @@ public:
   short width,height;       // height and witdth of font
   short leading;            // Vertial gaps between lines
   short spacing;            // Horizontal gaps between characters.
+  short hshift;             // Shift used in redering characters.
   byte  truetype;           // Indicates this is a TrueType font.
   byte  vertfont;           // Vertical font.
   void  virtual draw       (HDC hdc,int jis,int x,int y) = 0;   // Render character
@@ -86,7 +92,6 @@ private:
   int   find_kanji  (int index,HDC hdc,COLORREF &color);    // Find a kanji.  Load the kanji from disk if necessary
 
   short   holes;                // Indicates font has holes.
-  short   hshift;               // Shift used in redering characters.
   short   bmsize;               // Size of bitmap in memory bytes (per character).
   short   bmfilesize;           // Size of bitmap in file bytes (per character).
   char   *bitmaps;              // Font's bitmap data
@@ -113,7 +118,6 @@ public:
 private:
   void  close         (void);                                       // Closes a font.
   HFONT   font;                 // TrueType font structure.
-  short   hshift;               // Shift used in redering characters.
   short   vshift;               // Vertical shift for rendering characters
 #ifndef WINCE                   // Windows CE does not use gylph addressing for TrueType fonts
   char   *cmap;                 // Copy of the cmap structure for this font.
@@ -127,6 +131,7 @@ private:
   ushort  vcount;               // Number of vertical replacement glyphs
   ushort *from;                 // Glphys to be replaced.
   ushort *to;                   // replacement glyphs.
+  int     bad;                  // Pre-calculated font code for KANJI_BAD.
 #endif WINCE
 };
 
@@ -163,7 +168,7 @@ public:
 
   void  close      (void);                  // Close the font.
   void  copy       (class JWP_font *font);  // Duplicates a particular font.
-  int   hadvance   (int x,int ch);          // Advance a cursor horizontaly by a single character.
+  int   hadvance   (int x,int ch,int control=0);                      // Advance a cursor horizontaly by a single character.
   int   open       (TCHAR *name,int size,int cache,HDC hdc,int vert); // Open and initialize the font.
   HFONT open_ascii (tchar *face);           // Open an ascii font.
 

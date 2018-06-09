@@ -104,7 +104,7 @@
 //
 
 //
-//  SUPORT_HALFKATA -- If defined allows suport for half width katakana
+//  SUPPORT_HALFKATA - If defined allows suport for half width katakana
 //                     strings used in Shift-JIS and EUC encodings.  If 
 //                     not defined half-width katakana sequences will not
 //                     be read.  These sequences do not appear to be used
@@ -367,13 +367,13 @@ int unicode2jis (int ch,int bad) {
   if ((ch >= 0x30a1) && (ch <= 0x30f6)) return (ch-0x30a1+0x2521);  // Katakana
   if ((ext_unicode != cp1253) && (ch >= 0x0391) && (ch <= 0x03c9)) {// Greek
     if (ch <= 0x03a1) return (ch-0x0391+0x2621);
-    if (ch == 0x03a2) return (0);
+    if (ch == 0x03a2) return (bad);
     if (ch <= 0x03a9) return (ch-0x0392+0x2621);
-    if (ch <  0x03b1) return (0);
+    if (ch <  0x03b1) return (bad);
     if (ch <= 0x03c1) return (ch-0x0391+0x2621);
-    if (ch == 0x03c2) return (0);
+    if (ch == 0x03c2) return (bad);
     if (ch <= 0x03c9) return (ch-0x0392+0x2621);
-    return (0);
+    return (bad);
   }
   if (ext_unicode != cp1251) {                                      // Cyrillic
     if (ch == 0x0401) return (0x2727);                                
@@ -408,9 +408,22 @@ int unicode2jis (int ch,int bad) {
 //   in the JASCII table, and if we move this before the misc codes they will not be found!    
 //
   if ((ch >= 0xff10) && (ch <= 0xff5a)) return (ch-0xff10+0x2330);  // Japanese ASCII.
+//
+//  This converts Unicode's half-width katakana characters into full-width the same way as the SJIS/EUC conversion routines do except it does NOT attempt to read ahead in order to compose voiced morae.
+//
+#ifdef SUPPORT_HALFKATA
+  if (ch >= 0xFF61 && ch <= 0xFF9F) {                               // Half-width katakana. Note that there are no precomposed characters in this set!
+    extern byte mtable[][2];
+    int c1,c2;
+    c1 = mtable[ch-0xFF61][0];
+    c2 = mtable[ch-0xFF61][1];
+    sjis2jis (&c1,&c2);
+    return (c1 << 8 | c2);
+  }
+#endif
   if ((ch == 0xfeff) || (ch == 0xfffe)) return (ch);                // UNICODE file markers.
   return (bad);                                                     // Invalid or untranslated UNICODE
-}                               
+}
 
 //--------------------------------
 //
@@ -527,7 +540,7 @@ JIS_convert jis_convert;    // Class instance.
 #define JIS_SS2 142         // Half-width katakana marker.
 
 #define IS_EUC(c)       (((c) >= 161) && ((c) <= 254))      // EUC code for kanji
-#define IS_HALFKATA(c)  (((c) >= 161) && ((c) <= 223))      // Range for half width katakana
+#define IS_HALFKATA(c)  (((c) >= 161) && ((c) <= 223))      // Range for half-width katakana (0xA1 - 0xDF).
 #define IS_SJIS1(c)    ((((c) >= 129) && ((c) <= 159)) || (((c) >= 224) && ((c) <= 239)))   // JIS set #1
 #define IS_SJIS2(c)     (((c) >= 64 ) && ((c) <= 252))      // JIS set #2
 #define IS_MARU(c)      (((c) >= 202) && ((c) <= 206))      // Half-width katakana codes like pa, po, etc.
@@ -651,13 +664,8 @@ int JIS_convert::get_bits (int count) {
 //  I got this routine from Ken R. Lunde's jconv.c and have reformated
 //  it and changed the style of the code slightly.  
 //
-#ifdef SUPORT_HALFKATA
-void JIS_convert::half2full (int *p1,int *p2) {
-  int junk;
-  int c1     = *p1;
-  int maru   = false;
-  int nigori = false;
-  static byte mtable[][2] = {
+#ifdef SUPPORT_HALFKATA
+  byte mtable[][2] = {
     {129,66 },{129,117},{129,118},{129,65 },{129,69 },{131,146},{131,64 },
     {131,66 },{131,68 },{131,70 },{131,72 },{131,131},{131,133},{131,135},
     {131,98 },{129,91 },{131,65 },{131,67 },{131,69 },{131,71 },{131,73 },
@@ -669,6 +677,11 @@ void JIS_convert::half2full (int *p1,int *p2) {
     {131,136},{131,137},{131,138},{131,139},{131,140},{131,141},
     {131,143},{131,147},{129,74 },{129,75 }
   };
+void JIS_convert::half2full (int *p1,int *p2) {
+  int junk;
+  int c1     = *p1;
+  int maru   = false;
+  int nigori = false;
 //
 //  Merged routine used with the half2full() function.  This procedure
 //  makes sure that you will be able to undo the next two characters
@@ -677,7 +690,8 @@ void JIS_convert::half2full (int *p1,int *p2) {
 //  are too few bytes, the contents of the buffer are shifted, and more 
 //  data is read into the upper part of the buffer.
 //
-  if ((position+1 >= size) && reload()) return;
+  *p2 = JIS_EOF;                                      // Make sure this is consistent in case we're at the end of the input.
+  if ((position+1 >= size) && reload()) goto Convert; // No second character - jump directly to conversion.
 //
 //  Look for nigori (ten-ten) or maru characters.
 //
@@ -717,6 +731,7 @@ void JIS_convert::half2full (int *p1,int *p2) {
     else
       unget_char();
   }
+Convert:
 //
 //  Convert to Shift-JIS code
 //
@@ -738,7 +753,7 @@ void JIS_convert::half2full (int *p1,int *p2) {
   sjis2jis (p1,p2);
   return;
 }
-#endif SUPORT_HALFKATA
+#endif SUPPORT_HALFKATA
 
 //--------------------------------
 //
@@ -797,7 +812,7 @@ int JIS_convert::input_char () {
                    }
                }
                ch = get_char();                                         // Get next character.
-             };
+             }
              return (JIS_EOF); 
            }
       case FILETYPE_JFC:
@@ -821,30 +836,33 @@ int JIS_convert::input_char () {
            return (unicode2jis(ch,KANJI_BAD));                      // I used to return the UNICODE value, but now we return KANJI_BAD.
       case FILETYPE_JFCEUC:
       case FILETYPE_EUC:
-           if (IS_EUC(ch)) return (((ch << 8) | get_char()) & 0x7f7f);  // Kanji code
-#ifdef SUPORT_HALFKATA
+           if (IS_EUC(ch)) {
+             if ((c2 = get_char()) < 0) return (KANJI_BAD);
+             return (((ch << 8) | c2) & 0x7f7f);    // Kanji code
+           }
+#ifdef SUPPORT_HALFKATA
            else if (ch == JIS_SS2) {                // Half-width katakana
-             c2 = get_char();
+             if ((c2 = get_char()) < 0) return (KANJI_BAD);
              if (IS_HALFKATA(c2)) {
                ch = c2;
                half2full (&ch,&c2);
                return ((ch << 8) | c2);
              }
            }
-#endif SUPORT_HALFKATA
+#endif SUPPORT_HALFKATA
            return (ch);                             // Ascii fall-through
       case FILETYPE_SJS:
            if (IS_SJIS1(ch)) {                      // Kanji character
-             c2 = get_char();
+             if ((c2 = get_char()) < 0) return (KANJI_BAD);
              if (IS_SJIS2(c2)) sjis2jis (&ch,&c2);
              return ((ch << 8) | c2); 
            }
-#ifdef SUPORT_HALFKATA
+#ifdef SUPPORT_HALFKATA
            else if (IS_HALFKATA(ch)) {              // Half-width katakana
              half2full (&ch,&c2);
              return ((ch << 8) | c2);
            }
-#endif SUPORT_HALFKATA
+#endif SUPPORT_HALFKATA
            return (ch);                             // Ascii fall through
       case FILETYPE_JIS:
       case FILETYPE_OLD:
@@ -863,6 +881,17 @@ int JIS_convert::input_char () {
            }
     }
   }
+}
+
+
+// This is intended to improve Unicode autodetection by allowing certain unconvertible characters occasionally found in Japanese text.
+static bool excusable (int c) {
+  if (c < 0 || c > 0xFFFF) return (false);
+  switch (c) {
+    case 0x2027:      // hyphenation point
+      return (true);  // Excuse certain Unicode characters which derail clipboard autodetection because they don't map to JIS.
+  }
+  return (false);
 }
 
 //--------------------------------
@@ -886,7 +915,10 @@ int JIS_convert::is_unicode () {
   if (ch == 0xfeff) { charsize = csize; return (FILETYPE_UNICODE ); }   // This is a unicode file because of the ID 
   if (ch == 0xfffe) { charsize = csize; return (FILETYPE_UNICODER); }   // Unicode reverced byte order flag.
   while (ch != JIS_EOF) {
-    if (!unicode2jis(ch,0)) { charsize = csize; return (false); }       // Not a unicode character!
+    if (!unicode2jis(ch,0) && !excusable(ch)) {                         // Does this character lack a JIS equivalent?
+      charsize = csize;
+      return (false);                                                   // Assume text is not Unicode.
+    }
     if ((ch & 0x8080) != 0x8080) eucsjis = false;                       // A non-euc/shift-jis character.
     ch = get_char();
   }

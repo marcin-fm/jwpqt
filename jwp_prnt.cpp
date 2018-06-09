@@ -807,8 +807,8 @@ static HDC open_printer () {
   }
   devmode  = (DEVMODE  *) GlobalLock(hDevMode);
   devnames = (DEVNAMES *) GlobalLock(hDevNames);
-  hdc = CreateIC (((char *) devnames)+devnames->wDriverOffset,((char *) devnames)+devnames->wDeviceOffset,
-                  ((char *) devnames)+devnames->wOutputOffset,devmode);
+  hdc = CreateIC (((tchar *) devnames)+devnames->wDriverOffset,((tchar *) devnames)+devnames->wDeviceOffset,
+                  ((tchar *) devnames)+devnames->wOutputOffset,devmode);
   GlobalUnlock (hDevMode);
   GlobalUnlock (hDevNames);
   return (hdc);
@@ -1071,7 +1071,7 @@ CountDone:;
   ABC        abc[256];          // Used to get font width.
   int        widths[256];       // Calculated font widths in device units.
   memset (&lf,0,sizeof(lf));    // Create the font.
-  strcpy (lf.lfFaceName,jwp_config.cfg.ascii_font.name);
+  _tcscpy (lf.lfFaceName,jwp_config.cfg.ascii_font.name);
   lf.lfHeight = -pc.fheight;
   if ((font = CreateFontIndirect(&lf))) {	            // Did we get the font!
 //  
@@ -1088,7 +1088,7 @@ CountDone:;
     docinfo.cbSize      = sizeof(docinfo);
     docinfo.lpszDocName = name;							// Use file name as print job name.
     devnames = (DEVNAMES *) GlobalLock(hDevNames);
-    docinfo.lpszOutput = ((char *) devnames)+devnames->wOutputOffset;
+    docinfo.lpszOutput = ((tchar *) devnames)+devnames->wOutputOffset;
 //###    if (printdlg.Flags & PD_PRINTTOFILE) docinfo.lpszOutput = "FILE:";  // Do print to file
 //### Not really happy that we get an old style dailog box for the FILE: printer.
 //

@@ -113,11 +113,11 @@ struct compound_kana compound_kana[] = {
   { "che" , { 0x41,0x27 } },
   { "cho" , { 0x41,0x67 } },
   { "tsu" , { 0x44,0x0  } },
-  { "tzu" , { 0x44,0x0  } },
-  { "dsu" , { 0x45,0x0  } },
+  { "tzu" , { 0x44,0x0  }, 1 },   // I'd expect this to be 0x45 but that would be inconsistent from +tzu below.
+  { "dsu" , { 0x45,0x0  }, 1 },
   { "dzu" , { 0x45,0x0  } },
   { "+tsu", { 0x43,0x0  } },
-  { "+tzu", { 0x43,0x0  } },
+  { "+tzu", { 0x43,0x0  }, 1 },
   { "la"  , { 0x69,0x0  } },
   { "li"  , { 0x6a,0x0  } },
   { "lu"  , { 0x6b,0x0  } },
@@ -151,7 +151,37 @@ struct compound_kana compound_kana[] = {
   { "dhu" , { 0x47,0x25 } },
   { "dhe" , { 0x47,0x27 } },
   { "dho" , { 0x47,0x29 } },
-  
+//
+// Keep in mind that the state table must be modified to accommodate new conversions, such as the following.
+//
+  { "ca"  , { 0x2B,0x0 }, 1 },    // ka
+  { "cu"  , { 0x2F,0x0 }, 1 },    // ku
+  { "ce"  , { 0x3B,0x0 }, 1 },    // se - This is common in IMEs because 'ce' in English almost always represents an 's' sound.
+  { "co"  , { 0x33,0x0 }, 1 },    // ko
+//{ "ca"  , { 0x41,0x63 } },      // These four are for consistency with 'ci' only. Might lead to bad habits, so replaced with the above.
+//{ "cu"  , { 0x41,0x65 } },
+//{ "ce"  , { 0x41,0x27 } },
+//{ "co"  , { 0x41,0x67 } },
+  { "dji" , { 0x42,0x0  } },
+  { "dzi" , { 0x42,0x0  } },
+//
+// The remainder are unfortunate side-effects of the semi-hardcoded state table.
+// It's easier to include a few weird conversions / kludges than redesign everything.
+// I'd say a precedent has already been established with "tzu" and "dsu" above.
+//
+  { "tji" , { 0x42,0x0  }, 1 },
+  { "tzi" , { 0x42,0x0  }, 1 },
+//
+// These won't be noticed by the user since they mimic the behavior of invalid input state transitions.
+//
+  { "dsi" , { 0x24,0x0  }, 1 },
+  { "tsi" , { 0x24,0x0  }, 1 },
+//
+// These sequences would output "ju" in the old version because the t/d would get kicked out as soon as you typed j. The following conversions mimic the new expected behavior for that state.
+//
+  { "dju" , { 0x26,0x0  }, 1 },
+  { "tju" , { 0x26,0x0  }, 1 },
+
   { ""    , { 0x00,0x00 } }
 };
 
@@ -314,9 +344,55 @@ int char_class (int ch) {
   if (ISKATAKANA(ch)) return (CLASS_KATAKANA);
   if (ISHIRAGANA(ch)) return (CLASS_HIRAGANA);
   if (ISJASCII(ch))   return (CLASS_JASCII);
+  if ((unsigned)(ch+1) > 256) return (CLASS_KPUNCT); // Avoid isalnum() debugging assertion.
   if (isalnum(ch))    return (CLASS_ASCII);
   if (ISASCII(ch))    return (CLASS_APUNCT);
   return (CLASS_KPUNCT);
+}
+
+//--------------------------------
+//
+//  Decides if two characters are in the same class. Allows for certain lenient (mis)matches useful for delineating words.
+//
+//      ch1,ch2 -- Characters to be checked.
+//
+//      RETURN  -- Matching character class or zero for a mismatch.
+//
+int same_class (int ch1,int ch2) {
+  int c1,c2;
+  if (ch1 == HIRAGANA_WO || ch2 == HIRAGANA_WO) return (0);   // Always break on wo (but not WO as it is used phonetically in a few words.)
+  //
+  //  Check character classes for a direct match.
+  //
+  c1 = char_class (ch1);
+  c2 = char_class (ch2);
+  if (c1 == c2) return (c1);
+  //
+  //  Treat "junk" (mostly line breaks) as whitespace.
+  //
+  if (c1 == CLASS_SPACE && c2 == CLASS_JUNK) return c1;
+  if (c2 == CLASS_SPACE && c1 == CLASS_JUNK) return c2;
+  //
+  //  Accept long vowel symbol as a kana character if adjacent to same.
+  //
+  if (ch1 == KANJI_LONGVOWEL && (c2 == CLASS_KATAKANA || c2 == CLASS_HIRAGANA)) return (c2);
+  if (ch2 == KANJI_LONGVOWEL && (c1 == CLASS_KATAKANA || c1 == CLASS_HIRAGANA)) return (c1);
+  //
+  //  Accept noma (kanji repetition character) as a kanji if adjacent to same.
+  //
+  if (ch1 == KANJI_REPT && c2 == CLASS_KANJI) return (c2);
+  if (ch2 == KANJI_REPT && c1 == CLASS_KANJI) return (c1);
+  //
+  //  Accept katakana kurikaeshi (repetition mark) as a katakana if adjacent to same.
+  //
+  if ((ch1 == KATAKANA_REPT || ch1 == KATAKANA_REPT_V) && c2 == CLASS_KATAKANA) return (c2);
+  if ((ch2 == KATAKANA_REPT || ch2 == KATAKANA_REPT_V) && c1 == CLASS_KATAKANA) return (c1);
+  //
+  //  Accept hiragana kurikaeshi (repetition mark) as a hiragana if adjacent to same.
+  //
+  if ((ch1 == HIRAGANA_REPT || ch1 == HIRAGANA_REPT_V) && c2 == CLASS_HIRAGANA) return (c2);
+  if ((ch2 == HIRAGANA_REPT || ch2 == HIRAGANA_REPT_V) && c1 == CLASS_HIRAGANA) return (c1);
+  return (0);
 }
 
 //--------------------------------
@@ -488,7 +564,7 @@ static kana_state kana_states[] = {
   { "e="   ,2 ,KANA_DONE     }, // 41   KANA_Y
   { "auo"  ,1 ,KANA_DONE     }, // 42   KANA_GKNY
    
-  { "a"    ,1 ,KANA_DONE     }, // 43   KAYA__WA
+  { "a"    ,1 ,KANA_DONE     }, // 43   KANA__WA
 
   { "aieo" ,2 ,KANA_DONE     }, // 44   KANA_W
   { "l"    ,0 ,KANA_PPC_L    }, // 45
@@ -529,7 +605,8 @@ static kana_state kana_states[] = {
 #define KANA__K         40  // +ka +ke
 #define KANA_UP         41  // ^^  ^.  ^-, ^+
 #define KANA_AIEUO      42  // tha the tho thu thi
-#define KANA_PENDING    43  // Place holder used to mark kana as waiting for next latter to resolve.
+#define KANA_DJI        43
+#define KANA_PENDING    44  // Place holder used to mark kana as waiting for next latter to resolve.
 
 static kana_state kana_states[] = {
   { "'`"   ,15,KANA_DONE     }, // 00
@@ -555,11 +632,12 @@ static kana_state kana_states[] = {
   { "aieuo",2 ,KANA_DONE     }, // 18   KANA_NORMAL_Y
   { "y"    ,0 ,KANA_GKNY     }, // 19
 
-  { "i"    ,2 ,KANA_DONE     }, // 20   KANA_C
+//{ "i"    ,2 ,KANA_DONE     }, // 20   KANA_C
+  { "aiueo",2 ,KANA_DONE     }, // 20   KANA_C
   { "h"    ,3 ,KANA_NORMAL   }, // 21   KANA_S
   { "y"    ,4 ,KANA_GKNY     }, // 22   KANA_T
   { "aiueo",1 ,KANA_DONE     }, // 23   KANA_NORMAL
-  { "sz"   ,0 ,KANA_TSU      }, // 24
+  { "szj"  ,0 ,KANA_TSU      }, // 24
   { "h"    ,0 ,KANA_AIEUO    }, // 25
   
   { "t"    ,5 ,KANA__TSU     }, // 26   KANA_PLUS
@@ -573,12 +651,12 @@ static kana_state kana_states[] = {
   { "u"    ,2 ,KANA_DONE     }, // 33   KANA__TSU
   { "zs"   ,1 ,KANA_TSU      }, // 34
 
-  { "u"    ,1 ,KANA_DONE     }, // 35   KANA_TSU
+  { "iu"   ,1 ,KANA_DONE     }, // 35   KANA_TSU    // Added 'i' for dji dzi but includes side effects.
 
   { "e="   ,2 ,KANA_DONE     }, // 36   KANA_Y
   { "auo"  ,1 ,KANA_DONE     }, // 37   KANA_GKNY
    
-  { "a"    ,1 ,KANA_DONE     }, // 38   KAYA__WA
+  { "a"    ,1 ,KANA_DONE     }, // 38   KANA__WA
 
   { "aieo" ,1 ,KANA_DONE     }, // 39   KANA_W
 
@@ -588,7 +666,9 @@ static kana_state kana_states[] = {
 
   { "aieuo",1 ,KANA_DONE     }, // 42   KANA_AIEUO
 
-  { ""     ,0 ,KANA_PENDING  }, // 43   KANA_PENDING    // Loop holding state.
+  { ""     ,1 ,KANA_DONE     }, // 43   KANA_DJI
+
+  { ""     ,0 ,KANA_PENDING  }, // 44   KANA_PENDING    // Loop holding state.
 };
 #endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
 
@@ -637,18 +717,19 @@ void KANA_convert::do_char (JWP_file *f,int ch) {
 //  First check for double concident.  If so output a small tsu of the corect type.
 //
   c = tolower(ch);
-  if ((index == 1) && !pending && (((buffer[0] == ch) && isalpha(ch)) || ((buffer[0] == 't') && (ch == 'c')))) {
+  if ((index == 1) && !pending && c != 'm' && (((buffer[0] == ch) && isalpha(ch)) || ((buffer[0] == 't') && (ch == 'c')))) {
     if (c == ch) strcpy (buffer,"+tu"); else strcpy (buffer,"+TU");
     pending = true;                         // Setting pending will force clear() to otput the charcter
     clear ();
   }
 //
-//  Here is a check to pickup mp and mb, which are equivalent to np and nb.
+//  Here is a check to pick up mb/mm/mp, which are equivalent to nb/nm/np, as well as m' (n').
 //
-  if ((index == 1) && (buffer[0] == 'm') && ((c == 'b') || (c == 'p'))) {
-    pending = true;
-    strcpy (buffer,"n");
+  if ((index == 1) && (buffer[0] == 'm' || buffer[0] == 'M') && (c == '\'' || c == '"' || c == 'b' || c == 'm' || c == 'p')) {
+    pending = true;                         // Tell clear() to output the buffer before clearing everything.
+    strcpy (buffer,buffer[0] == 'm'? "n":"N");
     clear  ();
+    if (c == '\'' || c == '"') return;      // Discard (possibly shifted) apostrophe character.
   }
 //
 //  Figure out if we want this charcter.  If we do not process the
@@ -683,7 +764,7 @@ void KANA_convert::do_char (JWP_file *f,int ch) {
       for (ptr = kana_states[i+state].valid; *ptr && (c != *ptr); ptr++);
       if (*ptr) goto CharFound;                         // Found char in state so exit loop.
     }
-    if (pending && isupper(buffer[0]) && (c == ch) && (buffer[0] != 'N')) {   
+    if (pending && isupper(buffer[0]) && (ch >= 'a' && ch <= 'z') && (buffer[0] != 'N')) {   
       kanji_start = true;                               // Did not find char so we are going to dump 
       buffer[0]   = tolower(buffer[0]);                 //   the state.  First must resolve pended 
     }                                                   //   character, if it is uppercase then is it 
@@ -855,7 +936,7 @@ void KANA_convert::out_kana () {
     { "`"  , { 0x2156,0x0    } },   // These two are necessary because they 
     { "'"  , { 0x2157,0x0    } },   // translate to non-ASCII equivalents   
     { "y=" , { 0x216f,0x0    } },   // These are special additions (yen)
-    { "f-" , { 0x2172,0x0    } },   //   (lira)
+    { "f-" , { 0x2172,0x0    } },   //   (pound)
     { "^^" , { 0x2130,0x0    } },   //   (^)
     { "^." , { 0x2126,0x0    } },   //   (center .)
     { "^-" , { 0x2144,0x0    } },   //   (...)
@@ -878,9 +959,12 @@ void KANA_convert::out_kana () {
   static char temp[4] = "xi";           // temp is used to search for first part of compount kana like kya,gyo, etc.
   temp[0]   = buffer[0];                // first kara is first char (n)+(i).
   buffer[0] = '+';                      // second kana is a small verion.
-  i         = find_direct(buffer);      // had to move this here because put kana 
-  put_kana (base+find_direct(temp));    // can clear the ascii->kana convert (to get h, aeiou, etc.).
-  put_kana (base+i);
+  i         = find_direct(buffer);      // Had to move this here because put_kana can clear the ascii->kana conversion (to get h, aeiou, etc.).
+  ASSERT (i);
+  if (i) {                              // This conditional will catch some erroneous buffers.
+    put_kana (base+find_direct(temp));
+    put_kana (base+i);
+  }
   clear    ();
   return;
 }
@@ -896,7 +980,8 @@ void KANA_convert::out_kana () {
 //      ch   -- KANJI code to output.
 //
 void KANA_convert::put_kana (int ch) {
-  file->put_char (ch,kanji_start ? CHAR_START : CHAR_CONT);
+  if (!ISHIRAGANA(ch)) file->put_char (ch,CHAR_STOP);   // Halt in-progress kanji conversions on inapplicable characters.
+  else file->put_char (ch,kanji_start ? CHAR_START : CHAR_CONT);
   kanji_start = false;          // Prevents sequences generating copound kana from starting on each kana output.
   return;
 }
@@ -927,7 +1012,7 @@ void JWP_file::do_char (int ch) {
     put_char (ch,CHAR_STOP);                            //   input and processed as such.
     return;
   }
-  if (ch < ' ') return;
+  if (ch < ' ' || ch == 0x7F) return;
   if (jwp_config.mode == MODE_KANJI) {                  // KANJI mode -> to converter
     kana_convert.do_char (this,ch);
     return;
@@ -966,6 +1051,7 @@ void JWP_file::put_char (int ch,int code) {
     find_pos (&cursor);
     sel.pos1 = cursor;
     sel.type = SELECT_KANJI;
+    undo_clear (UNDO_NONE);                                         // Break the undo chain when starting an inline conversion.
   }
   undo_para (UNDO_TYPE);                                            // Actually put the character into the file.
   pos  = cursor.abs_pos();                                          // Save the cursor location so we can put the character in the  

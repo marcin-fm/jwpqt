@@ -157,7 +157,7 @@ public:
   void clear_results   (void);                              // Clear results and set results flags.
   int  command         (WPARAM wParam);                     // Process the standard dialog box commands.    
   int  get_value       (int id,int limit,int &v1,int &v2);  // Get a numerical value from a control.
-  void initialize      (HWND hwnd,int allow_auto,int id);   // Intialize the dialog box and class
+  void initialize      (HWND hwnd,int allow_auto,int id,bool focus=true);   // Initialize the dialog box and class.
   int  radlist_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam);   // Window proc for handling the radicals list.
   void set_value       (int id,int value);                  // Set a value in a control.
 
@@ -266,7 +266,12 @@ void KANJI_lookup::clear_results () {
 int KANJI_lookup::command (WPARAM wParam) {
   switch (LOWORD(wParam)) {
 #ifndef WINCE_POCKETPC
-    case IDOK:           
+    case IDSEARCH:
+    case IDOK:
+         if (GetFocus () == GetDlgItem (dialog,IDC_RLRESULT)) {           // Results list in focus?
+           if (list_len) SendMessage (dialog,WM_COMMAND,IDC_RLINSERT,0);  // Insert kanji.
+           return  (true);
+         } // Else do search and activate results list. Useful if automatic searching is disabled.
          do_search (true);
          return    (true);
 #else   WINCE_POCKETPC
@@ -280,7 +285,7 @@ int KANJI_lookup::command (WPARAM wParam) {
          return (true);
     case IDC_RLCLEAR:                    // Clear all buttons and list.
          reset    ();
-         SetFocus (GetDlgItem(dialog,clear_id));
+         SetDialogFocus (dialog,clear_id);
          return   (true);
     case IDC_RLINFO:                     // Get info for character.
          get_info (dialog);
@@ -304,7 +309,10 @@ int KANJI_lookup::command (WPARAM wParam) {
     case IDC_RLAUTO:                     // Change auto-search state.
          auto_search = IsDlgButtonChecked(dialog,IDC_RLAUTO);
          jwp_config.cfg.auto_lookup = (byte) auto_search;
-         break;;
+         break;
+    case IDC_RLTYPE:                     // Reading/Index comboboxes.
+    case IDC_ILTYPE:
+         return (false);                 // Skip auto_check() and perform default behavior. Without this it was clearing search results if the combobox was in focus at the time. To make matters worse, Index Lookup was also doing an explicit reset() on ILTYPE commands.
     default:
          break;
   }
@@ -341,7 +349,7 @@ void KANJI_lookup::do_search (int activate) {
     EnableWindow (GetDlgItem(dialog,IDC_RLINFO)  ,true);
     EnableWindow (GetDlgItem(dialog,IDC_RLCOPY)  ,true);
     select   (0);
-    if (activate) SetFocus (GetDlgItem(dialog,IDC_RLRESULT));
+    if (activate) SetDialogFocus (dialog,IDC_RLRESULT);
     if (list_len < size-1) wsprintf (buffer,TEXT("%d"),(list_len+1)/2);
       else {
         MessageBeep   (MB_ICONASTERISK);    // Have too many results!
@@ -384,8 +392,9 @@ int KANJI_lookup::get_value (int id,int limit,int &v1,int &v2) {
 //      hwnd       -- Pointer to the dialog window.
 //      allow_auto -- Indicates if auto-searching is supported.
 //      id         -- ID of control to be activated
+//      focus      -- Set focus on the control if true (the default).
 //
-void KANJI_lookup::initialize (HWND hwnd,int allow_auto,int id) {
+void KANJI_lookup::initialize (HWND hwnd,int allow_auto,int id,bool focus) {
   dialog   = hwnd;
   clear_id = id;
   reset ();                                         // Need this before auto is enabled or will fail first time.
@@ -394,7 +403,7 @@ void KANJI_lookup::initialize (HWND hwnd,int allow_auto,int id) {
     CheckDlgButton (hwnd,IDC_RLAUTO,auto_search);
   }
   add_dialog (hwnd,true);
-  SetFocus   (GetDlgItem(hwnd,id));
+  if (focus) SetDialogFocus (hwnd,id);
   return;
 }
 
@@ -429,12 +438,25 @@ int KANJI_lookup::radlist_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPar
          return           (0);
     case WM_HSCROLL:                // Process scroll messages.
          do_scroll (wParam);
+         goto SetFocus;             // Fixes "floating caret" bug.
          return    (0);
 #ifndef WINCE
     case WM_MOUSEWHEEL:
          do_wheel (wParam);
+         goto SetFocus;             // Fixes "floating caret" bug.
          return   (0);
 #endif  WINCE
+    case WM_SYSKEYDOWN:
+         switch (wParam) {
+           MSG msg;
+           case VK_X:
+                if (GetKeyState(VK_MENU) < 0) {
+                  while (PeekMessage(&msg,hwnd,WM_KEYFIRST,WM_KEYLAST,PM_REMOVE));
+                  SendMessage (main_window,WM_COMMAND,IDM_FILE_EXIT,0);
+                  return (0);
+                }
+         }
+         break;
     case WM_KEYDOWN:                // Process keyboard events.
          i = (GetKeyState(VK_CONTROL) < 0) ? CONTROL_MOVE*2 : 2;
          switch (wParam) {
@@ -454,12 +476,25 @@ int KANJI_lookup::radlist_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPar
            case VK_END:
                 selected = list_len;
                 break;
+           case VK_PRIOR:
+                if (selected != first) { selected = first; break; }   // Select the first item on the current page if not already selected.
+                do_scroll (SB_PAGEUP);
+                selected = first;
+                break;
+           case VK_NEXT:
+                i = first;
+                do_scroll (SB_PAGEDOWN);
+                selected = first != i? first:list_len;                // Select the last item if already on the last page (inferred).
+                break;
            case VK_I:
                 get_info (hwnd);
                 break;
            case VK_C:
                 if (list_len) SendMessage (dialog,WM_COMMAND,IDC_RLCOPY,0);
                 break;
+           case VK_F4:
+                SendMessage (dialog,WM_CLOSE,0,0);
+                return (0);
            case VK_F23:
                 get_info (hwnd);
                 return (1);
@@ -471,6 +506,7 @@ int KANJI_lookup::radlist_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPar
          select (selected);
     case WM_SETFOCUS:   // *** FALL THROUGH ***
 SetFocus:
+         if (list_len == 0 || sel.right == sel.left) return (0);  // Prevents several extraneous carets.
          CreateCaret (hwnd,null,sel.right-sel.left,1);
          SetCaretPos (sel.left,sel.bottom);
          ShowCaret   (hwnd);
@@ -909,6 +945,15 @@ int KANJIRAD_lookup::radicals_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
            case VK_V:                                                           // Fake message passed to window 
                 if (!single) SendMessage (dialog,WM_COMMAND,IDC_RLCOPYKANJI,0); // to set radicals.
                 return (0);
+           case VK_F4:
+                SendMessage (dialog,WM_CLOSE,0,0);
+                return (0);
+           case VK_F5:
+                SendMessage (dialog,WM_COMMAND,IDC_RLCLEAR,0);
+                return (0);
+           case VK_F6:
+                if (list_len) SetDialogFocus (dialog,IDC_RLRESULT);
+                return (0);
            default:
                 return (0);
          }
@@ -1346,7 +1391,7 @@ int RADSTROKE_lookup::bushu_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lP
                 break;
            case SB_THUMBTRACK:          // Tracking.
            case SB_THUMBPOSITION:
-                i = HIWORD(wParam);
+                i = HIWORD(wParam);     // This scrollbar will never emit values that transcend 16 bits.
                 cursor += i-left;
                 break;
            default:
@@ -1428,6 +1473,9 @@ int RADSTROKE_lookup::bushu_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lP
            case VK_END:             // End of line or last button
                 if (i) cursor = last_button; else cursor = left+buttons-1;
                 break;
+           case VK_F4:
+                SendMessage (dialog,WM_CLOSE,0,0);
+                return (0);
            default:
                 return (0);
          }
@@ -2232,7 +2280,7 @@ int FOURCORNER_lookup::dlg_fclookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lP
                 set_value (current,lParam);
                 current += 2;
                 if (current > IDC_FC5) current = IDC_FC1;
-                SetFocus (GetDlgItem(hwnd,current));
+                SetDialogFocus (hwnd,current);            // The controls now behave differently (cosmetic only) than with SetFocus() but also more consistently.
                 break;
            case IDC_FC1:
            case IDC_FC2:
@@ -2734,7 +2782,7 @@ int INDEX_lookup::dlg_indexlookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPar
                 jwp_config.cfg.index_type = (byte) SendDlgItemMessage(hwnd,IDC_ILTYPE,CB_GETCURSEL,0,0);
                 break;
            case IDC_ILTYPE:
-                reset ();
+              //reset ();       // I disagree that selecting the Type of Index combobox should clear the search results, but because it is being done explicitly here (unlike in Reading Lookup where it was a side effect) I would have left it in if it weren't also causing searches erroneously report 0 results when the combobox has focus.
                 break;
            case IDC_ILVOL:
            case IDC_ILINDEX:
@@ -2913,6 +2961,7 @@ void index_lookup (JWP_file *file) {
 
 typedef class RADICAL_lookup : public KANJIRAD_lookup {
 friend void radical_lookup (JWP_file *file);            // This is the external entry point!
+friend void radical_lookup (HWND hwnd,KANJI ch);        // Alternate external entry point intended for situations without an associated file.
 public:
   inline RADICAL_lookup  (int count) : KANJIRAD_lookup (count,false) { return; }
   int  dlg_radlookup     (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam);
@@ -2966,6 +3015,8 @@ int RADICAL_lookup::dlg_radlookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPar
     case WM_INITDIALOG:                         // Intialize, so chache dialog box pointer.
          initialize      (hwnd,true,IDC_RLRADICALS);
          POCKETPC_DIALOG (hwnd);
+         KANJI dinput;                          // lParam comes from JCreateDialog() in radical_lookup().
+         if ((dinput = (KANJI)lParam) && ISKANJI (dinput)) goto DialogInput; AmoreAllItaliana:
          return          (false);
     case WM_DESTROY:
          remove_dialog (hwnd);
@@ -3002,7 +3053,11 @@ int RADICAL_lookup::dlg_radlookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPar
                   KANJI     ch,buffer[3000];
                   JWP_file *paste;
                   if (!(paste = get_paste (hwnd))) { MessageBeep (MB_ICONEXCLAMATION); return (true); }
+                  if (!paste->edit_getlen()) return (true);         // Make sure there is something there
                   ch = (paste->edit_gettext()[0]);                  // Get character from clipboard
+                  if (!ISKANJI(ch)) return (true);                  // Make sure it's a kanji.
+                  dinput = 0; DialogInput:                          // Entry point for the part shared by WM_INITDIALOG.
+                  if (dinput) ch = dinput;                          // Input has already been vetted so only need to check for non-zero.
                   reset ();                                         // Clear the search
                   if (INVALID_HANDLE_VALUE == (data = open(NAME_RADRADICAL,IDS_RL_ERRORRADINDEX))) return (true);
                   for (i = 0; i <= BUTTON_COUNT; i++) {             // Scan though all radicals
@@ -3013,6 +3068,7 @@ int RADICAL_lookup::dlg_radlookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPar
                     if (k != j) set_radical (i);                    // activate radical
                   }
                   CloseHandle (data);             // Close files.
+                  if (dinput) goto AmoreAllItaliana;                // This keeps the WM_INITDIALOG epilog consistent, assuming no error occurred opening the radical file.
                 }
                 break;
            case IDC_RLPM2:                      // +/-2 so clear +/-1 and >
@@ -3033,7 +3089,7 @@ int RADICAL_lookup::dlg_radlookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lPar
            default:
                 break;
          }
-         return (command(wParam));
+         return (command(wParam));              // Pass it on to KANJI_lookup, potentially doing an automatic search in the process.
   }
   return (false);       // Let the dialog box handler handle the standard
 }                                                   //   buttons and actions.    
@@ -3124,6 +3180,7 @@ void RADICAL_lookup::search () {
   int count = 0;            // Number of kanji in the list (some may be 0, indicated rejected).
   int count2;               // Number of kanji in subsequent kanji lists.
   int nocount;              // Indicates that count is unbounded.
+  int radicals = false;     // Indicates that one or more radicals were selected.
   int i,j,k;                
   KANJI_info kanji_info;    // Classe used to access the kanji information database
 //
@@ -3151,6 +3208,7 @@ void RADICAL_lookup::search () {
     if (!(count2 = get_data(i,list))) continue;         // This is a false radical (the real radical will come up)
     if (first) {                                        // First radical with real data.
       first = false;
+      radicals = true;
       count = get_data(i,kbuffer);                      // Relad because it is easier than coping
     }
     else {                                              // Second(+) radical, so do a select
@@ -3204,8 +3262,21 @@ KeepThisOne:;
     CloseHandle (data);                                 // Close files.
   }
 //
-//  Now put the the data we have collecte back into the display buffer.
+//  Now put the data we have collected back into the display buffer.
 //
+//  This was enhanced to list rare kanji at the end like the other lookup methods do.
+//  The 0 placeholder here and down below is for a proposed "suppress rare" option.
+//  I don't think it's really necessary now with all the other options for deemphasizing rare kanji.
+//
+  if (0 || (jwp_config.cfg.rare_last && (radicals || cmin != cmax))) {  // If no radicals were selected, or only a single stroke count was searched, skip this pass as being redundant.
+    for (i = 0; i < count; i++) {   // Only add common kanji on the first pass. This is the way the other lookup types behave, albeit not intentionally.
+      if (!kbuffer[i] || ISRAREKANJI(kbuffer[i])) continue;
+      put_kanji (kbuffer[i]);
+      put_kanji ('/');
+      kbuffer[i] = 0;               // Remove from buffer.
+    }
+  }
+  if (0) return;                    // We are excluding rare kanji so skip the second pass entirely. This option is intended to apply to every look-up method, but I'm not motivated to finish implementing it.
   for (i = 0; i < count; i++) {
     if (!kbuffer[i]) continue;      // We can use this if we have a presorted list.
     put_kanji (kbuffer[i]);
@@ -3226,10 +3297,22 @@ KeepThisOne:;
 //
 //      file -- Context from which we were called so we can past text boack
 //
+/*
 void radical_lookup (JWP_file *file) {
   if (rad_lookup) { SetForegroundWindow (rad_lookup->dialog); return; }
   if (!(rad_lookup = new RADICAL_lookup(3000))) { OutOfMemory (file->window); return; }
-  JCreateDialog (IDD_RADICALLOOKUP,file->window,(DLGPROC) dialog_radlookup);
+  JCreateDialog (IDD_RADICALLOOKUP,file->window,(DLGPROC) dialog_radlookup,file->get_selected_ch());
+  return;
+}
+*/
+void radical_lookup (JWP_file *file) {
+  radical_lookup (file->window,file->get_selected_ch());
+}
+// This was broken out to support lists (e.g. dictionary results) which do not have an associated JWP_file.
+void radical_lookup (HWND hwnd,KANJI ch) {
+  if (rad_lookup) { SetForegroundWindow (rad_lookup->dialog); return; }
+  if (!(rad_lookup = new RADICAL_lookup(3000))) { OutOfMemory (hwnd); return; }
+  JCreateDialog (IDD_RADICALLOOKUP,hwnd,(DLGPROC)dialog_radlookup,ch);
   return;
 }
 
@@ -3253,6 +3336,7 @@ public:
   int  dlg_readinglookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam);
 private:
   int    get_type        (void);                        // Get index type.
+  int    translate_type  (int type);                    // Translate a Reading Lookup type to an index in the combobox.
   void   reset           (void);                        // Reset the search engine.
   void   search          (void);                        // Execute the actual search.
 } READING_lookup;
@@ -3264,21 +3348,9 @@ private:
 
 //--------------------------------
 //
-// Defintiion of the actual search indexes.
-//
-#define RLTYPE_ON       0       // on-yomi
-#define RLTYPE_KUN      1       // kun-yomi
-#define RLTYPE_KUNON    2       // kun or on
-#define RLTYPE_MEANING  3       // meaning
-#define RLTYPE_NANORI   4       // nanonri
-#define RLTYPE_PINYIN   5       // pinyin
-#define RLTYPE_KOREAN   6       // korean
-
-//--------------------------------
-//
 //  Text used to describe the indexes.
 //
-#define READINGS_FIXED      ((int) (sizeof(readings)/sizeof(TCHAR *)))
+#define READINGS_FIXED      ((int) (sizeof(readings)/sizeof(readings[0])))
 
 static int readings[] = { IDS_RL_ON,IDS_RL_KUN,IDS_RL_ONKUN,IDS_RL_MEANING };
 
@@ -3374,13 +3446,15 @@ int READING_lookup::dlg_readinglookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
          if (jwp_config.kanji_flags & KIFLAG_NANORI) SendDlgItemMessage (hwnd,IDC_RLTYPE,CB_ADDSTRING,0,(LPARAM) get_string(IDS_RL_NANORI));
          if (jwp_config.kanji_flags & KIFLAG_PINYIN) SendDlgItemMessage (hwnd,IDC_RLTYPE,CB_ADDSTRING,0,(LPARAM) get_string(IDS_RL_PINYIN));
          if (jwp_config.kanji_flags & KIFLAG_KOREAN) SendDlgItemMessage (hwnd,IDC_RLTYPE,CB_ADDSTRING,0,(LPARAM) get_string(IDS_RL_KOREAN));
-         if (CB_ERR == SendDlgItemMessage(hwnd,IDC_RLTYPE,CB_SETCURSEL,jwp_config.cfg.reading_type,0)) SendDlgItemMessage (hwnd,IDC_RLTYPE,CB_SETCURSEL,0,0);
+         dialog = hwnd;                                                     // Needed by translate_type() below.
+         if (CB_ERR == SendDlgItemMessage(hwnd,IDC_RLTYPE,CB_SETCURSEL,translate_type(jwp_config.cfg.reading_type),0)) SendDlgItemMessage (hwnd,IDC_RLTYPE,CB_SETCURSEL,0,0);
          CheckDlgButton     (hwnd,IDC_RLKUN ,jwp_config.cfg.reading_kun );
          CheckDlgButton     (hwnd,IDC_RLWORD,jwp_config.cfg.reading_word);
-         initialize         (hwnd,false,IDC_RLSTRING);
-         SendDlgItemMessage (hwnd,IDC_RLSTRING,JE_LOAD,0,lParam);           // Since intialize will call reset, order is importaint.
+         initialize         (hwnd,false,IDC_RLSTRING,false);                // The last parameter tells it to not set focus yet because WM_KILLFOCUS clears the selection for edit controls causing JE_LOAD to fail.
+         SendDlgItemMessage (hwnd,IDC_RLSTRING,JE_LOAD,0,lParam);           // This must be done after initialize() since the latter will call reset(), eliminating the string we just loaded.
          exclude = (JWP_file *) SendDlgItemMessage(hwnd,IDC_RLSTRING,JE_GETJWPFILE,0,0);
          POCKETPC_DIALOG (hwnd);
+         SetDialogFocus  (hwnd,IDC_RLSTRING);                               // Set the focus here because it is no longer being done in the above initialize() call.
          return          (false);
     case WM_DESTROY:
          remove_dialog (hwnd);
@@ -3396,13 +3470,17 @@ int READING_lookup::dlg_readinglookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
            case IDOK:
 #endif WINCE_POCKETPC
            case IDCANCEL:
-                jwp_config.cfg.reading_type = (byte) SendDlgItemMessage(hwnd,IDC_RLTYPE,CB_GETCURSEL,0,0);
+                jwp_config.cfg.reading_type = (byte) get_type ();                           // Store the enumerated type instead of the combobox index.
                 jwp_config.cfg.reading_kun  =        IsDlgButtonChecked(hwnd,IDC_RLKUN );
                 jwp_config.cfg.reading_word =        IsDlgButtonChecked(hwnd,IDC_RLWORD);
                 break;
            case IDC_RLSTROKE:
                 input_check (hwnd,wParam);
                 if (HIWORD(wParam) != EN_CHANGE) return (true);
+                break;
+           case IDC_RLTYPE:         // When the type is changed, switch the input mode to whichever is more appropriate.
+                i = get_type ();
+                if (i == RLTYPE_MEANING || i == RLTYPE_PINYIN || i == RLTYPE_KOREAN) set_mode (MODE_ASCII); else set_mode (MODE_KANJI);
                 break;
            default:
                 break;
@@ -3427,6 +3505,22 @@ int READING_lookup::get_type () {
   if (!lstrcmp(buffer,get_string(IDS_RL_PINYIN))) return (RLTYPE_PINYIN);
   if (!lstrcmp(buffer,get_string(IDS_RL_KOREAN))) return (RLTYPE_KOREAN);
   return (RLTYPE_ON);
+}
+
+//--------------------------------
+//
+//  Translate a Reading Lookup type to an index in the combobox.
+//
+int READING_lookup::translate_type (int type) {
+  int   i;
+  TCHAR buffer[SIZE_BUFFER]; buffer[0] = 0;
+  ASSERT (dialog);
+  if (type < READINGS_FIXED) return (type);                                 // These are expected to always be available and in the same order.
+  for (i = READINGS_FIXED; i < RLTYPE_NUMBER; i++) {                        // If it's not one of the core types, translate it based on its text value.
+    SendDlgItemMessage(dialog,IDC_RLTYPE,CB_GETLBTEXT,i,(WPARAM) buffer);
+    if (!lstrcmp(buffer,get_string(IDS_RL_ON+type))) return (i);            // If it matches, return the actual combobox index of the requested type.
+  }
+  return (default_config.reading_type);                                     // Type wasn't found in the combobox so return the configuration default.
 }
 
 //--------------------------------
@@ -3471,7 +3565,7 @@ void READING_lookup::search () {
     for (ptr = astring, i = 0; i < length; i++) {               // Convert to UTF-8 string
       if (ISJIS(kptr[i])) {
         JMessageBox (dialog,IDS_RL_ERRORKANAFOUND,IDS_RL_ERRORKANA,MB_OK | MB_ICONERROR);
-        SetFocus    (GetDlgItem(dialog,IDC_RLSTRING));
+        SetDialogFocus (dialog,IDC_RLSTRING);
         return;
       }
       if (type == RLTYPE_MEANING) jis2utf (ptr,tolower(kptr[i])); else *ptr++ = tolower(kptr[i]);
@@ -3514,12 +3608,12 @@ void READING_lookup::search () {
     int mask      = 0;
     for (ptr = (byte *) astring, i = 0; i < length; i++) {
       if      ((kptr[i] == KANJI_DASH) || (kptr[i] == KANJI_LONGVOWEL)) *ptr++ = 0x1f;
-      else if ((kptr[i] == '(') || (kptr[i] == KANJI_LPARAN) && !okurigana) { okurigana = true; mask = 0x80; }
-      else if ((kptr[i] == ')') || (kptr[i] == KANJI_RPARAN) &&  okurigana) { okurigana = false; }
+      else if ((kptr[i] == '(') || (kptr[i] == KANJI_LPAREN) && !okurigana) { okurigana = true; mask = 0x80; }
+      else if ((kptr[i] == ')') || (kptr[i] == KANJI_RPAREN) &&  okurigana) { okurigana = false; }
       else if (ISKANA(kptr[i])) { *ptr++ = (kptr[i] & 0x00ff) | mask; mask = 0; }
       else {
         JMessageBox (dialog,IDS_RL_ERRORNONKANA,IDS_RL_ERRORKANA,MB_OK | MB_ICONERROR);
-        SetFocus (GetDlgItem(dialog,IDC_RLSTRING));
+        SetDialogFocus (dialog,IDC_RLSTRING);
         return;
       }
     }
@@ -3759,7 +3853,7 @@ int SKIP_lookup::dlg_skiplookup (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam
                 break;
            case IDC_SLSKIPTYPE:
                 set_value (IDC_SLTYPE,lParam);
-                SetFocus  (GetDlgItem(hwnd,IDC_SLS1));
+                SetDialogFocus (hwnd,IDC_SLS1);   // Cosmetically different than with SetFocus().
                 break;                              
            case IDC_SLTYPE:
            case IDC_SLS1:
@@ -4274,6 +4368,9 @@ int JIS_table::jistable_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam
            case VK_I:
                 SendMessage (dialog,WM_COMMAND,IDC_JTINFO,0);
                 break;
+           case VK_F4:
+                SendMessage (dialog,WM_CLOSE,0,0);
+                return (0);
            default:
                 return (0);
          }
@@ -4281,6 +4378,20 @@ int JIS_table::jistable_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM lParam
          while ((x >= 0x20) && !valid(y | x)) x--;
          goto_jis (y | x,0);
          return (0);
+//
+//  Handle Alt-key combinations.
+//
+    case WM_SYSKEYDOWN:
+         switch (wParam) {
+           MSG msg;
+           case VK_X:
+                if (GetKeyState(VK_MENU) < 0) {
+                  while (PeekMessage(&msg,hwnd,WM_KEYFIRST,WM_KEYLAST,PM_REMOVE));
+                  SendMessage (main_window,WM_COMMAND,IDM_FILE_EXIT,0);
+                  return (0);
+                }
+         }
+         break;                                 // This is necessary for Alt-F4 to continue to work.
 //
 //  The only character we accpet is ' ' which indicates insert
 //

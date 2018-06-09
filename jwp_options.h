@@ -68,12 +68,12 @@
 //
 //------  jwp_jisc  ------
 //
-//  SUPORT_HALFKATA -- If defined allows suport for half width katakana
+//  SUPPORT_HALFKATA - If defined allows suport for half width katakana
 //                     strings used in Shift-JIS and EUC encodings.  If 
 //                     not defined half-width katakana sequences will not
 //                     be read.  These sequences do not appear to be used
 //                     much.
 //
-#define SUPORT_HALFKATA
+#define SUPPORT_HALFKATA
 
 #endif jwp_opts_h

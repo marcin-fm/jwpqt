@@ -112,13 +112,13 @@ void JWP_stat::draw (HDC hdc) {
  
   SetBkMode (hdc,TRANSPARENT);
   TextOut   (hdc,x_insert,offset,get_string(jwp_config.insert ? IDS_STAT_INS : IDS_STAT_OVR),3);
-  TextOut   (hdc,x_mode  ,offset,get_string(modes[jwp_config.mode]),5);
+  TextOut   (hdc,x_mode  ,offset,get_string(modes[jwp_config.mode]),6);
 #ifdef WINCE
   TCHAR buffer2[40];
   for (i = 0; buffer[i]; i++) buffer2[i] = buffer[i];
   TextOut   (hdc,x_text  ,offset,buffer2,i);
 #else
-  TextOut   (hdc,x_text  ,offset,buffer,lstrlen(buffer));
+  TextOutA  (hdc,x_text  ,offset,buffer,strlen(buffer));
 #endif WINCE
   if (jwp_file) {
     ptr = get_string(types[jwp_file->filetype]);
@@ -193,7 +193,7 @@ void JWP_stat::redraw () {
 //
 //      text -- Text to be part of the display
 //
-void JWP_stat::update (char *text) {
+void JWP_stat::update (CHAR *text) {
   strcpy (buffer,text); 
   redraw (); 
   return;

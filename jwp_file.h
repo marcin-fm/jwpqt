@@ -46,7 +46,10 @@ private:
   void        align     (JWP_file *file,int x_pos,int mouse = FALSE);  // Align cursor to a specific pixal location.
   int         move_up   (void);                 // Move cursor up through the file.
   int         move_down (void);                 // Move cursor down through the file.
+  int         move_left (void);                 // Move cursor left through the file.
+  int         move_right(void);                 // Move cursor right through the file.
   void        rel       (void);                 // Convert to relative position.
+  int         get_left  (void);                 // Returns character left of cursor or zero at BOL.
                                                 // Inline functions get_char() get character at cursor.  Others 
                                                 //   return locational flags, b=begin, e=end, l=line, p=paragraph, f=file
   int  inline get_char  (void) { return ((pos >= para->length) ? 0 : para->text[line->first+pos]); }
@@ -159,6 +162,8 @@ public:
   void inline caret_off      (void) { DestroyCaret(); } // Disable the display caret.
   void        caret_on       (void);                    // Enable the display caret.
   void        change         (void);                    // Mark file as changed
+  void        ime_start      (HWND hwnd);               // Adjust IME window/font when composition begins.
+  void        ime_stop       (HWND hwnd);               // Clean up after composition ends or is canceled.
   void        redraw_all     (void);                    // Redraw entire file.
   void        redraw_from    (Paragraph *para,Line *line);          // Redraw from this paragraph forward
   void        redraw_para    (Paragraph *para,Line *line);          // Redraw this paragraph
@@ -226,7 +231,7 @@ public:
   void        activate       (void);                    // Activate this file.
   int         close          (int exit_ok);             // Close this file.
   void        delete_file    (void);                    // Delete disk file associated with the current file.
-  long        export_file    (JIS_convert *cvrt);       // Write file to any non-JWP format
+  long        export_file    (JIS_convert*,bool=false); // Write file to any non-JWP format
   void        revert         (void);                    // Revert to last loaded file.
   int         save           (tchar *name);             // Save file.
   int         save_as        (void);                    // Save with requestor
@@ -277,12 +282,16 @@ private:
 public:
   void        put_kanji        (KANJI *kanji,int length);   // Put kanji into file from kana->kanji convert.
   void        convert          (int direction);         // Dirve conversion commands.
+private:
+  BOOL        convert_romaji   (void);                  // Attempt to convert romaji into kana.
 //
 //  Selection controls.
 //
 public:
   void        selection_clear  (void);                  // Clear the selection.
   void        selection_delete (void);                  // Delete the selection.
+  KANJI       get_selected_ch  (void);                  // Get first character in selection.
+  int         get_selected_str (KANJI **kstr);          // Get pointer to actual selected string (not a copy) and length in characters.
   struct Selection  sel;                                // Selection for this file
 private:
   int         in_selection     (Position *loc);         // Tests if a position in in the selection.
@@ -291,6 +300,8 @@ private:
 public:
   void        view_check       (void);                  // Adjust horizontal/vertical scroll to show cursor.
   void        edit_menu        (void);                  // Dtermines the state of elements of the edit-menu.
+  bool        is_empty         (void);                  // True if file is empty.
+  bool        not_empty        (void);                  // True if file is not empty.
   byte        changed;                                  // File is changed.
 private:
   void        all_abs          (void);                  // Convert all points to abs.
@@ -310,7 +321,6 @@ private:
   short             char_width;                         // Width of display area in kanji characters.
   short             hscroll;                            // Horizontal scroll in characters width 
   short             vscroll;                            // Vertical scroll distance in in pixals (page up/down)
-  short             ime_y;                              // Vertical offset used for IME composition window.
   TCHAR            *name;                               // Disk file name
   PrintSetup        page;                               // Page setup.
   byte              no_first;                           // No headers & footers on first page.
@@ -353,6 +363,7 @@ extern FILE_list file_list;                 // Actual class instance.
 
 #ifndef WINELIB         // WINELIB has these defined in winuser.h (man would that be helpful!).
 #define VK_4    0x34
+#define VK_6    0x36
 #define VK_A    0x41
 #define VK_B    0x42
 #define VK_C    0x43

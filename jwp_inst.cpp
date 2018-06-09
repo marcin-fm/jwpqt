@@ -24,9 +24,8 @@
 #include "jwp_conf.h"
 #include "jwp_help.h"
 #include "jwp_inst.h"
-#include "shlobj.h"
-
 #include "jwp_misc.h"
+#include "shlobj.h"
 
 //--------------------------------
 //
@@ -74,11 +73,11 @@ static void save_link (IPersistFile *file,int place,tchar *dir) {
     CreateDirectory (buffer,NULL);
   }
   lstrcat (buffer,TEXT("\\"));                              // Add name.
-  lstrcat (buffer,TEXT("JWPce.lnk"));
+  lstrcat (buffer,TEXT("JWPxp.lnk"));
 #ifdef UNICODE
   file->Save (buffer,true);
 #else
-  WORD wbuffer[SIZE_BUFFER];
+  WCHAR wbuffer[SIZE_BUFFER];
   MultiByteToWideChar (CP_ACP,0,buffer,-1,wbuffer,SIZE_BUFFER);
   file->Save (wbuffer,true);
 #endif UNICODE
@@ -92,7 +91,7 @@ static void save_link (IPersistFile *file,int place,tchar *dir) {
 //
 
 #define NUMBER_EXT          10  // Number of extensions used possibly used by the program.
-#define EXT_JCP             8   // Project extension
+#define EXT_JPR             8   // JWPxp project extension (was JCP).
 #define EXT_JFC             9   // JFC extension.
 
                                 // First install dialog box return codes.
@@ -144,6 +143,7 @@ static BOOL CALLBACK dialog_advinstall (HWND hwnd,UINT message,WPARAM wParam,LPA
          CheckDlgButton (hwnd,IDC_AISTART  ,adv_install->start);
          CheckDlgButton (hwnd,IDC_AIDESKTOP,adv_install->desktop);
          SetDlgItemText (hwnd,IDC_AIGROUP  ,adv_install->group);
+         EnableWindow   (GetDlgItem(hwnd,IDC_AIGROUP),IsDlgButtonChecked(hwnd,IDC_AISTART));
          return (true);
     case WM_HELP:
          do_help (hwnd,IDH_INSTALL_ADVANCED);
@@ -210,6 +210,8 @@ static BOOL CALLBACK dialog_install (HWND hwnd,UINT message,WPARAM wParam,LPARAM
 //  Static routines.
 //
 
+static HKEY hk_classes = 0;
+
 //--------------------------------
 //
 //  This routine gets the value of a key from the registry.
@@ -225,7 +227,7 @@ static int get_key (tchar *subkey,TCHAR *buffer) {
   HKEY    hkey;
   ulong   size,type;
   size = SIZE_BUFFER;
-  if (ERROR_SUCCESS != RegOpenKeyEx(HKEY_CLASSES_ROOT,subkey,0,KEY_QUERY_VALUE,&hkey)) return (true);
+  if (ERROR_SUCCESS != RegOpenKeyEx(hk_classes?hk_classes:HKEY_CLASSES_ROOT,subkey,0,KEY_QUERY_VALUE,&hkey)) return (true);
   RegQueryValueEx (hkey,NULL,NULL,&type,(byte *) buffer,&size);
   RegCloseKey     (hkey);
   return (false);
@@ -241,18 +243,83 @@ static int get_key (tchar *subkey,TCHAR *buffer) {
 //
 #define ZSTRSIZE(x) (sizeof(TCHAR)*(lstrlen(x)+1))
 
+static bool notified;
+
 static void make_key (tchar *subkey,tchar *format,...) {
-  HKEY    hkey;
+  HKEY    hkey = 0;
   TCHAR   value[SIZE_BUFFER];
-  ulong   type;
+  LSTATUS err = 0;
   va_list argptr;
   va_start  (argptr,format);
   wvsprintf (value ,format,argptr);
-  RegCreateKeyEx (HKEY_CLASSES_ROOT,subkey,null,null,0,KEY_ALL_ACCESS,null,&hkey,&type);
-  RegSetValueEx  (hkey,null,null,REG_SZ,(byte *) value,ZSTRSIZE(value));
-  RegCloseKey    (hkey);
+  err |= RegCreateKeyEx (hk_classes?hk_classes:HKEY_CLASSES_ROOT,subkey,null,null,0,KEY_ALL_ACCESS,null,&hkey,null);    // Access classes at (HKLM|HKCU)/Software/Classes instead of the composite HKCR (which may not work for unprivileged users).
+  err |= RegSetValueEx  (hkey,null,null,REG_SZ,(byte *) value,ZSTRSIZE(value));
+  err |= RegCloseKey    (hkey);
+  if (err && !notified) {
+#ifdef _DEBUG
+    MPRINTF (TEXT("Error creating/modifying registry key.\n\n%s\n\n%s"),subkey,value);
+#else
+    ErrorMessage (true,IDS_REG_ERROR_WRITE);
+    notified = true;                                // Don't report subsequent errors on this installation attempt.
+#endif
+  }
   return;
 }
+
+#define EXT_LIMIT   (NUMBER_EXT-2)
+#define REG_COMMAND TEXT("JWPxp\\Shell\\Open\\Command")
+#define REG_JFCFILE TEXT("JFC\\Shell\\Edit\\Command")
+#define REG_PROJECT TEXT("JWPxp-project\\Shell\\Open\\Command")
+
+#define SUBKEY_CLASSES TEXT("Software\\Classes")
+
+static tchar* file_ext[] = {TEXT(".jce"),TEXT(".jwp"),TEXT(".euc"),TEXT(".sjs"),TEXT(".jis"),TEXT(".old"),TEXT(".nec"),TEXT(".utf")  /*,TEXT(".jpr"),TEXT(".jfc")*/ };
+
+//--------------------------------
+//
+//  Check extension assignments in registry.
+//
+//      install -- adv_install structure, the ext field will be filled in.
+//
+//      RETURN -- A non-zero return value indicates everything is already installed.
+//
+static int check_extensions (struct adv_install &install) {
+  int    ok,i;
+  TCHAR  buffer[SIZE_BUFFER],command[SIZE_BUFFER],executable[SIZE_BUFFER];
+//
+//  Initialize values.
+//
+  ok = true;
+  GetModuleFileName(instance,executable,SIZE_BUFFER);
+  sprintf (command,TEXT("\"%s\""),executable);
+//
+//  Check extensions.
+//
+  for (i = 0; i < EXT_LIMIT; i++) {
+    if      (get_key(file_ext[i]   ,buffer)) { install.ext[i] = true; ok = false; }
+    else if (!stricmp(TEXT("JWPxp"),buffer)) { install.ext[i] = false;            }
+    else                                     { install.ext[i] = true; ok = false; }
+  }
+  if      (get_key(TEXT(".jpr")          ,buffer)) { install.ext[EXT_JPR] = true;  ok = false; }
+  else if (!stricmp(TEXT("JWPxp-project"),buffer)) { install.ext[EXT_JPR] = false;             }
+  else                                             { install.ext[EXT_JPR] = false; ok = false; }
+  if      (get_key(TEXT(".jfc")          ,buffer)) { install.ext[EXT_JFC] = true;  ok = false; }
+  else if (!stricmp(TEXT("JFC")          ,buffer)) { install.ext[EXT_JFC] = false;             }
+  else                                             { install.ext[EXT_JFC] = false; ok = false; }
+//
+//  Check executable command.
+//
+  if      (get_key(REG_COMMAND,buffer))               { ok = false;                              }
+  else if (strnicmp(command,buffer,lstrlen(command))) { ok = false;                              }
+  if      (get_key(REG_PROJECT,buffer))               { ok = false; install.ext[EXT_JPR] = true; }
+  else if (strnicmp(command,buffer,lstrlen(command))) { ok = false; install.ext[EXT_JPR] = true; }
+  if      (get_key(REG_JFCFILE,buffer))               { ok = false; install.ext[EXT_JFC] = true; }
+  else if (strnicmp(command,buffer,lstrlen(command))) { ok = false; install.ext[EXT_JFC] = true; }
+
+  return ok;
+}
+
+
 
 //===================================================================
 //
@@ -268,15 +335,10 @@ static void make_key (tchar *subkey,tchar *format,...) {
 //               used to generate start-menu/desktop items when JWPce 
 //               cannot tell if the item already exists.
 //
-#define EXT_LIMIT   (NUMBER_EXT-2)
-#define REG_COMMAND TEXT("JWPce\\Shell\\Open\\Command")
-#define REG_JFCFILE TEXT("JFC\\Shell\\Edit\\Command")
-#define REG_PROJECT TEXT("JWPce-project\\Shell\\Open\\Command")
 
 void do_install (int force) {
-  static tchar* file_ext[] = {TEXT(".jce"),TEXT(".jwp"),TEXT(".euc"),TEXT(".sjs"),TEXT(".jis"),TEXT(".old"),TEXT(".nec"),TEXT(".utf")  /*,TEXT(".jcp"),TEXT(".jfc")*/ };
-  int    ok,i;
-  TCHAR  buffer[SIZE_BUFFER],command[SIZE_BUFFER],executable[SIZE_BUFFER];
+  int    ok,i,iresult,forall;
+  TCHAR  command[SIZE_BUFFER],executable[SIZE_BUFFER];
   struct adv_install install;
 
   if (!force && !jwp_config.cfg.install) return;    // User does not want check.
@@ -284,67 +346,63 @@ void do_install (int force) {
 //
 //  Initialize values.
 //
-  adv_install     = &install;
+  adv_install     = &install;                       // This is safe as adv_install is currently only referenced at this level of scope or lower.
   install.start   = true;
   install.desktop = false;
   GET_STRING (install.group,IDS_INST_GROUP);
   if (!GetModuleFileName(instance,executable,SIZE_BUFFER)) return;
   sprintf (command,TEXT("\"%s\""),executable);
-//
-//  Check extensions.
-//
-  for (i = 0; i < EXT_LIMIT; i++) {
-    if      (get_key(file_ext[i]   ,buffer)) { install.ext[i] = true; ok = false; }
-    else if (!stricmp(TEXT("JWPce"),buffer)) { install.ext[i] = false;            }
-    else                                     { install.ext[i] = true; ok = false; }
-  }
-  if      (get_key(TEXT(".jcp")          ,buffer)) { install.ext[EXT_JCP] = true;  ok = false; }
-  else if (!stricmp(TEXT("JWPce-project"),buffer)) { install.ext[EXT_JCP] = false;             }
-  else                                             { install.ext[EXT_JCP] = false; ok = false; }
-  if      (get_key(TEXT(".jfc")          ,buffer)) { install.ext[EXT_JFC] = true;  ok = false; }
-  else if (!stricmp(TEXT("JFC")          ,buffer)) { install.ext[EXT_JFC] = false;             }
-  else                                             { install.ext[EXT_JFC] = false; ok = false; }
-//
-//  Check executable command.
-//
-  if      (get_key(REG_COMMAND,buffer))               { ok = false;                              }
-  else if (strnicmp(command,buffer,lstrlen(command))) { ok = false;                              }
-  if      (get_key(REG_PROJECT,buffer))               { ok = false; install.ext[EXT_JCP] = true; }
-  else if (strnicmp(command,buffer,lstrlen(command))) { ok = false; install.ext[EXT_JCP] = true; }
-  if      (get_key(REG_JFCFILE,buffer))               { ok = false; install.ext[EXT_JFC] = true; }
-  else if (strnicmp(command,buffer,lstrlen(command))) { ok = false; install.ext[EXT_JFC] = true; }
+  forall     = 0;                                   // Do not install links for all users.
+  hk_classes = 0;                                   // This will cause several registry functions to default to using HKCR.
 //
 //  Do we need to do an install.
 //  
-  if (ok) return;
+  if (check_extensions (install) && ok) return;     // Side effect: determines which extensions need to be installed.
 //
 //  Do the dialog boxes.
 //
-  switch (JDialogBox(IDD_INSTALL,main_window,(DLGPROC) dialog_install)) {
-    case INSTALL_ABORT:
-         return;
-    case INSTALL_ADVANCED:
-         if (JDialogBox(IDD_ADVINSTALL,main_window,(DLGPROC) dialog_advinstall)) return;
-         break;
-    case INSTALL_OK:
-         break;
+  if (INSTALL_ABORT == (iresult = JDialogBox(IDD_INSTALL,main_window,(DLGPROC) dialog_install))) return;
+//
+//  This section takes care of installations for all users / current user.
+//  Without this, unprivileged users may not be able to install any extensions.
+//
+#if !defined(WINCE) && WINVER >= _WIN32_WINNT_WIN2K
+  if (ERROR_SUCCESS != RegOpenKeyEx(HKEY_LOCAL_MACHINE,SUBKEY_CLASSES,0,KEY_CREATE_SUB_KEY,&hk_classes)) hk_classes = 0;                                                        // Check for HKLM accessibility.
+  if (hk_classes) {                                                                                                                                                             // HKLM accessible?
+    if (IDCANCEL == (i = MessageBox (main_window,TEXT("Install for all users?"),TEXT("You Are Privileged"),MB_YESNOCANCEL | MB_ICONQUESTION | MB_DEFBUTTON2))) goto cleanup;    // Query user.
+    if (i == IDNO) {                                                                                                                                                            // Wants to install for current user only.
+      RegCloseKey (hk_classes);                                                                                                                                                 // Close key, then attempt to reopen it in HKCU.
+      hk_classes = 0;
+    }
+    else forall = true;                                                                                                                                                         // Also install links for all users.
+  }
+  if (!hk_classes && (ERROR_SUCCESS != RegOpenKeyEx (HKEY_CURRENT_USER,SUBKEY_CLASSES,0,KEY_CREATE_SUB_KEY,&hk_classes))) hk_classes = 0;                                       // If this fails, errors may occur down the line, which will get reported at that time.
+  if (hk_classes) check_extensions (install);                                                                                                                                   // Recheck extensions relative to one of the Software/Classes keys.
+#endif
+//
+//  Advanced installation requested?
+//
+  if (INSTALL_ADVANCED == iresult) {
+    install.start = install.desktop = false;                                                // Assume "advanced" users won't want links.
+    if (JDialogBox(IDD_ADVINSTALL,main_window,(DLGPROC) dialog_advinstall)) goto cleanup;   // Present advanced installation options dialog.
   }
 //
 //  Install the extensions and the file association.
 //
+  notified = false;                                                                         // Used by make_key() to avoid reporting subsequent errors.
   for (i = 0; i < EXT_LIMIT; i++) {
-    if (install.ext[i]) make_key (file_ext[i],TEXT("JWPce"));
+    if (install.ext[i]) make_key (file_ext[i],TEXT("JWPxp"));
   }
-  make_key (TEXT("JWPce"             ),get_string(IDS_INST_FILETYPE));
-  make_key (TEXT("JWPce\\DefaultIcon"),TEXT("%s,-%d"),executable,IDI_FILEICON);
+  make_key (TEXT("JWPxp"             ),get_string(IDS_INST_FILETYPE));
+  make_key (TEXT("JWPxp\\DefaultIcon"),TEXT("%s,-%d"),executable,IDI_FILEICON);
   make_key (REG_COMMAND               ,TEXT("%s \"%%1\""),command);
 //
 //  Install the project extension and file association.
 //
-  if (install.ext[EXT_JCP]) {
-    make_key (TEXT(".jcp"),TEXT("JWPce-project"));
-    make_key (TEXT("JWPce-project"             ),get_string(IDS_INST_PROJECTTYPE));
-    make_key (TEXT("JWPce-project\\DefaultIcon"),TEXT("%s,-%d"),executable,IDI_PROJECTICON);
+  if (install.ext[EXT_JPR]) {
+    make_key (TEXT(".jpr"),TEXT("JWPxp-project"));
+    make_key (TEXT("JWPxp-project"             ),get_string(IDS_INST_PROJECTTYPE));
+    make_key (TEXT("JWPxp-project\\DefaultIcon"),TEXT("%s,-%d"),executable,IDI_PROJECTICON);
     make_key (REG_PROJECT                       ,TEXT("%s \"%%1\""),command);
   }
 //
@@ -354,6 +412,10 @@ void do_install (int force) {
     make_key (TEXT(".jfc"),TEXT("JFC"));
     make_key (REG_JFCFILE,TEXT("%s \"%%1\""),command);
   }
+//
+//  Finished modifying registry.
+//
+  if (hk_classes) RegCloseKey (hk_classes);
 //
 //  Check for start-menu and/or desktop options.
 //
@@ -372,16 +434,19 @@ void do_install (int force) {
     IPersistFile *file; 
     if (S_OK == CoCreateInstance(CLSID_ShellLink,NULL,CLSCTX_INPROC_SERVER,IID_IShellLink,(void **) &link)) {
       link->SetPath        (executable);        // This is what the shortcut points to.
-      link->SetDescription ("JWPce");           // This is what will show up in the start-menu.
+      link->SetDescription (TEXT("JWPxp"));     // This is what will show up in the Start menu.
       if (S_OK == link->QueryInterface(IID_IPersistFile,(void **) &file)) {     // Create file object.
-        if (install.start  ) save_link (file,CSIDL_PROGRAMS,install.group);
-        if (install.desktop) save_link (file,CSIDL_DESKTOP ,NULL         );
+        if (install.start  ) save_link (file,forall?CSIDL_COMMON_PROGRAMS:        CSIDL_PROGRAMS,install.group);
+        if (install.desktop) save_link (file,forall?CSIDL_COMMON_DESKTOPDIRECTORY:CSIDL_DESKTOP ,NULL         );
         file->Release ();                       // Done with file.
       }
     }
     link->Release ();                           // Done with link.
 #endif WINCE
   }
+cleanup:
+  if (hk_classes) RegCloseKey (hk_classes);
+  hk_classes = 0;
   return;
 }
 

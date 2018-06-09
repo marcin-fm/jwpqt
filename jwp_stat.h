@@ -29,9 +29,9 @@ public:
   void  draw       (HDC hdc);           // Called only by window proc (actual draw).
   int   initialize (WNDCLASS *wclass);  // Intialize the status bar.
   void  redraw     (void);              // Invalidate window (force a redraw).
-  void  update     (char *text);        // Update text message and force redraw.
+  void  update     (CHAR *text);        // Update text message and force redraw.
 private:
-  char  buffer[10];                     // Buffer to store text message.
+  CHAR  buffer[10];                     // Buffer to store text message.
   short offset;                         // Y offset for rendering text.
   short x_insert;                       // X location of the insert/overwrite flag.
   short x_mode;                         // X location of mode flag.

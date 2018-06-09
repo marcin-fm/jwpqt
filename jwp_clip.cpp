@@ -39,8 +39,10 @@
 #include "jwpce.h"
 #include "jwp_clip.h"
 #include "jwp_conf.h"
+#include "jwp_conv.h"
 #include "jwp_file.h"
 #include "jwp_font.h"
+#include "jwp_inpt.h"
 #include "jwp_jisc.h"
 #include "jwp_misc.h"
 #include "jwp_stat.h"
@@ -303,14 +305,26 @@ JWP_file::JWP_file (int format_width) {
 void JWP_file::clip_paste (int errors) {
   JWP_file *paste;
   Paragraph *para;
+  kana_convert.clear ();                                        // Clear pending kana conversions (such as 'n' or katakana vowels). This is done even if the paste fails, since the implication is that the user was done entering kana. Kanji conversions are not affected. Any kana pushed out will be part of the previous undo chain, not the pasted text (if any).
+  if (!(paste = get_paste (errors ? window : null))) return;    // Get data to paste. This was moved here to avoid deleting text with nothing to paste.
+  jwp_conv.clear ();                                            // Clear kanji conversions but only if something is getting pasted. This fixes the case where you get a zombie kanji conversion list. You run into problems if this is done prior to checking if there is anything to paste.
   undo_start ();
   if (sel.type == SELECT_EDIT) selection_delete ();             // Pasting into exising selection.
   selection_clear ();
-  if (!(paste = get_paste (errors ? window : null))) return;    // Get data to paste.
+//
+//  Edit control. Paste only the first non-empty line found.
+//
+  if (filetype == FILETYPE_EDIT) {
+    for (para = paste->first; para != paste->last; para = para->next) { if (para->length) break; }
+    if (para->length) {
+      undo_para  (UNDO_QUE);
+      put_string (para->text,para->length);
+    }
+  }
 //
 //  Single paragraph paste.
 //
-  if (paste->first == paste->last) {
+  else if (paste->first == paste->last) {
     undo_para  (UNDO_QUE);
     put_string (paste->first->text,paste->first->length);
   }
@@ -446,6 +460,7 @@ HGLOBAL JWP_file::export_bitmap () {
   HBITMAP    hbitmap;       // Actuall bitmap
   RECT       rect;          // Bonding rectangle for the blitmap
   HFONT      font;          // Holds context font so we can restore.
+  bool       ascii_on_last_line;
 //
 //  Need to setup the parameters in the clipboard so we can use the 
 //  standard routines.
@@ -462,12 +477,18 @@ HGLOBAL JWP_file::export_bitmap () {
     para->format (this,NULL,false); // Data placed in the clipboard is unformatted!
     for (line = para->first; line; line = line->next) {
       y += clip_font.vheight;
-      for (j = clip_font.x_offset, i = 0; i < line->length; i++) j = clip_font.hadvance(j,para->text[line->first+i]);
+      ascii_on_last_line = false;                   // Reset on every new line since only the last line matters.
+      for (j = clip_font.x_offset, i = 0; i < line->length; i++) {
+        KANJI ch = para->text[line->first+i];
+        if (ISASCII(ch)) ascii_on_last_line = true; // This could be more sophisticated if there were a method of checking the actual height needed for each ASCII glyph. Making assumptions is not good enough, in my opinion.
+        j = clip_font.hadvance(j,ch);               // Accumulate width of current line.
+      }
       j -= clip_font.x_offset;
       if (j > x) x = j;
     }
   }
-  y -= 2*clip_font.kanji->leading;                  // Remove extra vertical space allocated for each line.
+  if (!ascii_on_last_line)                          // The inter-line vertical spacing is sometimes used by ASCII fonts, so keep it when it might be necessary.
+    y -= 2*clip_font.kanji->leading;                // Remove extraneous vertical space from the final line.
 //
 //  Make memory bitmap
 //
@@ -564,7 +585,7 @@ int JWP_file::import_clip () {
        (block = GetClipboardData(CF_UNICODETEXT))) {
     convert.input_clip (block);
     convert.set_type   (jwp_config.cfg.clip_read);
-    if ((jwp_config.cfg.clip_read == FILETYPE_UNICODE) || convert.is_unicode()) {
+    if ((jwp_config.cfg.clip_read == FILETYPE_UNICODE) || convert.is_unicode()) {  // This attempts to confirm Unicode for FILETYPE_AUTODETECT, but a single character lacking a translation causes the entire string to be rejected. Unfortunately, Windows will "helpfully" convert plain text into Unicode format making it unreliable.
       convert.rewind     ();
       convert.set_type   (FILETYPE_UNICODE);
       import_file        (&convert);

@@ -85,7 +85,7 @@ public:
  ~JWP_conv (void);
   void  adjust       (HWND hwnd);               // Adjust display parameters.
   int   attempt      (KANJI *kana,int length);  // Process auto kana->kanji conversion (determine if conve is possible).
-  void  clear        (void);                    // Clear conversion system
+  void  clear        (BOOL deselect=0);         // Clear conversion system, optionally clear selection.
   int   convert      (KANJI *kana,int length);  // Do an actuall conversion (no external output).
   int   dlg_userconv (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam);  // Edit user kana->kanji conversons.
   void  do_convert   (KANJI *kana,int length);  // Attempt forced conversion (F2, F2, etc)

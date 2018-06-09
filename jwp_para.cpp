@@ -312,14 +312,15 @@ void Paragraph::ins_string (JWP_file *file,Line *line,int pos,KANJI *string,int 
 //  paragrpah parameters, etc.
 //
 //      line   -- Line to be considered.
+//      font   -- Font to be considered.
 //
 //      RETURN -- Pixel location.  Note value may be netative if 
 //                display is scrolled.
 //
-int Paragraph::line_start (Line *line) {
+int Paragraph::line_start (Line *line, JWP_font *font) {
   int x;
-  x = file_font.x_offset+file_font.hwidth*indent_left;
-  if (first == line) x += file_font.hwidth*indent_first;
+  x = font->x_offset+font->hwidth*indent_left;
+  if (first == line) x += font->hwidth*indent_first;
   return (x);
 }
 

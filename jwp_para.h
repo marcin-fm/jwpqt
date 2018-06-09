@@ -53,7 +53,7 @@ private:
   int         copy_para  (Paragraph *para);     // Copy entire paragraph to this paragraph.
   void        copy_format(Paragraph *para);     // Copy formating infomation form aother paragraph.
   void        format     (JWP_file *file,Line *line,int redraw);    // Pargaraph format.
-  int         line_start (Line *line);          // x-pixal location of the start of a line.
+  int         line_start (Line *line,class JWP_font *font);   // Calculate horizontal pixel location of the start of a line for a given font.
   Line       *new_line   (void);                // Add line pointer to end of file.
   int         set_text   (KANJI *data,int len); // Set entire text buffer.
   class Paragraph *next,*prev;                  // Pointers to next & previous paragraph.

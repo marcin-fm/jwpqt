@@ -7,12 +7,22 @@
 //                                                                   //
 //===================================================================//
 
-#define _WIN32_WINNT    0x0401                  // Necessary to get wheel-mouse defintions.
+//#define _WIN32_WINNT    0x0401                // Necessary to get wheel-mouse defintions.
+#define _WIN32_WINNT    0x0500                  // Necessary to get a few new definitions.
+
+// If targeting older versions of Windows, you should also check all instances WINVER and _WIN32_WINNT in this program.
+#if (_WIN32_WINNT < 0x0500)
+#define OFN_DONTADDTORECENT     0x02000000
+#define SM_IMMENABLED           82
+#endif
+
 
 #include <windows.h>
 
 #ifndef jwp_main_h
 #define jwp_main_h
+
+#define CONVERT_ACCESS CONVERT_ACCESS_MEMORY    // Load conversion dictionary into memory at startup.
 
 #include "jwp_wnce.h"                           // Windows CE stuff
 #include "jwp_options.h"                        // Sets some major compile time options.
@@ -20,6 +30,14 @@
 #ifndef WINCE
   #include <stdio.h>                            // Definition of sscanf() is here, but CE does not have this file
 #endif
+
+#include <tchar.h>
+#define stricmp  _tcsicmp
+#define strnicmp _tcsnicmp
+#define strdup   _tcsdup
+#define sprintf  _stprintf
+#define sscanf   _stscanf
+//#define strcpy   _tcscpy
 
 #ifdef WINELIB                                  // Defintions for UNIX WINELIB
   #include <stdlib.h>
@@ -45,14 +63,21 @@
 #define DEBUG_ROUTINES
 #endif _DEBUG && !DEBUG_ROUTINES
 
+extern void dprintf (TCHAR *format,...);
+extern void mprintf (TCHAR *format,...);
+
 #ifdef DEBUG_ROUTINES
-  extern void dprintf (TCHAR *format,...);
-  extern void mprintf (TCHAR *format,...);
   #define DPRINTF   dprintf
   #define MPRINTF   mprintf
-#else  DEBUG_ROUTINES  
+  #define ALERT()   mprintf (TEXT("%s: %d"),TEXT(__FILE__),__LINE__)
+  #define ASSERT(e) ( (e) ? (void) 0 : mprintf (TEXT("%s\n%s: %d"),TEXT(#e),TEXT(__FILE__),__LINE__))
+// Use DebugBreak() instead when you want to break into the debugger immediately.
+#else  DEBUG_ROUTINES
   #define DPRINTF   (true ? (void) 0 : wsprintf )
-  #define MPRINTF   (true ? (void) 0 : wsprintf )
+//#define MPRINTF   (true ? (void) 0 : wsprintf ) // This doesn't work!
+  #define MPRINTF   mprintf
+  #define ALERT()
+  #define ASSERT(e) ((void) 0)
 #endif DEBUG_ROUTINES
 
 //===================================================================
@@ -60,14 +85,20 @@
 //  General definitions.
 //
 
+                                                // This is terribly insecure, but what can you do?
 #define SIZE_BUFFER     512                     // Size of general working character buffer.
-                                                // Version special is defined in options and includes special flags.
-#define SIZE_WORKING    256                     // Size of a working string (smaller than a buffer).
-#ifndef VERSION_SPECIAL
+#define SIZE_WORKING    (SIZE_BUFFER/2)         // Size of a working string (smaller than a buffer).
+#define SIZE_BIG_BUFFER 2048                    // Enough characters for dictionary entries or other potentially large items.
+
+#ifndef VERSION_SPECIAL                         // Version special is defined in options and includes special flags.
+ #ifndef UNICODE
+  #define VERSION_SPECIAL TEXT(" ANSI")
+ #else
   #define VERSION_SPECIAL                       // Define the special ID if not already.  Used for special versions.
+ #endif
 #endif  VERSION_SPECIAL
-#define VERSION_STRING  TEXT("1.50") VERSION_SPECIAL  // Version ID number
-#define VERSION_NAME    TEXT("JWPce ") VERSION_STRING // Version name.
+#define VERSION_STRING  TEXT("1.61") VERSION_SPECIAL  // Version ID number
+#define VERSION_NAME    TEXT("JWPxp ") VERSION_STRING // Version name.
 
                                 // Input modes
 #define MODE_KANJI      0       // Kanji (kana too)
@@ -84,6 +115,7 @@ extern HINSTANCE instance;      // Our instance.
 extern HINSTANCE language;      // Language processor instance.
 extern HMENU     hmenu;         // Our menu.
 extern HMENU     popup;         // Our popup menu.
+extern UINT16    winver;        // Windows version. Same format as WINVER and _WIN32_WINNT.
 #ifdef WINCE_POCKETPC
 extern HMENU     hmenu2;        // File menu in the button bar.
 #endif WINCE_POCKETPC

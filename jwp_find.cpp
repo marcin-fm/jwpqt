@@ -188,7 +188,9 @@ int JWP_search::dlg_search (HWND hwnd,UINT message,int command,int rep,class JWP
          CheckDlgButton (hwnd,IDC_SRJASCII  ,jwp_config.cfg.search_jascii);
          CheckDlgButton (hwnd,IDC_SRWRAP    ,jwp_config.cfg.search_wrap);
          CheckDlgButton (hwnd,IDC_SRALLFILES,jwp_config.cfg.search_all);
-         SendDlgItemMessage (hwnd,IDC_SRSEARCH,JE_SETTEXT,search_length   ,(LONG) search_input);
+         if (search_length && search_input) {
+           SendDlgItemMessage (hwnd,IDC_SRSEARCH,JE_SETTEXT,search_length   ,(LONG) search_input);
+         }
          SendDlgItemMessage (hwnd,IDC_SRSEARCH,JE_SETHIST,IDC_SRHISTSEARCH,(LONG) &search_history);
          if (!list) SendDlgItemMessage (hwnd,IDC_SRSEARCH,JE_LOAD   ,0,(LONG) jwp_file);
          EnableWindow   (GetDlgItem(hwnd,IDC_SRALLFILES),!list);
@@ -200,7 +202,9 @@ int JWP_search::dlg_search (HWND hwnd,UINT message,int command,int rep,class JWP
 #ifndef CLEARN_NOCONFIRM
            CheckDlgButton (hwnd,IDC_SRNOCONFIRM,jwp_config.cfg.search_noconfirm);
 #endif  CLEARN_NOCONFIRM
-           SendDlgItemMessage (hwnd,IDC_SRREPLACE,JE_SETTEXT,replace_length   ,(LONG) replace);
+           if (replace_length && replace) {
+             SendDlgItemMessage (hwnd,IDC_SRREPLACE,JE_SETTEXT,replace_length   ,(LONG) replace);
+           }
            SendDlgItemMessage (hwnd,IDC_SRREPLACE,JE_SETHIST,IDC_SRHISTREPLACE,(LONG) &replace_history);
          }
          dlg_search (hwnd,WM_COMMAND,IDC_SRALLFILES,rep,list);
@@ -254,6 +258,7 @@ int JWP_search::dlg_search (HWND hwnd,UINT message,int command,int rep,class JWP
 //
                 search_length = JEGetDlgItemText(hwnd,IDC_SRSEARCH,&search_input);
                 search_input  = kstrdup(search_input,search_length);  
+                if (!search_length) return (true);                         // Ignore if no search string present.
                 if (!search_input) { OutOfMemory (hwnd); return (true); }
                 if (jwp_config.cfg.search_jascii || jwp_config.cfg.search_nocase) {
                   if (!(search = kstrdup(search_input,search_length))) OutOfMemory (hwnd); 

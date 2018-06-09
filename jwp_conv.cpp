@@ -195,7 +195,7 @@ static int cmp_key (byte *p1,byte *p2,int endkana) {
 //      key    -- Ending from key (user ending as a letter).
 //      kana   -- Unser ending as kana (contains more information than
 //                the letter, and allows better processing of some 
-//                some entries (accepting chisai tsu instead of all 
+//                some entries (accepting chiisai tsu instead of all 
 //                t entries).
 //
 //      RETURN -- True value indicate the chraters match.  A False 
@@ -206,7 +206,7 @@ static int cmp_key (byte *p1,byte *p2,int endkana) {
 //  dictionary, because this dictionary contains entries for all 
 //  possible verb endings.
 //
-#define BYTEKANA_TSU    (0x43)   // Key value for chisai tsu.
+#define BYTEKANA_TSU    (0x43)   // Key value for chiisai tsu.
 #define BYTEKANA_N      (0x73)   // Key value for n
 #define BYTEKANA_WA     (0x6F)   // Key value for wa
 
@@ -344,7 +344,7 @@ struct godan {      // Structure relating ascii values for the godan doushi and 
 };
 
 static struct godan godans[] = { 
-  { 0x26,'u' },{ 0x2F,'k' },{ 0x30,'g' },{ 0x39,'s' },{ 0xC4,'t' },
+  { 0x26,'u' },{ 0x2F,'k' },{ 0x30,'g' },{ 0x39,'s' },{ 0x44,'t' },
   { 0x4C,'n' },{ 0x56,'b' },{ 0x60,'m' },{ 0x6B,'r' }
 };
 
@@ -524,7 +524,7 @@ int EDIT_userconv::dlg_convert (HWND hwnd,UINT message,WPARAM wParam,LPARAM lPar
                 lkanji = JEGetDlgItemText(hwnd,IDC_CEKANJI,&kkanji);
                 if (!lkana || !lkanji) {
                   JMessageBox (hwnd,IDS_CE_ERROREMPTY,IDS_CE_ERRORTITLE,MB_OK | MB_ICONWARNING);
-                  SetFocus    (GetDlgItem(hwnd,lkana ? IDC_CEKANJI : IDC_CEKANA));
+                  SetDialogFocus (hwnd,lkana ? IDC_CEKANJI : IDC_CEKANA);
                   return (true);
                 }
 //
@@ -534,10 +534,18 @@ int EDIT_userconv::dlg_convert (HWND hwnd,UINT message,WPARAM wParam,LPARAM lPar
                 for (i = 0; i < lkana; i++) {               // Process kana
                   if (!ISHIRAGANA(kkana[i])) {              // Kana should be hiragana.
                     JMessageBox (hwnd,IDS_CE_ERRORKANA,IDS_CE_ERRORTITLE,MB_OK | MB_ICONWARNING);
-                    SetFocus   (GetDlgItem(hwnd,IDC_CEKANA));
+                    SetDialogFocus (hwnd,IDC_CEKANA);
                     return (true);
                   }
                   kbuffer[length++] = kkana[i];
+                }
+//
+//  Require at least two kana characters for special conversion types.
+//
+                if ((IsDlgButtonChecked (hwnd,IDC_CEGODAN) || IsDlgButtonChecked (hwnd,IDC_CEICHIDAN) || IsDlgButtonChecked (hwnd,IDC_CEIADJ)) && lkana < 2) {
+                  JMessageBox (hwnd,IDS_CE_ERRORLENGTH,IDS_CE_ERRORTITLE,MB_OK | MB_ICONWARNING);
+                  SetDialogFocus (hwnd,IDC_CEKANA);
+                  return (true);
                 }
 //
 //  Process godan doushi.
@@ -546,8 +554,8 @@ int EDIT_userconv::dlg_convert (HWND hwnd,UINT message,WPARAM wParam,LPARAM lPar
                   if (kkana[lkana-1] == kkanji[lkanji-1]) lkanji--;
                   if (!godan_ascii(kkana[lkana-1])) {
                     JMessageBox (hwnd,IDS_CE_ERRORGODAN,IDS_CE_ERRORTITLE,MB_OK | MB_ICONWARNING);
-                    SetFocus    (GetDlgItem(hwnd,IDC_CEKANA));
-                    return      (true);
+                    SetDialogFocus (hwnd,IDC_CEKANA);
+                    return (true);
                   }
                   kbuffer[length++] = kbuffer[length-1];    // Build bracked ending.
                   kbuffer[length-2] = '[';
@@ -555,8 +563,8 @@ int EDIT_userconv::dlg_convert (HWND hwnd,UINT message,WPARAM wParam,LPARAM lPar
                   for (i = 0; i < lkanji; i++) {            // Check kanji.
                     if (ISSEPARATOR(kkanji[i])) {           // Multi-listing is an error.
                       JMessageBox (hwnd,IDS_CE_ERRORVERB,IDS_CE_ERRORTITLE,MB_OK | MB_ICONWARNING);
-                      SetFocus    (GetDlgItem(hwnd,IDC_CEKANJI));
-                      return      (true);
+                      SetDialogFocus (hwnd,IDC_CEKANJI);
+                      return (true);
                     }
                   }
                 }
@@ -566,17 +574,35 @@ int EDIT_userconv::dlg_convert (HWND hwnd,UINT message,WPARAM wParam,LPARAM lPar
 #define KANA_RU 0x246b
                 if (IsDlgButtonChecked(hwnd,IDC_CEICHIDAN)) {
                   if (kkana[lkana-1] == kkanji[lkanji-1]) lkanji--;
-                  if (kkana[lkana-1] == KANA_RU) length--;
+                  if (kkana[lkana-1] == KANA_RU) length--;  // Check for -ru.
                     else {
                       JMessageBox (hwnd,IDS_CE_ERRORRUVERB,IDS_CE_ERRORTITLE,MB_OK | MB_ICONWARNING);
-                      SetFocus    (GetDlgItem(hwnd,IDC_CEKANA));
-                      return      (true);
+                      SetDialogFocus (hwnd,IDC_CEKANA);
+                      return (true);
                     }
+//
+//  Check for -iru/-eru as part of ichidan doushi processing.
+//
+                  char *romaji = kana_to_ascii(kkana[lkana-2]);
+                  if (!romaji) {                            // Check for conversion error.
+                    JMessageBox (hwnd,IDS_CE_ERRORRUVERB,IDS_CE_ERRORTITLE,MB_OK | MB_ICONWARNING);
+                    SetDialogFocus (hwnd,IDC_CEKANA);
+                    return (true);
+                  }
+                  romaji += strlen(romaji)-1;               // Last character in romanization of kana.
+                  if ((*romaji != 'i') && (*romaji != 'e')) {
+                    JMessageBox (hwnd,IDS_CE_ERRORRUVERB,IDS_CE_ERRORTITLE,MB_OK | MB_ICONWARNING);
+                    SetDialogFocus (hwnd,IDC_CEKANA);
+                    return (true);
+                  }
+//
+//  Check kanji and finish ichidan doushi processing.
+//
                   for (i = 0; i < lkanji; i++) {            // Check kanji.
                     if (ISSEPARATOR(kkanji[i])) {           // Multi-listing is an error.
                       JMessageBox (hwnd,IDS_CE_ERRORVERB,IDS_CE_ERRORTITLE,MB_OK | MB_ICONWARNING);
-                      SetFocus    (GetDlgItem(hwnd,IDC_CEKANJI));
-                      return      (true);
+                      SetDialogFocus (hwnd,IDC_CEKANJI);
+                      return (true);
                     }
                   }
                   kbuffer[length++] = '(';
@@ -592,14 +618,14 @@ int EDIT_userconv::dlg_convert (HWND hwnd,UINT message,WPARAM wParam,LPARAM lPar
                   if (kkana[lkana-1] == KANA_I) length--;
                     else {
                       JMessageBox (hwnd,IDS_CE_ERRORIADJ,IDS_CE_ERRORTITLE,MB_OK | MB_ICONWARNING);
-                      SetFocus    (GetDlgItem(hwnd,IDC_CEKANA));
-                      return      (true);
+                      SetDialogFocus (hwnd,IDC_CEKANA);
+                      return (true);
                     }
                   for (i = 0; i < lkanji; i++) {            // Check kanji.
                     if (ISSEPARATOR(kkanji[i])) {           // Multi-listing is an error.
                       JMessageBox (hwnd,IDS_CE_ERRORVERB,IDS_CE_ERRORTITLE,MB_OK | MB_ICONWARNING);
-                      SetFocus    (GetDlgItem(hwnd,IDC_CEKANJI));
-                      return      (true);
+                      SetDialogFocus (hwnd,IDC_CEKANJI);
+                      return (true);
                     }
                   }
                   kbuffer[length++] = '{';
@@ -615,6 +641,11 @@ int EDIT_userconv::dlg_convert (HWND hwnd,UINT message,WPARAM wParam,LPARAM lPar
 //
 //  Do the kanji.
 //
+                if (!lkana || !lkanji) {                    // Check if we ended up with empty strings.
+                  JMessageBox (hwnd,IDS_CE_ERRORDELETED,IDS_CE_ERRORTITLE,MB_OK | MB_ICONWARNING);
+                  SetDialogFocus (hwnd,lkana ? IDC_CEKANJI : IDC_CEKANA);
+                  return (true);
+                }
                 for (i = 0; i < lkanji; i++) kbuffer[length++] = kkanji[i];
                 EndDialog (hwnd,true);
                 return (true);
@@ -895,7 +926,7 @@ JWP_conv::JWP_conv (int count) : KANJI_list (count) {
 //
 JWP_conv::~JWP_conv () {
 #if   (CONVERT_ACCESS == CONVERT_ACCESS_MEMORY) 
-  if (dict ) CloseHandle (dict);
+  if (dict) free (dict);
 #else  CONVERT_ACCESS
   CloseHandle (dict);
 #endif CONVERT_ACCESS
@@ -999,12 +1030,29 @@ int JWP_conv::binary_search (byte *key) {
 //
 //  Clear the kana->kanji conversion system.
 //
-void JWP_conv::clear () {
+void JWP_conv::clear (BOOL deselect) {
   kana_convert.clear ();
   is_more  = false;
   KANJI_list::clear ();
+//
+// Neither of the following fixes work properly in every situation.
+// There are many cases where the selection needs to remain unchanged.
+// They have been left here, commented-out, for reference.
+//
+//if (file && file->sel.type == SELECT_CONVERT) file->selection_clear ();       // This fixes a lot of bugs where the conversion is cleared but the selection is not updated. The result is you've still got a conversion selection but the kanji list is gone.
+//if (file && file->sel.type == SELECT_CONVERT) file->sel.type = SELECT_EDIT;   // This leaves the selection but puts it in a safer state.
+  if (deselect && file && file->sel.type == SELECT_CONVERT) file->selection_clear ();   // This fixes a lot of bugs where the conversion is cleared but the selection is not updated. The result is you've still got a conversion selection but the kanji list is gone.
   return;
 }
+
+//
+//  This value can be passed to search() as the 'endkana' argument.
+//  It informs search_dict() that we want to match v1r/adj-i stems.
+//
+//  This is dependent on test_endings() matching all '1'/'i' dictionary endings,
+//  and the numerical value was chosen such that it won't cause unintended matches.
+//
+#define CONVERT_SPECIAL 1
 
 //--------------------------------
 //
@@ -1022,6 +1070,13 @@ int JWP_conv::convert (KANJI *kana,int length) {
   KANJI_sel *choice;
   int i;
   clear ();                                                 // Clear any old conversion.
+  for (i = 0; i < length; i++) {                            // Check for invalid characters.
+    if (ISHIRAGANA(kana[i]) || (ISKATAKANA(kana[i]) && kana[i] < 0x2574)) continue;
+    else {                                                  // Most katakana still work even though they're not allowed.
+      ASSERT (i && i == length - 1);                        // For inline conversions, illegal characters should never be present at the start or in the middle of the conversion string. They can be found anywhere for manual conversions, of course.
+      return (0);                                           // Do not attempt conversion if there's anything invalid.
+    }
+  }
   if (length >= SIZE_MAXKEY) return (0);                    // Too many characters in kana list.
   for (i = 0; i < length; i++) key[i] = (byte) ((kana[i] & 0x00ff) | 0x80);
   for (; i < SIZE_SELKEY; i++) key[i] = 0;
@@ -1032,6 +1087,7 @@ int JWP_conv::convert (KANJI *kana,int length) {
     }
   search (key,0);                                           // Get fixed end kanji.
   if (length > 1) {             
+    search (key,CONVERT_SPECIAL);                           // Get v1r/adj-i stems.
     key[length-1] = 0;          
     search (key,kana[length-1]);                            // Get variable end kanji
   }
@@ -1231,7 +1287,11 @@ int JWP_conv::initialize (WNDCLASS *wclass) {
   isize = GetFileSize (file,NULL);
   if (!(dict = (byte *) malloc(isize)) || !ReadFile(file,dict,isize,&done,NULL)) err = true;
   CloseHandle (file);
-  if (err) return (true);
+  if (err) {
+    if (dict) free (dict);
+    dict = 0;
+    return (true);
+  }
 #else  CONVERT_ACCESS
   if (INVALID_HANDLE_VALUE == (dict = jwp_config.open(NAME_CONVT,OPEN_READ,false))) return (true);
 #endif CONVERT_ACCESS
@@ -1276,7 +1336,7 @@ int JWP_conv::initialize (WNDCLASS *wclass) {
     wclass->lpszClassName = WINCLASS_CONVERTBAR;
     if (!RegisterClass(wclass)) return (true);
   }
-  if (jwp_config.cfg.nokanjibar) {                              // User wants no kanji bar.
+  if (!jwp_config.cfg.kanjibar) {                              // User wants no kanji bar.
     height = 0;
     window = NULL;
   }
@@ -1386,7 +1446,8 @@ void JWP_conv::search_dict (byte *key,int endkana,IO_cache *cache,int sorted) {
   byte *ptr;
   int   i,j,diff;
 
-  if (endkana) {                                // In endkana make ending
+  if (endkana == CONVERT_SPECIAL) ending = 0;   // Special mode used to pick up v1r/adj-i stems.
+  else if (endkana) {                           // In endkana make ending
     ascii = kana_to_ascii(endkana);
     if (!ascii) return;
     if (*ascii == '+') ascii++;
@@ -1403,10 +1464,12 @@ void JWP_conv::search_dict (byte *key,int endkana,IO_cache *cache,int sorted) {
     ptr++;
     diff = cmp_key (kana,key,endkana);          // Compare keys.
     if (diff > 0) {
-      if (test_nkey(kana,key)) is_more = true;  // Test to see if kana can possible be added to string.
+      if (!endkana && test_nkey(kana,key))      // Test to see if kana can possible be added to string.
+        is_more = true;
       if (sorted) break;                        // Past key in sorted dictionary so done.
       continue;                                 // Unsorted dictionary may still have entries.
     }
+    if (diff < 0) continue;                     // Dictionary entry is too small.
 // ###
 //  To support the user converisons, we expand all conversions.  This
 //  can result in conversions beging entered in the list more than once.
@@ -1415,6 +1478,7 @@ void JWP_conv::search_dict (byte *key,int endkana,IO_cache *cache,int sorted) {
 //
 //  if (ending != dict_ending) continue;        // Edings don't match so skip this one.
     if (!test_endings(dict_ending,ending,endkana)) continue;
+    if (endkana == CONVERT_SPECIAL) endkana = 0;// Suppress erroneous affixes in this mode.
     if (!diff) {                                // have match.
       if (list_len) put_kanji ('/');            // Merge with list.
       for (i = 0; (convert[i] != '\n'); i++) {
@@ -1447,6 +1511,11 @@ void JWP_conv::search_dict (byte *key,int endkana,IO_cache *cache,int sorted) {
 void JWP_conv::select (int s) {
   int        i;
   KANJI_sel *choice;
+  if (!list_len) {                                  // This shouldn't be necessary, but bugs sometimes put us into such a state.
+    if (file->sel.type == SELECT_CONVERT) file->selection_clear ();
+    ALERT ();                                       // Yet another conversion bug to fix...
+    return;
+  }
 //
 //  Scroll kanji bar to make current selection visable.
 //
@@ -1547,7 +1616,10 @@ void JWP_file::convert (int code) {
   i = sel.pos2.pos-sel.pos1.pos;
   kptr = sel.pos1.para->text+sel.pos1.pos;
   all_rel ();
-  if (j && (code != CONVERT_ATTEMPT)) { MessageBeep (MB_ICONASTERISK); return; }
+  if (j && (code != CONVERT_ATTEMPT)) {                     // If unwanted characters found, try a romaji->kana conversion instead.
+    if (!convert_romaji ()) MessageBeep (MB_ICONASTERISK);
+    return;
+  }
 //
 //  If this is an attempt, first do an attempt.  If this cannot be 
 //  matched, backup up one kana and do a conversion.
@@ -1563,7 +1635,7 @@ void JWP_file::convert (int code) {
       do {
         sel.pos2.advance (-1);
         i--;
-        if (!i) { jwp_conv.clear(); return; }
+        if (!i) { jwp_conv.clear(); selection_clear(); return; }
       } while (!jwp_conv.convert(kptr,i));
       jwp_conv.do_convert (kptr,i);         
     }
@@ -1574,6 +1646,61 @@ void JWP_file::convert (int code) {
 //
   jwp_conv.do_convert (kptr,i);
   return;
+}
+
+BOOL JWP_file::convert_romaji () {
+  int i,kcnt,nonascii=false;
+  KANJI *kbuf,*kptr,k;
+  Selection old = sel;
+  if (sel.type != SELECT_EDIT) return (false);
+  all_abs ();
+  kcnt = sel.pos2.pos-sel.pos1.pos;
+  if (kcnt > sel.pos1.para->length - sel.pos1.pos) { ALERT(); kcnt = 0; }
+  all_rel ();
+//
+// Allocate a buffer since the selected text is probably going to get deleted right away.
+//
+  if (!kcnt) return (false);
+  kbuf = (KANJI *) malloc (kcnt*sizeof(KANJI));   // This could have been a char buffer, saving half of a trivial amount of memory, but who cares?
+  if (!kbuf) return (false);
+//
+// Copy selection to buffer and check for invalid characters. Pointer used because the index doesn't always start at 0.
+//
+  all_abs ();
+  for (kptr=kbuf, i = sel.pos1.pos; (i < sel.pos2.pos) && (i < sel.pos1.para->length); i++) {
+    k = sel.pos1.para->text[i];
+    if ((k < 0x20 || k >= 0x7f) && k != '\t') { nonascii = true; break; }
+    *kptr++ = k;
+  }
+  all_rel ();
+  if (nonascii) { free (kbuf); return (false); }
+//
+// Send each character in the buffer to the appropriate handler as if the user typed it.
+// We really should check if there are any unconvertable sequences and do nothing at all if so, but that's difficult.
+//
+  for (i = 0; i < kcnt; i++) {
+    k = kbuf[i];
+    if (k == '\t') do_key (VK_TAB,0,0);
+    else kana_convert.do_char (this,kbuf[i]);
+  }
+  if (sel.type == SELECT_KANJI) convert (CONVERT_RIGHT);
+  jwp_conv.clear  ();                             // Clear out anything pending, a consequence of emulating user input.
+  selection_clear ();                             // This line is probably superfluous.
+//
+// Highlight the newly converted characters so the user can immediately convert to kanji, copy, etc.
+// Since we're fiddling with the selection and sometimes the cursor, a few unusual steps are involved.
+//
+  sel = old;                                      // Restore original selection.
+  sel.type = SELECT_EDIT;                         // This should already be the case but set it explicitly as a defensive coding practice.
+  if (old.fixed == SELECT_FIX2) {                 // Emulate the case where the original text was selected right to left.
+    sel.pos2 = cursor;
+    cursor = old.pos1;
+  }
+  edit_menu ();                                   // Set up the edit menu items and associated icons.
+  selection (true);                               // Select text based on current cursor position.
+  view_check ();                                  // This seems to be necessary sometimes when monkeying with the cursor.
+  free (kbuf);
+  return (true);
 }
 
 //--------------------------------

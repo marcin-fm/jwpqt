@@ -323,7 +323,8 @@ void IO_cache::put_char (int ch) {
 //
 int IO_cache::reload () {
   unsigned long done;
-  if (handle == INVALID_HANDLE_VALUE) {                      // Cannot reload a memory cache.
+  if (position > size) return (true);                       // This can happen if we keep reading past the end of the buffer.
+  if (handle == INVALID_HANDLE_VALUE) {                     // Cannot reload a memory cache.
     if (position >= size) return (true);
     return (false);
   }

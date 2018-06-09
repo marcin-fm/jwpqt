@@ -410,11 +410,11 @@ static BOOL CALLBACK dialog_xrefinfo (HWND hwnd,UINT message,WPARAM wParam,LPARA
 //                                  routine automatically.
 //
 #ifdef USE_ASCII_OKURIGANA
-  #define PARAN_LEFT    '('
-  #define PARAN_RIGHT   ')'
+  #define PAREN_LEFT    '('
+  #define PAREN_RIGHT   ')'
 #else  USE_ASCII_OKURIGANA
-  #define PARAN_LEFT    KANJI_LPARAN
-  #define PARAN_RIGHT   KANJI_RPARAN
+  #define PAREN_LEFT    KANJI_LPAREN
+  #define PAREN_RIGHT   KANJI_RPAREN
 #endif USE_ASCII_OKURIGANA
 
 static byte *put_line (EUC_buffer *line,int base,byte *ptr,int add) {
@@ -427,13 +427,13 @@ static byte *put_line (EUC_buffer *line,int base,byte *ptr,int add) {
     while (*ptr) {
       if (*ptr == 0x1f) line->put_char (KANJI_DASH);
         else {
-          if (*ptr & 0x80) { line->put_char(PARAN_LEFT); okurigana = true; }
+          if (*ptr & 0x80) { line->put_char(PAREN_LEFT); okurigana = true; }
           line->put_char (base | (*ptr & 0x7F));
         }
       ptr++;
     }
   }
-  if (okurigana) line->put_char (PARAN_RIGHT);
+  if (okurigana) line->put_char (PAREN_RIGHT);
   if (!add) line->flush (-1);
   return (ptr+1);
 }
@@ -468,7 +468,7 @@ static byte *put_reading (EUC_buffer *line,int base,byte *ptr,int index,int last
   if (!jwp_config.cfg.info_compress) return (put_line(line,base,ptr,false));    // Uncompressed line, just pass through.
   if (!index) line->clear ();                       // Start of a compressed block.
     else {          
-      if (base) line->put_char (KANJI_CAMA);        // Continuing a compressed block
+      if (base) line->put_char (KANJI_COMMA);        // Continuing a compressed block
         else {
           line->put_char (',');
           line->put_char (' ');
@@ -747,12 +747,8 @@ int initialize_info (WNDCLASS *wclass) {
 //
 //  Get startup info form the kanji information database.
 //
-  ulong done;
   KANJI_info info;
   if (info.open_info(null)) return (false);
-  ReadFile (info.handle,&jwp_config.kanji_flags,sizeof(long),&done,NULL);
-//  ReadFile (handle,&count   ,sizeof(short),&done,NULL);     // Get the number of kanji in database (NOT USED AT THIS TIME)
-//  ReadFile (handle,&last_jis,sizeof(short),&done,NULL);     // Last kanji in the database. (NOT USED AT THIS TIME)
   info.close_info ();
   return (false);
 }
@@ -832,7 +828,7 @@ static void info_string (HWND hwnd,int id,byte *string) {
   return;
 }
 #else WINCE
-  #define info_string(w,i,s) SetDlgItemText(w,i,(char *) s);
+#define info_string(w,i,s) SetDlgItemTextA(w,i,(char *) s);   // Always use ANSI for this one regardless of compiled character set.
 #endif WINCE
 
 //===================================================================
@@ -912,12 +908,20 @@ int KANJI_info::dlg_kanjiinfo (HWND hwnd,UINT message,WPARAM wParam,LPARAM lPara
     case WM_COMMAND:    
          switch (LOWORD(wParam)) {
            case IDOK:
+                if (GetFocus () == GetDlgItem (dialog,IDC_KILIST)) {            // List in focus?
+                  JWP_list *list = (JWP_list*)SendDlgItemMessage (hwnd,IDC_KILIST,JL_GETJWPLIST,0,0);
+                  if (list->get_select_cnt()) {                                 // Any selected lines?
+                    SendDlgItemMessage (hwnd,IDC_KILIST,JL_INSERTTOFILE,0,0);   // Insert them.
+                    return (true);
+                  }
+                } // Else close window.
            case IDCANCEL:
                 DestroyWindow (hwnd);   
                 return (true);
            case IDC_KIFROMCLIP: 
                 JWP_file *paste;
                 if (!(paste = get_paste (hwnd))) return (true);
+                if (!paste->edit_getlen()) return (true);
                 ch = paste->edit_gettext()[0];
                 InvalidateRect (hwnd,NULL,true);
                 init_dialog    (hwnd);
@@ -1099,8 +1103,8 @@ void KANJI_info::format_line (HWND hwnd,int line,int code) {
 //  Do the item
 //
   SetDlgItemText (hwnd,++line,TEXT(""));
-  if ((ch < 0x3000) && (code > INFO_UNICODE)) return;
-//  if (!kinfo.extra && (code >= INFO_SPAHN)) return;
+  if ((ch < BASE_KANJI) && (code > INFO_UNICODE)) return;
+//if (!kinfo.extra && (code >= INFO_SPAHN)) return;
   switch (code) {
     case INFO_TYPE:
          i = HIBYTE(ch);
@@ -1263,11 +1267,18 @@ void KANJI_info::format_xref (HWND hwnd) {
 #ifdef WINCE
       for (i = 0; buffer[i]; i++) ((byte *) buffer)[i] = (char) buffer[i]; 
       ((byte *) buffer)[i] = 0;
-#endif WINCE        
+#endif WINCE
+
+#ifdef UNICODE
+      byte buff_utf8[512];                          // Convert to UTF-8 for put_line (base 0).
+      WideCharToMultiByte(CP_UTF8,0,buffer,-1,(CHAR*)buff_utf8,sizeof(buff_utf8),NULL,NULL);
+      put_line (&line,0,buff_utf8,false);
+#else
       put_line (&line,0,(byte *) buffer,false);
+#endif
     }
   }
-  SetFocus (GetDlgItem(hwnd,IDC_MIXREF));
+  SetDialogFocus (hwnd,IDC_MIXREF);
   return;
 }
 
@@ -1406,7 +1417,7 @@ void KANJI_info::init_dialog (HWND hwnd) {
 //
 //  Check for valid character
 //
-  EnableWindow(GetDlgItem(hwnd,IDC_KIMORE),ch >= 0x3000);
+  EnableWindow(GetDlgItem(hwnd,IDC_KIMORE),ch >= BASE_KANJI);
   memset (&kinfo,0,sizeof(kinfo));
 //
 //  Display romaji for kana
@@ -1415,9 +1426,27 @@ void KANJI_info::init_dialog (HWND hwnd) {
     static byte special[3][4] = { "vu","+ka","+ke" };
     line.initialize (GetDlgItem(hwnd,IDC_KILIST));
     for (i = 0; compound_kana[i].kana[0]; i++) {
-      if (!compound_kana[i].kana[1] && ((ch & 0xff) == compound_kana[i].kana[0])) put_reading (&line,0,(byte *) compound_kana[i].string,0,1);
+      if (!compound_kana[i].kana[1] && ((ch & 0xff) == compound_kana[i].kana[0]) && !compound_kana[i].hide) put_reading (&line,0,(byte *) compound_kana[i].string,0,1);
     }
     if ((ch & 0xff) <= 0x73) put_reading (&line,0,(byte *) direct_kana[(ch & 0xff)-0x21],0,1); else put_reading (&line,0,special[(ch & 0xff)-0x74],0,1);
+  }
+//
+//  Display character names for the Greek and Cyrillic alphabets.
+//  I'm not as confident in the Cyrillic names.
+//
+  else if (ISGREEK(ch) && (ch >= 0x21+BASE_GREEK && ch <= 0x38+BASE_GREEK || ch >= 0x41+BASE_GREEK && ch <= 0x58+BASE_GREEK)) {
+    static char*greek[] = { "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta", "iota", "kappa", "lambda", "mu", "nu", "xi", "omicron", "pi", "rho", "sigma", "tau", "upsilon", "phi", "chi", "psi", "omega" };
+    line.initialize (GetDlgItem(hwnd,IDC_KILIST));
+    i = (ch&0xff) - ((ch&0xff) >= 0x41? 0x41: 0x21);
+    put_reading (&line,0,(byte*)greek[i],0,1);
+  }
+  else if (ISCYRILLIC(ch) && (ch >= 0x21+BASE_CYRILLIC && ch <= 0x41+BASE_CYRILLIC || ch >= 0x51+BASE_CYRILLIC && ch <= 0x71+BASE_CYRILLIC)) {
+    static char*cyr1[] = { "a", "be", "ve", "ge",  "de", "ye", "yo", "zhe", "ze", "i", "short i", "ka", "el", "em", "en", "o", "pe", "er", "es", "te", "u", "ef", "kha", "tse", "che", "sha", "shcha", "yer",       "yery", "yeri",      "e", "yu", "ya" };
+    static char*cyr2[] = { "a", "be", "ve", "ghe", "de", "ie", "io", "zhe", "ze", "i", "short i", "ka", "el", "em", "en", "o", "pe", "er", "es", "te", "u", "ef", "ha",  "tse", "che", "sha", "shcha", "hard sign", "yeru", "soft sign", "e", "yu", "ya" };
+    line.initialize (GetDlgItem(hwnd,IDC_KILIST));
+    i = (ch&0xff) - ((ch&0xff) >= 0x51? 0x51: 0x21);
+    put_reading (&line,0,(byte*)cyr1[i],0,1); if (strcmp (cyr1[i],cyr2[i]))
+    put_reading (&line,0,(byte*)cyr2[i],0,1);
   }
 //
 //  Deal with kanji.
@@ -1456,7 +1485,7 @@ void KANJI_info::init_dialog (HWND hwnd) {
 //  Activate the list so the user can use the cursor keys to move 
 //  through the list.  ESC and or ENTER will still exit the dialog.
 //
-    SetFocus (GetDlgItem(hwnd,IDC_KILIST));
+    SetDialogFocus (hwnd,IDC_KILIST);
   }
 //
 //  Render the info items.
@@ -1769,7 +1798,7 @@ static BOOL CALLBACK dialog_kanjicount (HWND hwnd,UINT message,WPARAM wParam,LPA
 //
     case WM_INITDIALOG: 
          int i;
-         count_size.wm_init (hwnd,IDC_CKLIST,&jwp_config.cfg.size_oount,false,0,0);
+         count_size.wm_init (hwnd,IDC_CKLIST,&jwp_config.cfg.size_count,false,0,0);
          add_dialog (kanji_count->dialog = hwnd,true);
          SetDlgItemText (hwnd,IDC_CKNUMBER,TEXT(""));
          for (i = IDC_CKFREQUENCY; i <= IDC_CKMEANING; i++) CheckDlgButton (hwnd,i,true);
@@ -1888,7 +1917,7 @@ static BOOL CALLBACK dialog_kanjicount (HWND hwnd,UINT message,WPARAM wParam,LPA
                   qsort (kanji_count->list,SIZE_KANJI,sizeof(kanji_c),kanji_compare);
                   for (i = 0; (i < SIZE_KANJI) && kanji_count->list[i].count; i++);
                   SetDlgItemInt (hwnd,IDC_CKNUMBER,i,false);
-                  if (i) SetFocus (GetDlgItem(hwnd,IDC_CKLIST));  // Actiave list.
+                  if (i) SetDialogFocus (hwnd,IDC_CKLIST);        // Activate list.
 //
 //  Setup display.
 //

@@ -77,8 +77,8 @@ public:
   byte              format;         // Dictioanry format
   byte              idx;            // Index type
   byte              names;          // Does dictionary have names.
-  byte              special;        // Do we search this dictionary.
-  byte              searched;       // Special flags for dictionary.
+  byte              special;        // Special flags for dictionary.
+  byte              searched;       // Do we search this dictionary.
   byte              buffered;       // Search type.
   byte              keep;           // Keep in memory or keep open.
   byte              quiet;          // Quiet handling of errors.
@@ -141,6 +141,7 @@ private:
 #define DICTKEY_END         1       // Requires matching at the end of words.
 #define DICTKEY_NAMES       2       // Rejects personal names.
 #define DICTKEY_PLACES      3       // Rejects place names.
+#define DICTKEY_START_GEN   4       // First dict key after the name-related ones.
 
 #define DICTBIT_BEGIN   (0x1L << DICTKEY_BEGIN )    // These are bit values used to 
 #define DICTBIT_END     (0x1L << DICTKEY_END   )    //   store various dictiony flags
@@ -167,6 +168,8 @@ public:
 private:
   int  add_dict           (Dictionary *&base,TCHAR *name,TCHAR *file,TCHAR *flags,int startup);   // Add a dictionary to the end of the search list.
   void check_primary      (byte *ptr);                              // Check for prinary entry and move to forward part of list if this is active.
+  void move_primary       (void);                                   // Move the last entry to the end of the primaries.
+  void mark_priority      (void);                                   // Add a marker delineating the boundary between priority ("primary") and non-priority.
   void def_dictionaries   (Dictionary *&base);                      // Setup the default dictionaries.
   int  do_search          (void);                                   // Actually executat a search for a specific pattern, seith a set of parameters.
   void error              (int format,...);                         // Version of the main error handler adjusted for this dialog box.
@@ -177,16 +180,21 @@ private:
   int  get_last           (void);                                   // Get last character in search
   int  is_searching       (void);                                   // Determine if we are in a search.
   void load               (void);                                   // Load dictionaries file
-  void message            (tchar *foramt,...);                      // Set the message in the dialog window.
+  void message            (tchar *format,...);                      // Set the message in the dialog window.
   int  put_last           (KANJI kanji);                            // Add kanji to the end of the search key.
   int  search_add         (KANJI kanji);                            // Search dictionary with added ending.
   int  search_end         (KANJI kanji);                            // Search dictionary with new ending.
-  void search_dict        (void);                                   // Actually search.
+  void search_dict        (int search_type=0);                      // Actually search.
+  int  contsearch         (KANJI *search,int length,int mode);      // Contingent search.
+  int  search_skip_first  (KANJI *search,int length);               // Search for an exact match while skipping the first character.
   void set_checkboxes     (void);                                   // Set the state of the 4 check-boxes in the main dialog box.
   void user_dictionary    (HWND hwnd);                              // Edit the user dictionary.
   int  utf_endbegin       (byte *first,byte *last);                 // Check ending and beginning.
   int  save_user          (void);                                   // Save user dictionary.
   int  write_dictionaries (void);                                   // Write dictionaries file.
+  bool is_single_kana     (void);                                   // Is search key one kana only?
+  void save_names         (void);                                   // Save the state of the name filters.
+  void restore_names      (void);                                   // Restore the state of the name filters.
 //
 //  Data
 //
@@ -199,8 +207,13 @@ private:
   int       matches;                            // Number of valid matches.
   int       rejected;                           // Number of fully rejected entries.
   int       primary;                            // Pointer to primary location.
+  int       begin_primary;                      // Pointer to start of a new set of primary items (e.g. advanced search results).
+  int       sort_state;                         // Controls dictionary sorting.
+  bool      sort_reverse;                       // Sort dictionary in reverse.
+  bool      in_advanced;                        // True if an advanced search is in progress.
   byte      state;                              // Current state (see flags above).
   byte      filter;                             // Set to true when entries need to be filtered.
+  byte      filter_names_only;                  // Only name filters are active (at most). Also set to true when no filters are active.
   byte      nonames;                            // Names are to be filtered out of the search (skips some dictionaries);
   byte      active;                             // Determine dictionary is active.
   byte      classical_part;                     // Determines if this this a classical paticle (or jodoushi).
@@ -214,6 +227,7 @@ private:
   int       prefix_len;                         // Length of prefix (zero for no prefix)
   int       postfix_len;                        // Length of postfix (zero for no postfix).
   int       euc_length;                         // Length of search string in EUC characters.
+  int       had_kanji;                          // True if original search string had kanji in it.
 };
 
 typedef class JWP_dict JWP_dict;

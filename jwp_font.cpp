@@ -226,6 +226,9 @@ void KANJI_font::find_color (int jis,HDC hdc,COLORREF &color) {
       if (!i) color = SetTextColor(hdc,jwp_config.cfg.colorkanji_color);
     }
   }
+#define ISRGBCOLOR(c)         (!((c) & 0xFF000000))                     // True if this is a valid RGB COLORREF
+#define SELECT_COLOR(cfg,def) (ISRGBCOLOR((cfg))? (cfg): (def))
+  if (jwp_config.cfg.colorize_rare && color == NO_CHANGE && ISRAREKANJI (jis)) color = SetTextColor (hdc,SELECT_COLOR(jwp_config.cfg.rarekanji_color,RGB(0,250,0)));
   return;
 }
 
@@ -307,9 +310,9 @@ void BITMAP_KANJI_font::close () {
 void BITMAP_KANJI_font::draw (HDC hdc,int jis,int x,int y) {
   if (vertfont) {                           // Vertical printing this way is only used for 
     RECT rect;                              //   writing to the clipboard.  Thus efficiency 
-    rect.top    = y-height+1;               //   is not that important.
-    rect.bottom = y+1;
-    rect.left   = x;
+    rect.bottom = y;                        //   is not that important.
+    rect.top    = rect.bottom-height;       // Top/bottom were both previously +1 which was causing many kanji to get cut off.
+    rect.left   = x+1;                      // I suspect this change (adding +1) is what was actually intended. The right edge doesn't need to be adjusted in this case because it is calculated from the left edge.
     rect.right  = rect.left+width;
     fill (hdc,jis,&rect);
   }
@@ -584,6 +587,7 @@ int BITMAP_KANJI_font::open (TCHAR *name,int docache,int vertical) {
   int number;
   FONTHEADER header;
   unsigned long done;
+//docache = 0;  // Force bitmap fonts to load entirely into RAM (except odd sizes like 24x24). In practice, with the defaults, this only affects the 48x48 font.
   if (INVALID_HANDLE_VALUE == (file = jwp_config.open(name,OPEN_READ,false))) return (true);
   if (!ReadFile(file,&header,sizeof(header),&done,NULL)) return (true);
   truetype   = false;
@@ -779,10 +783,10 @@ int TRUETYPE_KANJI_font::jis_index (int jis) {
   int i;
   jis = jis2unicode(jis);                                       // Convert to UNICODE
   for (i = 0; (i < count) && (jis > end[i]); i++);              // Find segment containning charcter
-  if (jis < start[i]) return (jis_index(KANJI_BAD));            // Character is out of segment (does not exist).
+  if (jis < start[i]) return (bad);                             // Character is out of segment (does not exist).
   if (!offset[i]) jis += delta[i];                              // Displacement character
     else  jis = *(offset[i]/2 + (jis - start[i]) + &offset[i]); // Get value from glyph array.
-  if (!jis) return (jis_index(KANJI_BAD));                      // No not a good character.
+  if (!jis) return (bad);                                       // No, not a good character.
   if (gsub) {                                                   // If this is here we are printing vertical.
     for (i = 0; (i < vcount) && (from[i] < jis); i++);          // Find the glyph in the substitution list.
     if (from[i] == jis) jis = to[i];                            // Do we need to stubstitue.
@@ -851,6 +855,7 @@ int TRUETYPE_KANJI_font::open (HDC hdc,tchar *name,int size,int vertical) {
   leading = height/8; 
   spacing = width/12;
   hshift  = spacing/2-1;            // This -1 seems to give better screen display and should not show up on the printer.
+  hshift  = hshift >= 0? hshift:-hshift;  // The above calculation isn't appropriate for fonts narrower than 24 pixels. This adjustment corrects problems with clipboard bitmaps and looks better.
   vshift  = (short) -height;
 //
 //  Read the cmap inforamtion from the font.  
@@ -973,6 +978,8 @@ int TRUETYPE_KANJI_font::open (HDC hdc,tchar *name,int size,int vertical) {
 //  
     vshift = 0;
   }
+  bad = 0;
+  if (!(bad = jis_index (KANJI_BAD))) return (-1);                       // Pre-calculate font index for KANJI_BAD and verify that it is available in this font.
 #endif WINCE            // Windows CE does not use glyph addressing
 //
 //  Clean-up and restore the default font.
@@ -1036,10 +1043,38 @@ void JWP_font::copy (class JWP_font *font) {
 //
 //      RETURN -- New hornizontal poisiton.
 //
-int JWP_font::hadvance (int x,int ch) {
-  if (ISJIS(ch)) return (x+hwidth);
-  if (ch != '\t') return (x+widths[ch]);
-  return (((x-x_offset)/hwidth+1)*hwidth+x_offset);
+int JWP_font::hadvance (int x,int ch,int control) {
+  if (!control) {                           // Default to original behavior.
+    if (ISJIS(ch)) return (x+hwidth);
+    if (ch != '\t') return (x+widths[ch]);
+    return (((x-x_offset)/hwidth+1)*hwidth+x_offset);
+  }
+//
+//  This is a more sophisticated, albeit kludgey, implementation of the above, fixing a few bugs.
+//  Its intent is to produce identical results when called from different parts of the program.
+//  It minimally requires an initialization invocation at the beginning of each line.
+//
+//  There may be additional problems caused by the Paragraph class's insistence on using file_font,
+//  which might not yield consistent results depending on user customizations. This has not been investigated.
+//
+  static int px = 0x80000000;   // "Phantom" x value used to calculate tabs consistently.
+  if (control == HADV_START) {  // Prepare to start a new line.
+    px = file_font.x_offset;    // file_font.x_offset is the horizontal offset used by Paragraph::format.
+    return x;
+  }
+//
+//  Calculate width of a character or tab.
+//
+  int w;
+  if (ISJIS(ch)) w = hwidth;
+  else if (ch != '\t') w = widths[ch];
+  else w = (((px-x_offset)/hwidth+1)*hwidth+x_offset) - px;  // This is the new "canonical" tab width.
+//
+//  Update position. HADV_PEEK can be used to check the result without modifying the state.
+//
+  if (control != HADV_PEEK)
+        px += w;
+  return x +  w;
 }
 
 //--------------------------------
@@ -1552,7 +1587,7 @@ int initialize_fonts () {
   auto_font (&jwp_config.cfg.list_font,&list_font,&edit_font);
   auto_font (&jwp_config.cfg. bar_font,& bar_font,&edit_font);
   auto_font (&jwp_config.cfg.file_font,&file_font,& sys_font);
-  if (jwp_config.cfg.clip_font.automatic || !clip_font.open(jwp_config.cfg.clip_font.name,jwp_config.cfg.clip_font.size,true,NULL,jwp_config.cfg.clip_font.vertical)) clip_font.copy(&file_font);
+  if ((jwp_config.cfg.clip_font.automatic && !jwp_config.cfg.clip_font.vertical) || !clip_font.open(jwp_config.cfg.clip_font.name,jwp_config.cfg.clip_font.size,true,NULL,jwp_config.cfg.clip_font.vertical)) clip_font.copy(&file_font);
 //
 //  Get system font height.
 //

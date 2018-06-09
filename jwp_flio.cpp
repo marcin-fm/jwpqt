@@ -103,7 +103,23 @@ static tchar file_exts[][5] = { TEXT(".jce"),       // Normal
                                 TEXT(".utf"),       // UTF-7
                                 TEXT(".utf"),       // UTF-8
                                 TEXT(".jfc"),       // JFC
-                                TEXT(".jcp"),       // JWPce Project
+                                TEXT(".jpr"),       // JWPxp Project
+                              };
+//
+//  Unambiguous extensions used to automatically select file type for Save As.
+//
+static tchar auto_exts[][4] = { TEXT("jce"),        // Normal
+                                TEXT("jwp"),        // JWP
+                                TEXT("euc"),        // EUC
+                                TEXT("sjs"),        // Shift-JIS
+                                TEXT("jis"),        // New JIS
+                                TEXT("old"),        // Old JIS
+                                TEXT("nec"),        // NEC JIS
+                              //TEXT("txt"),        // UNICODE
+                              //TEXT("utf"),        // UTF-7
+                              //TEXT("utf"),        // UTF-8
+                                TEXT("jfc"),        // JFC
+                                TEXT("jpr"),        // JWPxp Project
                               };
 
 //-------------------------------------------------------------------
@@ -364,7 +380,7 @@ JWP_file *choose_file (HWND hwnd,int index,int help) {
 void do_drop (HDROP drop) {
 #ifndef WINCE                   // Windows CE does not support file drag and drop
   int  i;
-  char buffer[SIZE_BUFFER];
+  TCHAR buffer[SIZE_BUFFER];
   for (i = 0; DragQueryFile(drop,i,buffer,SIZE_BUFFER) > 0; i++) {
     open_file (buffer,FILETYPE_AUTODETECT);
   }
@@ -402,6 +418,8 @@ void do_fileopen () {
   ofn.lpstrInitialDir   = currentdir;   // Use Current directory for windows CE              
 #else WINCE
   ofn.Flags             = OFN_CREATEPROMPT | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY  | OFN_ALLOWMULTISELECT | OFN_EXPLORER;
+  if (!jwp_config.cfg.save_recent)
+    ofn.Flags          |= OFN_DONTADDTORECENT;
 #endif WINCE
   if (!GetOpenFileName(&ofn)) return;                       // User canclled!
   type = ofn.nFilterIndex;
@@ -584,7 +602,12 @@ JWP_file::JWP_file (tchar *filename,int type,int recent) {
       if (magic == JWP_MAGIC) {
         if (!stricmp(ext,TEXT(".jwp"))) type = FILETYPE_JWP; else type = FILETYPE_NORMAL;
       }
-      else if (magic == CONFIG_MAGIC) type = FILETYPE_PROJECT;      // This is a project file
+#ifdef BINARY_CONFIG
+      else if (magic == CONFIG_MAGIC)      type       = FILETYPE_PROJECT;      // This is a project file.
+#endif
+      else if (magic == PROJECT_MAGIC_NEW) type       = FILETYPE_PROJECT;      // This is a project file.
+      else if (magic == CONFIG_MAGIC_ANSI) type       = FILETYPE_PROJECT;      // Identify old versions as well.
+      else if (magic == JWPce_PROJECT)     type       = FILETYPE_PROJECT;      // I guess this is a really old version.
       else if (!stricmp(ext,TEXT(".jfc"))) type       = FILETYPE_JFC; 
       else if (!stricmp(ext,TEXT(".euc"))) type       = FILETYPE_EUC;
       else if (!stricmp(ext,TEXT(".sjs"))) type       = FILETYPE_SJS;
@@ -637,7 +660,7 @@ JWP_file::JWP_file (tchar *filename,int type,int recent) {
          delete this;
          return;
     case FILEERR_ERROR:     // File has some kind of error but some data may be readable.
-         if (IDYES == JMessageBox(main_window,IDS_FILE_DAMMAGED,IDS_FILE_ERROR,MB_YESNO | MB_ICONERROR,filename)) break;
+         if (IDYES == JMessageBox(main_window,IDS_FILE_DAMAGED,IDS_FILE_ERROR,MB_YESNO | MB_ICONERROR,filename)) break;
          delete this;
          return;
   }
@@ -686,12 +709,13 @@ void JWP_file::activate () {
 //  These are general updates of the screen and other systems.
 //
   if (!this) return;
-  jwp_conv.clear ();
+  jwp_conv.clear (false);                                           // Passing 'true' here interferes with passing off the selection to the Dictionary dialog.
+  if (this && sel.type == SELECT_CONVERT) selection_clear ();       // This, however, does not interfere.
   if (filetype != FILETYPE_EDIT) jwp_file = this;
   title     ();
   adjust    ();
   edit_menu ();
-  EnableMenuItem (hmenu,IDM_FILE_REVERT,(filetype == FILETYPE_UNNAMED) ? MF_GRAYED : MF_ENABLED);
+//EnableMenuItem (hmenu,IDM_FILE_REVERT,(filetype == FILETYPE_UNNAMED) ? MF_GRAYED : MF_ENABLED);   // This wasn't really necessary. There's no reason you shouldn't be able to "revert" an unnamed file.
   EnableMenuItem (hmenu,IDM_FILE_DELETE,(filetype == FILETYPE_UNNAMED) ? MF_GRAYED : MF_ENABLED);
   jwp_stat.redraw ();
   redo_clear ();
@@ -733,6 +757,7 @@ void JWP_file::activate () {
 //
 int JWP_file::close (int exit_ok) {
   class JWP_file *file;
+  if (filetype == FILETYPE_UNNAMED && is_empty()) changed = false;   // Don't pester user about blank, unnamed files - just close them.
   if (changed) {
     switch (ButtonDialog(null,IDD_SAVECHECK,jwp_file->get_name(),IDH_FILE_CLOSE)) {
       case IDCANCEL:
@@ -779,12 +804,13 @@ void JWP_file::delete_file () {
 //      convert -- Initialized JIS_convert structure.  This allows
 //                 us to export to files, clipboard, or other locations
 //
-long JWP_file::export_file (JIS_convert *convert) {
+long JWP_file::export_file (JIS_convert *convert, bool final_lf) {
   int        i;
   Paragraph *para;
   convert->unicode_write ();                        // Do we need to write a UNICODE ID
   for (para = first; para; para = para->next) {
     for (i = 0; i < para->length; i++) convert->output_char (para->text[i]);
+    if (!final_lf && !para->next) break;            // Terminate early at EOF if we're not outputting a final LF (as for the clipboard).
     convert->output_char ('\r');
     convert->output_char ('\n');
   }
@@ -848,12 +874,18 @@ int JWP_file::import_file (JIS_convert *convert) {
 //
 //      name   -- Name of file to read.
 //      
+extern BOOL load_config (char *conf);
+
 void JWP_file::project_read (tchar *name) {
   int    i;
   HANDLE hfile;
   unsigned long done;
   TCHAR *load,*ptr;
+#ifdef BINARY_CONFIG
   struct cfg cfg;
+#else
+  unsigned long magic;
+#endif
 //
 //  Check what the user wants to do with the open files.
 //
@@ -880,20 +912,36 @@ void JWP_file::project_read (tchar *name) {
 //
 //  Read and check the configuration part.
 //
+#ifdef BINARY_CONFIG
   if (!ReadFile(hfile,&cfg,sizeof(cfg),&done,NULL) || (cfg.magic != CONFIG_MAGIC)) {
+#else
+  if (!ReadFile(hfile,&magic,sizeof(magic),&done,NULL) || (magic != PROJECT_MAGIC_NEW)) {
+#endif
+Corrupt:
     ErrorMessage (true,IDS_FILE_PROJCORRUP,name);
     CloseHandle  (hfile);
     return;
   }
 //
-//  Get the file list and current directory.
+//  Allocate the file list and current directory.
 //
-  i = GetFileSize(hfile,NULL);
+  i = GetFileSize(hfile,NULL);              // This over-allocates but who cares?
   if (!(ptr = load = (TCHAR *) calloc(i+24,1))) {
     CloseHandle (hfile);
     OutOfMemory (window);
     return;
   }
+#ifdef BINARY_CONFIG
+#else
+  BYTE*p = (BYTE*)load;
+  for (int j = i; j--;) {                   // Load the textual configuration part byte by byte.
+    if (!ReadFile (hfile,p,1,&done,NULL)) break;
+    if (!*p++) break;                       // Search for end of configuration string.
+  }
+  *p = 0;                                   // Add extra terminator in case loop expired.
+  if (!load_config ((char*)load)) { free (load); goto Corrupt; }
+  memset(load,0,i);                         // Make sure there will always be a valid terminator for the following code.
+#endif
 //
 //  Cleanup the files.
 //
@@ -911,12 +959,16 @@ void JWP_file::project_read (tchar *name) {
   for (; *ptr; ptr += lstrlen(ptr)+1) {     // Open files.
     if (FileExists(ptr)) new JWP_file(ptr,FILETYPE_AUTODETECT,false);
   }
+#ifdef BINARY_CONFIG
   jwp_config.set (&cfg);                    // Apply configuration
+#else
+  jwp_config.set (&jwp_config.cfg);
+#endif
 //
 //  Final cleanup
 //
   free   (load);    // Deallocate file name block.
-  close  (false);   // Close this file (actually is the .jcp file).
+  close  (false);   // Close this file (actually is the .jpr file).
   return;
 }
 
@@ -936,6 +988,8 @@ void JWP_file::project_read (tchar *name) {
 //
 #define STRINGSIZE(x)   (sizeof(TCHAR)*(x))
 
+extern BOOL write_config (HANDLE fh);
+
 int JWP_file::project_save (tchar *name) {
   HANDLE        hfile;
   unsigned long done;
@@ -949,7 +1003,15 @@ int JWP_file::project_save (tchar *name) {
     ErrorMessage (true,IDS_FILE_PROJSAVE,name);
     return (true);
   }
-  WriteFile (hfile,&jwp_config.cfg,sizeof(cfg),&done,NULL);
+#ifdef BINARY_CONFIG
+  WriteFile (hfile,&jwp_config.cfg,sizeof(jwp_config.cfg),&done,NULL);
+#else
+  unsigned long magic = PROJECT_MAGIC_NEW;
+  WriteFile (hfile,&magic,sizeof(magic),&done,NULL);    // Write ID.
+  write_config (hfile);                                 // Output textual configuration.
+  buffer[0] = 0;
+  WriteFile (hfile,buffer,1,&done,NULL);                // Terminate string.
+#endif
 //
 //  Write the current directory
 //
@@ -1122,7 +1184,7 @@ void JWP_file::revert () {
 #define BACKUP_FILE_STRING  TEXT("_BAK")
 
 int JWP_file::save (tchar *filename) {
-  int    exit;
+  int    error;
   HANDLE file;
   TCHAR  buffer[512];
   byte        buf[SIZE_JISBUFFER];      // Buffer used for file io.
@@ -1146,20 +1208,28 @@ int JWP_file::save (tchar *filename) {
   lstrcpy (buffer,filename);
   lstrcat (buffer,TEMP_FILE_STRING);
 //
+//  Make sure file is not read-only.
+//
+  int attrs = GetFileAttributes (filename);
+  if ((attrs != INVALID_FILE_ATTRIBUTES) && (attrs & FILE_ATTRIBUTE_READONLY)) {
+    ErrorMessage (true,IDS_FILE_ERROR_RO,filename);
+    return       (true);
+  }
+//
 //  Attempt to open temporary file and write file.
 //
   if (INVALID_HANDLE_VALUE == (file = OPENWRITE(buffer))) { ErrorMessage (true,IDS_FILE_ERRORTEMP,filename); return (true); }
   if ((filetype == FILETYPE_NORMAL) || (filetype == FILETYPE_JWP)) {
     cache.output_file (buf,sizeof(buf),file);
-    exit = write_jwp_file(&cache); 
+    error = write_jwp_file(&cache); 
   }
   else {
     convert.output_file (buf,sizeof(buf),file);
     convert.set_type (filetype);
-    exit = export_file(&convert);
+    error = export_file(&convert, true);
   }
   CloseHandle (file);
-  if (exit) {
+  if (error) {
     DeleteFile   (buffer);                      // Write error -> delete temp file.
     ErrorMessage (true,IDS_FILE_ERRORWRITE,filename);
     return       (true);
@@ -1173,13 +1243,13 @@ int JWP_file::save (tchar *filename) {
   if (jwp_config.cfg.backup_files) {            // Save old verison of file for backup.
     lstrcpy    (buffer,filename);
     lstrcat    (buffer,BACKUP_FILE_STRING);
-    DeleteFile (buffer);
-    MoveFile   (filename,buffer);
+    DeleteFile (buffer);                        // Delete old backup file if it exists.
+    MoveFile   (filename,buffer);               // Rename original file (if it exists) to backup file.
     lstrcpy    (buffer,filename);
     lstrcat    (buffer,TEMP_FILE_STRING);
   }
-  DeleteFile (filename);                        // Replace old file.
-  MoveFile   (buffer,filename);
+  DeleteFile (filename);                        // Delete old file if it exists.
+  MoveFile   (buffer,filename);                 // Rename temp file to actual file.
   return     (false);
 }
 
@@ -1208,13 +1278,15 @@ int JWP_file::save_as () {
   ofn.nFilterIndex      = i;
   ofn.lpstrFile         = buffer;
   ofn.nMaxFile          = SIZE_BUFFER;
-  ofn.Flags             = OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
+  ofn.Flags             = OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_NOREADONLYRETURN;
 #ifdef WINCE
   ofn.lpstrInitialDir   = currentdir;   // Use Windows CE current directory
+#else  WINCE
+  if (!jwp_config.cfg.save_recent) ofn.Flags |= OFN_DONTADDTORECENT;
 #endif WINCE
   if (filetype) lstrcpy (buffer,name); else buffer[0] = 0;
   for (i = lstrlen(buffer)-1; (i > 0) && (buffer[i] != '.') && (buffer[i] != '/') && (buffer[i] != ':'); i--);
-  if (buffer[i] == '.') buffer[i] = 0;
+  if (buffer[i] == '.') buffer[i] = 0;        // Truncate extension if present.
   if (!GetSaveFileName(&ofn)) return (true);
 #ifdef WINCE
 #if    (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
@@ -1227,13 +1299,36 @@ int JWP_file::save_as () {
   set_currentdir (buffer,true);         // Wave windows CE current directory
 #endif WINCE
 //
+//  This section attempts to intelligently handle file extensions input by the user.
+//  Change file type (actually the filter index for now) for certain user-supplied extensions.
+//  Otherwise the extension is ignored and the selected filter determines the actual file format.
+//
+  if (ofn.nFileExtension && lstrlen(&buffer[ofn.nFileExtension]) == 3) {  // User typed a 3-char extension?
+    TCHAR * ext = &buffer[ofn.nFileExtension];
+    int new_index = -1;
+    for (int x = 0; x < sizeof(file_exts)/sizeof(file_exts[0]); x++) {    // Is it a known extension?
+      if (!lstrcmpi(ext, &file_exts[x][1])) {
+        new_index = x + 1;
+        break;
+      }
+    }
+    if (new_index > 0 && ofn.nFilterIndex != new_index)
+    for (int x = 0; x < sizeof(auto_exts)/sizeof(auto_exts[0]); x++) {    // Is it also unambiguous?
+      if (!lstrcmpi(ext, auto_exts[x])) {
+        ofn.nFilterIndex = new_index;                                     // Change file type downstream.
+        break;
+      }
+    }
+  }
+//
 //  Add file extensions
 //  Check for exisitng file.
 //  Set the file type and save.
 //
-  for (i = lstrlen(buffer); (i > 0) && (buffer[i] != '\\') && (buffer[i] != '.'); i--);
-  if (buffer[i] != '.') lstrcat (buffer,file_exts[ofn.nFilterIndex-1]);
-  if (buffer[lstrlen(buffer)-1] == '.') lstrcat (buffer,&file_exts[ofn.nFilterIndex-1][1]);
+  for (i = lstrlen(buffer); (i > 0) && (buffer[i] != '\\') && (buffer[i] != '.'); i--);     // Find final period or separator.
+  if (buffer[i] != '.') lstrcat (buffer,file_exts[ofn.nFilterIndex-1]);                     // No extension?
+  if (buffer[lstrlen(buffer)-1] == '.') lstrcat (buffer,&file_exts[ofn.nFilterIndex-1][1]); // Trailing period?
+
   if (INVALID_HANDLE_VALUE != (file = OPENREAD(buffer))) {
     CloseHandle (file);
     if (!YesNo(IDS_FILE_OVERWRITE,buffer)) return (true);
