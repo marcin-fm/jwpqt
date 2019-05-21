@@ -73,11 +73,13 @@
 
 #include "jwpce.h"
 #include "jwp_conf.h"
+#include "jwp_conv.h"
 #include "jwp_edit.h"
 #include "jwp_find.h"
 #include "jwp_help.h"
 #include "jwp_inpt.h"
 #include "jwp_misc.h"
+#include "jwp_stat.h"
 
 //===================================================================
 //
@@ -296,6 +298,7 @@ int JWP_search::dlg_search (HWND hwnd,UINT message,int command,int rep,class JWP
 #define CONFIRM_ALL     IDC_RCALL     // Yes, do raplace, and all further searches.
 
 void JWP_search::do_next (class JWP_list *list) {
+  bool wrapped = false;     // Indicates that the search wrapped around the start/end of the file.
   int code = CONFIRM_NO;    // Code indicates confirmation from the user.  The special value
                             //   CONFIRM_ALL can be set to force search into search_noconfirm
                             //   mode.
@@ -305,6 +308,7 @@ void JWP_search::do_next (class JWP_list *list) {
   Position  start_pos;      //   both all the files, and within the current file.  This is used
                             //   to determine when the search has failed (we are back at the 
                             //   same position (for wrap searches, and all file searches).
+  jwp_conv.clear ();        // Clean up the kana/kanji conversion system before potentially jumping around.
 //
 //  Check for a valid search at all.
 //
@@ -354,7 +358,7 @@ void JWP_search::do_next (class JWP_list *list) {
         pos.para = pos.para->prev;         
         if (!pos.para) {
           if      (jwp_config.cfg.search_all ) { file = file->prev; pos.para = file->last; }
-          else if (jwp_config.cfg.search_wrap) { pos.para = file->last; }
+          else if (jwp_config.cfg.search_wrap) { pos.para = file->last; wrapped = true; }
         }
         if (pos.para) pos.pos = pos.para->length;
       }
@@ -378,7 +382,7 @@ void JWP_search::do_next (class JWP_list *list) {
         pos.para = pos.para->next;
         if (!pos.para) {
           if      (jwp_config.cfg.search_all ) { file = file->next; pos.para = file->first; }
-          else if (jwp_config.cfg.search_wrap) { pos.para = file->first; }
+          else if (jwp_config.cfg.search_wrap) { pos.para = file->first; wrapped = true; }
         }
         pos.pos = 0;
       }
@@ -387,13 +391,20 @@ void JWP_search::do_next (class JWP_list *list) {
 //  Not found!  Put up a message and exit search routine.
 //
 NotFound:
+    jwp_stat.update ("");
     not_found (main_window,code == CONFIRM_ALL);
     break;
 //
 //  Found.  Switch to the new file, and mark the selected text.
 //
 FoundMatch:
-    if (file != jwp_file) file->activate ();
+    if (file != jwp_file) {
+      file->activate ();
+      jwp_stat.update ("Active file switched during search");
+    }
+    else if (wrapped) jwp_stat.update ("Search wrapped around");
+    else jwp_stat.update ("");
+
     jwp_file->cursor = jwp_file->sel.pos1 = jwp_file->sel.pos2 = pos;
     jwp_file->sel.type      = SELECT_EDIT;
     jwp_file->sel.pos2.pos += search_length;

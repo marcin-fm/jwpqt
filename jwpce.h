@@ -97,7 +97,7 @@ extern void mprintf (TCHAR *format,...);
   #define VERSION_SPECIAL                       // Define the special ID if not already.  Used for special versions.
  #endif
 #endif  VERSION_SPECIAL
-#define VERSION_STRING  TEXT("1.61") VERSION_SPECIAL  // Version ID number
+#define VERSION_STRING  TEXT("1.62") VERSION_SPECIAL  // Version ID number
 #define VERSION_NAME    TEXT("JWPxp ") VERSION_STRING // Version name.
 
                                 // Input modes

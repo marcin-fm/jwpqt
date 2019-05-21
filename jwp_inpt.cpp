@@ -345,7 +345,12 @@ int char_class (int ch) {
   if (ISHIRAGANA(ch)) return (CLASS_HIRAGANA);
   if (ISJASCII(ch))   return (CLASS_JASCII);
   if ((unsigned)(ch+1) > 256) return (CLASS_KPUNCT); // Avoid isalnum() debugging assertion.
-  if (isalnum(ch))    return (CLASS_ASCII);
+  if (isalnum(ch) ||
+        ch=='_' ||
+        ch=='@' ||
+        ch=='#' ||
+        ch=='$' ||
+        ch=='%')      return (CLASS_ASCII);
   if (ISASCII(ch))    return (CLASS_APUNCT);
   return (CLASS_KPUNCT);
 }

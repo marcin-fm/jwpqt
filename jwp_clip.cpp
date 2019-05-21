@@ -331,17 +331,25 @@ void JWP_file::clip_paste (int errors) {
 //
 //  Extended object paste.
 //
+#define NUM_PARAS_HUGE 500
   else {
+    byte oldtype;
+    bool huge = paste->para_to_number(paste->last) >= NUM_PARAS_HUGE;
     do_key    (VK_RETURN,false,false);
     do_key    (VK_LEFT,false,false);
     undo_para (UNDO_QUE);
     cursor.para->ins_string (this,cursor.line,cursor.line->length,paste->first->text,paste->first->length);
+    if (huge) {
+      oldtype = filetype;
+      filetype = FILETYPE_WORK;              // Delay redrawing for huge pastes.
+    }
     for (para = paste->first->next; para != paste->last; para = para->next) {
       if (new_paragraph(cursor.para)) { undo_end(); return; }
       cursor.para = cursor.para->next;
       if (cursor.para->copy_para(para)) { undo_end(); return; }
-      cursor.para->format (this,NULL,true);
+      cursor.para->format (this,NULL,!huge);
     }
+    if (huge) { filetype = oldtype; redraw_all (); }
     cursor.para = cursor.para->next;
     cursor.line = cursor.para->first;
     cursor.pos  = 0;

@@ -147,6 +147,7 @@ HEAD("Startup")
 { CIB(install) "CheckInstalled", true },  //  byte  install;                // If set causes check for installed version and file extensions.
 { CIB(maximize) "MaximizeWindow" }, //  byte  maximize;               // Maximize the main window.
 { CIB(usedims) "RestoreWindow" },   //  byte  usedims;                // Use last saved dimensions for main window.
+{ CIB(startup_dict) "OpenDictionary" }, //  byte  startup_dict;           // Open dictionary on startup.
 { CIB(reload_files) "ReloadPreviousFiles", true },  //  byte  reload_files;           // Reload files loaded when we exited.
 
 HEAD("Exit")

@@ -703,6 +703,7 @@ void JWP_file::undo_pop (UNDO_action **list) {
   int          i;
   UNDO_action *action;
   selection_clear ();                           // Clear selected text because won't make sense after.
+  change          ();                           // Mark file as changed in case it was saved immediately prior.
   undo_start      ();                           // Accumulate redo infomration.
   for (action = list[0]; action; action = action->next) action->undo (this);    // Undo a chain!
   undo_end        ();                           // End accumulate

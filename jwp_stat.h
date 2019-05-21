@@ -31,7 +31,7 @@ public:
   void  redraw     (void);              // Invalidate window (force a redraw).
   void  update     (CHAR *text);        // Update text message and force redraw.
 private:
-  CHAR  buffer[10];                     // Buffer to store text message.
+  CHAR  buffer[MAX_PATH];               // Buffer to store text message.
   short offset;                         // Y offset for rendering text.
   short x_insert;                       // X location of the insert/overwrite flag.
   short x_mode;                         // X location of mode flag.

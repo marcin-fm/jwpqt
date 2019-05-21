@@ -275,6 +275,7 @@ struct cfg default_config = {
   false,                                    //  byte  usedims;                // Use last saved dimensions.
   true,                                     //  byte  save_exit;              // Save configuration on exit.     
   true,                                     //  byte  reload_files;           // Reload files loaded when we exited.
+  false,                                    //  byte  startup_dict;           // Open dictionary on startup.
 //
 //  Display flags
 //
@@ -2566,7 +2567,7 @@ int working;
   do_commandbar       ();
   SetForegroundWindow (main_window);                // Necessary because CE does not restore JWPce to top after configuration message!
 #else  WINCE
-  if (!(main_window = CreateWindowEx(WS_EX_ACCEPTFILES | WS_EX_CONTEXTHELP,WINCLASS_MAIN,TEXT("JWPce-Main Window"),WS_OVERLAPPEDWINDOW,jwp_config.cfg.x,jwp_config.cfg.y,jwp_config.cfg.xs,jwp_config.cfg.ys,null,null,hInstance,null))) terminate (IDS_TERM_WINDOW);
+  if (!(main_window = CreateWindowEx(WS_EX_ACCEPTFILES | WS_EX_CONTEXTHELP,WINCLASS_MAIN,TEXT("JWPxp-Main Window"),WS_OVERLAPPEDWINDOW,jwp_config.cfg.x,jwp_config.cfg.y,jwp_config.cfg.xs,jwp_config.cfg.ys,null,null,hInstance,null))) terminate (IDS_TERM_WINDOW);
   if ((iCmdShow != SW_SHOWMINIMIZED) && jwp_config.cfg.maximize && jwp_config.cfg.usedims) iCmdShow = SW_SHOWMAXIMIZED;
   ShowWindow       (main_window,iCmdShow);
   UpdateWindow     (main_window);
@@ -2605,9 +2606,10 @@ int working;
   argv=0;
 #endif
 //
-//  Proof of concept.
+//  Process startup options from configuration or possibly the command line.
 //
-  //PostMessage (main_window,WM_COMMAND,IDM_UTILITIES_DICTIONARY,0);
+  if ((jwp_config.cfg.startup_dict && argc <= 1) || 0)        // Open dictionary if option enabled and no CLI arguments (kludge), or if explicitly enabled on the command line (to-do).
+    PostMessage (main_window,WM_COMMAND,IDM_UTILITIES_DICTIONARY,0);
 #ifndef WINCE
   //ImmSimulateHotKey(main_window,IME_JHOTKEY_CLOSE_OPEN);    // Try to activate Japanese IME. Tested to work with other IMEs installed, and found to be harmless if Japanese IME not installed.
 #endif

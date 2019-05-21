@@ -479,10 +479,10 @@ FONT 8, "MS Sans Serif"
 BEGIN
     LTEXT           "",IDC_DATA,9,5,228,8
     LTEXT           "This file is already open!  What do you want to do?",IDC_STATIC,9,19,160,8
-    DEFPUSHBUTTON   "&Edit Existing File",IDOK,9,35,66,14
-    PUSHBUTTON      "&Open New Copy",IDC_DFOPEN,90,35,66,14
-    PUSHBUTTON      "&Replace with New",IDC_DFREPLACE,171,35,66,14
-    PUSHBUTTON      "&Cancel",IDCANCEL,90,56,66,14
+    DEFPUSHBUTTON   "&Switch to Open File",IDOK,9,35,66+4,14
+    PUSHBUTTON      "&Open Another Copy",IDC_DFOPEN,90+4,35,66+4,14
+    PUSHBUTTON      "&Reload File",IDC_DFREPLACE,171+8,35,66-8,14
+    PUSHBUTTON      "&Cancel",IDCANCEL,90+4,56,66+4,14
 END
 
 IDD_RADICALLOOKUP DIALOGEX 0, 0, 390, 205

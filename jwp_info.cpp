@@ -168,11 +168,12 @@
 
 #define KANJIINFO_OFFSET    (2*sizeof(ulong)+2*sizeof(ushort))  //  Offset of first entry in the file.
 
-#define SIZE_KANJI      (6355+10)       // Number of kanji alloacted by the 
-                                        //   counting procedrue.  This is the 
-                                        //   Number of different kanji we can 
+#define SIZE_KANJI      (7680+10)       // Number of kanji allocated by the 
+                                        //   counting procedure.  This is the 
+                                        //   number of different kanji we can 
                                         //   handle.  JWPce fonts have 6355 kanji,
-                                        //   plus we alloow 10 odd ones.
+                                        //   plus we allow 10 odd ones. 7680 is the
+                                        //   theoretical maximum for JIS (80 * 94).
 
 #define USE_ASCII_OKURIGANA             // If defined causes the system to 
                                         //   use ascii ( and ) to surround
@@ -1134,17 +1135,19 @@ void KANJI_info::format_line (HWND hwnd,int line,int code) {
          SetDlgItemText (hwnd,line,buffer1);
          break;
     case INFO_UNICODE:
-         wsprintf       (buffer1,TEXT("%X"),jis2unicode(ch));
-         SetDlgItemText (hwnd,line,buffer1);
+         if (jis2unicode(ch)) {
+           wsprintf       (buffer1,TEXT("%X"),jis2unicode(ch));
+           SetDlgItemText (hwnd,line,buffer1);
+         }
          break;
     case INFO_STROKE:
-         SetDlgItemInt (hwnd,line,kinfo.strokes,true);
+         if (kinfo.strokes) SetDlgItemInt (hwnd,line,kinfo.strokes,true);
          break;
     case INFO_GRADE:
          if (kinfo.grade) SetDlgItemInt (hwnd,line,kinfo.grade,false);
          break;
     case INFO_NELSON:
-         format_two (hwnd,line,format_int(buffer1,kinfo.nelson),format_int(buffer2,kinfo.haig));
+         if (kinfo.nelson || kinfo.haig) format_two (hwnd,line,format_int(buffer1,kinfo.nelson),format_int(buffer2,kinfo.haig));
          break;
     case INFO_HALPERN:
          if (kinfo.skip_t) wsprintf (buffer2,TEXT("%d-%d-%d"),kinfo.skip_t,kinfo.skip_1,kinfo.skip_2); else buffer2[0] = 0;
@@ -1155,7 +1158,7 @@ void KANJI_info::format_line (HWND hwnd,int line,int code) {
          format_two (hwnd,line,buffer1,format_int(buffer2,sh_kana));
          break;
     case INFO_FOURCORNERS:
-         format_two (hwnd,line,format_fc(buffer1,extend.fc_main,extend.fc_index),format_fc(buffer2,fc_main2,extend.fc_index2));
+         if (extend.fc_index || extend.fc_index2) format_two (hwnd,line,format_fc(buffer1,extend.fc_main,extend.fc_index),format_fc(buffer2,fc_main2,extend.fc_index2));
          break;
     case INFO_MOROHASHI:
          if (!extend.md_long) buffer1[0] = 0;
@@ -1186,7 +1189,7 @@ void KANJI_info::format_line (HWND hwnd,int line,int code) {
          if (heisig) SetDlgItemInt (hwnd,line,heisig,false);
          break;
     case INFO_ONEILL:
-         format_two (hwnd,line,format_int(buffer1,oneill),format_int(buffer2,oneill_ek));
+         if (oneill || oneill_ek) format_two (hwnd,line,format_int(buffer1,oneill),format_int(buffer2,oneill_ek));
          break;
     case INFO_DEROO:
          if (deroo) SetDlgItemInt (hwnd,line,deroo,false);
@@ -1415,10 +1418,39 @@ void KANJI_info::init_dialog (HWND hwnd) {
   SendDlgItemMessage (hwnd,IDC_KIBUSHUCHAR    ,WMU_SETWINDOWVALUE,0,0);
   SendDlgItemMessage (hwnd,IDC_KICLASSICALCHAR,WMU_SETWINDOWVALUE,0,0);
 //
-//  Check for valid character
+//  Check for valid kanji character and enable the More Info button if so.
 //
-  EnableWindow(GetDlgItem(hwnd,IDC_KIMORE),ch >= BASE_KANJI);
+  EnableWindow(GetDlgItem(hwnd,IDC_KIMORE),ISKANJI(ch) && ((ch & 0xff) >= 0x21) && ((ch & 0xff) <= 0x7e));
+//
+//  Clear out data structures corresponding to displayable fields.
+//
   memset (&kinfo,0,sizeof(kinfo));
+  memset (buffer,0,sizeof(buffer));
+  memset (&extend,0,sizeof(extend));
+  pinyin = 0;
+  korean = 0;
+  on = 0;
+  kun = 0;
+  imi = 0;
+  nan = 0;
+  xref = 0;
+  freq = 0;
+  sh_kana = 0;
+  henshall = 0;
+  gakken = 0;
+  heisig = 0;
+  oneill = 0;
+  fc_main2 = 0;
+  oneill_ek = 0;
+  halpern_kld = 0;
+  deroo = 0;
+  count = 0;
+  readwrite = 0;
+  tuttlecard = 0;
+  kanjiway = 0;
+  kanjicontext = 0;
+  kanjiguide = 0;
+  busypeople = 0;
 //
 //  Display romaji for kana
 //  
@@ -1458,13 +1490,15 @@ void KANJI_info::init_dialog (HWND hwnd) {
     if (open_info(hwnd)) return;
     get_info (ch,INFO_ALL);
     close_info ();
+    if (kinfo.bushu) {
     SendDlgItemMessage (hwnd,IDC_KIBUSHUCHAR,WMU_SETWINDOWVALUE,0,kinfo.bushu);
     if (!kinfo.classical) SetDlgItemInt (hwnd,IDC_KIBUSHU,kinfo.bushu,true);
       else {
         wsprintf (buffer2,TEXT("%d (%d)"),kinfo.bushu,kinfo.classical);
         SetDlgItemText     (hwnd,IDC_KIBUSHU,buffer2);
         SendDlgItemMessage (hwnd,IDC_KICLASSICALCHAR,WMU_SETWINDOWVALUE,0,kinfo.classical);
-      }       
+      }
+    }
 //
 //  Read all of the line type entries all in one big block.  This is 
 //  very brut-force, but it does save time/space, and everything else.

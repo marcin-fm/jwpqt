@@ -884,11 +884,12 @@ int JIS_convert::input_char () {
 }
 
 
-// This is intended to improve Unicode autodetection by allowing certain unconvertible characters occasionally found in Japanese text.
+// This is intended to improve Unicode autodetection by allowing certain unconvertible Unicode characters occasionally found in Japanese text.
 static bool excusable (int c) {
   if (c < 0 || c > 0xFFFF) return (false);
   switch (c) {
     case 0x2027:      // hyphenation point
+    case 0xFF0D:      // fullwidth hyphen/minus
       return (true);  // Excuse certain Unicode characters which derail clipboard autodetection because they don't map to JIS.
   }
   return (false);

@@ -1098,6 +1098,16 @@ Redo:    if (ctrl) do_redo ();
          if (ctrl) do_undo ();
          return;
 //
+//  Escape -- End kanji conversion and deselect; clear kana input.
+//
+    case VK_ESCAPE:
+         if (sel.type == SELECT_KANJI || sel.type == SELECT_CONVERT) {
+           jwp_conv.clear  ();
+           selection_clear ();
+         }
+         else kana_convert.erase ();
+         return;
+//
 //  Space and > Conversion to the left with control
 //
     case VK_GT:

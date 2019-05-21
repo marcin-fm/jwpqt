@@ -188,6 +188,7 @@ struct cfg {
   byte  usedims;                // Use last saved dimensions for main window.
   byte  save_exit;              // Save configuration on exit.     
   byte  reload_files;           // Reload files loaded when we exited.
+  byte  startup_dict;           // Open dictionary on startup.
 //
 //  Display flags
 //
