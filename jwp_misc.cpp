@@ -478,7 +478,7 @@ SetPage:;
                   SendMessage ((HWND) (item.lParam),WM_GETDLGVALUES,0,0);
                 }
                 EndDialog (hwnd,true);
-				return    (true);
+                return    (true);
            case IDCANCEL:                               // Just exit.
                 EndDialog (hwnd,false);
                 return    (true);

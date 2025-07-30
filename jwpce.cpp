@@ -272,9 +272,9 @@ struct cfg default_config = {
 //
   true,                                     //  byte  install;                // If set causes check for installed version and file extensions.
   false,                                    //  byte  maximize;               // Maximaize the file.
-  false,                                    //  byte  usedims;                // Use last saved dimensions.
+  false,                                    //  byte  usedims;                // Use last saved dimensions. If this is true and no configuration file exists, the window will be unusably small.
   true,                                     //  byte  save_exit;              // Save configuration on exit.     
-  true,                                     //  byte  reload_files;           // Reload files loaded when we exited.
+  false,                                    //  byte  reload_files;           // Reload files that were previously open when we exited.
   false,                                    //  byte  startup_dict;           // Open dictionary on startup.
 //
 //  Display flags
@@ -290,7 +290,7 @@ struct cfg default_config = {
 //  Basic operations flags
 //
   true,                                     //  byte  confirm_exit;           // Require confirmation of exit on closing last file.
-  true,                                     //  byte  close_does_file;        // Window close control, closes just current file.
+  false,                                    //  byte  close_does_file;        // If true, the close button only closes the current file instead of the entire program.
   false,                                    //  byte  backup_files;           // Save last version of a file as a backup.
   true,                                     //  byte  save_history;           // Save dictionary/search/replace histories on exit.
   true,                                     //  byte  save_recent;            // Save recent file list on exit.
@@ -300,6 +300,9 @@ struct cfg default_config = {
   false,                                    //  byte  page_mode_file;         // Uses page scrolling for the file (PPC only)
   false,                                    //  byte  page_mode_list;         // Uses page scrolling for lists (PPC only)
   0,                                        //  byte  dir_handling;           // Defines, in part, how the initial directory for the Open dialog is determined.
+  true,                                     //  byte  revert_to_K_mode;       // The input mode will revert to Kanji Mode upon a kanji conversion.
+  false,                                    //  byte  old_katakana_input;     // Determines if the old style of katakana vowel input should be used.
+  false,                                    //  byte  ctrl_up_down_convert;   // Determines if Control-Up/Down should be interpreted as kanji conversion.
 #ifdef BINARY_CONFIG
   0,0,0,0,0,0,0,0,
   0L,0L,
@@ -308,8 +311,8 @@ struct cfg default_config = {
 //  Clipboard flags
 //
   FILETYPE_SJS,                             //  byte  clip_write;             // Clipboard write type.
-  FILETYPE_AUTODETECT,                      //  byte  clip_read;              // Clipboard read type.
-  false,                                    //  byte  no_BITMAP;              // Suppress BITMAP clipboard format
+  FILETYPE_UNICODE,                         //  byte  clip_read;              // Clipboard read type.
+  true,                                     //  byte  no_BITMAP;              // Suppress BITMAP clipboard format
   false,                                    //  byte  no_UNICODETEXT;         // Suppress UNICODETEXT clipboard format
 //
 //  Search flags
@@ -356,8 +359,9 @@ struct cfg default_config = {
   false,                                    //  byte  reading_word            // Allow partial-word matches for meanings in Reading lookup.
   false,                                    //  byte  no_variants;            // Hides variant/equivalent radicals from radical selection bar.
   true,                                     //  byte  rare_last;              // List rare kanji at the end. Only needed for the radical lookup.
+  true,                                     //  byte  colorize_radicals;      // Show rarely needed radicals in a subdued color for Radical/Bushu Lookup.
 #ifdef BINARY_CONFIG
-  0,0,0,0,
+  0,0,0,
 #endif
 //
 //  Font flags
@@ -431,18 +435,20 @@ static BOOL CALLBACK dialog_userconv (HWND hwnd,UINT message,WPARAM wParam,LPARA
 //
 static TCHAR *get_parameter (TCHAR *buffer,TCHAR *ptr) {
   TCHAR *p2;
+  const long max=SIZE_BUFFER-1;
+  *buffer=0;
   if (*ptr == '"') {
-    lstrcpy (buffer,++ptr);
+    _tcsncat (buffer,++ptr,max);
     for (p2 = buffer; *p2 && (*p2 != '"'); p2++);
   }
   else {
-    lstrcpy (buffer,ptr);
-    for (p2 = buffer; *p2 && !isspace(*p2); p2++);
+    _tcsncat (buffer,ptr,max);
+    for (p2 = buffer; *p2 && !isspace(*p2<=0xFF?*p2:'!'); p2++);
   }
   if (!*p2) return (NULL);
   *p2  = 0;
   ptr += (p2-buffer);
-  for (ptr++; *ptr && isspace(*ptr); ptr++);
+  for (ptr++; *ptr && isspace(*ptr<=0xFF?*ptr:'!'); ptr++);
   if (!*ptr) return (NULL);
   return (ptr);
 }
@@ -540,7 +546,7 @@ static void terminate (int format,...) {
     MessageBox (null,buffer,get_string(IDS_ERROR_TERMINAL),MB_OK | MB_ICONERROR);
   }
   if (main_window) DestroyWindow (main_window);
-  ExitThread (format ? 0 : 1);
+  ExitProcess (format ? 0 : 1);
 }
 
 //===================================================================
@@ -1014,7 +1020,7 @@ JWP_config::JWP_config () {
 #ifndef WINELIB
   TCHAR *p;
   p = get_parameter (buf,GetCommandLine());
-  GetFullPathName (buf,sizeof(buffer),buffer,&ptr);
+  GetFullPathName (buf,sizeof(buffer)/sizeof(TCHAR),buffer,&ptr);
 //
 //  Setup for network support.  This allows a number of the user 
 //  configuration files to be located in a different location.  The 
@@ -1032,7 +1038,7 @@ JWP_config::JWP_config () {
     if ((buf[0] == '+') || (buf[0] == '-')) {   // Is first chare + or -?
       if (buf[0] == '-') quiet_errors = true;   // Quiet errors
       add_part      (buf,TEXT("x"));            // Build directory.
-      GetFullPathName (buf+1,sizeof(nbuffer),nbuffer,&nptr);
+      GetFullPathName (buf+1,sizeof(nbuffer)/sizeof(TCHAR),nbuffer,&nptr);
     }
   }
 //
@@ -1381,7 +1387,7 @@ UseDefault:
     search_history .alloc (jwp_config.cfg.history_size);
     replace_history.alloc (jwp_config.cfg.history_size);
   }
-  ErrorMessage (false,IDS_START_CONFIGLOAD,NAME_CONFIG);
+  ErrorMessage (false,IDS_START_CONFIGLOAD,NAME_CONFIG_INI);
 AdjustConfig:
 #ifndef WINCE
   if (!cfg.usedims) cfg.x = cfg.y = cfg.xs = cfg.ys = CW_USEDEFAULT;

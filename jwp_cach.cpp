@@ -114,10 +114,14 @@ int IO_cache::get_char () {
   if (charsize > 1) {
     j = i = BUFFER(position);       // We can cheet of UNICODE, and take the first zero
   }                                 //   character as EOF.
-  else {
+  else if (position+2 <= size) {
     i = buffer[position];           // On single byte reads we must look for two zeros in
     j = buffer[position+1];         //   a row.  This allows us to read JWP's stupid zero
   }                                 //   flag for extended ascii (bad choice of values)!
+  else {
+    i = buffer[position];
+    j = 0;                          // No second character.
+  }
   position += charsize;
   if (!i && !j) return (IO_EOF);
   return (i);

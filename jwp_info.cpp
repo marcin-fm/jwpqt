@@ -1130,10 +1130,13 @@ void KANJI_info::format_line (HWND hwnd,int line,int code) {
          wsprintf       (buffer1,TEXT("%X (%X) [%s]"),ch,ch | 0x8080,buffer2);
          SetDlgItemText (hwnd,line,buffer1);
          break;
-    case INFO_SHIFTJIS:
-         wsprintf       (buffer1,TEXT("%X"),(ch < 0x80) ? ch : jis2sjis(ch));
+    case INFO_SHIFTJIS: {
+         int alt, sjis = (ch < 0x80) ? ch : jis2sjis(ch);
+         wsprintf       (buffer1,TEXT("%X"),sjis);
+         if (alt = sjisalternate(sjis)) wsprintf (buffer1+wcslen(buffer1),TEXT(" (%X)"),alt);
          SetDlgItemText (hwnd,line,buffer1);
          break;
+         }
     case INFO_UNICODE:
          if (jis2unicode(ch)) {
            wsprintf       (buffer1,TEXT("%X"),jis2unicode(ch));

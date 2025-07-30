@@ -182,7 +182,7 @@ static BOOL CALLBACK dialog_advinstall (HWND hwnd,UINT message,WPARAM wParam,LPA
 static BOOL CALLBACK dialog_install (HWND hwnd,UINT message,WPARAM wParam,LPARAM lParam) {
   switch (message) {
     case WM_INITDIALOG:
-         CheckDlgButton (hwnd,IDC_IDINSTALL,!jwp_config.cfg.install);
+         CheckDlgButton (hwnd,IDC_IDINSTALL,BST_CHECKED);  // The checkbox state formerly was !jwp_config.cfg.install
          return (true);
     case WM_HELP:
          do_help (hwnd,IDH_INSTALL_MORE);

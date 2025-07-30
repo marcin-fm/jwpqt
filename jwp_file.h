@@ -74,8 +74,8 @@ private:
                                 // Selection types
 #define SELECT_NONE     0       // No selection
 #define SELECT_EDIT     1       // Standard window edit selection.
-#define SELECT_KANJI    2       // Kanji conversion selection.
-#define SELECT_CONVERT  3       // Conversion in process.
+#define SELECT_KANJI    2       // Kanji conversion selection. (I.e. currently inputting kana for conversion into kanji.)
+#define SELECT_CONVERT  3       // Conversion in process. (I.e. currently selecting what to convert the selection into.)
 
                                 // Selection fixed codes.
 #define SELECT_FIX1     0       // Fixed point is pos1

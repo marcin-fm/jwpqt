@@ -350,6 +350,28 @@ int sjis2jis (int ch) {
   return ((p1 << 8) | p2);
 }
 
+static const unsigned short kata2half[][2] = {
+                  {0x8142, 0xa1}, {0x8175, 0xa2}, {0x8176, 0xa3}, {0x8141, 0xa4}, {0x8145, 0xa5}, {0x8392, 0xa6}, {0x8340, 0xa7}, {0x8342, 0xa8}, {0x8344, 0xa9}, {0x8346, 0xaa}, {0x8348, 0xab}, {0x8383, 0xac}, {0x8385, 0xad}, {0x8387, 0xae}, {0x8362, 0xaf},
+  {0x815b, 0xb0}, {0x8341, 0xb1}, {0x8343, 0xb2}, {0x8345, 0xb3}, {0x8347, 0xb4}, {0x8349, 0xb5}, {0x834a, 0xb6}, {0x834c, 0xb7}, {0x834e, 0xb8}, {0x8350, 0xb9}, {0x8352, 0xba}, {0x8354, 0xbb}, {0x8356, 0xbc}, {0x8358, 0xbd}, {0x835a, 0xbe}, {0x835c, 0xbf},
+  {0x835e, 0xc0}, {0x8360, 0xc1}, {0x8363, 0xc2}, {0x8365, 0xc3}, {0x8367, 0xc4}, {0x8369, 0xc5}, {0x836a, 0xc6}, {0x836b, 0xc7}, {0x836c, 0xc8}, {0x836d, 0xc9}, {0x836e, 0xca}, {0x8371, 0xcb}, {0x8374, 0xcc}, {0x8377, 0xcd}, {0x837a, 0xce}, {0x837d, 0xcf},
+  {0x837e, 0xd0}, {0x8380, 0xd1}, {0x8381, 0xd2}, {0x8382, 0xd3}, {0x8384, 0xd4}, {0x8386, 0xd5}, {0x8388, 0xd6}, {0x8389, 0xd7}, {0x838a, 0xd8}, {0x838b, 0xd9}, {0x838c, 0xda}, {0x838d, 0xdb}, {0x838f, 0xdc}, {0x8393, 0xdd}, {0x814a, 0xde}, {0x814b, 0xdf},
+  {0x8394, 0xb3de}, {0, 0}
+};
+
+int sjisalternate(int sjis) {
+  int i,half;
+  if (sjis < 0x8141 || sjis > 0x8394) return 0;
+  for (i = 0; half = kata2half[i][1]; i++) {
+    if (sjis == kata2half[i][0]) return half;
+    if (sjis < 0x834b || sjis > 0x837c) continue;
+    if (sjis >= 0x8369 && sjis <= 0x836e) continue;
+    if (sjis == 0x8362 || sjis == 0x8363) continue;
+    if (sjis == kata2half[i][0]+1) return (half<<8|0xde);
+    if (sjis == kata2half[i][0]+2 && sjis >= 0x8370) return (half<<8|0xdf);
+  }
+  return 0;
+}
+
 //--------------------------------
 //
 //  This routine converts from Unicode to JIS codes.  This is one half
@@ -365,6 +387,9 @@ int unicode2jis (int ch,int bad) {
   if ((ch <= 0x007e)                  ) return (ch);                // ASCII
   if ((ch >= 0x3041) && (ch <= 0x3093)) return (ch-0x3041+0x2421);  // Hiragana
   if ((ch >= 0x30a1) && (ch <= 0x30f6)) return (ch-0x30a1+0x2521);  // Katakana
+  if (ch == 0x201a) return (bad);                                   // 0x82 misconstrued
+  if (ch == 0x0192) return (bad);                                   // 0x83 misconstrued
+  if (ch == 0x201e) return (bad);                                   // 0x84 misconstrued
   if ((ext_unicode != cp1253) && (ch >= 0x0391) && (ch <= 0x03c9)) {// Greek
     if (ch <= 0x03a1) return (ch-0x0391+0x2621);
     if (ch == 0x03a2) return (bad);
@@ -537,7 +562,8 @@ JIS_convert jis_convert;    // Class instance.
 #define JIS_NL  10          // New Line char.
 #define JIS_CR  13          // Carrage Return.
 #define JIS_ESC 27          // Escape.
-#define JIS_SS2 142         // Half-width katakana marker.
+#define JIS_SS2 0x8E        // Half-width katakana marker.
+#define EUC_212 0x8F        // JIS X 0212 initiator in EUC-JP
 
 #define IS_EUC(c)       (((c) >= 161) && ((c) <= 254))      // EUC code for kanji
 #define IS_HALFKATA(c)  (((c) >= 161) && ((c) <= 223))      // Range for half-width katakana (0xA1 - 0xDF).
@@ -757,6 +783,195 @@ Convert:
 
 //--------------------------------
 //
+//  This attempts to convert certain 3-byte EUC sequences initiated by 0x8f.
+//
+int convert_EUC_0212 (int ch,int c2)
+{
+  if (ch == 0xa2) switch (c2) {
+    case 0xed: return (0xa9);  // copyright
+    case 0xee: return (0xae);  // registered trademark
+    case 0xef: return (0x99);  // registered trademark
+  }
+  else if (ch == 0xa9) switch (c2) {
+    case 0xa1: return (0xc6);  // AE
+    case 0xa2: return (0xd0);  // eth majuscule
+    case 0xac: return (0xd8);  // O stroke
+    case 0xad: return (0x8c);  // OE
+    case 0xb0: return (0xde);  // thorn majuscule
+    case 0xc1: return (0xe6);  // ae
+    case 0xc2: return (0xf0);  // eth minuscule
+    case 0xcc: return (0xf8);  // o stroke
+    case 0xcd: return (0x9c);  // oe
+    case 0xce: return (0xdf);  // ss
+    case 0xd0: return (0xfe);  // thorn minuscule
+  }
+  else if (ch == 0xaa) switch (c2) {// majuscule Latin glyphs
+    case 0xa1: return (0xc1);  // A acute
+    case 0xa2: return (0xc0);  // A grave
+    case 0xa3: return (0xc4);  // A umlaut
+    case 0xa4: return (0xc2);  // A circumflex
+    case 0xa9: return (0xc5);  // A ring
+    case 0xaa: return (0xc3);  // A tilde
+    case 0xae: return (0xc7);  // C cedilla
+    case 0xb1: return (0xc9);  // E acute
+    case 0xb2: return (0xc8);  // E grave
+    case 0xb3: return (0xcb);  // E umlaut
+    case 0xb4: return (0xca);  // E circumflex
+    case 0xbf: return (0xcd);  // I acute
+    case 0xc0: return (0xcc);  // I grave
+    case 0xc1: return (0xcf);  // I umlaut
+    case 0xc2: return (0xce);  // I circumflex
+    case 0xd0: return (0xd1);  // N tilde
+    case 0xd1: return (0xd3);  // O acute
+    case 0xd2: return (0xd2);  // O grave
+    case 0xd3: return (0xd6);  // O umlaut
+    case 0xd4: return (0xd4);  // O circumflex
+    case 0xd7: return (0xd4);  // O macron (kludged with circumflex) (ambiguous!)
+    case 0xd8: return (0xd5);  // O tilde
+    case 0xde: return (0x8a);  // S caron
+    case 0xe2: return (0xda);  // U acute
+    case 0xe3: return (0xd9);  // U grave
+    case 0xe4: return (0xdc);  // U umlaut
+    case 0xe5: return (0xdb);  // U circumflex
+    case 0xf2: return (0xdd);  // Y acute
+    case 0xf3: return (0x9f);  // Y umlaut
+    case 0xf6: return (0x8e);  // Z caron
+  }
+  else if (ch == 0xab) switch (c2) {// minuscule
+    case 0xa1: return (0xe1);  // a acute
+    case 0xa2: return (0xe0);  // a grave
+    case 0xa3: return (0xe4);  // a umlaut
+    case 0xa4: return (0xe2);  // a circumflex
+    case 0xa7: return (0xe2);  // a macron (kludged with circumflex) (ambiguous!)
+    case 0xa9: return (0xe5);  // a ring
+    case 0xaa: return (0xe3);  // a tilde
+    case 0xae: return (0xe7);  // c cedilla
+    case 0xb1: return (0xe9);  // e acute
+    case 0xb2: return (0xe8);  // e grave
+    case 0xb3: return (0xeb);  // e umlaut
+    case 0xb4: return (0xea);  // e circumflex
+    case 0xb7: return (0xea);  // e macron (kludged with circumflex) (ambiguous!)
+    case 0xbf: return (0xed);  // i acute
+    case 0xc0: return (0xec);  // i grave
+    case 0xc1: return (0xef);  // i umlaut
+    case 0xc2: return (0xee);  // i circumflex
+    case 0xd0: return (0xf1);  // n tilde
+    case 0xd1: return (0xf3);  // o acute
+    case 0xd2: return (0xf2);  // o grave
+    case 0xd3: return (0xf6);  // o umlaut
+    case 0xd4: return (0xf4);  // o circumflex
+    case 0xd7: return (0xf4);  // o macron (kludged with circumflex) (ambiguous!)
+    case 0xd8: return (0xf5);  // o tilde
+    case 0xde: return (0x9a);  // s caron
+    case 0xe2: return (0xfa);  // u acute
+    case 0xe3: return (0xf9);  // u grave
+    case 0xe4: return (0xfc);  // u umlaut
+    case 0xe5: return (0xfb);  // u circumflex
+    case 0xe9: return (0xfb);  // u macron (kludged with circumflex) (ambiguous!)
+    case 0xf2: return (0xfd);  // y acute
+    case 0xf3: return (0xff);  // y umlaut
+    case 0xf6: return (0x9e);  // z caron
+  }
+  return (KANJI_BAD);  // Search for this character in EDICT/ENAMDICT (opening the file directly) to check for missing conversions.
+}
+
+//--------------------------------
+//
+//  This is the reverse of the above.
+//  It tries to find a JIS X 0212 encoding for the input.
+//
+int encode_EUC_0212 (int in,int&o1)
+{
+  o1 = 0xa2; switch (in) {
+    case 0xa9: return (0xed);  // copyright
+    case 0xae: return (0xee);  // registered trademark
+    case 0x99: return (0xef);  // registered trademark
+  }
+  o1 = 0xa9; switch (in) {
+    case 0xc6: return (0xa1);  // AE
+    case 0xd0: return (0xa2);  // eth majuscule
+    case 0xd8: return (0xac);  // O stroke
+    case 0x8c: return (0xad);  // OE
+    case 0xde: return (0xb0);  // thorn majuscule
+    case 0xe6: return (0xc1);  // ae
+    case 0xf0: return (0xc2);  // eth minuscule
+    case 0xf8: return (0xcc);  // o stroke
+    case 0x9c: return (0xcd);  // oe
+    case 0xdf: return (0xce);  // ss
+    case 0xfe: return (0xd0);  // thorn minuscule
+  }
+  o1 = 0xaa; switch (in) {
+    case 0xc1: return (0xa1);  // A acute
+    case 0xc0: return (0xa2);  // A grave
+    case 0xc4: return (0xa3);  // A umlaut
+    case 0xc2: return (0xa4);  // A circumflex
+    case 0xc5: return (0xa9);  // A ring
+    case 0xc3: return (0xaa);  // A tilde
+    case 0xc7: return (0xae);  // C cedilla
+    case 0xc9: return (0xb1);  // E acute
+    case 0xc8: return (0xb2);  // E grave
+    case 0xcb: return (0xb3);  // E umlaut
+    case 0xca: return (0xb4);  // E circumflex
+    case 0xcd: return (0xbf);  // I acute
+    case 0xcc: return (0xc0);  // I grave
+    case 0xcf: return (0xc1);  // I umlaut
+    case 0xce: return (0xc2);  // I circumflex
+    case 0xd1: return (0xd0);  // N tilde
+    case 0xd3: return (0xd1);  // O acute
+    case 0xd2: return (0xd2);  // O grave
+    case 0xd6: return (0xd3);  // O umlaut
+    case 0xd4: return (0xd4);  // O circumflex
+//  case 0xd4: return (0xd7);  // O macron (kludged with circumflex) (ambiguous!)
+    case 0xd5: return (0xd8);  // O tilde
+    case 0x8a: return (0xde);  // S caron
+    case 0xda: return (0xe2);  // U acute
+    case 0xd9: return (0xe3);  // U grave
+    case 0xdc: return (0xe4);  // U umlaut
+    case 0xdb: return (0xe5);  // U circumflex
+    case 0xdd: return (0xf2);  // Y acute
+    case 0x9f: return (0xf3);  // Y umlaut
+    case 0x8e: return (0xf6);  // Z caron
+  }
+  o1 = 0xab; switch (in) {
+    case 0xe1: return (0xa1);  // a acute
+    case 0xe0: return (0xa2);  // a grave
+    case 0xe4: return (0xa3);  // a umlaut
+    case 0xe2: return (0xa4);  // a circumflex
+//  case 0xe2: return (0xa7);  // a macron (kludged with circumflex) (ambiguous!)
+    case 0xe5: return (0xa9);  // a ring
+    case 0xe3: return (0xaa);  // a tilde
+    case 0xe7: return (0xae);  // c cedilla
+    case 0xe9: return (0xb1);  // e acute
+    case 0xe8: return (0xb2);  // e grave
+    case 0xeb: return (0xb3);  // e umlaut
+    case 0xea: return (0xb4);  // e circumflex
+//  case 0xea: return (0xb7);  // e macron (kludged with circumflex) (ambiguous!)
+    case 0xed: return (0xbf);  // i acute
+    case 0xec: return (0xc0);  // i grave
+    case 0xef: return (0xc1);  // i umlaut
+    case 0xee: return (0xc2);  // i circumflex
+    case 0xf1: return (0xd0);  // n tilde
+    case 0xf3: return (0xd1);  // o acute
+    case 0xf2: return (0xd2);  // o grave
+    case 0xf6: return (0xd3);  // o umlaut
+    case 0xf4: return (0xd4);  // o circumflex
+//  case 0xf4: return (0xd7);  // o macron (kludged with circumflex) (ambiguous!)
+    case 0xf5: return (0xd8);  // o tilde
+    case 0x9a: return (0xde);  // s caron
+    case 0xfa: return (0xe2);  // u acute
+    case 0xf9: return (0xe3);  // u grave
+    case 0xfc: return (0xe4);  // u umlaut
+    case 0xfb: return (0xe5);  // u circumflex
+//  case 0xfb: return (0xe9);  // u macron (kludged with circumflex) (ambiguous!)
+    case 0xfd: return (0xf2);  // y acute
+    case 0xff: return (0xf3);  // y umlaut
+    case 0x9e: return (0xf6);  // z caron
+  }
+  return 0;
+}
+
+//--------------------------------
+//
 //  This is the main input driver for reading input streams.  This is
 //  called for each character to be read.  This routine gets characters
 //  from the input stream and translates them into JIS characters and 
@@ -840,6 +1055,11 @@ int JIS_convert::input_char () {
              if ((c2 = get_char()) < 0) return (KANJI_BAD);
              return (((ch << 8) | c2) & 0x7f7f);    // Kanji code
            }
+           else if (ch == EUC_212) {
+             if ((ch = get_char()) < 0) return (KANJI_BAD);
+             if ((c2 = get_char()) < 0) return (KANJI_BAD);
+             return convert_EUC_0212 (ch,c2);
+           }
 #ifdef SUPPORT_HALFKATA
            else if (ch == JIS_SS2) {                // Half-width katakana
              if ((c2 = get_char()) < 0) return (KANJI_BAD);
@@ -848,8 +1068,12 @@ int JIS_convert::input_char () {
                half2full (&ch,&c2);
                return ((ch << 8) | c2);
              }
-           }
+#else SUPPORT_HALFKATA
+           else if (ch == JIS_SS2) {                // JWPce encodes 8-bit ASCII this way on output; not sure if it's standards-compliant though.
+             if ((c2 = get_char()) < 0) return (KANJI_BAD);
 #endif SUPPORT_HALFKATA
+             return (c2 | 0x80);                    // (But, until version 1.64, it couldn't reconstruct its own output for this particular case.)
+           }
            return (ch);                             // Ascii fall-through
       case FILETYPE_SJS:
            if (IS_SJIS1(ch)) {                      // Kanji character
@@ -883,12 +1107,16 @@ int JIS_convert::input_char () {
   }
 }
 
+#define UNIRNG(a,b) (c >= 0x##a && c <= 0x##b)
 
 // This is intended to improve Unicode autodetection by allowing certain unconvertible Unicode characters occasionally found in Japanese text.
 static bool excusable (int c) {
   if (c < 0 || c > 0xFFFF) return (false);
+  if (UNIRNG(2160,2169) || UNIRNG(2170,2179) || UNIRNG(2460,2473)) return (true);  // Roman numerals and circled numbers
   switch (c) {
     case 0x2027:      // hyphenation point
+    case 0x267A:      // (unknown)
+    case 0x2764:      // heart
     case 0xFF0D:      // fullwidth hyphen/minus
       return (true);  // Excuse certain Unicode characters which derail clipboard autodetection because they don't map to JIS.
   }
@@ -1038,8 +1266,15 @@ void JIS_convert::output_char (int ch) {
            put_char ((ch & 0xff) | 0x80);
          }
          else if (ch & 0x80) {                  // Output ascii character with high bit set.
-           put_char (JIS_SS2);
-           put_char (ch & 0x7f);
+           int e2, e3;
+           if (e3 = encode_EUC_0212 (ch,e2)) {  // Try JIS X 0212 first
+             put_char (EUC_212);
+             put_char (e2);
+             put_char (e3);
+           } else {
+             put_char (JIS_SS2);                // Use an alternative encoding method that couldn't even be reconstructed on input until JWPxp version 1.64!
+             put_char (ch & 0x7f);
+           }
          }
          else {                                 // Ascii output
            put_char (ch);

@@ -318,6 +318,9 @@ JWP_file::~JWP_file () {
   while ((p = first)) { first = p->next; delete p; }
   if (name) free (name);
   undo_free (undo,jwp_config.cfg.undo_number);
+  if (this == jwp_conv.file) {
+    jwp_conv.file = null;
+  }
   return;
 }
 
@@ -553,6 +556,7 @@ void JWP_file::right () {
 //
 void JWP_file::do_key (int key,int ctrl,int shift) {
   int i,j,k;
+  Position old_pos;
   switch (key) {
 //
 //  CAPS LOCK -- Output any pending ambiguous kana since toggling the caps lock normally implies we've finished entering the previous text.
@@ -698,10 +702,13 @@ void JWP_file::do_key (int key,int ctrl,int shift) {
                left                 ();
                j = cursor.get_char  ();
                if (k == KANJI_LONGVOWEL) k = j;
-               if (!same_class (i,j)) break;
-               if (!same_class (k,j)) break;
+               if (!same_class (i,j)) goto newclass;                  // Go back to the start of the word.
+               if (!same_class (k,j)) goto newclass;
              }
-             if (!cursor.bof() || same_class(j,' ')) right ();
+//
+// The loop terminated naturally, so we must have reached the beginning of the file without finding a different class of character.
+//
+             if (same_class(j,' ')) newclass: right ();             // I'm not sure the conditional is operable but that's how I originally had it.
 #else
              if (!cursor.bof()) left ();
              while (true) {
@@ -710,7 +717,7 @@ void JWP_file::do_key (int key,int ctrl,int shift) {
                left ();
              }
              while ((i == char_class(cursor.get_char())) && !cursor.bof()) left ();
-             if (!cursor.bof()) right ();
+             if (!cursor.bof()) right ();  // Bug! Doesn't work right if a different character class is also at the start of the file.
 #endif
            }
          break;
@@ -884,6 +891,10 @@ DeleteToStart:
 //            <plain> -- Toggle insert mode.
 //
     case VK_INSERT:
+         if (shift || ctrl) {
+           if (sel.type == SELECT_KANJI) convert (CONVERT_FORCE);
+           if (sel.type == SELECT_CONVERT) jwp_conv.clear ();
+         }
          if (shift) {
            clip_paste (false);  // Changed to false to suppress the error message.
            shift = false;
@@ -933,11 +944,26 @@ DeleteToStart:
          if (ctrl && shift) bushu2_lookup (this);
          return;
 //
-//  C -- <ctrl> -- Copy to clipboard.
+//  C -- <ctrl> -- Copy selection to clipboard. If nothing selected, copy entire line.
 //
     case VK_C:
-         if (ctrl) clip_copy ();
-         return;
+         if (!ctrl) return;
+         if (sel.type) {
+           if (sel.type == SELECT_KANJI) convert (CONVERT_FORCE);
+           if (sel.type == SELECT_CONVERT) jwp_conv.clear (TRUE);
+           sel.type = SELECT_EDIT;     // Force the selection back on for the copy operation.
+           clip_copy ();
+           return;
+         }
+         jwp_conv.clear ();
+         old_pos = cursor;
+         do_key (VK_HOME,false,false);
+         do_key (VK_END,false,true);
+         clip_copy ();
+         selection_clear ();
+         cursor = old_pos;
+         shift = false;       // Fixes selection errors.
+         break;
 //
 //  F6 -- Dictionary.
 //
@@ -1032,11 +1058,15 @@ DeleteToStart:
 //  V -- <ctrl> -- Paste from clipboard
 //
     case VK_V:
-         if (ctrl) clip_paste (false);  // Changed to false to suppress the error message.
-         shift = false;                 // Fixes selection errors.
+         shift = false;       // Fixes selection errors.
+         if (!ctrl) break;
+         if (sel.type == SELECT_KANJI) convert (CONVERT_FORCE);
+         if (sel.type == SELECT_CONVERT) jwp_conv.clear ();
+         clip_paste (false);  // Changed to false to suppress the error message.
          break;
 //
-//  W -- <ctrl> -- Select word.
+//  W -- <ctrl>       -- Select word.
+//       <ctrl+shift> -- Select line.
 //
     case VK_W:              // Select word
          if (!ctrl) return;
@@ -1049,7 +1079,7 @@ DeleteToStart:
            return;
          }
          j = 0;
-         if (sel.type && sel.pos2.pos == cursor.pos) j = 1;                       // If preceding is selected, treat it like a separate word.
+         if (sel.type && sel.type != SELECT_CONVERT && sel.pos2.pos == cursor.pos) j = 1;   // If preceding is selected, treat it like a separate word, except during a conversion.
          else if (cursor.eol () && !cursor.bol()) do_key (VK_LEFT,false,false);   // This will cause it to select leftwards at end of line.
          if (same_class(k=cursor.get_char(),' ')) do_key (VK_RIGHT,true,false);   // Skip whitespace to start of next word.
          else if (!j && !cursor.bol()) {            // This could be more compact but the comments and logic are a bit clearer this way.
@@ -1077,11 +1107,16 @@ DeleteToStart:
 #endif
          break;
 //
-//  X -- <ctrl> -- Cut to clipboard.
+//  X -- <ctrl> -- Cut selection to clipboard. If nothing selected, cut entire line.
 //
     case VK_X:
          shift = false;   // Fixes selection errors.
-         if (ctrl) clip_cut ();
+         if (!ctrl) break;
+         if (!sel.type) {
+           do_key (VK_HOME,false,false);
+           do_key (VK_END,false,true);
+         }
+         clip_cut ();
          break;
 //
 //  Y -- <ctrl> -- Redo.
@@ -1246,29 +1281,33 @@ DoNext:    jwp_search.do_next (NULL);                       // We have high conf
 //        SPECIAL -- On PPC/PocketPC up during a kanji conversion is taken as convert.
 //
     case VK_UP:
-         /* This is the old behavior, which has been removed since it was interfering with the new Ctrl-Up/Down scrolling.
 #if (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
          if ((sel.type == SELECT_KANJI) || (sel.type == SELECT_CONVERT)) {
            convert (CONVERT_RIGHT);
            break;
          }
 #endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
-         if (ctrl && !sel.type) {
-           shift = false;
-           v_scroll (SB_LINEUP);
-           return;
-         }
+         if (jwp_config.cfg.ctrl_up_down_convert) {     // This is the old behavior, which had been removed because it interferes with Ctrl-Up/Down scrolling.
+           if (ctrl && !sel.type) {
+             shift = false;
+             v_scroll (SB_LINEUP);
+             return;
+           }
+           if (ctrl) {
+             shift = false;
+             convert (CONVERT_RIGHT);
+             break;
+           }
+         } else                                         // New behavior for Control-Up.
          if (ctrl) {
-           shift = false;
-           convert (CONVERT_RIGHT);
-           break;
-         }
-         */
-         if (ctrl) {
-           shift = false;
            v_scroll (SB_LINEUP);
            //find_pos (&cursor);                        // This could be redundant, but it's what view_check() does initially.
            if (cursor.y-view_top.y <= height) return;   // Return if cursor did not drop off the bottom (conditional based on view_check).
+           if (!x_cursor) x_cursor = (short) cursor.x;  // This block of code was copied from below. It was added to preserve any selection unchanged.
+           if (cursor.move_up()) break;
+           cursor.align (this,x_cursor);
+           view_check ();
+           return;
          }
          if (jwp_config.cfg.page_mode_file) goto PageUp;
          jwp_conv.clear ();
@@ -1286,28 +1325,32 @@ DoNext:    jwp_search.do_next (NULL);                       // We have high conf
 //          SPECIAL -- On PPC/PocketPC down during a kanji conversion is taken as convert.
 //
     case VK_DOWN:
-         /* See commented-out section above for explanation.
 #if (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
          if ((sel.type == SELECT_KANJI) || (sel.type == SELECT_CONVERT)) {
            convert (CONVERT_RIGHT);
            break;
          }
 #endif (defined(WINCE_PPC) || defined(WINCE_POCKETPC))
-         if (ctrl && !sel.type) {
-           shift = false;
-           v_scroll (SB_LINEDOWN);
-           return;
-         }
+         if (jwp_config.cfg.ctrl_up_down_convert) {     // This is the old behavior, which had been removed because it interferes with Ctrl-Up/Down scrolling.
+           if (ctrl && !sel.type) {
+             shift = false;
+             v_scroll (SB_LINEDOWN);
+             return;
+           }
+           if (ctrl) {
+             shift = false;
+             convert (CONVERT_LEFT);
+             break;
+           }
+         } else                                         // New behavior for Control-Down.
          if (ctrl) {
-           shift = false;
-           convert (CONVERT_LEFT);
-           break;
-         }
-         */
-         if (ctrl) {
-           shift = false;
            v_scroll (SB_LINEDOWN);
            if ((cursor.y > view_top.y+JWP_FONT.vspace) && (total_length > view_top.y+height-JWP_FONT.vheight)) return;  // See VK_UP for comments and caveats.
+           if (!x_cursor) x_cursor = (short) cursor.x;  // See comments for VK_UP.
+           if (cursor.move_down()) break;
+           cursor.align (this,x_cursor);
+           view_check ();
+           return;
          }
          if (jwp_config.cfg.page_mode_file) goto PageDown;
          jwp_conv.clear ();
@@ -1528,8 +1571,8 @@ FoundYPosition:
 //  list.
 //
   if (!jwp_config.cfg.auto_scroll) return;
-  if     ((HIWORD(lParam) < JWP_FONT.height/3) && (view_top.line != first->first)) i = SB_LINEUP;
-  else if (HIWORD(lParam) > height-JWP_FONT.height/3) {
+  if     ((y_pos < JWP_FONT.height/3) && (view_top.line != first->first)) i = SB_LINEUP;
+  else if (y_pos > height-JWP_FONT.height/3) {
     Position pos;                               // This section makes sure we do not 
     pos.para = last;                            //   over-scroll the display.  This is 
     pos.line = last->last;                      //   such a mess becuase the difficulties of

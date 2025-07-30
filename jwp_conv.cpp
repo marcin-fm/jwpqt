@@ -1042,6 +1042,9 @@ void JWP_conv::clear (BOOL deselect) {
 //if (file && file->sel.type == SELECT_CONVERT) file->selection_clear ();       // This fixes a lot of bugs where the conversion is cleared but the selection is not updated. The result is you've still got a conversion selection but the kanji list is gone.
 //if (file && file->sel.type == SELECT_CONVERT) file->sel.type = SELECT_EDIT;   // This leaves the selection but puts it in a safer state.
   if (deselect && file && file->sel.type == SELECT_CONVERT) file->selection_clear ();   // This fixes a lot of bugs where the conversion is cleared but the selection is not updated. The result is you've still got a conversion selection but the kanji list is gone.
+// The previous line has crashed once before with a bad pointer when called from set_mode().
+// I added a check in the JWP_file destructor that may or may not fix the problem.
+// If not, I don't see any obvious point where we can drop the pointer without causing other problems.
   return;
 }
 
@@ -1511,6 +1514,8 @@ void JWP_conv::search_dict (byte *key,int endkana,IO_cache *cache,int sorted) {
 void JWP_conv::select (int s) {
   int        i;
   KANJI_sel *choice;
+  ASSERT (file);
+  if (!file) return;
   if (!list_len) {                                  // This shouldn't be necessary, but bugs sometimes put us into such a state.
     if (file->sel.type == SELECT_CONVERT) file->selection_clear ();
     ALERT ();                                       // Yet another conversion bug to fix...
@@ -1580,6 +1585,7 @@ void JWP_conv::select (int s) {
 void JWP_file::convert (int code) {
   int i,j;
   KANJI *kptr;
+  if (code != CONVERT_ATTEMPT && jwp_config.cfg.revert_to_K_mode) set_mode (MODE_KANJI);
 //
 //  Set file setting so we can know where to put the kanji back.
 //
@@ -1612,7 +1618,8 @@ void JWP_file::convert (int code) {
   if (!sel.type || (sel.pos1.para != sel.pos2.para)) { MessageBeep (MB_ICONASTERISK); return; }
   all_abs ();                                               // Extract kana string.
   j = false;
-  for (i = sel.pos1.pos; (i < sel.pos2.pos) && (i < sel.pos1.para->length); i++) if (!ISHIRAGANA(sel.pos1.para->text[i])) j = true;
+  for (i = sel.pos1.pos; (i < sel.pos2.pos) && (i < sel.pos1.para->length); i++) if (!ISHIRAGANA(sel.pos1.para->text[i]) && !(ISKATAKANA(sel.pos1.para->text[i]) && sel.pos1.para->text[i] < 0x2574)) j = true;
+
   i = sel.pos2.pos-sel.pos1.pos;
   kptr = sel.pos1.para->text+sel.pos1.pos;
   all_rel ();
@@ -1676,7 +1683,7 @@ BOOL JWP_file::convert_romaji () {
   if (nonascii) { free (kbuf); return (false); }
 //
 // Send each character in the buffer to the appropriate handler as if the user typed it.
-// We really should check if there are any unconvertable sequences and do nothing at all if so, but that's difficult.
+// We really should check if there are any unconvertible sequences and do nothing at all if so, but that's difficult.
 //
   for (i = 0; i < kcnt; i++) {
     k = kbuf[i];

@@ -201,8 +201,10 @@ static struct jascii_kanji {
   KANJI kanji;      // JASCII code.
 } jascii_kanji[] = {
   { ' ',  0x2121 },
-  { ',',  0x2122 },
+  { ',',  0x2122 },	// Japanese-style comma
   { '.',  0x2123 },
+  { ',',  0x2124 },	// Western-style comma
+  { '.',  0x2125 },
   { ':',  0x2127 },
   { ';',  0x2128 },
   { '?',  0x2129 },
@@ -210,9 +212,9 @@ static struct jascii_kanji {
   { '\"', 0x212b },
   { '^',  0x2130 },
   { '_',  0x2132 },
-  { '-',  0x213c },
-  { '-',  0x213d },
-  { '-',  0x213e },
+  { '-',  0x213c },	// long vowel
+  { '-',  0x213d },	// long dash
+  { '-',  0x213e },	// short dash
   { '/',  0x213f },
   { '\\', 0x2140 },
   { '~',  0x2141 },
@@ -234,7 +236,7 @@ static struct jascii_kanji {
   { '[',  0x215a },
   { ']',  0x215b },
   { '+',  0x215c },
-  { '-',  0x215d },
+  { '-',  0x215d },	// minus
   { 'x',  0x215f },
   { '=',  0x2161 },
   { '$',  0x2170 },
@@ -276,8 +278,13 @@ static struct jascii_kanji {
 //
 //      RETURN -- JASCII value or zero to indicate an error.
 //
-static int ascii_to_jascii (int ch) {
+static int ascii_to_jascii (int ch, bool jascii_mode = false) {
   int i;
+  if (jascii_mode) switch (ch) {
+    case ',': return (0x2124);  // Western-style comma
+    case '.': return (0x2125);  // Western-style period
+    case '-': return (0x213d);  // long dash
+  }
   if ((ch >= 'A') && (ch <= 'Z')) return (0x2341+ch-'A');   // Order is importaint here to to get
   if ((ch >= 'a') && (ch <= 'z')) return (0x2361+ch-'a');   //   correct processing of the x char.
   for (i = 0; i < SIZE_JASCII; i++) {
@@ -608,7 +615,7 @@ static kana_state kana_states[] = {
 #define KANA__WA        38  // +wa
 #define KANA_W          39  // wa,wi,we,wo
 #define KANA__K         40  // +ka +ke
-#define KANA_UP         41  // ^^  ^.  ^-, ^+
+#define KANA_UP         41  // ^^  ^.  ^-  ^+  (etc.)
 #define KANA_AIEUO      42  // tha the tho thu thi
 #define KANA_DJI        43
 #define KANA_PENDING    44  // Place holder used to mark kana as waiting for next latter to resolve.
@@ -628,7 +635,7 @@ static kana_state kana_states[] = {
   { "c"    ,0 ,KANA_C        }, // 11   chi,cha,chu,che,cho  ci
   { "n"    ,0 ,KANA_N        }, // 12   na,ni,nu,ne,no  nyu,nyo,nya  n'
   { "aieuo",0 ,KANA_PENDING  }, // 13
-  { "^"    ,0 ,KANA_UP       }, // 14   ^^, ^., ^-
+  { "^"    ,0 ,KANA_UP       }, // 14   ^^  ^.  ^-  ^+  (etc.)
 
   { "aieuo",2 ,KANA_DONE     }, // 15   KANA_F 
   { "-"    ,0 ,KANA_DONE     }, // 16   
@@ -667,7 +674,7 @@ static kana_state kana_states[] = {
 
   { "ea"   ,1 ,KANA_DONE     }, // 40   KANA__K
 
-  { "^-.+" ,1 ,KANA_DONE     }, // 41   KANA_UP
+  { "^-.+", 1 ,KANA_DONE     }, // 41   KANA_UP (this string is no longer being used)
 
   { "aieuo",1 ,KANA_DONE     }, // 42   KANA_AIEUO
 
@@ -713,6 +720,7 @@ void KANA_convert::do_char (JWP_file *f,int ch) {
   char *ptr;
   int   c,i;
   static char *reserved = "'`^+lzmjvkgstdnhbprywfcaieuo";   // These are caracters eaten by the kana converter.
+  static char *syms = "^-.+#(){}[]<>`'~\"!*,:02468";        // Update this string and the complex_kana table to add new conversions.
 //
 //
 //
@@ -737,12 +745,28 @@ void KANA_convert::do_char (JWP_file *f,int ch) {
     if (c == '\'' || c == '"') return;      // Discard (possibly shifted) apostrophe character.
   }
 //
+//  Allow ' or " to forcibly output pending katakana vowels.
+//
+  if (!jwp_config.cfg.old_katakana_input && pending && index == 1 && (c == '\'' || c == '"') && (buffer[0] == 'A' || buffer[0] == 'I' || buffer[0] == 'U' || buffer[0] == 'E' || buffer[0] == 'O')) {
+    clear  ();
+    return;
+  }
+//
 //  Figure out if we want this charcter.  If we do not process the
 //  character as a jascii character.
 //
   if ((state == KANA_N) && (c == '"')) ch = c = '\'';
   for (ptr = reserved; *ptr && (c != *ptr); ptr++);                                     // accept reserved chacters.
-  if ((state == KANA_UP) && ((c == '.') || (c == '-') || (c == '+'))) ptr = reserved;   // accept ^ kana extensions (^^,^.,^-).
+  //if (state == KANA_UP && (c == '.' || c == '-' || c == '+' || c == '#'))ptr = reserved;// accept ^ kana extensions.
+  if (state == KANA_UP) {
+    for (ptr = syms; *ptr; ptr++) {
+      if (*ptr == c) {
+        i = 0;
+        goto CharFound;
+      }
+    }
+  }
+  if ((state == KANA_PLUS) && (c == '+')) ptr = "";                                     // Convert ++ sequence to full-width + symbol.
   if (((state == KANA_Y) && (c == '=')) || ((state == KANA_F) && (c == '-'))) {         // accept y= and f- but block kanji generation
     ptr       = reserved;
     buffer[0] = tolower(buffer[0]);
@@ -946,6 +970,28 @@ void KANA_convert::out_kana () {
     { "^." , { 0x2126,0x0    } },   //   (center .)
     { "^-" , { 0x2144,0x0    } },   //   (...)
     { "^+" , { 0x215c,0x0    } },   //   (+)
+    { "^#" , { 0x2139,0x0    } },   //   (noma)
+    { "^*" , { 0x2228,0x0    } },   //   (kome)
+    { "^0" , { 0x217B,0x0    } },   //   (maru) (217B seems to be more common than 213B)
+    { "^," , { 0x2124,0x0    } },
+    { "^!" , { 0x2125,0x0    } },
+    { "^:" , { 0x2145,0x0    } },
+    { "^6" , { 0x222A,0x0    } },
+    { "^4" , { 0x222B,0x0    } },
+    { "^8" , { 0x222C,0x0    } },
+    { "^2" , { 0x222D,0x0    } },
+    { "^[" , { 0x215A,0x0    } },
+    { "^]" , { 0x215B,0x0    } },
+    { "^<" , { 0x2154,0x0    } },
+    { "^>" , { 0x2155,0x0    } },
+    { "^{" , { 0x2158,0x0    } },
+    { "^}" , { 0x2159,0x0    } },
+    { "^(" , { 0x214C,0x0    } },
+    { "^)" , { 0x214D,0x0    } },
+    { "^`" , { 0x2146,0x0    } },
+    { "^'" , { 0x2147,0x0    } },
+    { "^~" , { 0x2148,0x0    } },
+    { "^\"" , { 0x2149,0x0    } },
   };
   for (i = 0; i < SIZE_COMPLEX; i++) {
     if (!strcmp(complex_kana[i].string,buffer)) {
@@ -1023,7 +1069,7 @@ void JWP_file::do_char (int ch) {
     return;
   }
   if (jwp_config.mode == MODE_JASCII) {                 // JASCII mode -> convert ch to JASCII.
-    if (!(ch = ascii_to_jascii(ch))) return;
+    if (!(ch = ascii_to_jascii(ch,true))) return;
   }
   put_char (ch,CHAR_STOP);
   return;

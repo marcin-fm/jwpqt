@@ -704,24 +704,35 @@ static int euc_pre (byte *ptr,KANJI *key,int count) {
 //                   to indicate an error.
 //
 static byte *format_line (EUC_buffer *line,byte *data,int user,int format) {
-  int ch,i;
+  int ch,c2,i,bcnt=0;
   int first_line = true;
   line->clear ();                               // Intialize line buffer.
   for (i = 0; i < SIZE_LINE; i++) {             // Limit string length.
     if (!*data || ISCRLF(data[1]) || ISCRLF(*data)) break; // End of line so exit, or error condition (past end of buffer)
-    if ((*data & 0x80) && ((format == DICT_EUC) || first_line)) {  // Output kanji/kana character.
+    if ((*data == 0x8f) && (format == DICT_EUC)) {
+      ch = *++data; if (!ch) break;
+      c2 = *++data; if (!c2) break;
+      int convert_EUC_0212 (int,int);
+      line->put_char (convert_EUC_0212 (ch,c2));
+    }
+    else if ((*data & 0x80) && ((format == DICT_EUC) || first_line)) {  // Output kanji/kana character.
       ch = *data++;
       line->put_char ((ch << 8) | *data);
     }
     else if (first_line) {                      // First line has special characters.
       switch (*data) {
         case '[':
+             if (bcnt++ && !jwp_config.cfg.dict_compress) {             // ENAMDICTX
+               line->flush (-1);
+               line->put_char ('\t');
+             }
              line->put_char (jwp_config.cfg.dict_compress ? '[' : KANJI_LBRACKET);
              break;
         case ']':
              line->put_char (jwp_config.cfg.dict_compress ? ']' : KANJI_RBRACKET);
              break;
         case ' ':
+             if (!strncmp ((char*)data, "  EntL", 6) || !strncmp ((char*)data, "  SrcH", 6)) goto SkipRemainder;
              line->put_char ('\t');
              break;
         case '/':                               // First '/' indicates end of first line, just text after here.
@@ -734,11 +745,18 @@ static byte *format_line (EUC_buffer *line,byte *data,int user,int format) {
       }
     }
     else if (!user && (*data == '/')) {         // After first line just output, but change '/' into ', '.
+      if (!strncmp ((char*)data, "/EntL", 5)) goto SkipRemainder;
       line->put_char (',');
       line->put_char (' ');
     }
     else line->put_char (*data);
     data++;
+  }
+  if (*data == ']' && ISCRLF(data[1])) {        // ENAMDICTX
+    line->put_char (jwp_config.cfg.dict_compress ? ']' : KANJI_RBRACKET);
+  }
+  if (0) { SkipRemainder:
+    while(ch = *++data) if (ISCRLF(data[1]) || ISCRLF(ch)) break;
   }
   line->flush (-1);                             // Flush last line.
   data += 2;                                    // Calculate location of next line.
@@ -3617,6 +3635,10 @@ void JWP_dict::search_dict (int search_type) {
 //
   if (is_searching()) { state = DICTSTATE_ABORT; return; }      // Abort search if in progress.
   get_checkboxes ();                                            // Get all the settings.
+  JWP_file *ebox = (JWP_file *) SendDlgItemMessage (dialog,IDC_DDSTRING,JE_GETJWPFILE,0,0);
+  if (ebox->sel.type == SELECT_KANJI) { ebox->convert (CONVERT_FORCE); jwp_conv.clear (); }
+  else if (ebox->sel.type == SELECT_CONVERT) jwp_conv.clear ();
+  else kana_convert.clear ();
   length = JEGetDlgItemText(dialog,IDC_DDSTRING,&search_ptr);   // Get search string. Also adds it to the search history.
   orig_len = length; orig_str = search_ptr;
   if (!length) SetDialogFocus (dialog,IDC_DDSTRING);            // Focus on edit control so user can input something next time.
@@ -4264,7 +4286,7 @@ void EUC_IDX_Dictionary::search (KANJI *key,int length) {
 //
 void EUC_MEM_Dictionary::search (KANJI *key,int length) {
   int   i;
-  byte *ptr,*p,*p2,buffer[SIZE_BUFFER];
+  byte *ptr,*p,*p2,buffer[SIZE_BIG_BUFFER];
 
   for (ptr = memory+1; *ptr; ptr++) {
     if (euc_comp(ptr,key,length)) {             // No match.
@@ -4273,10 +4295,12 @@ void EUC_MEM_Dictionary::search (KANJI *key,int length) {
     }
     for (i = 0, p = ptr; (i < SIZE_LINE-9) && !ISCRLF(*ptr); ptr--, i++); 
                                                 // Find beginning of entry.
+    if (!ISCRLF(*ptr)) { ptr = p; continue; }   // Failsafe.
     buffer[0] = '\n';                           // Build duplicate entry.
     p2 = buffer+(p-ptr);                        // Calculate same relative place for end/begin 
-    for (i = 1, ptr++; (i < SIZE_BUFFER-2) && !ISCRLF(*ptr); ptr++) buffer[i++] = *ptr;     
+    for (i = 1, ptr++; (i < SIZE_BIG_BUFFER-2) && !ISCRLF(*ptr); ptr++) buffer[i++] = *ptr;
                                                 // Diplicate entry (use ptr so skip rest of entry)
+    if (!ISCRLF(*ptr)) { ptr = p; continue; }   // Failsafe.
     buffer[i] = '\n';                           // Terminate enry.
     jwp_dict.euc_check (p2);                    // Process entry.
   }
@@ -4347,15 +4371,17 @@ void UTF_IDX_Dictionary::search (KANJI *key,int length) {
 //
 void UTF_MEM_Dictionary::search (KANJI *key,int length) {
   int   i,utf_length;
-  byte *ptr,*p,*p2,buffer[SIZE_BUFFER];
+  byte *ptr,*p,*p2,buffer[SIZE_BIG_BUFFER];
 
   for (ptr = memory+1; *ptr; ptr += utf_size(*ptr)) {
     if (utf_comp(ptr,key,length,utf_length)) continue;                      // No match.
     for (i = 0, p = ptr; (i < SIZE_LINE-9) && !ISCRLF(*ptr); ptr--, i++);   // Find beginning of entry.
+    if (!ISCRLF(*ptr)) { ptr = p; continue; }                               // Failsafe.
     buffer[0] = '\n';                                                       // Build duplicate entry.
     p2 = buffer+(p-ptr);                                                    // Calculate same relative place for end/begin 
-    for (i = 1, ptr++; (i < SIZE_BUFFER-2) && !ISCRLF(*ptr); ptr++) buffer[i++] = *ptr;     
+    for (i = 1, ptr++; (i < SIZE_BIG_BUFFER-2) && !ISCRLF(*ptr); ptr++) buffer[i++] = *ptr;
                                                                             // Diplicate entry (use ptr so skip rest of entry)
+    if (!ISCRLF(*ptr)) { ptr = p; continue; }                               // Failsafe.
     buffer[i] = '\n';                                                       // Terminate enry.
     jwp_dict.utf_check (p2,utf_length);                                     // Process entry.
   }
@@ -4518,7 +4544,7 @@ void MIX_IDX_Dictionary::search (KANJI *key,int length) {
 //
 void MIX_MEM_Dictionary::search (KANJI *key,int length) {
   int   i;
-  byte *ptr,*p,*p2,buffer[SIZE_BUFFER];
+  byte *ptr,*p,*p2,buffer[SIZE_BIG_BUFFER];
 
   for (ptr = memory+1; *ptr; ptr++) {
     if (mix_comp(ptr,key,length)) {             // No match.
@@ -4527,10 +4553,12 @@ void MIX_MEM_Dictionary::search (KANJI *key,int length) {
     }
     for (i = 0, p = ptr; (i < SIZE_LINE-9) && !ISCRLF(*ptr); ptr--, i++); 
                                                 // Find beginning of entry.
+    if (!ISCRLF(*ptr)) { ptr = p; continue; }   // Failsafe.
     buffer[0] = '\n';                           // Build duplicate entry.
     p2 = buffer+(p-ptr);                        // Calculate same relative place for end/begin 
-    for (i = 1, ptr++; (i < SIZE_BUFFER-2) && !ISCRLF(*ptr); ptr++) buffer[i++] = *ptr;     
+    for (i = 1, ptr++; (i < SIZE_BIG_BUFFER-2) && !ISCRLF(*ptr); ptr++) buffer[i++] = *ptr;
                                                 // Diplicate entry (use ptr so skip rest of entry)
+    if (!ISCRLF(*ptr)) { ptr = p; continue; }   // Failsafe.
     buffer[i] = '\n';                           // Terminate enry.
     jwp_dict.euc_check (p2);                    // Process entry.
   }

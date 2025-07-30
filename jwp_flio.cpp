@@ -106,7 +106,7 @@ static tchar file_exts[][5] = { TEXT(".jce"),       // Normal
                                 TEXT(".jpr"),       // JWPxp Project
                               };
 //
-//  Unambiguous extensions used to automatically select file type for Save As.
+//  Unambiguous extensions which can be used to automatically select the file type for Save As.
 //
 static tchar auto_exts[][4] = { TEXT("jce"),        // Normal
                                 TEXT("jwp"),        // JWP
@@ -810,7 +810,7 @@ long JWP_file::export_file (JIS_convert *convert, bool final_lf) {
   convert->unicode_write ();                        // Do we need to write a UNICODE ID
   for (para = first; para; para = para->next) {
     for (i = 0; i < para->length; i++) convert->output_char (para->text[i]);
-    if (!final_lf && !para->next) break;            // Terminate early at EOF if we're not outputting a final LF (as for the clipboard).
+    if (!final_lf && !para->next) break;            // Terminate early at EOF unless instructed to output an extra LF at the end.
     convert->output_char ('\r');
     convert->output_char ('\n');
   }
@@ -843,7 +843,6 @@ int JWP_file::import_file (JIS_convert *convert) {
                                         //   marker (this should only skip 
                                         //   the first occurance, but this 
                                         //   skips all of them).
-    if (ch == JIS_EOF) break;
     if (((last_ch == '\r') && (ch == '\n')) || ((last_ch == '\n') && (ch == '\r'))) { ch = last_ch; continue; }
     if (line_pending) {
       line_pending = false;
@@ -853,6 +852,7 @@ int JWP_file::import_file (JIS_convert *convert) {
       line_pending = true;
       continue;
     }
+    if (ch == JIS_EOF) break;
     last->add_char (ch);
   }
   return (FILEERR_OK);
@@ -1226,7 +1226,7 @@ int JWP_file::save (tchar *filename) {
   else {
     convert.output_file (buf,sizeof(buf),file);
     convert.set_type (filetype);
-    error = export_file(&convert, true);
+    error = export_file(&convert);
   }
   CloseHandle (file);
   if (error) {
@@ -1267,8 +1267,9 @@ int JWP_file::save_as () {
   HANDLE       file;
   int  i;
   TCHAR buffer[SIZE_BUFFER];
+  static int prevtype = FILETYPE_NORMAL;
 
-  if ((filetype == FILETYPE_UNNAMED) || (filetype == FILETYPE_ASCII)) i = FILETYPE_NORMAL-3; else i = filetype-3;
+  if ((filetype == FILETYPE_UNNAMED) || (filetype == FILETYPE_ASCII)) i = prevtype-3; else i = filetype-3;
 
   memset (&ofn,0,sizeof(ofn));  
   ofn.lStructSize       = sizeof(ofn);
@@ -1341,6 +1342,7 @@ int JWP_file::save_as () {
 //
 //  This is all other files saves.
 //
+  prevtype = i;
   undo_type ();
   filetype = (byte) i;
   return (save(buffer));  

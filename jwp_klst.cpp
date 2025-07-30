@@ -47,6 +47,7 @@
 //
 KANJI_list::KANJI_list (int count) {
   window = null;
+  file = null;
   size   = 0; 
   if ((list = (KANJI *) malloc(count*sizeof(KANJI)))) size = count;
   clear ();

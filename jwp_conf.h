@@ -213,6 +213,9 @@ struct cfg {
   byte  page_mode_file;         // Uses page scrolling for the file (PPC only)
   byte  page_mode_list;         // Uses page scrolling for lists (PPC only)
   byte  dir_handling_todo;      // Defines, in part, how the initial directory for the Open dialog is determined.
+  byte  revert_to_K_mode;       // The input mode will revert to Kanji Mode upon a kanji conversion.
+  byte  old_katakana_input;     // Determines if the old style of katakana vowel input should be used.
+  byte  ctrl_up_down_convert;   // Determines if Control-Up/Down should be interpreted as kanji conversion.
 #ifdef BINARY_CONFIG
   byte  dummy0,dummy1,dummy2,dummy3,dummy4,dummy5,dummy6,dummy7;
   long  dummy8,dummy9;
@@ -269,8 +272,9 @@ struct cfg {
   byte  reading_word;           // Allow partial-word matches for meanings in Reading lookup.
   byte  no_variants;            // Hides variant/equivalent radicals from radical selection bar.
   byte  rare_last;              // List rare kanji at the end. Only needed for the radical lookup.
+  byte  colorize_radicals;      // Show rarely needed radicals in a subdued color for Radical/Bushu Lookup.
 #ifdef BINARY_CONFIG
-  byte  dmy1,dmy2,dmy3,dmy4;
+  byte  dmy1,dmy2,dmy3;
 #endif
 //
 //  Font flags

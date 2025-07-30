@@ -169,6 +169,10 @@ HEAD("Basic Operation")
 { CIB(paste_newpara) "InsertOnSeparateLines", true }, //  byte  paste_newpara;          // Causes text inserted from a Japanese list box to be inserted into separate lines (actually paragraphs) for each entry. Named "Insert on New Lines" in options.
 { CIB(backup_files) "KeepBackupCopyWhenSaving" },     //  byte  backup_files;           // Save last version of a file as a backup.
 { CII(code_page) "TranslationCodePage", CODEPAGE_AUTO },  //  short code_page;              // Code page used for Unicode translations.
+{ CIB(revert_to_K_mode) "RevertToKanjiMode", true },
+{ CIB(old_katakana_input) "OldKatakanaVowelHandling", false },
+{ CIB(ctrl_up_down_convert) "CtrlUpDownConvertKanji", false },
+
 
 HEAD("Display")
 { CIB(vscroll) "ScrollBar_Vertical", true },  //  byte  vscroll,hscroll;        // Vertical and horizontal scroll bar.
@@ -214,6 +218,7 @@ HEAD("Kanji Lookup")
 { CIB(skip_misscodes) "Match_SKIP_Miscodings" },    //  byte  skip_misscodes;         // Search for skip miss-codes.
 { CIB(rare_last) "RareKanjiLast", true },           //  byte  rare_last;              // List rare kanji at the end. Only needed for the radical lookup.
 { CIB(no_variants) "ReduceRadicalChoices" },        //  byte  no_variants;            // Hides variant/equivalent radicals from radical selection bar.
+{ CIB(colorize_radicals) "DeemphasizeRareRadicals"},//  byte  colorize_radicals;      // Show rarely needed radicals in a subdued color for Radical/Bushu Lookup.
 BLANK()
 { CII(index_type)   "IndexType", 0 }, //  byte  index_type;             // Index type for index search.
 { CII(reading_type) "ReadingType", RLTYPE_KUNON },  //  byte  reading_type;           // Reading type for reading search

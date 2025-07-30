@@ -760,6 +760,37 @@ KANJIRAD_lookup::~KANJIRAD_lookup () {
 
 //--------------------------------
 //
+//  Rare radicals table.
+//
+static bool rare_radical[1+BUTTON_COUNT];
+static void fillrare () {
+  static bool done;
+  if (done++) return;
+  rare_radical[67]=1;
+//rare_radical[76]=1;   // Previously there were no kanji listed for this radical and it was wrongly combined with radical #75.
+  rare_radical[81]=1;
+  rare_radical[87]=1;
+  rare_radical[90]=1;
+  rare_radical[147]=1;
+  rare_radical[165]=1;
+  rare_radical[187]=1;
+  rare_radical[194]=1;
+  rare_radical[204]=1;
+  rare_radical[215]=1;  // Arguable.
+  rare_radical[216]=1;
+  rare_radical[217]=1;
+  rare_radical[218]=1;  // Arguable.
+  rare_radical[223]=1;
+  rare_radical[225]=1;  // Arguable.
+  rare_radical[229]=1;
+  memset (rare_radical+231,1,234-231+1);
+  rare_radical[237]=1;
+  rare_radical[240]=1;
+  rare_radical[241]=1;
+}
+
+//--------------------------------
+//
 //  This is the window procedure for the radical buttons window.  This 
 //  window contains a number of buttons associated with the radicals
 //  that the user can click on.  When the window is active, the caret 
@@ -975,6 +1006,7 @@ int KANJIRAD_lookup::radicals_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
          HDC    hdcmem;     // for holding the bitmaps.
          HBRUSH brush;      // Yellow brush for selected buttons.
 
+         fillrare ();
          hdc    = BeginPaint(hwnd,&ps);
          hdcmem = CreateCompatibleDC(hdc);
          brush  = CreateSolidBrush(COLOR_SELRAD);
@@ -995,7 +1027,8 @@ int KANJIRAD_lookup::radicals_winproc (HWND hwnd,UINT iMsg,WPARAM wParam,LPARAM 
                  if (states[rad]) brush = (HBRUSH) SelectObject(hdc,brush);
                    else SelectObject (hdc,GetStockObject(LTGRAY_BRUSH));
                  Rectangle    (hdc,i*BUTTON_SIZE,y,i*BUTTON_SIZE+BUTTON_SIZE,y+BUTTON_SIZE);
-                 SetTextColor (hdc,RGB(0,0,0));
+                 if (jwp_config.cfg.colorize_radicals && rare_radical[rad]) SetTextColor (hdc,RGB(0x80,0x80,0x80));
+                   else SetTextColor (hdc,RGB(0,0,0));      // Changing this color (e.g. to deemphasize rarely needed radicals) doesn't work well due to the AND ROP below.
                  SelectObject (hdcmem,radical_bitmap);
                  BitBlt       (hdc,i*BUTTON_SIZE+BUTTON_RBMOFFSET,y+BUTTON_RBMOFFSET,BUTTON_RBMSIZE,BUTTON_RBMSIZE,hdcmem,0,(rad-1)*BUTTON_RBMSIZE,SRCAND);
                  if (states[rad]) brush = (HBRUSH) SelectObject(hdc,brush);
@@ -1098,7 +1131,7 @@ void KANJIRAD_lookup::set_cursor (HWND hwnd) {
 void KANJIRAD_lookup::set_radical (int rad) {
   static byte radical_triple[3] = { 65,66,67 };                 // This is the one tripplet.
   static byte radical_pairs[][2] = {                            // These are the pairs.
-    {187, 33},{194, 34},{ 52, 53},{ 55, 56},{165, 74},{ 75, 76},//   In this encouding, the reall radical
+    {187, 33},{194, 34},{ 52, 53},{ 55, 56},{165, 74},//{ 75, 76},   In this encoding, the real radical
     { 81, 82},{ 87, 88},{ 98, 97},{119,114},{150,116},{155,117},//   is the first radical.  We do not use this,
     {147,141},{237,200},{239,220},{240,227}                     //   however (see the search rotuine).
   };

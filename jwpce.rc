@@ -1706,7 +1706,7 @@ BEGIN
     IDS_CK_APPEND           "Color kanji list built, %d kanji.\n\n%d kanji added."
     IDS_CK_REMOVE           "Color kanji list built, %d kanji.\n\n%d kanji removed."
     IDS_CK_VIEWNAME         ":: Color Kanji List"
-    IDS_SR_NOTFOUND         "Search not found!"
+    IDS_SR_NOTFOUND         "Search string not found"
     IDS_SR_CHANGESMADE      "%d change(s) made."
     IDS_SR_CHANGES          "Changes"
     IDS_CE_ERRORTEXT        "Cannot load User Conversion file!  The file is corrupt or incorrect type!\n\n%s"

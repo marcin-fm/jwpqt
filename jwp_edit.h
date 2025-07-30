@@ -156,6 +156,7 @@ private:
   void inline redraw        (void) { InvalidateRect (window,NULL,false); }
   void        select        (int line,int onoff);           // Set selected state or clear it.
   void        scroll        (void);                         // Set scroll bar.
+  KANJI       get_first_char(void) { KANJI*p; return last_char = get_text(current,&p) ? p[0] : 0; }
 
   int         alloc;                // Number of lines allocated for the list.
   int         focus;                // List has the focus
@@ -259,7 +260,7 @@ public:
   int  inline  count        (void)            { return (list->count); }
   int  inline  get_buffer   (int index)       { return (length = list->get_buffer(kbuffer,index)); }
   int  inline  next_item    (int index)       { return (list->next(index)); }
-  void         do_drop      (HDROP drop);				                            // Process drag and drop import list.
+  void         do_drop      (HDROP drop);                                           // Process drag and drop import list.
   void         do_event     (int event);                                            // Event handler for the buttons.
   void         error        (int format,...);                                       // Generate  an error message.
   void         init         (HWND hwnd,byte *data,int import);                      // Initializes the instance of the class.

@@ -100,7 +100,7 @@ private:
   HDC     hdcmem;               // Memory HDC used for rendering the bitmaps.
   HANDLE  file;                 // Pointer to file (used only for cached fonts).
 #ifndef WINCE                   // CE does not support SetBitmapBits so cannot use this.
-  HBITMAP hbitmap;				// Bitmap for bit operations
+  HBITMAP hbitmap;              // Bitmap for bit operations
 #endif  WINCE
 };
 

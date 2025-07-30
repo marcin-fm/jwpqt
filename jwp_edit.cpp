@@ -1566,7 +1566,7 @@ void JWP_list::move (int pos,int shift,int keep) {
   LIST_list *list;
   
   old     = current;                        // Save old location for later
-  current = pos;;                           // Calculate new location.
+  current = pos;                            // Calculate new location.
   if (current >= count) current = count-1;  // Clip locations to actual data.
   if (current < 0) current = 0;             //   Order is importaint when no data is there
 //
@@ -1867,6 +1867,8 @@ int JWP_list::win_proc (HWND hwnd,int msg,WPARAM wParam,LPARAM lParam) {
   HFONT       font;
   PAINTSTRUCT ps;
   int         i,j;
+  short mx = (short) LOWORD(lParam); 
+  short my = (short) HIWORD(lParam);
   static short delta = 1;               // This is a KLUDGE used to get around the fact
                                         //   that mouse_event will not generate an event
                                         //   if the mouse does not move so we generate
@@ -2021,7 +2023,7 @@ SelectAll:;
                 break;
            case VK_I:
                 if (!ctrl) break;
-                kanji_info (hwnd,last_char);
+                kanji_info (hwnd,get_first_char());
                 return (0);
            case VK_J:                           // Ctrl-J -> Change input mode. Might as well.
                 if (ctrl) set_mode (MODE_JASCII);
@@ -2032,7 +2034,7 @@ SelectAll:;
            case VK_L:                           // Ctrl-L or F5 -> Examine kanji radicals.
                 if (!ctrl) break;
            case VK_F5:
-                radical_lookup (hwnd,last_char);
+                radical_lookup (hwnd,get_first_char());
                 return (0);
            case VK_D:
                 if (!ctrl) break;
@@ -2235,7 +2237,8 @@ SelectAll:;
 //
 //  Find the y location of the mosue click.
 //
-           i = (HIWORD(lParam)-1)/height+top;
+           i = (my-1)/height+top;
+           if (i < 0) i = 0;                            // Fix bug when dragging mouse up too high.
            if (!in_select || (i != last_y)) {           // Mouse selelect that did not really move (suppress flashing).
              last_y    = i;                             // Save last position for next time.
              in_select = true;                          // This could be a mouse select.
@@ -2289,7 +2292,7 @@ SelectAll:;
                  }
                  if (sel_x1 == sel_x2) sel_x1 = 0;  // Same start and end point so disable single line.
                } 
-               que_line ((HIWORD(lParam)-1)/height+top);
+               que_line ((my-1)/height+top);
              }
 //
 //  Auto-scroll handler.  When currsor is close enough to the edge 
@@ -2297,8 +2300,8 @@ SelectAll:;
 //  list.
 //
            if (!jwp_config.cfg.auto_scroll) return (0);
-           if      ((HIWORD(lParam) <  height/3)              && (top > 0     )) i = SB_LINEUP;
-           else if ((HIWORD(lParam) >= height*lines-height/3) && (top < BOTTOM)) i = SB_LINEDOWN;
+           if ( i >= 0 && my < height/3           && (top > 0     )) i = SB_LINEUP;
+           else if ((my >= height*lines-height/3) && (top < BOTTOM)) i = SB_LINEDOWN;
            else return (0);             // No auto-scroll so exit.
 
            win_proc     (hwnd,WM_VSCROLL,i,0);          // Scroll list.
@@ -2439,7 +2442,7 @@ SelectAll:;
                 jwp_file->title();              // If the insrt file changed state changed the title will be redrawn.
                 return (0);
            case IDM_LIST_GETINFO:               // Get character information.
-                kanji_info (hwnd,last_char);
+                kanji_info (hwnd,get_first_char());
                 return     (0);
            case IDM_LIST_COPY:                  // Copy to clipboard.
                 clip_copy ();

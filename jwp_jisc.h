@@ -106,6 +106,7 @@ extern int  ascii2unicode  (int ch);            // Convert extended ASCII to UNI
 extern int  jis2sjis       (int ch);            // Convert JIS code into Shift-JIS code.
 extern int  jis2unicode    (int ch);            // Convert JIS code into Unicode.
 extern int  sjis2jis       (int ch);            // Convert Shift-JIS code to JIS code.
+extern int  sjisalternate  (int ch);            // Check for alternate encoding for Shift-JIS code.
 extern int  unicode2jis    (int ch,int bad);    // Convert Unicode to JIS code.   
 //
 //  Some of functions have been blocked out because they are not yet needed.  They are for when the 
