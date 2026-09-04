@@ -11,11 +11,13 @@
 #include <QMainWindow>
 #include <QString>
 
+#include "jwpqt/core/jwp_document_history.h"
 #include "jwpqt/core/jwp_document_model.h"
 #include "jwpqt/core/jwp_search.h"
 #include "jwpqt/core/legacy_code_page.h"
 #include "jwpqt/core/text_file.h"
 
+class QAction;
 class QActionGroup;
 class QCloseEvent;
 class QLabel;
@@ -81,6 +83,10 @@ class MainWindow : public QMainWindow {
 
  private:
   void create_actions();
+  void undo_document();
+  void redo_document();
+  void restore_jwp_history_state(core::JwpPosition caret);
+  void update_undo_actions();
   void new_document();
   void open_document();
   bool save_document();
@@ -107,6 +113,8 @@ class MainWindow : public QMainWindow {
 
   QPlainTextEdit* editor_;
   QLabel* encoding_label_;
+  QAction* undo_action_;
+  QAction* redo_action_;
   QActionGroup* encoding_actions_;
   QMenu* jwp_code_page_menu_;
   std::vector<QAction*> jwp_code_page_actions_;
@@ -114,6 +122,9 @@ class MainWindow : public QMainWindow {
   core::TextEncoding encoding_ = core::TextEncoding::kUtf8;
   bool has_byte_order_mark_ = false;
   std::optional<core::JwpDocumentModel> jwp_document_;
+  core::JwpDocumentHistory jwp_history_;
+  std::optional<core::JwpPosition> jwp_caret_;
+  std::optional<core::JwpPosition> expected_jwp_caret_;
   std::optional<core::JwpDocument> saved_jwp_document_;
   std::optional<core::JwpDocument> pristine_jwp_document_;
   std::u32string rendered_jwp_text_;
@@ -121,6 +132,8 @@ class MainWindow : public QMainWindow {
   QString search_text_;
   QString replacement_text_;
   core::JwpSearchOptions search_options_;
+  bool qt_undo_available_ = false;
+  bool qt_redo_available_ = false;
   bool updating_editor_ = false;
 };
 

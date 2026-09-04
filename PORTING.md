@@ -52,6 +52,10 @@ legacy file structures.
 17. The current slice exposes Replace Next and Replace All natively. JWP
     replacements preserve structure and metadata, and each accepted occurrence
     remains independently undoable as in JWPxp.
+18. The current slice routes JWP edits through portable transaction history.
+    Undo and redo restore the complete JWP document and caret, consecutive
+    typing/deletion coalesces, Replace All retains one entry per occurrence,
+    saves retain history, and both menu and context-menu actions use it.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -60,14 +64,12 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Replace the temporary Qt undo stack with portable JWP transaction history.
-   Selection, clipboard, search, and replacement actions are already available.
-2. Port kana-to-kanji conversion and dictionary lookup with fixtures captured
+1. Port kana-to-kanji conversion and dictionary lookup with fixtures captured
    from the recovered implementation.
-3. Replace `QPlainTextEdit` scaffolding with a custom Qt editor surface once the
+2. Replace `QPlainTextEdit` scaffolding with a custom Qt editor surface once the
    paragraph model can drive wrapping, selection, conversion spans, and kanji
    coloring.
-4. Port lookup tools, configuration, and printing as separate vertical slices.
+3. Port lookup tools, configuration, and printing as separate vertical slices.
 
 Each slice is committed independently after focused tests and the complete
 CTest suite pass.

@@ -145,6 +145,8 @@ MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
       editor_(new QPlainTextEdit(this)),
       encoding_label_(new QLabel(this)),
+      undo_action_(nullptr),
+      redo_action_(nullptr),
       encoding_actions_(new QActionGroup(this)),
       jwp_code_page_menu_(nullptr) {
   setCentralWidget(editor_);
@@ -163,6 +165,30 @@ MainWindow::MainWindow(QWidget* parent)
           });
   connect(editor_->document(), &QTextDocument::modificationChanged, this,
           [this] { update_title(); });
+  connect(editor_, &QPlainTextEdit::cursorPositionChanged, this, [this] {
+    if (updating_editor_ || !jwp_document_.has_value()) {
+      return;
+    }
+    try {
+      const std::size_t offset = utf32_offset_for_utf16(
+          editor_->toPlainText(), editor_->textCursor().position());
+      const core::JwpPosition caret =
+          core::jwp_plain_text_position(*jwp_document_, offset);
+      if (expected_jwp_caret_.has_value() &&
+          caret == *expected_jwp_caret_) {
+        expected_jwp_caret_.reset();
+      } else {
+        jwp_history_.break_coalescing();
+        expected_jwp_caret_.reset();
+      }
+      jwp_caret_ = caret;
+    } catch (const std::exception&) {
+      jwp_caret_.reset();
+      expected_jwp_caret_.reset();
+      jwp_history_.break_coalescing();
+    }
+  });
+  update_undo_actions();
   update_title();
 }
 
@@ -196,19 +222,29 @@ void MainWindow::create_actions() {
 
   QMenu* edit_menu = menuBar()->addMenu(tr("&Edit"));
 
-  QAction* undo_action = edit_menu->addAction(tr("&Undo"));
-  undo_action->setShortcut(QKeySequence::Undo);
-  undo_action->setEnabled(false);
-  connect(undo_action, &QAction::triggered, editor_, &QPlainTextEdit::undo);
-  connect(editor_, &QPlainTextEdit::undoAvailable, undo_action,
-          &QAction::setEnabled);
+  undo_action_ = edit_menu->addAction(tr("&Undo"));
+  undo_action_->setObjectName(QStringLiteral("undoAction"));
+  undo_action_->setShortcut(QKeySequence::Undo);
+  undo_action_->setEnabled(false);
+  connect(undo_action_, &QAction::triggered, this,
+          [this] { undo_document(); });
+  connect(editor_, &QPlainTextEdit::undoAvailable, this,
+          [this](bool available) {
+            qt_undo_available_ = available;
+            update_undo_actions();
+          });
 
-  QAction* redo_action = edit_menu->addAction(tr("&Redo"));
-  redo_action->setShortcut(QKeySequence::Redo);
-  redo_action->setEnabled(false);
-  connect(redo_action, &QAction::triggered, editor_, &QPlainTextEdit::redo);
-  connect(editor_, &QPlainTextEdit::redoAvailable, redo_action,
-          &QAction::setEnabled);
+  redo_action_ = edit_menu->addAction(tr("&Redo"));
+  redo_action_->setObjectName(QStringLiteral("redoAction"));
+  redo_action_->setShortcut(QKeySequence::Redo);
+  redo_action_->setEnabled(false);
+  connect(redo_action_, &QAction::triggered, this,
+          [this] { redo_document(); });
+  connect(editor_, &QPlainTextEdit::redoAvailable, this,
+          [this](bool available) {
+            qt_redo_available_ = available;
+            update_undo_actions();
+          });
 
   edit_menu->addSeparator();
   QAction* cut_action = edit_menu->addAction(tr("Cu&t"));
@@ -234,6 +270,15 @@ void MainWindow::create_actions() {
   select_all_action->setShortcut(QKeySequence::SelectAll);
   connect(select_all_action, &QAction::triggered, editor_,
           &QPlainTextEdit::selectAll);
+
+  // The standard QPlainTextEdit menu would bypass portable JWP history.
+  editor_->setContextMenuPolicy(Qt::ActionsContextMenu);
+  editor_->addAction(undo_action_);
+  editor_->addAction(redo_action_);
+  editor_->addAction(cut_action);
+  editor_->addAction(copy_action);
+  editor_->addAction(paste_action);
+  editor_->addAction(select_all_action);
 
   edit_menu->addSeparator();
   QAction* find_action = edit_menu->addAction(tr("&Find..."));
@@ -289,6 +334,84 @@ void MainWindow::create_actions() {
   }
 }
 
+void MainWindow::undo_document() {
+  if (!jwp_document_.has_value()) {
+    editor_->undo();
+    return;
+  }
+  try {
+    core::JwpDocumentModel model = *jwp_document_;
+    core::JwpDocumentHistory history = jwp_history_;
+    core::JwpPosition caret = jwp_caret_.value_or(core::JwpPosition{});
+    if (!history.undo(model, caret)) {
+      return;
+    }
+    jwp_document_ = std::move(model);
+    jwp_history_ = std::move(history);
+    restore_jwp_history_state(caret);
+  } catch (const std::exception& error) {
+    statusBar()->showMessage(
+        tr("Could not undo: %1").arg(QString::fromUtf8(error.what())), 5000);
+  }
+}
+
+void MainWindow::redo_document() {
+  if (!jwp_document_.has_value()) {
+    editor_->redo();
+    return;
+  }
+  try {
+    core::JwpDocumentModel model = *jwp_document_;
+    core::JwpDocumentHistory history = jwp_history_;
+    core::JwpPosition caret = jwp_caret_.value_or(core::JwpPosition{});
+    if (!history.redo(model, caret)) {
+      return;
+    }
+    jwp_document_ = std::move(model);
+    jwp_history_ = std::move(history);
+    restore_jwp_history_state(caret);
+  } catch (const std::exception& error) {
+    statusBar()->showMessage(
+        tr("Could not redo: %1").arg(QString::fromUtf8(error.what())), 5000);
+  }
+}
+
+void MainWindow::restore_jwp_history_state(core::JwpPosition caret) {
+  std::u32string text =
+      core::decode_jwp_plain_text(*jwp_document_, jwp_code_page_);
+  const QString qt_text = to_qstring(text);
+  const std::size_t offset =
+      core::jwp_plain_text_offset(*jwp_document_, caret);
+  const int qt_offset = utf16_offset_for_utf32(text, offset);
+
+  updating_editor_ = true;
+  editor_->setPlainText(qt_text);
+  QTextCursor cursor = editor_->textCursor();
+  cursor.setPosition(qt_offset);
+  editor_->setTextCursor(cursor);
+  updating_editor_ = false;
+
+  rendered_jwp_text_ = std::move(text);
+  jwp_caret_ = caret;
+  expected_jwp_caret_.reset();
+  const bool modified = !saved_jwp_document_.has_value() ||
+                        jwp_document_->document() != *saved_jwp_document_;
+  editor_->document()->setModified(modified);
+  update_undo_actions();
+  update_title();
+}
+
+void MainWindow::update_undo_actions() {
+  if (undo_action_ == nullptr || redo_action_ == nullptr) {
+    return;
+  }
+  const bool jwp = jwp_document_.has_value();
+  undo_action_->setEnabled(jwp ? jwp_history_.can_undo()
+                               : qt_undo_available_);
+  redo_action_->setEnabled(jwp ? jwp_history_.can_redo()
+                               : qt_redo_available_);
+}
+
 void MainWindow::new_document() {
   if (!maybe_save()) {
     return;
@@ -296,6 +419,9 @@ void MainWindow::new_document() {
   jwp_document_.reset();
   saved_jwp_document_.reset();
   pristine_jwp_document_.reset();
+  jwp_history_.clear();
+  jwp_caret_.reset();
+  expected_jwp_caret_.reset();
   rendered_jwp_text_.clear();
   updating_editor_ = true;
   editor_->clear();
@@ -305,6 +431,7 @@ void MainWindow::new_document() {
   has_byte_order_mark_ = false;
   set_text_encoding(core::TextEncoding::kUtf8, false);
   update_encoding_display();
+  update_undo_actions();
   update_title();
 }
 
@@ -427,6 +554,9 @@ void MainWindow::load_document(const QString& path,
   jwp_document_.reset();
   saved_jwp_document_.reset();
   pristine_jwp_document_.reset();
+  jwp_history_.clear();
+  jwp_caret_.reset();
+  expected_jwp_caret_.reset();
   rendered_jwp_text_.clear();
   updating_editor_ = true;
   editor_->setPlainText(to_qstring(file.text));
@@ -436,6 +566,7 @@ void MainWindow::load_document(const QString& path,
   encoding_ = file.encoding;
   has_byte_order_mark_ = file.has_byte_order_mark;
   update_encoding_display();
+  update_undo_actions();
   update_title();
 }
 
@@ -455,12 +586,16 @@ void MainWindow::load_jwp_document(const QString& path,
   jwp_document_ = std::move(model);
   saved_jwp_document_ = jwp_document_->document();
   pristine_jwp_document_ = std::move(pristine_document);
+  jwp_history_.clear();
+  jwp_caret_ = core::JwpPosition{};
+  expected_jwp_caret_.reset();
   rendered_jwp_text_ = std::move(text);
   jwp_code_page_ = code_page;
   current_path_ = path;
   has_byte_order_mark_ = false;
   editor_->document()->setModified(false);
   update_encoding_display();
+  update_undo_actions();
   update_title();
 }
 
@@ -931,25 +1066,40 @@ std::size_t MainWindow::replace_all(const QString& text,
   try {
     std::vector<std::pair<int, int>> matches;
     std::optional<core::JwpDocumentModel> candidate_jwp;
+    std::optional<core::JwpDocumentHistory> candidate_history;
+    std::optional<core::JwpPosition> candidate_caret;
     std::u32string expected_jwp_text;
     if (is_jwp_document()) {
       const core::JwpText pattern =
           core::encode_jwp_text(from_qstring(text), jwp_code_page_);
+      const std::u32string replacement_text = from_qstring(replacement);
       const std::vector<core::JwpRange> ranges =
           core::find_all(*jwp_document_, pattern, options);
       candidate_jwp.emplace(jwp_document_->document());
-      for (auto range = ranges.rbegin(); range != ranges.rend(); ++range) {
+      candidate_history.emplace(jwp_history_);
+      std::size_t previous_original_end = 0;
+      std::size_t current_offset = 0;
+      for (const core::JwpRange& range : ranges) {
         const std::size_t begin =
-            core::jwp_plain_text_offset(*jwp_document_, range->begin);
+            core::jwp_plain_text_offset(*jwp_document_, range.begin);
         const std::size_t end =
-            core::jwp_plain_text_offset(*jwp_document_, range->end);
-        core::replace_jwp_plain_text(*candidate_jwp, begin, end - begin,
-                                     from_qstring(replacement),
-                                     jwp_code_page_);
+            core::jwp_plain_text_offset(*jwp_document_, range.end);
+        current_offset += begin - previous_original_end;
+        const core::JwpPosition before = core::jwp_plain_text_position(
+            *candidate_jwp, current_offset);
+        candidate_history->begin(*candidate_jwp, before);
+        candidate_caret = core::replace_jwp_plain_text(
+            *candidate_jwp, current_offset, end - begin, replacement_text,
+            jwp_code_page_);
+        candidate_history->commit(*candidate_jwp, *candidate_caret);
+        current_offset =
+            core::jwp_plain_text_offset(*candidate_jwp, *candidate_caret);
+        previous_original_end = end;
         matches.emplace_back(
             utf16_offset_for_utf32(rendered_jwp_text_, begin),
             utf16_offset_for_utf32(rendered_jwp_text_, end));
       }
+      std::reverse(matches.begin(), matches.end());
       expected_jwp_text =
           core::decode_jwp_plain_text(*candidate_jwp, jwp_code_page_);
     } else {
@@ -995,13 +1145,25 @@ std::size_t MainWindow::replace_all(const QString& text,
         throw core::JwpPlainTextError(
             "Native editor did not apply the validated JWP replacements");
       }
+      if (candidate_jwp.has_value() && candidate_caret.has_value()) {
+        const std::size_t caret_offset = core::jwp_plain_text_offset(
+            *candidate_jwp, *candidate_caret);
+        QTextCursor caret(editor_->document());
+        caret.setPosition(
+            utf16_offset_for_utf32(expected_jwp_text, caret_offset));
+        editor_->setTextCursor(caret);
+      }
     }
     if (candidate_jwp.has_value()) {
       const bool modified = saved_jwp_document_.has_value() &&
                             candidate_jwp->document() != *saved_jwp_document_;
       jwp_document_.emplace(std::move(*candidate_jwp));
+      jwp_history_ = std::move(*candidate_history);
+      jwp_caret_ = candidate_caret;
+      expected_jwp_caret_.reset();
       rendered_jwp_text_ = std::move(expected_jwp_text);
       editor_->document()->setModified(modified);
+      update_undo_actions();
       update_title();
     }
     search_text_ = text;
@@ -1047,17 +1209,38 @@ void MainWindow::synchronize_jwp_document(int position, int chars_removed,
       rejected_selection_end = position + chars_removed;
     }
 
+    const std::size_t fallback_caret_offset =
+        chars_removed == 0 ? prefix : prefix + removed_length;
+    const core::JwpPosition before_caret =
+        jwp_caret_.has_value() &&
+                jwp_document_->valid_position(*jwp_caret_)
+            ? *jwp_caret_
+            : core::jwp_plain_text_position(*jwp_document_,
+                                            fallback_caret_offset);
     core::JwpDocumentModel updated = *jwp_document_;
-    core::replace_jwp_plain_text(
+    core::JwpDocumentHistory history = jwp_history_;
+    history.begin(*jwp_document_, before_caret);
+    const core::JwpPosition after_caret = core::replace_jwp_plain_text(
         updated, prefix, removed_length,
         std::u32string_view(current).substr(
             prefix, replacement_length),
         jwp_code_page_);
+    const core::JwpHistoryKind kind =
+        removed_length == 0 && replacement_length != 0
+            ? core::JwpHistoryKind::kTyping
+        : removed_length != 0 && replacement_length == 0
+            ? core::JwpHistoryKind::kDeletion
+            : core::JwpHistoryKind::kNone;
+    history.commit(updated, after_caret, kind);
     const bool modified = !saved_jwp_document_.has_value() ||
                           updated.document() != *saved_jwp_document_;
     jwp_document_ = std::move(updated);
+    jwp_history_ = std::move(history);
+    jwp_caret_ = after_caret;
+    expected_jwp_caret_ = after_caret;
     rendered_jwp_text_ = std::move(current);
     editor_->document()->setModified(modified);
+    update_undo_actions();
   } catch (const std::exception& error) {
     restore_jwp_editor_text(cursor_position, rejected_selection_start,
                             rejected_selection_end);

@@ -476,14 +476,33 @@ void test_jwp_replace_preserves_structure(const QString& directory) {
               replaced->paragraphs[2].line_spacing == 175,
           "JWP Replace All changed document structure or metadata");
 
-  editor->undo();
-  require(editor->toPlainText() == QStringLiteral("\uff21B\n\nB"),
+  QAction* undo = find_action(window, "undoAction");
+  QAction* redo = find_action(window, "redoAction");
+  require(undo != nullptr && redo != nullptr && undo->isEnabled(),
+          "Portable JWP undo action was not enabled");
+  undo->trigger();
+  require(editor->toPlainText() == QStringLiteral("BB\n\nA"),
           "JWP Replace All merged independent occurrences into one undo");
-  editor->undo();
-  editor->undo();
+  undo->trigger();
+  undo->trigger();
   require(window.current_jwp_document() != nullptr &&
               *window.current_jwp_document() == source,
           "JWP Replace All occurrences were not separately undoable");
+  require(redo->isEnabled(), "Portable JWP redo action was not enabled");
+  redo->trigger();
+  redo->trigger();
+  redo->trigger();
+  require(editor->toPlainText() == QStringLiteral("BB\n\nB"),
+          "Portable JWP redo did not restore Replace All");
+  const int replace_all_caret = editor->textCursor().position();
+  editor->insertPlainText(QStringLiteral("C"));
+  undo->trigger();
+  require(editor->toPlainText() == QStringLiteral("BB\n\nB") &&
+              editor->textCursor().position() == replace_all_caret,
+          "Edit after Replace All restored a stale portable caret");
+  undo->trigger();
+  undo->trigger();
+  undo->trigger();
 
   QTextCursor selection = editor->textCursor();
   selection.setPosition(2);
@@ -620,7 +639,10 @@ void test_zero_paragraph_jwp_save_is_not_normalized(const QString& directory) {
   editor->insertPlainText(QStringLiteral("A"));
   require(editor->document()->isModified(),
           "Editing zero-paragraph JWP did not mark it modified");
-  editor->undo();
+  QAction* undo = find_action(window, "undoAction");
+  require(undo != nullptr && undo->isEnabled(),
+          "Zero-paragraph edit did not enable portable undo");
+  undo->trigger();
   require(editor->toPlainText().isEmpty() &&
               !editor->document()->isModified(),
           "Undo did not restore zero-paragraph JWP saved state");
@@ -676,11 +698,65 @@ void test_jwp_rejects_lossy_edits(const QString& directory) {
               editor->textCursor().selectionStart() == 0 &&
               editor->textCursor().selectionEnd() == 1,
           "Rejected replacement did not restore the prior selection");
-  editor->undo();
+  QAction* undo = find_action(window, "undoAction");
+  require(undo != nullptr && undo->isEnabled(),
+          "Valid JWP edit did not enable portable undo");
+  undo->trigger();
   require(editor->toPlainText() == QStringLiteral("A\n\nB") &&
               *window.current_jwp_document() == source &&
               !editor->document()->isModified(),
           "Rejected edit destroyed the prior valid undo entry");
+}
+
+void test_jwp_history_actions(const QString& directory) {
+  jwpqt::core::JwpDocument source;
+  source.paragraphs = {paragraph(U"A")};
+  const QString source_path = directory + QStringLiteral("/history.jwp");
+  const QString saved_path = directory + QStringLiteral("/history-saved.jwp");
+  jwpqt::qt::write_jwp_file(source_path, source);
+
+  jwpqt::qt::MainWindow window;
+  require(window.open_jwp_path(source_path),
+          "Could not open portable history fixture");
+  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QAction* undo = find_action(window, "undoAction");
+  QAction* redo = find_action(window, "redoAction");
+  require(editor != nullptr && undo != nullptr && redo != nullptr &&
+              !undo->isEnabled() && !redo->isEnabled(),
+          "Fresh JWP document did not start with empty history");
+  QAction* context_undo = nullptr;
+  for (QAction* action : editor->actions()) {
+    if (action->objectName() == QStringLiteral("undoAction")) {
+      context_undo = action;
+    }
+  }
+  require(editor->contextMenuPolicy() == Qt::ActionsContextMenu &&
+              context_undo == undo,
+          "Editor context menu does not route through portable JWP undo");
+
+  QTextCursor cursor = editor->textCursor();
+  cursor.movePosition(QTextCursor::End);
+  editor->setTextCursor(cursor);
+  editor->insertPlainText(QStringLiteral("B"));
+  editor->insertPlainText(QStringLiteral("C"));
+  require(editor->toPlainText() == QStringLiteral("ABC") &&
+              undo->isEnabled(),
+          "JWP typing was not recorded in portable history");
+  context_undo->trigger();
+  require(editor->toPlainText() == QStringLiteral("A") &&
+              !undo->isEnabled() && redo->isEnabled(),
+          "Consecutive JWP typing did not coalesce into one undo");
+  redo->trigger();
+  require(editor->toPlainText() == QStringLiteral("ABC") &&
+              undo->isEnabled() && !redo->isEnabled(),
+          "Portable JWP redo did not restore typing");
+
+  require(window.save_path(saved_path), "Could not save history fixture");
+  require(undo->isEnabled(), "Saving unexpectedly cleared portable history");
+  undo->trigger();
+  require(editor->toPlainText() == QStringLiteral("A") &&
+              editor->document()->isModified(),
+          "Undo after save did not restore pre-edit state");
 }
 
 void test_jwp_rejects_non_bmp_edit(const QString& directory) {
@@ -728,6 +804,7 @@ int main(int argc, char* argv[]) {
     test_zero_paragraph_jwp_save_is_not_normalized(directory.path());
     test_jwp_rejects_lossy_edits(directory.path());
     test_jwp_rejects_non_bmp_edit(directory.path());
+    test_jwp_history_actions(directory.path());
     std::cout << "All main window tests passed\n";
     return 0;
   } catch (const std::exception& error) {
