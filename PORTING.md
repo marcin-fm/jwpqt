@@ -36,8 +36,10 @@ legacy file structures.
    join, formatting, and hard-page-break semantics.
 9. `e8d9236` adds bounded document transactions, undo/redo, caret restoration,
    and legacy typing/deletion coalescing.
-10. The current slice adds paragraph-local forward/backward search, legacy
-    ASCII/JASCII comparison, and strongly exception-safe replacement.
+10. `95e2937` adds paragraph-local forward/backward search, legacy ASCII/JASCII
+    comparison, and strongly exception-safe replacement.
+11. The current slice maps flat Unicode edits to checked paragraph mutations
+    while preserving formatting and protecting structural hard page breaks.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -46,10 +48,10 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Expose document selection, clipboard, search/replace, and undo/redo actions
-   through the native editor.
-2. Integrate JWP documents with native open/save while preserving metadata and
+1. Integrate JWP documents with native open/save while preserving metadata and
    the selected CP1250 through CP1258 extension table.
+2. Expose document selection, clipboard, search/replace, and undo/redo actions
+   through the native editor.
 3. Port kana-to-kanji conversion and dictionary lookup with fixtures captured
    from the recovered implementation.
 4. Replace `QPlainTextEdit` scaffolding with a custom Qt editor surface once the
