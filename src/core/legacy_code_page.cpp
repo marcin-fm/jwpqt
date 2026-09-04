@@ -68,6 +68,50 @@ const std::array<char32_t, 128>* table_for(
 
 }  // namespace
 
+std::string_view legacy_code_page_name(LegacyCodePage code_page) noexcept {
+  switch (code_page) {
+    case LegacyCodePage::k1250:
+      return "windows-1250";
+    case LegacyCodePage::k1251:
+      return "windows-1251";
+    case LegacyCodePage::k1252:
+      return "windows-1252";
+    case LegacyCodePage::k1253:
+      return "windows-1253";
+    case LegacyCodePage::k1254:
+      return "windows-1254";
+    case LegacyCodePage::k1255:
+      return "windows-1255";
+    case LegacyCodePage::k1256:
+      return "windows-1256";
+    case LegacyCodePage::k1257:
+      return "windows-1257";
+    case LegacyCodePage::k1258:
+      return "windows-1258";
+  }
+  return "Unknown";
+}
+
+std::optional<LegacyCodePage> parse_legacy_code_page(
+    std::string_view name) noexcept {
+  constexpr std::string_view kWindowsPrefix = "windows-";
+  constexpr std::string_view kCpPrefix = "cp";
+  if (name.substr(0, kWindowsPrefix.size()) == kWindowsPrefix) {
+    name.remove_prefix(kWindowsPrefix.size());
+  } else if (name.substr(0, kCpPrefix.size()) == kCpPrefix) {
+    name.remove_prefix(kCpPrefix.size());
+  }
+
+  if (name.size() != 4 || name.substr(0, 3) != "125") {
+    return std::nullopt;
+  }
+  const char suffix = name[3];
+  if (suffix < '0' || suffix > '8') {
+    return std::nullopt;
+  }
+  return static_cast<LegacyCodePage>(1250 + suffix - '0');
+}
+
 std::optional<char32_t> legacy_byte_to_unicode(
     std::uint8_t byte, LegacyCodePage code_page) noexcept {
   if (byte <= 0x7eU) {

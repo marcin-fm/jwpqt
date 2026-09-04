@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string_view>
 
 namespace jwpqt::core {
 
@@ -24,6 +25,10 @@ enum class LegacyCodePage {
 // before calling the mapping functions.
 inline constexpr LegacyCodePage kDefaultLegacyCodePage =
     LegacyCodePage::k1252;
+
+std::string_view legacy_code_page_name(LegacyCodePage code_page) noexcept;
+std::optional<LegacyCodePage> parse_legacy_code_page(
+    std::string_view name) noexcept;
 
 // Maps the single-byte portion of JWP's configured Windows code page. Values
 // that the recovered tables mark undefined have no mapping.

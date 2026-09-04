@@ -161,6 +161,47 @@ void test_unknown_code_page() {
           "Legacy fallback code page changed");
 }
 
+void test_code_page_names() {
+  for (std::size_t index = 0; index < kCodePages.size(); ++index) {
+    const LegacyCodePage code_page = kCodePages[index];
+    const std::string_view display =
+        jwpqt::core::legacy_code_page_name(code_page);
+    require(display == "windows-125" + std::to_string(index),
+            "Code-page display name changed");
+    require(jwpqt::core::parse_legacy_code_page(display) == code_page,
+            "Canonical code-page name did not round-trip");
+
+    const std::string number = "125" + std::to_string(index);
+    require(jwpqt::core::parse_legacy_code_page(number) == code_page,
+            "Numeric code-page name was not parsed");
+    require(jwpqt::core::parse_legacy_code_page("cp" + number) == code_page,
+            "CP-prefixed code-page name was not parsed");
+    require(jwpqt::core::parse_legacy_code_page("windows-" + number) ==
+                code_page,
+            "Windows-prefixed code-page name was not parsed");
+  }
+
+  require(jwpqt::core::legacy_code_page_name(
+              static_cast<LegacyCodePage>(9999)) == "Unknown",
+          "Unknown code-page name changed");
+  require(!jwpqt::core::parse_legacy_code_page("1259"),
+          "Unsupported code page was accepted");
+  require(!jwpqt::core::parse_legacy_code_page("Windows-1252"),
+          "Uppercase alias was unexpectedly accepted");
+  require(!jwpqt::core::parse_legacy_code_page("cp1252extra"),
+          "Trailing code-page text was accepted");
+  require(!jwpqt::core::parse_legacy_code_page("windows1252"),
+          "Missing code-page separator was accepted");
+  require(!jwpqt::core::parse_legacy_code_page("cp-1252"),
+          "Extra code-page separator was accepted");
+  require(!jwpqt::core::parse_legacy_code_page("1252 "),
+          "Code-page trailing whitespace was accepted");
+  require(!jwpqt::core::parse_legacy_code_page("cp"),
+          "Truncated code-page name was accepted");
+  require(!jwpqt::core::parse_legacy_code_page(""),
+          "Empty code-page name was accepted");
+}
+
 }  // namespace
 
 int main() {
@@ -169,5 +210,6 @@ int main() {
   test_undefined_and_inverse_stability();
   test_recovered_table_fingerprints();
   test_unknown_code_page();
+  test_code_page_names();
   std::cout << "All legacy code-page tests passed\n";
 }
