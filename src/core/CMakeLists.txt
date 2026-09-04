@@ -3,6 +3,7 @@ add_library(jwpqt_core STATIC
   jis_text.cpp
   jis_unicode.cpp
   legacy_text.cpp
+  text_detection.cpp
   text_file.cpp
   utf8.cpp
 )

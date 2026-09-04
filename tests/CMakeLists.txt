@@ -47,12 +47,19 @@ add_executable(jwpqt_text_file_tests
 target_link_libraries(jwpqt_text_file_tests PRIVATE jwpqt_core)
 target_compile_options(jwpqt_text_file_tests PRIVATE -Wall -Wextra -Wpedantic)
 
+add_executable(jwpqt_text_detection_tests
+  text_detection_test.cpp
+)
+target_link_libraries(jwpqt_text_detection_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_text_detection_tests PRIVATE -Wall -Wextra -Wpedantic)
+
 add_test(NAME core_utf8 COMMAND jwpqt_core_tests)
 add_test(NAME core_jis_encoding COMMAND jwpqt_jis_encoding_tests)
 add_test(NAME core_jis_unicode COMMAND jwpqt_jis_unicode_tests)
 add_test(NAME core_jis_text COMMAND jwpqt_jis_text_tests)
 add_test(NAME core_legacy_text COMMAND jwpqt_legacy_text_tests)
 add_test(NAME core_text_file COMMAND jwpqt_text_file_tests)
+add_test(NAME core_text_detection COMMAND jwpqt_text_detection_tests)
 add_test(NAME qt_file_io COMMAND jwpqt_qt_io_tests)
 add_test(NAME qt_main_window COMMAND jwpqt_main_window_tests)
 add_test(NAME application_startup COMMAND jwpqt --smoke-test)
