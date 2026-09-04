@@ -3,7 +3,9 @@
 #ifndef JWPQT_CORE_KANA_INPUT_H
 #define JWPQT_CORE_KANA_INPUT_H
 
+#include <optional>
 #include <stdexcept>
+#include <string_view>
 #include <vector>
 
 #include "jwpqt/core/jwp_document.h"
@@ -26,6 +28,10 @@ struct KanaInputEvent {
 struct KanaInputOptions {
   bool old_katakana_input = false;
 };
+
+// Returns the recovered desktop romaji spelling for a hiragana or katakana
+// cell. Small kana spellings retain their leading '+'.
+std::optional<std::string_view> romaji_for_kana(JisCode kana) noexcept;
 
 class KanaInputError : public std::runtime_error {
  public:

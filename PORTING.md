@@ -58,8 +58,11 @@ legacy file structures.
     saves retain history, and both menu and context-menu actions use it.
 19. `2f56f44` extracts the recovered desktop romaji-to-kana state machine,
     including direct, compound, symbol, case, pending, and consonant behavior.
-20. The current slice parses and validates the recovered WNN index/data wire
-    formats without native-ABI assumptions or bundled dictionary payloads.
+20. `07c0f82` parses and validates the recovered WNN index/data wire formats
+    without native-ABI assumptions or bundled dictionary payloads.
+21. The current slice reproduces ordered WNN exact, special-stem, and
+    conjugated candidate lookup, suffix attachment, extension checks, and
+    stable duplicate removal over the portable dictionary model.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -68,8 +71,9 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Port WNN candidate lookup, conjugation filtering, duplicate handling, and
-   preference ordering over the validated portable dictionary model.
+1. Port WNN user-dictionary preference ordering and the native conversion
+   session that connects romaji composition, candidate selection, and document
+   transactions.
 2. Replace `QPlainTextEdit` scaffolding with a custom Qt editor surface once the
    paragraph model can drive wrapping, selection, conversion spans, and kanji
    coloring.

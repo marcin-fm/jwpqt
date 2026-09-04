@@ -104,14 +104,12 @@ std::vector<WnnRecord> parse_records(std::string_view bytes) {
           static_cast<unsigned char>(bytes[cursor]));
       if (first == '/') {
         ++cursor;
-        if (cursor < line_end) {
-          if (candidate_count == kWnnMaximumCandidateCount) {
-            fail_at("data candidate", cursor,
-                    "dictionary exceeds the candidate limit");
-          }
-          record.candidates.emplace_back();
-          ++candidate_count;
+        if (candidate_count == kWnnMaximumCandidateCount) {
+          fail_at("data candidate", cursor,
+                  "dictionary exceeds the candidate limit");
         }
+        record.candidates.emplace_back();
+        ++candidate_count;
         continue;
       }
       if (!is_high_bit_byte(first)) {

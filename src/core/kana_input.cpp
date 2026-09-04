@@ -238,6 +238,16 @@ bool KanaInputEvent::operator==(const KanaInputEvent& other) const noexcept {
   return kind == other.kind && text == other.text;
 }
 
+std::optional<std::string_view> romaji_for_kana(JisCode kana) noexcept {
+  const JisCode page = static_cast<JisCode>(kana & 0xff00U);
+  const JisCode cell = static_cast<JisCode>(kana & 0x00ffU);
+  if ((page != kHiraganaBase && page != kKatakanaBase) || cell < 0x21U ||
+      cell > 0x73U) {
+    return std::nullopt;
+  }
+  return kDirectKana[static_cast<std::size_t>(cell - 0x21U)];
+}
+
 KanaInputComposer::KanaInputComposer(KanaInputOptions options)
     : options_(options) {}
 

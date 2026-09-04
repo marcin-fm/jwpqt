@@ -173,6 +173,14 @@ void test_legacy_byte_domain_and_empty_candidates() {
   require(slash_ending.records()[0].ending == '/' &&
               slash_ending.records()[0].candidates.empty(),
           "Printable slash ending was not preserved");
+
+  const WnnDictionary trailing_empty = WnnDictionary::parse(
+      empty_index.bytes(), bytes({0xa2, '*', 0xb0, 0xa1, '/', '\n'}));
+  require(trailing_empty.records()[0].candidates.size() == 2 &&
+              trailing_empty.records()[0].candidates[0] ==
+                  jwpqt::core::JwpText{0x3021} &&
+              trailing_empty.records()[0].candidates[1].empty(),
+          "Trailing empty WNN candidate was not preserved");
 }
 
 void test_resource_limits() {
