@@ -3,6 +3,7 @@ add_library(jwpqt_core STATIC
   jis_encoding.cpp
   jis_text.cpp
   jis_unicode.cpp
+  kana_input.cpp
   jwp_document.cpp
   jwp_document_history.cpp
   jwp_document_model.cpp

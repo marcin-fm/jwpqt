@@ -41,6 +41,12 @@ add_executable(jwpqt_jis_text_tests
 target_link_libraries(jwpqt_jis_text_tests PRIVATE jwpqt_core)
 target_compile_options(jwpqt_jis_text_tests PRIVATE -Wall -Wextra -Wpedantic)
 
+add_executable(jwpqt_kana_input_tests
+  kana_input_test.cpp
+)
+target_link_libraries(jwpqt_kana_input_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_kana_input_tests PRIVATE -Wall -Wextra -Wpedantic)
+
 add_executable(jwpqt_jwp_document_tests
   jwp_document_test.cpp
 )
@@ -112,6 +118,7 @@ add_test(NAME core_byte_io COMMAND jwpqt_byte_io_tests)
 add_test(NAME core_jis_encoding COMMAND jwpqt_jis_encoding_tests)
 add_test(NAME core_jis_unicode COMMAND jwpqt_jis_unicode_tests)
 add_test(NAME core_jis_text COMMAND jwpqt_jis_text_tests)
+add_test(NAME core_kana_input COMMAND jwpqt_kana_input_tests)
 add_test(NAME core_jwp_document COMMAND jwpqt_jwp_document_tests)
 add_test(NAME core_jwp_text_codec COMMAND jwpqt_jwp_text_codec_tests)
 add_test(NAME core_jwp_document_model COMMAND jwpqt_jwp_document_model_tests)
