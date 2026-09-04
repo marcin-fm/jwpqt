@@ -36,9 +36,9 @@ The native editor opens and atomically saves UTF-8, EUC-JP, Shift-JIS,
 New/Old/NEC JIS, and JWP B1/B2/J1.20 documents. JWP editing preserves metadata,
 paragraph formatting, hard page breaks, code-page interpretation, native
 search/replace, and portable transaction history. The portable core also
-contains the recovered desktop romaji-to-kana composer. Kana-to-kanji
-dictionaries, lookup tools, custom layout/rendering, configuration, and
-printing remain in progress.
+contains the recovered desktop romaji-to-kana composer and a bounded parser for
+the WNN conversion dictionary wire formats. Kana-to-kanji lookup, lookup tools,
+custom layout/rendering, configuration, and printing remain in progress.
 
 JWPce/JWPxp copyright and licensing notices remain in `_cpright.txt`,
 `_readme.txt`, and `gnugpl.txt`.
