@@ -2,6 +2,7 @@ add_library(jwpqt_core STATIC
   jis_encoding.cpp
   jis_unicode.cpp
   legacy_text.cpp
+  text_file.cpp
   utf8.cpp
 )
 
