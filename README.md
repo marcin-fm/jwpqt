@@ -32,12 +32,13 @@ Run the editor, optionally opening a UTF-8 file:
 
 ## Current scope
 
-The native shell provides strict UTF-8 loading and saving plus a basic Qt text
-window. The portable core also provides validated JIS X 0208, EUC-JP, and
-Shift-JIS transformations for the 6,892 characters mapped by the recovered JWP
-tables. The GUI does not expose those legacy encodings yet. The JWP container,
-original paragraph model, kana-to-kanji conversion, dictionaries, lookup tools,
-and printing have not yet been ported.
+The native editor opens and atomically saves UTF-8, EUC-JP, Shift-JIS,
+New/Old/NEC JIS, and JWP B1/B2/J1.20 documents. JWP editing preserves metadata,
+paragraph formatting, hard page breaks, code-page interpretation, native
+search/replace, and portable transaction history. The portable core also
+contains the recovered desktop romaji-to-kana composer. Kana-to-kanji
+dictionaries, lookup tools, custom layout/rendering, configuration, and
+printing remain in progress.
 
 JWPce/JWPxp copyright and licensing notices remain in `_cpright.txt`,
 `_readme.txt`, and `gnugpl.txt`.

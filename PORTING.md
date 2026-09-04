@@ -49,13 +49,15 @@ legacy file structures.
     JWP documents, including legacy ASCII/JASCII comparison and bounded wrap.
 16. `748d9fb` enumerates non-overlapping document matches independently of
     cursor direction and wrapping for deterministic whole-document operations.
-17. The current slice exposes Replace Next and Replace All natively. JWP
+17. `dbf1599` exposes Replace Next and Replace All natively. JWP
     replacements preserve structure and metadata, and each accepted occurrence
     remains independently undoable as in JWPxp.
-18. The current slice routes JWP edits through portable transaction history.
+18. `1ef8e06` routes JWP edits through portable transaction history.
     Undo and redo restore the complete JWP document and caret, consecutive
     typing/deletion coalesces, Replace All retains one entry per occurrence,
     saves retain history, and both menu and context-menu actions use it.
+19. `2f56f44` extracts the recovered desktop romaji-to-kana state machine,
+    including direct, compound, symbol, case, pending, and consonant behavior.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -64,8 +66,8 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Port kana-to-kanji conversion and dictionary lookup with fixtures captured
-   from the recovered implementation.
+1. Parse and validate the WNN conversion index/data wire formats using synthetic
+   fixtures, then port candidate lookup and conjugation filtering.
 2. Replace `QPlainTextEdit` scaffolding with a custom Qt editor surface once the
    paragraph model can drive wrapping, selection, conversion spans, and kanji
    coloring.
