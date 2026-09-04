@@ -34,8 +34,10 @@ legacy file structures.
    preserving legacy canonicalization.
 8. `ce1ac01` adds checked paragraph/document mutation with the legacy split,
    join, formatting, and hard-page-break semantics.
-9. The current slice adds bounded document transactions, undo/redo, caret
-   restoration, and legacy typing/deletion coalescing.
+9. `e8d9236` adds bounded document transactions, undo/redo, caret restoration,
+   and legacy typing/deletion coalescing.
+10. The current slice adds paragraph-local forward/backward search, legacy
+    ASCII/JASCII comparison, and strongly exception-safe replacement.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -44,8 +46,8 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Port selections and search/replace over the portable document model, then
-   expose clipboard and undo/redo actions through the native editor.
+1. Expose document selection, clipboard, search/replace, and undo/redo actions
+   through the native editor.
 2. Integrate JWP documents with native open/save while preserving metadata and
    the selected CP1250 through CP1258 extension table.
 3. Port kana-to-kanji conversion and dictionary lookup with fixtures captured
