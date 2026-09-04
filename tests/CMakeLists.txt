@@ -53,6 +53,12 @@ add_executable(jwpqt_jwp_text_codec_tests
 target_link_libraries(jwpqt_jwp_text_codec_tests PRIVATE jwpqt_core)
 target_compile_options(jwpqt_jwp_text_codec_tests PRIVATE -Wall -Wextra -Wpedantic)
 
+add_executable(jwpqt_jwp_document_model_tests
+  jwp_document_model_test.cpp
+)
+target_link_libraries(jwpqt_jwp_document_model_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_jwp_document_model_tests PRIVATE -Wall -Wextra -Wpedantic)
+
 add_executable(jwpqt_legacy_text_tests
   legacy_text_test.cpp
 )
@@ -84,6 +90,7 @@ add_test(NAME core_jis_unicode COMMAND jwpqt_jis_unicode_tests)
 add_test(NAME core_jis_text COMMAND jwpqt_jis_text_tests)
 add_test(NAME core_jwp_document COMMAND jwpqt_jwp_document_tests)
 add_test(NAME core_jwp_text_codec COMMAND jwpqt_jwp_text_codec_tests)
+add_test(NAME core_jwp_document_model COMMAND jwpqt_jwp_document_model_tests)
 add_test(NAME core_legacy_code_page COMMAND jwpqt_legacy_code_page_tests)
 add_test(NAME core_legacy_text COMMAND jwpqt_legacy_text_tests)
 add_test(NAME core_text_file COMMAND jwpqt_text_file_tests)

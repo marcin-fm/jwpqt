@@ -26,6 +26,14 @@ struct JwpParagraph {
   std::uint8_t left_indent = 0;
   std::uint8_t right_indent = 0;
   bool page_break = false;
+
+  bool operator==(const JwpParagraph& other) const noexcept {
+    return text == other.text && line_spacing == other.line_spacing &&
+           first_indent == other.first_indent &&
+           left_indent == other.left_indent &&
+           right_indent == other.right_indent &&
+           page_break == other.page_break;
+  }
 };
 
 struct JwpDocument {

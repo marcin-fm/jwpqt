@@ -27,6 +27,13 @@ legacy file structures.
    using the recovered JWP mapping data and canonical duplicate ordering.
 4. `883bd41` adds strict full-text EUC-JP and Shift-JIS codecs over those
    primitives.
+5. `b1fa787` parses and canonically writes the portable B1, B2, and J1.20 JWP
+   document containers.
+6. `9e9ce3e` maps the recovered CP1250 through CP1258 extension tables.
+7. `c7fcf41` bridges complete JWP text-token streams to and from Unicode while
+   preserving legacy canonicalization.
+8. The current slice adds checked paragraph/document mutation with the legacy
+   split, join, formatting, and hard-page-break semantics.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -35,20 +42,16 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Add explicit document encoding selection and preserve the selected encoding
-   across native open/save operations. Do not guess between ambiguous Japanese
-   encodings without a user-visible fallback.
-2. Extract the `IO_cache` buffering and legacy JWP file container logic behind
-   portable byte-stream interfaces.
-3. Extract paragraph storage and document mutation independently of `HWND`,
-   `HDC`, scrolling, caret, and menu state.
-4. Port undo/redo over the portable document model.
-5. Port kana-to-kanji conversion and dictionary lookup with fixtures captured
+1. Port undo/redo, selections, and search/replace over the portable document
+   model.
+2. Integrate JWP documents with native open/save while preserving metadata and
+   the selected CP1250 through CP1258 extension table.
+3. Port kana-to-kanji conversion and dictionary lookup with fixtures captured
    from the recovered implementation.
-6. Replace `QPlainTextEdit` scaffolding with a custom Qt editor surface once the
+4. Replace `QPlainTextEdit` scaffolding with a custom Qt editor surface once the
    paragraph model can drive wrapping, selection, conversion spans, and kanji
    coloring.
-7. Port lookup tools, configuration, and printing as separate vertical slices.
+5. Port lookup tools, configuration, and printing as separate vertical slices.
 
 Each slice is committed independently after focused tests and the complete
 CTest suite pass.
