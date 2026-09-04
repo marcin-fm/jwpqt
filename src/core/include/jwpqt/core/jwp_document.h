@@ -3,6 +3,7 @@
 #include "jwpqt/core/jis_encoding.h"
 
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
@@ -34,6 +35,10 @@ struct JwpParagraph {
            right_indent == other.right_indent &&
            page_break == other.page_break;
   }
+
+  bool operator!=(const JwpParagraph& other) const noexcept {
+    return !(*this == other);
+  }
 };
 
 struct JwpDocument {
@@ -46,6 +51,27 @@ struct JwpDocument {
   std::array<JwpText, 5> summary;
   std::array<std::array<JwpText, 3>, 4> headers;
   std::vector<JwpParagraph> paragraphs;
+
+  bool operator==(const JwpDocument& other) const noexcept {
+    for (std::size_t index = 0; index < margins.size(); ++index) {
+      if (margins[index] != other.margins[index] &&
+          !(std::isnan(margins[index]) &&
+            std::isnan(other.margins[index]))) {
+        return false;
+      }
+    }
+    return source_version == other.source_version &&
+           landscape == other.landscape &&
+           separate_left_right_headers ==
+               other.separate_left_right_headers &&
+           suppress_first_page_headers == other.suppress_first_page_headers &&
+           vertical == other.vertical && summary == other.summary &&
+           headers == other.headers && paragraphs == other.paragraphs;
+  }
+
+  bool operator!=(const JwpDocument& other) const noexcept {
+    return !(*this == other);
+  }
 };
 
 class JwpFormatError : public std::runtime_error {
