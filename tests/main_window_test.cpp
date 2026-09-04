@@ -35,8 +35,10 @@ QByteArray read_bytes(const QString& path) {
 class PromptingWindow : public jwpqt::qt::MainWindow {
  public:
   std::optional<jwpqt::core::TextEncoding> next_encoding;
+  std::optional<jwpqt::qt::SearchRequest> next_search;
   std::vector<jwpqt::core::TextEncoding> offered_encodings;
   QString explanation;
+  int search_prompt_count = 0;
 
  protected:
   std::optional<jwpqt::core::TextEncoding> prompt_for_encoding(
@@ -45,6 +47,12 @@ class PromptingWindow : public jwpqt::qt::MainWindow {
     offered_encodings = candidates;
     explanation = prompt;
     return next_encoding;
+  }
+
+  std::optional<jwpqt::qt::SearchRequest> prompt_for_search(
+      const jwpqt::qt::SearchRequest&) override {
+    ++search_prompt_count;
+    return next_search;
   }
 };
 
@@ -56,6 +64,10 @@ QAction* find_encoding_action(jwpqt::qt::MainWindow& window,
     }
   }
   return nullptr;
+}
+
+QAction* find_action(jwpqt::qt::MainWindow& window, const char* name) {
+  return window.findChild<QAction*>(QString::fromLatin1(name));
 }
 
 jwpqt::core::JwpParagraph paragraph(std::u32string_view text,
@@ -259,6 +271,138 @@ void test_ascii_and_unknown_prompts(const QString& directory) {
           "Cancelled unknown detection unexpectedly opened");
   require(window.offered_encodings.empty(),
           "Unknown detection unexpectedly constrained encoding choices");
+}
+
+void test_plain_text_find_actions(const QString& directory) {
+  const QString path = directory + QStringLiteral("/find.txt");
+  jwpqt::qt::write_text_file(
+      path, jwpqt::core::TextFile{U"x Alpha alpha \u00c9 \u00e9",
+                                 jwpqt::core::TextEncoding::kUtf8, false});
+
+  PromptingWindow window;
+  require(window.open_path(path, jwpqt::core::TextEncoding::kUtf8),
+          "Could not open plain search fixture");
+  window.next_search = jwpqt::qt::SearchRequest{
+      QStringLiteral("ALPHA"), jwpqt::core::JwpSearchOptions{}};
+  QAction* find = find_action(window, "findAction");
+  QAction* find_next = find_action(window, "findNextAction");
+  QAction* find_previous = find_action(window, "findPreviousAction");
+  require(find != nullptr && find_next != nullptr && find_previous != nullptr,
+          "Native find actions were not created");
+
+  find->trigger();
+  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  require(window.search_prompt_count == 1 && editor != nullptr &&
+              editor->textCursor().selectedText() == QStringLiteral("Alpha"),
+          "Find dialog action did not select the first plain-text match");
+  find_next->trigger();
+  require(editor->textCursor().selectedText() == QStringLiteral("alpha"),
+          "Find Next did not select the following plain-text match");
+  find_previous->trigger();
+  require(editor->textCursor().selectedText() == QStringLiteral("Alpha"),
+          "Find Previous did not select the preceding plain-text match");
+
+  const QTextCursor original = editor->textCursor();
+  require(!window.find_text(QStringLiteral("missing")),
+          "Missing plain text unexpectedly matched");
+  require(editor->textCursor().selectionStart() == original.selectionStart() &&
+              editor->textCursor().selectionEnd() == original.selectionEnd(),
+          "Failed plain-text search changed the selection");
+
+  QTextCursor after_upper_accent = editor->textCursor();
+  after_upper_accent.setPosition(editor->toPlainText().indexOf(u'\u00c9') + 1);
+  editor->setTextCursor(after_upper_accent);
+  require(!window.find_text(QStringLiteral("\u00c9")),
+          "ASCII-only case folding matched a non-ASCII case variant");
+
+  editor->setPlainText(QStringLiteral("x aaa"));
+  QTextCursor overlap = editor->textCursor();
+  overlap.setPosition(1);
+  editor->setTextCursor(overlap);
+  require(window.find_text(QStringLiteral("aa")) &&
+              editor->textCursor().selectionStart() == 2,
+          "Plain search did not find the first overlapping match");
+  find_next->trigger();
+  require(editor->textCursor().selectionStart() == 3,
+          "Find Next skipped an overlapping plain-text match");
+
+  editor->setPlainText(QStringLiteral("x only"));
+  QTextCursor before_only = editor->textCursor();
+  before_only.setPosition(1);
+  editor->setTextCursor(before_only);
+  jwpqt::core::JwpSearchOptions wrap;
+  wrap.wrap = true;
+  require(window.find_text(QStringLiteral("only"), wrap),
+          "Plain search did not find its only match");
+  const QTextCursor only_match = editor->textCursor();
+  require(!window.find_text(QStringLiteral("only"), wrap) &&
+              editor->textCursor().selectionStart() ==
+                  only_match.selectionStart() &&
+              editor->textCursor().selectionEnd() == only_match.selectionEnd(),
+          "Wrapped plain search reselected its only current match");
+}
+
+void test_jwp_find_uses_legacy_comparison(const QString& directory) {
+  jwpqt::core::JwpDocument source;
+  source.paragraphs = {paragraph(U"x\uff21y alpha"), paragraph(U""),
+                       paragraph(U"beta alpha")};
+  source.paragraphs[1].page_break = true;
+  const QString path = directory + QStringLiteral("/find.jwp");
+  jwpqt::qt::write_jwp_file(path, source);
+
+  jwpqt::qt::MainWindow window;
+  require(window.open_jwp_path(path), "Could not open JWP search fixture");
+  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  require(editor != nullptr, "JWP search window has no editor");
+
+  require(window.find_text(QStringLiteral("A")),
+          "JASCII equivalence did not find full-width ASCII");
+  require(editor->textCursor().selectedText() == QStringLiteral("\uff21"),
+          "JASCII search selected the wrong text");
+
+  jwpqt::core::JwpSearchOptions exact;
+  exact.ignore_ascii_case = false;
+  exact.jascii_ascii_equivalence = false;
+  QTextCursor cursor = editor->textCursor();
+  cursor.setPosition(0);
+  editor->setTextCursor(cursor);
+  require(!window.find_text(QStringLiteral("A"), exact),
+          "Exact JWP search matched full-width ASCII");
+
+  require(window.find_text(QStringLiteral("ALPHA")),
+          "Case-folded JWP search did not find ASCII text");
+  require(editor->textCursor().selectedText() == QStringLiteral("alpha"),
+          "JWP search selected the wrong ASCII match");
+
+  QAction* find_next = find_action(window, "findNextAction");
+  QAction* find_previous = find_action(window, "findPreviousAction");
+  require(find_next != nullptr && find_previous != nullptr,
+          "JWP repeat-search actions were not created");
+  find_next->trigger();
+  require(editor->textCursor().selectedText() == QStringLiteral("alpha") &&
+              editor->textCursor().selectionStart() > 10,
+          "JWP Find Next did not cross the hard-page-break paragraph");
+  find_previous->trigger();
+  require(editor->textCursor().selectionStart() < 10,
+          "JWP Find Previous did not return to the first match");
+
+  jwpqt::core::JwpSearchOptions wrapped;
+  wrapped.direction = jwpqt::core::JwpSearchDirection::kBackward;
+  wrapped.wrap = true;
+  require(window.find_text(QStringLiteral("ALPHA"), wrapped) &&
+              editor->textCursor().selectionStart() > 10,
+          "Backward JWP search did not wrap to the final match");
+
+  const QTextCursor selection = editor->textCursor();
+  require(!window.find_text(QString::fromUtf8("\xF0\x9F\x98\x80")),
+          "Unrepresentable JWP search pattern unexpectedly matched");
+  require(editor->textCursor().selectionStart() == selection.selectionStart() &&
+              editor->textCursor().selectionEnd() == selection.selectionEnd(),
+          "Failed JWP search changed the current selection");
+  require(!editor->document()->isModified() &&
+              window.current_jwp_document() != nullptr &&
+              *window.current_jwp_document() == source,
+          "Searching changed the JWP source model");
 }
 
 void test_jwp_open_edit_and_save(const QString& directory) {
@@ -480,6 +624,8 @@ int main(int argc, char* argv[]) {
     test_detected_bom_is_preserved(directory.path());
     test_detection_prompt_and_cancellation(directory.path());
     test_ascii_and_unknown_prompts(directory.path());
+    test_plain_text_find_actions(directory.path());
+    test_jwp_find_uses_legacy_comparison(directory.path());
     test_jwp_open_edit_and_save(directory.path());
     test_jwp_code_page_switch(directory.path());
     test_jwp_code_page_can_be_selected_before_open(directory.path());

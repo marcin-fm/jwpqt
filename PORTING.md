@@ -42,9 +42,12 @@ legacy file structures.
     preserving formatting and protecting structural hard page breaks.
 12. `984829a` adds atomic native file I/O for complete JWP containers.
 13. `74d39dc` names and parses the recovered CP1250 through CP1258 tables.
-14. The current slice opens, edits, and saves JWP documents in the native Qt
-    window while preserving metadata, paragraph formatting, and hard page
-    breaks. Its explicit code-page selector can be set before a file is opened.
+14. `8258437` opens, edits, and saves JWP documents in the native Qt window
+    while preserving metadata, paragraph formatting, and hard page breaks. Its
+    explicit code-page selector can be set before a file is opened.
+15. The current slice exposes Find, Find Next, and Find Previous for both plain
+    text and JWP documents, including legacy ASCII/JASCII comparison and
+    bounded wrapping behavior.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -53,8 +56,8 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Expose document selection, clipboard, search/replace, and undo/redo actions
-   through the native editor.
+1. Expose replacement and portable undo/redo semantics through the native
+   editor. Selection, clipboard, and search actions are already available.
 2. Port kana-to-kanji conversion and dictionary lookup with fixtures captured
    from the recovered implementation.
 3. Replace `QPlainTextEdit` scaffolding with a custom Qt editor surface once the

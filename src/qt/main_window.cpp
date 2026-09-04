@@ -12,23 +12,33 @@
 
 #include <QAction>
 #include <QActionGroup>
+#include <QCheckBox>
 #include <QCloseEvent>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFormLayout>
 #include <QFontDatabase>
+#include <QHBoxLayout>
 #include <QInputDialog>
 #include <QKeySequence>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPlainTextEdit>
+#include <QPushButton>
+#include <QRadioButton>
 #include <QStatusBar>
 #include <QTextCursor>
 #include <QTextDocument>
+#include <QVBoxLayout>
 
 #include "file_io.h"
 #include "jwpqt/core/jwp_plain_text.h"
+#include "jwpqt/core/jwp_text_codec.h"
 #include "jwpqt/core/plain_text_change.h"
 #include "jwpqt/core/text_detection.h"
 #include "text_bridge.h"
@@ -100,6 +110,23 @@ std::size_t utf32_offset_for_utf16(const QString& text, int offset) {
         "Qt text change splits a Unicode surrogate pair");
   }
   return from_qstring(text.left(offset)).size();
+}
+
+int utf16_offset_for_utf32(std::u32string_view text, std::size_t offset) {
+  if (offset > text.size()) {
+    throw core::JwpSearchError("Search result offset is out of bounds");
+  }
+  return to_qstring(text.substr(0, offset)).size();
+}
+
+QString fold_ascii_case(QString text) {
+  for (qsizetype index = 0; index < text.size(); ++index) {
+    const ushort value = text.at(index).unicode();
+    if (value >= 'A' && value <= 'Z') {
+      text[index] = QChar(static_cast<ushort>(value + ('a' - 'A')));
+    }
+  }
+  return text;
 }
 
 std::optional<core::TextEncoding> encoding_from_filter(const QString& filter) {
@@ -206,6 +233,27 @@ void MainWindow::create_actions() {
   select_all_action->setShortcut(QKeySequence::SelectAll);
   connect(select_all_action, &QAction::triggered, editor_,
           &QPlainTextEdit::selectAll);
+
+  edit_menu->addSeparator();
+  QAction* find_action = edit_menu->addAction(tr("&Find..."));
+  find_action->setObjectName(QStringLiteral("findAction"));
+  find_action->setShortcut(QKeySequence::Find);
+  connect(find_action, &QAction::triggered, this,
+          [this] { find_document(); });
+
+  QAction* find_next_action = edit_menu->addAction(tr("Find &Next"));
+  find_next_action->setObjectName(QStringLiteral("findNextAction"));
+  find_next_action->setShortcut(QKeySequence::FindNext);
+  connect(find_next_action, &QAction::triggered, this, [this] {
+    find_again(core::JwpSearchDirection::kForward);
+  });
+
+  QAction* find_previous_action = edit_menu->addAction(tr("Find Pre&vious"));
+  find_previous_action->setObjectName(QStringLiteral("findPreviousAction"));
+  find_previous_action->setShortcut(QKeySequence::FindPrevious);
+  connect(find_previous_action, &QAction::triggered, this, [this] {
+    find_again(core::JwpSearchDirection::kBackward);
+  });
 
   QMenu* encoding_menu = menuBar()->addMenu(tr("E&ncoding"));
   encoding_actions_->setExclusive(true);
@@ -522,6 +570,60 @@ std::optional<core::TextEncoding> MainWindow::prompt_for_encoding(
   return std::nullopt;
 }
 
+std::optional<SearchRequest> MainWindow::prompt_for_search(
+    const SearchRequest& initial) {
+  QDialog dialog(this);
+  dialog.setWindowTitle(tr("Find"));
+
+  auto* layout = new QVBoxLayout(&dialog);
+  auto* form = new QFormLayout();
+  auto* text = new QLineEdit(initial.text, &dialog);
+  text->setObjectName(QStringLiteral("findText"));
+  form->addRow(tr("Find:"), text);
+  layout->addLayout(form);
+
+  auto* ignore_case = new QCheckBox(tr("Ignore ASCII case"), &dialog);
+  ignore_case->setChecked(initial.options.ignore_ascii_case);
+  layout->addWidget(ignore_case);
+  auto* jascii = new QCheckBox(tr("Treat full-width ASCII as ASCII"), &dialog);
+  jascii->setChecked(initial.options.jascii_ascii_equivalence);
+  jascii->setEnabled(is_jwp_document());
+  layout->addWidget(jascii);
+  auto* wrap = new QCheckBox(tr("Wrap around"), &dialog);
+  wrap->setChecked(initial.options.wrap);
+  layout->addWidget(wrap);
+
+  auto* direction = new QHBoxLayout();
+  auto* forward = new QRadioButton(tr("Forward"), &dialog);
+  auto* backward = new QRadioButton(tr("Backward"), &dialog);
+  forward->setChecked(initial.options.direction ==
+                      core::JwpSearchDirection::kForward);
+  backward->setChecked(initial.options.direction ==
+                       core::JwpSearchDirection::kBackward);
+  direction->addWidget(forward);
+  direction->addWidget(backward);
+  layout->addLayout(direction);
+
+  auto* buttons = new QDialogButtonBox(
+      QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+  buttons->button(QDialogButtonBox::Ok)->setText(tr("Find"));
+  connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+  connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+  layout->addWidget(buttons);
+
+  text->selectAll();
+  text->setFocus();
+  if (dialog.exec() != QDialog::Accepted) {
+    return std::nullopt;
+  }
+  return SearchRequest{
+      text->text(),
+      core::JwpSearchOptions{
+          backward->isChecked() ? core::JwpSearchDirection::kBackward
+                                : core::JwpSearchDirection::kForward,
+          ignore_case->isChecked(), jascii->isChecked(), wrap->isChecked()}};
+}
+
 void MainWindow::set_text_encoding(core::TextEncoding encoding,
                                    bool mark_modified) {
   if (jwp_document_.has_value() || encoding_ == encoding) {
@@ -563,6 +665,118 @@ void MainWindow::set_jwp_code_page(core::LegacyCodePage code_page) {
     show_error(tr("Could not use %1").arg(code_page_name(code_page)), error);
     update_encoding_display();
   }
+}
+
+void MainWindow::find_document() {
+  const std::optional<SearchRequest> request =
+      prompt_for_search(SearchRequest{search_text_, search_options_});
+  if (request.has_value()) {
+    find_text(request->text, request->options);
+  }
+}
+
+void MainWindow::find_again(core::JwpSearchDirection direction) {
+  if (search_text_.isEmpty()) {
+    find_document();
+    return;
+  }
+  core::JwpSearchOptions options = search_options_;
+  options.direction = direction;
+  find_text(search_text_, options);
+}
+
+bool MainWindow::find_text(const QString& text,
+                           core::JwpSearchOptions options) {
+  if (text.isEmpty()) {
+    statusBar()->showMessage(tr("Enter text to find"), 3000);
+    return false;
+  }
+  search_text_ = text;
+  search_options_ = options;
+  try {
+    return is_jwp_document() ? find_jwp_text(text, options)
+                             : find_plain_text(text, options);
+  } catch (const std::exception& error) {
+    statusBar()->showMessage(
+        tr("Could not search: %1").arg(QString::fromUtf8(error.what())), 5000);
+    return false;
+  }
+}
+
+bool MainWindow::find_jwp_text(const QString& text,
+                               core::JwpSearchOptions options) {
+  const core::JwpText pattern =
+      core::encode_jwp_text(from_qstring(text), jwp_code_page_);
+  const QTextCursor original = editor_->textCursor();
+  const int start_utf16 = original.hasSelection() ? original.selectionStart()
+                                                  : original.position();
+  const std::size_t start_offset =
+      utf32_offset_for_utf16(editor_->toPlainText(), start_utf16);
+  const core::JwpSearchResult result = core::find_next(
+      *jwp_document_, pattern,
+      core::jwp_plain_text_position(*jwp_document_, start_offset), options);
+  if (!result.match.has_value()) {
+    statusBar()->showMessage(tr("Text not found"), 3000);
+    return false;
+  }
+
+  const std::size_t begin =
+      core::jwp_plain_text_offset(*jwp_document_, result.match->begin);
+  const std::size_t end =
+      core::jwp_plain_text_offset(*jwp_document_, result.match->end);
+  QTextCursor found = editor_->textCursor();
+  found.setPosition(utf16_offset_for_utf32(rendered_jwp_text_, begin));
+  found.setPosition(utf16_offset_for_utf32(rendered_jwp_text_, end),
+                    QTextCursor::KeepAnchor);
+  editor_->setTextCursor(found);
+  statusBar()->showMessage(result.wrapped ? tr("Search wrapped")
+                                         : tr("Match found"),
+                           2000);
+  return true;
+}
+
+bool MainWindow::find_plain_text(const QString& text,
+                                 core::JwpSearchOptions options) {
+  const QTextCursor original = editor_->textCursor();
+  const QString source = options.ignore_ascii_case
+                             ? fold_ascii_case(editor_->toPlainText())
+                             : editor_->toPlainText();
+  const QString pattern =
+      options.ignore_ascii_case ? fold_ascii_case(text) : text;
+  const bool backward =
+      options.direction == core::JwpSearchDirection::kBackward;
+  const qsizetype start = original.hasSelection() ? original.selectionStart()
+                                                  : original.position();
+  qsizetype match = -1;
+  if (backward && start > 0) {
+    match = source.lastIndexOf(pattern, start - 1);
+  } else if (!backward && start < source.size()) {
+    match = source.indexOf(pattern, start + 1);
+  }
+  bool wrapped = false;
+  if (match < 0 && options.wrap) {
+    const qsizetype candidate =
+        backward ? source.lastIndexOf(pattern) : source.indexOf(pattern);
+    if ((backward && candidate > start) || (!backward && candidate < start)) {
+      match = candidate;
+      wrapped = true;
+    }
+  }
+  if (match < 0) {
+    editor_->setTextCursor(original);
+    statusBar()->showMessage(tr("Text not found"), 3000);
+    return false;
+  }
+
+  QTextCursor found = original;
+  found.setPosition(static_cast<int>(match));
+  found.setPosition(static_cast<int>(match + text.size()),
+                    QTextCursor::KeepAnchor);
+  editor_->setTextCursor(found);
+  statusBar()->showMessage(wrapped ? tr("Search wrapped")
+                                   : tr("Match found"),
+                           2000);
+  return true;
 }
 
 void MainWindow::synchronize_jwp_document(int position, int chars_removed,

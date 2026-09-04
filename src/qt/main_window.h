@@ -12,6 +12,7 @@
 #include <QString>
 
 #include "jwpqt/core/jwp_document_model.h"
+#include "jwpqt/core/jwp_search.h"
 #include "jwpqt/core/legacy_code_page.h"
 #include "jwpqt/core/text_file.h"
 
@@ -26,6 +27,11 @@ namespace jwpqt::qt {
 enum class OpenMode {
   kInteractive,
   kNonInteractive,
+};
+
+struct SearchRequest {
+  QString text;
+  core::JwpSearchOptions options;
 };
 
 class MainWindow : public QMainWindow {
@@ -45,12 +51,15 @@ class MainWindow : public QMainWindow {
   bool is_jwp_document() const noexcept;
   core::LegacyCodePage jwp_code_page() const noexcept;
   const core::JwpDocument* current_jwp_document() const noexcept;
+  bool find_text(const QString& text, core::JwpSearchOptions options = {});
 
  protected:
   void closeEvent(QCloseEvent* event) override;
   virtual std::optional<core::TextEncoding> prompt_for_encoding(
       const std::vector<core::TextEncoding>& candidates,
       const QString& explanation);
+  virtual std::optional<SearchRequest> prompt_for_search(
+      const SearchRequest& initial);
 
  private:
   void create_actions();
@@ -65,6 +74,10 @@ class MainWindow : public QMainWindow {
                          core::LegacyCodePage code_page);
   void set_text_encoding(core::TextEncoding encoding, bool mark_modified);
   void set_jwp_code_page(core::LegacyCodePage code_page);
+  void find_document();
+  void find_again(core::JwpSearchDirection direction);
+  bool find_jwp_text(const QString& text, core::JwpSearchOptions options);
+  bool find_plain_text(const QString& text, core::JwpSearchOptions options);
   void synchronize_jwp_document(int position, int chars_removed,
                                 int chars_added);
   void restore_jwp_editor_text(int cursor_position, int selection_start,
@@ -86,6 +99,8 @@ class MainWindow : public QMainWindow {
   std::optional<core::JwpDocument> pristine_jwp_document_;
   std::u32string rendered_jwp_text_;
   core::LegacyCodePage jwp_code_page_ = core::kDefaultLegacyCodePage;
+  QString search_text_;
+  core::JwpSearchOptions search_options_;
   bool updating_editor_ = false;
 };
 
