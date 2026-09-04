@@ -28,8 +28,8 @@ int main(int argc, char* argv[]) {
   const QCommandLineOption encoding_option(
       {QStringLiteral("e"), QStringLiteral("encoding")},
       QStringLiteral("Text encoding: utf-8, euc-jp, shift-jis, "
-                     "new-jis, old-jis, or nec-jis."),
-      QStringLiteral("encoding"), QStringLiteral("utf-8"));
+                      "new-jis, old-jis, or nec-jis."),
+      QStringLiteral("encoding"));
   parser.addOption(encoding_option);
   parser.addPositionalArgument(QStringLiteral("file"),
                                QStringLiteral("Text file to open."),
@@ -41,19 +41,41 @@ int main(int argc, char* argv[]) {
     parser.showHelp(2);
   }
 
-  const std::optional<jwpqt::core::TextEncoding> encoding =
-      jwpqt::core::parse_text_encoding(
-          parser.value(encoding_option).toStdString());
-  if (!encoding.has_value()) {
+  std::optional<jwpqt::core::TextEncoding> encoding;
+  if (parser.isSet(encoding_option)) {
+    encoding = jwpqt::core::parse_text_encoding(
+        parser.value(encoding_option).toStdString());
+  }
+  if (parser.isSet(encoding_option) && !encoding.has_value()) {
     QTextStream(stderr) << "Unsupported text encoding: "
                         << parser.value(encoding_option) << '\n';
     return 2;
   }
 
   jwpqt::qt::MainWindow window;
-  if (!positional_arguments.isEmpty() &&
-      !window.open_path(positional_arguments.constFirst(), *encoding)) {
-    return 1;
+  if (!positional_arguments.isEmpty()) {
+    const jwpqt::qt::OpenMode open_mode =
+        parser.isSet(smoke_test) ? jwpqt::qt::OpenMode::kNonInteractive
+                                 : jwpqt::qt::OpenMode::kInteractive;
+    const bool opened =
+        encoding.has_value()
+            ? window.open_path(positional_arguments.constFirst(), *encoding,
+                               open_mode)
+            : window.open_path_detected(positional_arguments.constFirst(),
+                                        open_mode);
+    if (!opened) {
+      if (open_mode == jwpqt::qt::OpenMode::kNonInteractive) {
+        if (encoding.has_value()) {
+          QTextStream(stderr)
+              << "Could not open the file using the requested encoding.\n";
+        } else {
+          QTextStream(stderr)
+              << "Could not determine the file encoding noninteractively; "
+                 "specify --encoding.\n";
+        }
+      }
+      return 1;
+    }
   }
   window.show();
 

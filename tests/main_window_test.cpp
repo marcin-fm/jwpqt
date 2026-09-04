@@ -31,6 +31,22 @@ QByteArray read_bytes(const QString& path) {
   return file.readAll();
 }
 
+class PromptingWindow : public jwpqt::qt::MainWindow {
+ public:
+  std::optional<jwpqt::core::TextEncoding> next_encoding;
+  std::vector<jwpqt::core::TextEncoding> offered_encodings;
+  QString explanation;
+
+ protected:
+  std::optional<jwpqt::core::TextEncoding> prompt_for_encoding(
+      const std::vector<jwpqt::core::TextEncoding>& candidates,
+      const QString& prompt) override {
+    offered_encodings = candidates;
+    explanation = prompt;
+    return next_encoding;
+  }
+};
+
 QAction* find_encoding_action(jwpqt::qt::MainWindow& window,
                               const QString& name) {
   for (QAction* action : window.findChildren<QAction*>()) {
@@ -119,6 +135,109 @@ void test_leaving_utf8_drops_bom(const QString& directory) {
           "Switching away from UTF-8 did not clear BOM metadata");
 }
 
+void test_detected_open(const QString& directory) {
+  const QString path = directory + QStringLiteral("/detected.euc");
+  jwpqt::qt::write_text_file(
+      path, {U"ASCII \u65e5\u672c\u8a9e\n",
+             jwpqt::core::TextEncoding::kEucJp, false});
+
+  jwpqt::qt::MainWindow window;
+  require(window.open_path_detected(path),
+          "Could not open a certainly detected EUC-JP file");
+  require(window.text_encoding() == jwpqt::core::TextEncoding::kEucJp,
+          "Detected open did not retain EUC-JP");
+  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  require(editor != nullptr &&
+              editor->toPlainText() == QStringLiteral("ASCII \u65e5\u672c\u8a9e\n"),
+          "Detected open decoded EUC-JP incorrectly");
+}
+
+void test_detected_bom_is_preserved(const QString& directory) {
+  const QString source_path = directory + QStringLiteral("/detected-bom.txt");
+  jwpqt::qt::write_text_file(
+      source_path, {U"\u65e5\u672c\u8a9e", jwpqt::core::TextEncoding::kUtf8,
+                    true});
+
+  jwpqt::qt::MainWindow window;
+  require(window.open_path_detected(source_path),
+          "Could not detect UTF-8 BOM file");
+  const QString saved_path = directory + QStringLiteral("/preserved-bom.txt");
+  require(window.save_path(saved_path), "Could not save detected BOM file");
+  require(read_bytes(saved_path).startsWith(QByteArray::fromHex("efbbbf")),
+          "Detected UTF-8 BOM was not preserved");
+}
+
+void test_detection_prompt_and_cancellation(const QString& directory) {
+  const QString initial_path = directory + QStringLiteral("/initial.txt");
+  jwpqt::qt::write_text_file(
+      initial_path,
+      {U"original", jwpqt::core::TextEncoding::kUtf8, false});
+  const QString ambiguous_path = directory + QStringLiteral("/ambiguous.bin");
+  QFile ambiguous(ambiguous_path);
+  require(ambiguous.open(QIODevice::WriteOnly),
+          "Could not create ambiguous fixture");
+  require(ambiguous.write(QByteArray::fromHex("e0a1")) == 2,
+          "Could not write ambiguous fixture");
+  ambiguous.close();
+
+  PromptingWindow window;
+  require(window.open_path(initial_path, jwpqt::core::TextEncoding::kUtf8),
+          "Could not open initial prompt-state document");
+  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  require(editor != nullptr, "Prompting window has no editor");
+  window.next_encoding = std::nullopt;
+  require(!window.open_path_detected(ambiguous_path),
+          "Cancelled ambiguous detection unexpectedly opened");
+  require(editor->toPlainText() == QStringLiteral("original") &&
+              window.text_encoding() == jwpqt::core::TextEncoding::kUtf8,
+          "Cancelled detection changed current document state");
+  require(window.offered_encodings ==
+              std::vector<jwpqt::core::TextEncoding>{
+                  jwpqt::core::TextEncoding::kEucJp,
+                  jwpqt::core::TextEncoding::kShiftJis},
+          "Ambiguous detection did not offer exact viable encodings");
+
+  window.next_encoding = jwpqt::core::TextEncoding::kEucJp;
+  require(window.open_path_detected(ambiguous_path),
+          "Selected ambiguous encoding did not open");
+  require(window.text_encoding() == jwpqt::core::TextEncoding::kEucJp,
+          "Selected ambiguous encoding was not retained");
+  const QString saved_path = directory + QStringLiteral("/ambiguous.euc");
+  require(window.save_path(saved_path), "Could not save ambiguous selection");
+  require(read_bytes(saved_path) == QByteArray::fromHex("e0a1"),
+          "Ambiguous selected encoding did not preserve canonical bytes");
+}
+
+void test_ascii_and_unknown_prompts(const QString& directory) {
+  const QString ascii_path = directory + QStringLiteral("/ascii.txt");
+  QFile ascii(ascii_path);
+  require(ascii.open(QIODevice::WriteOnly), "Could not create ASCII fixture");
+  require(ascii.write("ASCII") == 5, "Could not write ASCII fixture");
+  ascii.close();
+
+  PromptingWindow window;
+  window.next_encoding = jwpqt::core::TextEncoding::kShiftJis;
+  require(window.open_path_detected(ascii_path),
+          "Selected ASCII encoding did not open");
+  require(window.offered_encodings.size() == 6 &&
+              window.text_encoding() ==
+                  jwpqt::core::TextEncoding::kShiftJis,
+          "ASCII prompt did not expose and retain explicit encoding");
+
+  const QString invalid_path = directory + QStringLiteral("/invalid.bin");
+  QFile invalid(invalid_path);
+  require(invalid.open(QIODevice::WriteOnly),
+          "Could not create invalid fixture");
+  require(invalid.write(QByteArray::fromHex("ff")) == 1,
+          "Could not write invalid fixture");
+  invalid.close();
+  window.next_encoding = std::nullopt;
+  require(!window.open_path_detected(invalid_path),
+          "Cancelled unknown detection unexpectedly opened");
+  require(window.offered_encodings.empty(),
+          "Unknown detection unexpectedly constrained encoding choices");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -129,6 +248,10 @@ int main(int argc, char* argv[]) {
     require(directory.isValid(), "Could not create temporary test directory");
     test_explicit_open_and_encoding_action(directory.path());
     test_leaving_utf8_drops_bom(directory.path());
+    test_detected_open(directory.path());
+    test_detected_bom_is_preserved(directory.path());
+    test_detection_prompt_and_cancellation(directory.path());
+    test_ascii_and_unknown_prompts(directory.path());
     std::cout << "All main window tests passed\n";
     return 0;
   } catch (const std::exception& error) {

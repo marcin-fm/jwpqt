@@ -24,8 +24,7 @@ std::runtime_error io_error(const char* action, const QString& path,
 
 }  // namespace
 
-core::TextFile read_text_file(const QString& path,
-                              core::TextEncoding encoding) {
+std::string read_file_bytes(const QString& path) {
   QFile input(path);
   if (!input.open(QIODevice::ReadOnly)) {
     throw io_error("Could not open", path, input.errorString());
@@ -35,9 +34,13 @@ core::TextFile read_text_file(const QString& path,
   if (input.error() != QFileDevice::NoError) {
     throw io_error("Could not read", path, input.errorString());
   }
-  return core::decode_text_file(
-      std::string_view(bytes.constData(), static_cast<std::size_t>(bytes.size())),
-      encoding);
+  return std::string(bytes.constData(), static_cast<std::size_t>(bytes.size()));
+}
+
+core::TextFile read_text_file(const QString& path,
+                              core::TextEncoding encoding) {
+  const std::string bytes = read_file_bytes(path);
+  return core::decode_text_file(bytes, encoding);
 }
 
 void write_text_file(const QString& path, const core::TextFile& file) {

@@ -22,6 +22,7 @@
 #include <QStatusBar>
 #include <QTextDocument>
 
+#include "jwpqt/core/text_detection.h"
 #include "file_io.h"
 #include "text_bridge.h"
 
@@ -69,6 +70,8 @@ QString file_filters() {
          encoding_filter(core::TextEncoding::kNecJis) +
          QStringLiteral(";;") + MainWindow::tr("All files (*)");
 }
+
+QString all_files_filter() { return MainWindow::tr("All files (*)"); }
 
 std::optional<core::TextEncoding> encoding_from_filter(const QString& filter) {
   for (const core::TextEncoding encoding : kTextEncodings) {
@@ -200,7 +203,7 @@ void MainWindow::open_document() {
   if (!maybe_save()) {
     return;
   }
-  QString selected_filter = encoding_filter(encoding_);
+  QString selected_filter = all_files_filter();
   const QString path = QFileDialog::getOpenFileName(
       this, tr("Open text file"), QString(), file_filters(), &selected_filter);
   if (path.isEmpty()) {
@@ -208,32 +211,87 @@ void MainWindow::open_document() {
   }
   std::optional<core::TextEncoding> encoding =
       encoding_from_filter(selected_filter);
-  if (!encoding.has_value()) {
-    encoding = choose_encoding();
-  }
   if (encoding.has_value()) {
     open_path(path, *encoding);
+  } else {
+    open_path_detected(path);
   }
 }
 
 bool MainWindow::open_path(const QString& path,
-                           core::TextEncoding encoding) {
+                           core::TextEncoding encoding, OpenMode mode) {
   try {
     const core::TextFile file = read_text_file(path, encoding);
-    editor_->setPlainText(to_qstring(file.text));
-    editor_->document()->setModified(false);
-    current_path_ = path;
-    encoding_ = file.encoding;
-    has_byte_order_mark_ = file.has_byte_order_mark;
-    update_encoding_display();
-    update_title();
+    load_document(path, file);
     statusBar()->showMessage(
         tr("Opened %1 as %2").arg(path, encoding_name(encoding_)), 3000);
     return true;
   } catch (const std::exception& error) {
-    show_error(tr("Could not open %1").arg(path), error);
+    if (mode == OpenMode::kInteractive) {
+      show_error(tr("Could not open %1").arg(path), error);
+    }
     return false;
   }
+}
+
+bool MainWindow::open_path_detected(const QString& path, OpenMode mode) {
+  try {
+    const std::string bytes = read_file_bytes(path);
+    const core::TextEncodingDetection detection =
+        core::detect_text_encoding(bytes);
+
+    std::optional<core::TextEncoding> encoding;
+    if (detection.confidence == core::DetectionConfidence::kCertain &&
+        detection.candidates.size() == 1) {
+      encoding = detection.candidates.front();
+    } else {
+      if (mode == OpenMode::kNonInteractive) {
+        return false;
+      }
+      QString explanation;
+      switch (detection.confidence) {
+        case core::DetectionConfidence::kAmbiguous:
+          explanation = tr("Several encodings match this file. Choose one:");
+          break;
+        case core::DetectionConfidence::kAsciiOnly:
+          explanation =
+              tr("This file contains only ASCII. Choose its save encoding:");
+          break;
+        case core::DetectionConfidence::kUnknown:
+          explanation = tr("The encoding could not be detected. Choose one:");
+          break;
+        case core::DetectionConfidence::kCertain:
+          explanation = tr("Choose the text encoding:");
+          break;
+      }
+      encoding = prompt_for_encoding(detection.candidates, explanation);
+    }
+    if (!encoding.has_value()) {
+      return false;
+    }
+
+    const core::TextFile file = core::decode_text_file(bytes, *encoding);
+    load_document(path, file);
+    statusBar()->showMessage(
+        tr("Opened %1 as %2").arg(path, encoding_name(*encoding)), 3000);
+    return true;
+  } catch (const std::exception& error) {
+    if (mode == OpenMode::kInteractive) {
+      show_error(tr("Could not open %1").arg(path), error);
+    }
+    return false;
+  }
+}
+
+void MainWindow::load_document(const QString& path,
+                               const core::TextFile& file) {
+  editor_->setPlainText(to_qstring(file.text));
+  editor_->document()->setModified(false);
+  current_path_ = path;
+  encoding_ = file.encoding;
+  has_byte_order_mark_ = file.has_byte_order_mark;
+  update_encoding_display();
+  update_title();
 }
 
 bool MainWindow::save_document() {
@@ -280,18 +338,37 @@ bool MainWindow::save_path(const QString& path) {
 }
 
 std::optional<core::TextEncoding> MainWindow::choose_encoding() {
+  return prompt_for_encoding(
+      std::vector<core::TextEncoding>(kTextEncodings.begin(),
+                                      kTextEncodings.end()),
+      tr("Encoding:"));
+}
+
+std::optional<core::TextEncoding> MainWindow::prompt_for_encoding(
+    const std::vector<core::TextEncoding>& candidates,
+    const QString& explanation) {
+  const std::vector<core::TextEncoding> choices =
+      candidates.empty()
+          ? std::vector<core::TextEncoding>(kTextEncodings.begin(),
+                                            kTextEncodings.end())
+          : candidates;
   QStringList names;
-  for (const core::TextEncoding encoding : kTextEncodings) {
+  int current_index = 0;
+  for (std::size_t index = 0; index < choices.size(); ++index) {
+    const core::TextEncoding encoding = choices[index];
     names.append(encoding_name(encoding));
+    if (encoding == encoding_) {
+      current_index = static_cast<int>(index);
+    }
   }
   bool accepted = false;
   const QString selected = QInputDialog::getItem(
-      this, tr("Select text encoding"), tr("Encoding:"), names,
-      static_cast<int>(encoding_), false, &accepted);
+      this, tr("Select text encoding"), explanation, names, current_index,
+      false, &accepted);
   if (!accepted) {
     return std::nullopt;
   }
-  for (const core::TextEncoding encoding : kTextEncodings) {
+  for (const core::TextEncoding encoding : choices) {
     if (selected == encoding_name(encoding)) {
       return encoding;
     }

@@ -5,6 +5,7 @@
 
 #include <exception>
 #include <optional>
+#include <vector>
 
 #include <QMainWindow>
 #include <QString>
@@ -18,16 +19,27 @@ class QPlainTextEdit;
 
 namespace jwpqt::qt {
 
+enum class OpenMode {
+  kInteractive,
+  kNonInteractive,
+};
+
 class MainWindow : public QMainWindow {
  public:
   explicit MainWindow(QWidget* parent = nullptr);
 
-  bool open_path(const QString& path, core::TextEncoding encoding);
+  bool open_path(const QString& path, core::TextEncoding encoding,
+                 OpenMode mode = OpenMode::kInteractive);
+  bool open_path_detected(const QString& path,
+                          OpenMode mode = OpenMode::kInteractive);
   bool save_path(const QString& path);
   core::TextEncoding text_encoding() const noexcept;
 
  protected:
   void closeEvent(QCloseEvent* event) override;
+  virtual std::optional<core::TextEncoding> prompt_for_encoding(
+      const std::vector<core::TextEncoding>& candidates,
+      const QString& explanation);
 
  private:
   void create_actions();
@@ -37,6 +49,7 @@ class MainWindow : public QMainWindow {
   bool save_document_as();
   bool maybe_save();
   std::optional<core::TextEncoding> choose_encoding();
+  void load_document(const QString& path, const core::TextFile& file);
   void set_text_encoding(core::TextEncoding encoding, bool mark_modified);
   void update_encoding_display();
   void update_title();
