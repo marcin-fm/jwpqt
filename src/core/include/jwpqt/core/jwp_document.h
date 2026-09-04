@@ -79,6 +79,7 @@ class JwpFormatError : public std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
+bool has_jwp_document_magic(std::string_view bytes) noexcept;
 JwpDocument decode_jwp_document(std::string_view bytes);
 std::string encode_jwp_document(const JwpDocument& document);
 

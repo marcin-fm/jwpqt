@@ -38,8 +38,13 @@ legacy file structures.
    and legacy typing/deletion coalescing.
 10. `95e2937` adds paragraph-local forward/backward search, legacy ASCII/JASCII
     comparison, and strongly exception-safe replacement.
-11. The current slice maps flat Unicode edits to checked paragraph mutations
-    while preserving formatting and protecting structural hard page breaks.
+11. `b44feb9` maps flat Unicode edits to checked paragraph mutations while
+    preserving formatting and protecting structural hard page breaks.
+12. `984829a` adds atomic native file I/O for complete JWP containers.
+13. `74d39dc` names and parses the recovered CP1250 through CP1258 tables.
+14. The current slice opens, edits, and saves JWP documents in the native Qt
+    window while preserving metadata, paragraph formatting, and hard page
+    breaks. Its explicit code-page selector can be set before a file is opened.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -48,16 +53,14 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Integrate JWP documents with native open/save while preserving metadata and
-   the selected CP1250 through CP1258 extension table.
-2. Expose document selection, clipboard, search/replace, and undo/redo actions
+1. Expose document selection, clipboard, search/replace, and undo/redo actions
    through the native editor.
-3. Port kana-to-kanji conversion and dictionary lookup with fixtures captured
+2. Port kana-to-kanji conversion and dictionary lookup with fixtures captured
    from the recovered implementation.
-4. Replace `QPlainTextEdit` scaffolding with a custom Qt editor surface once the
+3. Replace `QPlainTextEdit` scaffolding with a custom Qt editor surface once the
    paragraph model can drive wrapping, selection, conversion spans, and kanji
    coloring.
-5. Port lookup tools, configuration, and printing as separate vertical slices.
+4. Port lookup tools, configuration, and printing as separate vertical slices.
 
 Each slice is committed independently after focused tests and the complete
 CTest suite pass.

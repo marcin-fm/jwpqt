@@ -259,6 +259,14 @@ JwpDocument decode_impl(std::string_view bytes) {
 
 }  // namespace
 
+bool has_jwp_document_magic(std::string_view bytes) noexcept {
+  return bytes.size() >= 4 &&
+         static_cast<std::uint8_t>(bytes[0]) == 0x67U &&
+         static_cast<std::uint8_t>(bytes[1]) == 0x26U &&
+         static_cast<std::uint8_t>(bytes[2]) == 0x02U &&
+         static_cast<std::uint8_t>(bytes[3]) == 0x42U;
+}
+
 JwpDocument decode_jwp_document(std::string_view bytes) {
   try {
     return decode_impl(bytes);

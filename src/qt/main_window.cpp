@@ -2,9 +2,13 @@
 
 #include "main_window.h"
 
+#include <algorithm>
 #include <array>
 #include <exception>
 #include <optional>
+#include <string>
+#include <string_view>
+#include <utility>
 
 #include <QAction>
 #include <QActionGroup>
@@ -20,10 +24,13 @@
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QStatusBar>
+#include <QTextCursor>
 #include <QTextDocument>
 
-#include "jwpqt/core/text_detection.h"
 #include "file_io.h"
+#include "jwpqt/core/jwp_plain_text.h"
+#include "jwpqt/core/plain_text_change.h"
+#include "jwpqt/core/text_detection.h"
 #include "text_bridge.h"
 
 namespace jwpqt::qt {
@@ -35,8 +42,21 @@ constexpr std::array<core::TextEncoding, 6> kTextEncodings{
     core::TextEncoding::kOldJis,    core::TextEncoding::kNecJis,
 };
 
+constexpr std::array<core::LegacyCodePage, 9> kLegacyCodePages{
+    core::LegacyCodePage::k1250, core::LegacyCodePage::k1251,
+    core::LegacyCodePage::k1252, core::LegacyCodePage::k1253,
+    core::LegacyCodePage::k1254, core::LegacyCodePage::k1255,
+    core::LegacyCodePage::k1256, core::LegacyCodePage::k1257,
+    core::LegacyCodePage::k1258,
+};
+
 QString encoding_name(core::TextEncoding encoding) {
   const std::string_view name = core::text_encoding_name(encoding);
+  return QString::fromLatin1(name.data(), static_cast<qsizetype>(name.size()));
+}
+
+QString code_page_name(core::LegacyCodePage code_page) {
+  const std::string_view name = core::legacy_code_page_name(code_page);
   return QString::fromLatin1(name.data(), static_cast<qsizetype>(name.size()));
 }
 
@@ -58,20 +78,29 @@ QString encoding_filter(core::TextEncoding encoding) {
   throw core::TextFileError("Unknown text encoding");
 }
 
+QString jwp_filter() { return MainWindow::tr("JWP documents (*.jwp)"); }
+
 QString file_filters() {
-  return encoding_filter(core::TextEncoding::kUtf8) + QStringLiteral(";;") +
-         encoding_filter(core::TextEncoding::kEucJp) + QStringLiteral(";;") +
-         encoding_filter(core::TextEncoding::kShiftJis) +
-         QStringLiteral(";;") +
-         encoding_filter(core::TextEncoding::kNewJis) +
-         QStringLiteral(";;") +
-         encoding_filter(core::TextEncoding::kOldJis) +
-         QStringLiteral(";;") +
-         encoding_filter(core::TextEncoding::kNecJis) +
-         QStringLiteral(";;") + MainWindow::tr("All files (*)");
+  QString filters = jwp_filter();
+  for (const core::TextEncoding encoding : kTextEncodings) {
+    filters += QStringLiteral(";;") + encoding_filter(encoding);
+  }
+  return filters + QStringLiteral(";;") + MainWindow::tr("All files (*)");
 }
 
 QString all_files_filter() { return MainWindow::tr("All files (*)"); }
+
+std::size_t utf32_offset_for_utf16(const QString& text, int offset) {
+  if (offset < 0 || offset > text.size()) {
+    throw core::PlainTextChangeError("Qt text change offset is out of bounds");
+  }
+  if (offset > 0 && offset < text.size() &&
+      text.at(offset - 1).isHighSurrogate() && text.at(offset).isLowSurrogate()) {
+    throw core::PlainTextChangeError(
+        "Qt text change splits a Unicode surrogate pair");
+  }
+  return from_qstring(text.left(offset)).size();
+}
 
 std::optional<core::TextEncoding> encoding_from_filter(const QString& filter) {
   for (const core::TextEncoding encoding : kTextEncodings) {
@@ -88,7 +117,8 @@ MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
       editor_(new QPlainTextEdit(this)),
       encoding_label_(new QLabel(this)),
-      encoding_actions_(new QActionGroup(this)) {
+      encoding_actions_(new QActionGroup(this)),
+      jwp_code_page_menu_(nullptr) {
   setCentralWidget(editor_);
   editor_->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
   editor_->setLineWrapMode(QPlainTextEdit::WidgetWidth);
@@ -99,6 +129,10 @@ MainWindow::MainWindow(QWidget* parent)
   update_encoding_display();
   resize(900, 680);
 
+  connect(editor_->document(), &QTextDocument::contentsChange, this,
+          [this](int position, int chars_removed, int chars_added) {
+            synchronize_jwp_document(position, chars_removed, chars_added);
+          });
   connect(editor_->document(), &QTextDocument::modificationChanged, this,
           [this] { update_title(); });
   update_title();
@@ -184,18 +218,38 @@ void MainWindow::create_actions() {
       set_text_encoding(encoding, true);
     });
   }
-  update_encoding_display();
+
+  encoding_menu->addSeparator();
+  jwp_code_page_menu_ = encoding_menu->addMenu(tr("J&WP code page"));
+  QActionGroup* code_page_group = new QActionGroup(this);
+  code_page_group->setExclusive(true);
+  for (const core::LegacyCodePage code_page : kLegacyCodePages) {
+    QAction* action = jwp_code_page_menu_->addAction(code_page_name(code_page));
+    action->setCheckable(true);
+    action->setData(static_cast<int>(code_page));
+    code_page_group->addAction(action);
+    jwp_code_page_actions_.push_back(action);
+    connect(action, &QAction::triggered, this,
+            [this, code_page] { set_jwp_code_page(code_page); });
+  }
 }
 
 void MainWindow::new_document() {
   if (!maybe_save()) {
     return;
   }
+  jwp_document_.reset();
+  saved_jwp_document_.reset();
+  pristine_jwp_document_.reset();
+  rendered_jwp_text_.clear();
+  updating_editor_ = true;
   editor_->clear();
+  updating_editor_ = false;
   editor_->document()->setModified(false);
   current_path_.clear();
   has_byte_order_mark_ = false;
   set_text_encoding(core::TextEncoding::kUtf8, false);
+  update_encoding_display();
   update_title();
 }
 
@@ -205,11 +259,15 @@ void MainWindow::open_document() {
   }
   QString selected_filter = all_files_filter();
   const QString path = QFileDialog::getOpenFileName(
-      this, tr("Open text file"), QString(), file_filters(), &selected_filter);
+      this, tr("Open document"), QString(), file_filters(), &selected_filter);
   if (path.isEmpty()) {
     return;
   }
-  std::optional<core::TextEncoding> encoding =
+  if (selected_filter == jwp_filter()) {
+    open_jwp_path(path, jwp_code_page_);
+    return;
+  }
+  const std::optional<core::TextEncoding> encoding =
       encoding_from_filter(selected_filter);
   if (encoding.has_value()) {
     open_path(path, *encoding);
@@ -218,8 +276,8 @@ void MainWindow::open_document() {
   }
 }
 
-bool MainWindow::open_path(const QString& path,
-                           core::TextEncoding encoding, OpenMode mode) {
+bool MainWindow::open_path(const QString& path, core::TextEncoding encoding,
+                           OpenMode mode) {
   try {
     const core::TextFile file = read_text_file(path, encoding);
     load_document(path, file);
@@ -234,12 +292,38 @@ bool MainWindow::open_path(const QString& path,
   }
 }
 
+bool MainWindow::open_jwp_path(const QString& path,
+                               core::LegacyCodePage code_page,
+                               OpenMode mode) {
+  try {
+    load_jwp_document(path, read_jwp_file(path), code_page);
+    statusBar()->showMessage(
+        tr("Opened %1 as JWP (%2)").arg(path, code_page_name(code_page)),
+        3000);
+    return true;
+  } catch (const std::exception& error) {
+    if (mode == OpenMode::kInteractive) {
+      show_error(tr("Could not open %1").arg(path), error);
+    }
+    return false;
+  }
+}
+
 bool MainWindow::open_path_detected(const QString& path, OpenMode mode) {
   try {
     const std::string bytes = read_file_bytes(path);
+    if (core::has_jwp_document_magic(bytes)) {
+      load_jwp_document(path, core::decode_jwp_document(bytes),
+                        jwp_code_page_);
+      statusBar()->showMessage(
+          tr("Opened %1 as JWP (%2)")
+              .arg(path, code_page_name(jwp_code_page_)),
+          3000);
+      return true;
+    }
+
     const core::TextEncodingDetection detection =
         core::detect_text_encoding(bytes);
-
     std::optional<core::TextEncoding> encoding;
     if (detection.confidence == core::DetectionConfidence::kCertain &&
         detection.candidates.size() == 1) {
@@ -285,11 +369,42 @@ bool MainWindow::open_path_detected(const QString& path, OpenMode mode) {
 
 void MainWindow::load_document(const QString& path,
                                const core::TextFile& file) {
+  jwp_document_.reset();
+  saved_jwp_document_.reset();
+  pristine_jwp_document_.reset();
+  rendered_jwp_text_.clear();
+  updating_editor_ = true;
   editor_->setPlainText(to_qstring(file.text));
+  updating_editor_ = false;
   editor_->document()->setModified(false);
   current_path_ = path;
   encoding_ = file.encoding;
   has_byte_order_mark_ = file.has_byte_order_mark;
+  update_encoding_display();
+  update_title();
+}
+
+void MainWindow::load_jwp_document(const QString& path,
+                                    core::JwpDocument document,
+                                    core::LegacyCodePage code_page) {
+  std::optional<core::JwpDocument> pristine_document;
+  if (document.paragraphs.empty()) {
+    pristine_document = document;
+  }
+  core::JwpDocumentModel model(std::move(document));
+  std::u32string text = core::decode_jwp_plain_text(model, code_page);
+
+  updating_editor_ = true;
+  editor_->setPlainText(to_qstring(text));
+  updating_editor_ = false;
+  jwp_document_ = std::move(model);
+  saved_jwp_document_ = jwp_document_->document();
+  pristine_jwp_document_ = std::move(pristine_document);
+  rendered_jwp_text_ = std::move(text);
+  jwp_code_page_ = code_page;
+  current_path_ = path;
+  has_byte_order_mark_ = false;
+  editor_->document()->setModified(false);
   update_encoding_display();
   update_title();
 }
@@ -300,6 +415,16 @@ bool MainWindow::save_document() {
 }
 
 bool MainWindow::save_document_as() {
+  if (is_jwp_document()) {
+    QString selected_filter = jwp_filter();
+    const QString filters = jwp_filter() + QStringLiteral(";;") +
+                            all_files_filter();
+    const QString path = QFileDialog::getSaveFileName(
+        this, tr("Save JWP document"), current_path_, filters,
+        &selected_filter);
+    return !path.isEmpty() && save_path(path);
+  }
+
   QString selected_filter = encoding_filter(encoding_);
   const QString path = QFileDialog::getSaveFileName(
       this, tr("Save text file"), current_path_, file_filters(),
@@ -321,6 +446,27 @@ bool MainWindow::save_document_as() {
 
 bool MainWindow::save_path(const QString& path) {
   try {
+    if (jwp_document_.has_value()) {
+      const bool unedited_pristine =
+          pristine_jwp_document_.has_value() &&
+          saved_jwp_document_.has_value() &&
+          jwp_document_->document() == *saved_jwp_document_;
+      write_jwp_file(path, unedited_pristine ? *pristine_jwp_document_
+                                              : jwp_document_->document());
+      if (!unedited_pristine) {
+        pristine_jwp_document_.reset();
+      }
+      saved_jwp_document_ = jwp_document_->document();
+      current_path_ = path;
+      editor_->document()->setModified(false);
+      update_title();
+      statusBar()->showMessage(
+          tr("Saved %1 as JWP (%2)")
+              .arg(path, code_page_name(jwp_code_page_)),
+          3000);
+      return true;
+    }
+
     write_text_file(path, core::TextFile{
                               from_qstring(editor_->toPlainText()), encoding_,
                               has_byte_order_mark_,
@@ -378,7 +524,7 @@ std::optional<core::TextEncoding> MainWindow::prompt_for_encoding(
 
 void MainWindow::set_text_encoding(core::TextEncoding encoding,
                                    bool mark_modified) {
-  if (encoding_ == encoding) {
+  if (jwp_document_.has_value() || encoding_ == encoding) {
     return;
   }
   encoding_ = encoding;
@@ -391,15 +537,141 @@ void MainWindow::set_text_encoding(core::TextEncoding encoding,
   }
 }
 
+void MainWindow::set_jwp_code_page(core::LegacyCodePage code_page) {
+  if (jwp_code_page_ == code_page) {
+    return;
+  }
+  if (!jwp_document_.has_value()) {
+    jwp_code_page_ = code_page;
+    update_encoding_display();
+    return;
+  }
+  try {
+    std::u32string text =
+        core::decode_jwp_plain_text(*jwp_document_, code_page);
+    const bool modified = saved_jwp_document_.has_value() &&
+                          jwp_document_->document() != *saved_jwp_document_;
+    updating_editor_ = true;
+    editor_->setPlainText(to_qstring(text));
+    updating_editor_ = false;
+    rendered_jwp_text_ = std::move(text);
+    jwp_code_page_ = code_page;
+    editor_->document()->setModified(modified);
+    update_encoding_display();
+    update_title();
+  } catch (const std::exception& error) {
+    show_error(tr("Could not use %1").arg(code_page_name(code_page)), error);
+    update_encoding_display();
+  }
+}
+
+void MainWindow::synchronize_jwp_document(int position, int chars_removed,
+                                          int chars_added) {
+  if (updating_editor_ || !jwp_document_.has_value()) {
+    return;
+  }
+
+  const int cursor_position = editor_->textCursor().position();
+  int rejected_selection_start = -1;
+  int rejected_selection_end = -1;
+  try {
+    const QString current_qt = editor_->toPlainText();
+    std::u32string current = from_qstring(current_qt);
+    if (current == rendered_jwp_text_) {
+      return;
+    }
+
+    const std::size_t prefix = utf32_offset_for_utf16(current_qt, position);
+    const std::size_t replacement_end =
+        utf32_offset_for_utf16(current_qt, position + chars_added);
+    const std::size_t removed_length =
+        static_cast<std::size_t>(chars_removed);
+    const std::size_t replacement_length = replacement_end - prefix;
+    current = core::replace_plain_text_snapshot(
+        rendered_jwp_text_, current, prefix, removed_length,
+        std::u32string_view(current).substr(prefix, replacement_length));
+    if (chars_removed != 0) {
+      rejected_selection_start = position;
+      rejected_selection_end = position + chars_removed;
+    }
+
+    core::JwpDocumentModel updated = *jwp_document_;
+    core::replace_jwp_plain_text(
+        updated, prefix, removed_length,
+        std::u32string_view(current).substr(
+            prefix, replacement_length),
+        jwp_code_page_);
+    const bool modified = !saved_jwp_document_.has_value() ||
+                          updated.document() != *saved_jwp_document_;
+    jwp_document_ = std::move(updated);
+    rendered_jwp_text_ = std::move(current);
+    editor_->document()->setModified(modified);
+  } catch (const std::exception& error) {
+    restore_jwp_editor_text(cursor_position, rejected_selection_start,
+                            rejected_selection_end);
+    statusBar()->showMessage(
+        tr("Edit rejected: %1").arg(QString::fromUtf8(error.what())), 5000);
+  }
+}
+
+void MainWindow::restore_jwp_editor_text(int cursor_position,
+                                         int selection_start,
+                                         int selection_end) {
+  const bool modified = saved_jwp_document_.has_value() &&
+                        jwp_document_->document() != *saved_jwp_document_;
+  updating_editor_ = true;
+  editor_->undo();
+  if (from_qstring(editor_->toPlainText()) != rendered_jwp_text_) {
+    editor_->setPlainText(to_qstring(rendered_jwp_text_));
+    QTextCursor cursor = editor_->textCursor();
+    cursor.setPosition(
+        std::min(cursor_position, editor_->document()->characterCount() - 1));
+    editor_->setTextCursor(cursor);
+  }
+  if (selection_start >= 0 && selection_end >= selection_start) {
+    QTextCursor cursor = editor_->textCursor();
+    cursor.setPosition(selection_start);
+    cursor.setPosition(selection_end, QTextCursor::KeepAnchor);
+    editor_->setTextCursor(cursor);
+  }
+  updating_editor_ = false;
+  editor_->document()->setModified(modified);
+  update_title();
+}
+
 void MainWindow::update_encoding_display() {
-  encoding_label_->setText(encoding_name(encoding_));
+  const bool jwp = jwp_document_.has_value();
+  encoding_label_->setText(
+      jwp ? tr("JWP / %1").arg(code_page_name(jwp_code_page_))
+          : encoding_name(encoding_));
   for (QAction* action : encoding_actions_->actions()) {
-    action->setChecked(action->data().toInt() == static_cast<int>(encoding_));
+    action->setEnabled(!jwp);
+    action->setChecked(!jwp && action->data().toInt() ==
+                                   static_cast<int>(encoding_));
+  }
+  if (jwp_code_page_menu_ != nullptr) {
+    jwp_code_page_menu_->setEnabled(true);
+  }
+  for (QAction* action : jwp_code_page_actions_) {
+    action->setChecked(action->data().toInt() ==
+                       static_cast<int>(jwp_code_page_));
   }
 }
 
 core::TextEncoding MainWindow::text_encoding() const noexcept {
   return encoding_;
+}
+
+bool MainWindow::is_jwp_document() const noexcept {
+  return jwp_document_.has_value();
+}
+
+core::LegacyCodePage MainWindow::jwp_code_page() const noexcept {
+  return jwp_code_page_;
+}
+
+const core::JwpDocument* MainWindow::current_jwp_document() const noexcept {
+  return jwp_document_.has_value() ? &jwp_document_->document() : nullptr;
 }
 
 bool MainWindow::maybe_save() {

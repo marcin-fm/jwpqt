@@ -67,6 +67,21 @@ void write_current_paragraph_header(ByteWriter& writer,
   writer.write_bytes(std::string(7, '\0'));
 }
 
+void test_magic_recognition() {
+  expect(jwpqt::core::has_jwp_document_magic(
+             std::string("\x67\x26\x02\x42", 4)),
+         "JWP magic was not recognized");
+  expect(jwpqt::core::has_jwp_document_magic(
+             std::string("\x67\x26\x02\x42payload", 11)),
+         "JWP magic with trailing payload was not recognized");
+  expect(!jwpqt::core::has_jwp_document_magic(
+             std::string("\x67\x26\x02", 3)),
+         "Truncated JWP magic was accepted");
+  expect(!jwpqt::core::has_jwp_document_magic(
+             std::string("\x67\x26\x02\x41", 4)),
+         "Incorrect JWP magic was accepted");
+}
+
 void test_minimal_exact_fixture() {
   ByteWriter expected;
   write_header(expected, "J1.20", 1);
@@ -330,6 +345,7 @@ void test_invalid_models() {
 }  // namespace
 
 int main() {
+  test_magic_recognition();
   test_minimal_exact_fixture();
   test_metadata_formatting_and_escaped_bytes();
   test_old_versions();

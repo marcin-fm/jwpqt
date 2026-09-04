@@ -77,6 +77,12 @@ add_executable(jwpqt_jwp_search_tests
 target_link_libraries(jwpqt_jwp_search_tests PRIVATE jwpqt_core)
 target_compile_options(jwpqt_jwp_search_tests PRIVATE -Wall -Wextra -Wpedantic)
 
+add_executable(jwpqt_plain_text_change_tests
+  plain_text_change_test.cpp
+)
+target_link_libraries(jwpqt_plain_text_change_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_plain_text_change_tests PRIVATE -Wall -Wextra -Wpedantic)
+
 add_executable(jwpqt_legacy_text_tests
   legacy_text_test.cpp
 )
@@ -112,6 +118,7 @@ add_test(NAME core_jwp_document_model COMMAND jwpqt_jwp_document_model_tests)
 add_test(NAME core_jwp_document_history COMMAND jwpqt_jwp_document_history_tests)
 add_test(NAME core_jwp_plain_text COMMAND jwpqt_jwp_plain_text_tests)
 add_test(NAME core_jwp_search COMMAND jwpqt_jwp_search_tests)
+add_test(NAME core_plain_text_change COMMAND jwpqt_plain_text_change_tests)
 add_test(NAME core_legacy_code_page COMMAND jwpqt_legacy_code_page_tests)
 add_test(NAME core_legacy_text COMMAND jwpqt_legacy_text_tests)
 add_test(NAME core_text_file COMMAND jwpqt_text_file_tests)

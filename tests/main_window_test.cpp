@@ -15,6 +15,7 @@
 #include <QTextDocument>
 
 #include "file_io.h"
+#include "jwpqt/core/jwp_text_codec.h"
 #include "main_window.h"
 
 namespace {
@@ -55,6 +56,28 @@ QAction* find_encoding_action(jwpqt::qt::MainWindow& window,
     }
   }
   return nullptr;
+}
+
+jwpqt::core::JwpParagraph paragraph(std::u32string_view text,
+                                    std::int16_t line_spacing = 100) {
+  jwpqt::core::JwpParagraph result;
+  result.text = jwpqt::core::encode_jwp_text(text);
+  result.line_spacing = line_spacing;
+  return result;
+}
+
+jwpqt::core::JwpDocument sample_jwp_document() {
+  jwpqt::core::JwpDocument document;
+  document.margins = {1.0F, 1.25F, 1.5F, 1.75F};
+  document.landscape = true;
+  document.summary[0] = jwpqt::core::encode_jwp_text(U"Sample title");
+  document.headers[0][0] = jwpqt::core::encode_jwp_text(U"Header");
+  document.paragraphs = {paragraph(U"A\u65e5\u672c", 125),
+                         paragraph(U"\u00e9", 150)};
+  document.paragraphs[0].first_indent = -2;
+  document.paragraphs[0].left_indent = 3;
+  document.paragraphs[0].right_indent = 4;
+  return document;
 }
 
 void test_explicit_open_and_encoding_action(const QString& directory) {
@@ -238,6 +261,211 @@ void test_ascii_and_unknown_prompts(const QString& directory) {
           "Unknown detection unexpectedly constrained encoding choices");
 }
 
+void test_jwp_open_edit_and_save(const QString& directory) {
+  const QString source_path = directory + QStringLiteral("/source.jwp");
+  const jwpqt::core::JwpDocument source = sample_jwp_document();
+  jwpqt::qt::write_jwp_file(source_path, source);
+  require(jwpqt::core::has_jwp_document_magic(
+              std::string_view(read_bytes(source_path).constData(), 4)),
+          "Written JWP file did not contain the JWP magic");
+
+  jwpqt::qt::MainWindow window;
+  require(window.open_path_detected(source_path),
+          "Detected open did not recognize JWP document");
+  require(window.is_jwp_document(), "Window did not retain JWP mode");
+  require(window.current_jwp_document() != nullptr &&
+              *window.current_jwp_document() == source,
+          "JWP open did not retain document metadata");
+
+  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  require(editor != nullptr, "JWP window has no editor");
+  require(editor->toPlainText() == QStringLiteral("A\u65e5\u672c\n\u00e9"),
+          "JWP body was not exposed as Unicode text");
+  QLabel* label = window.findChild<QLabel*>(QStringLiteral("documentEncoding"));
+  require(label != nullptr &&
+              label->text() == QStringLiteral("JWP / windows-1252"),
+          "JWP status did not show the active code page");
+
+  QTextCursor cursor = editor->textCursor();
+  cursor.setPosition(0);
+  cursor.setPosition(1, QTextCursor::KeepAnchor);
+  cursor.insertText(QStringLiteral("B"));
+  require(editor->document()->isModified(),
+          "JWP text edit did not mark the document modified");
+
+  jwpqt::core::JwpDocument expected = source;
+  expected.paragraphs[0].text =
+      jwpqt::core::encode_jwp_text(U"B\u65e5\u672c");
+  require(window.current_jwp_document() != nullptr &&
+              *window.current_jwp_document() == expected,
+          "JWP text edit did not preserve non-body metadata and formatting");
+
+  const QString saved_path = directory + QStringLiteral("/saved.jwp");
+  require(window.save_path(saved_path), "Could not save edited JWP document");
+  require(jwpqt::qt::read_jwp_file(saved_path) == expected,
+          "Saved JWP document did not match the edited model");
+  require(!editor->document()->isModified(),
+          "Saving JWP did not clear modified state");
+}
+
+void test_jwp_code_page_switch(const QString& directory) {
+  jwpqt::core::JwpDocument source;
+  source.paragraphs = {jwpqt::core::JwpParagraph{{0xc0}}};
+  const QString source_path = directory + QStringLiteral("/code-page.jwp");
+  jwpqt::qt::write_jwp_file(source_path, source);
+
+  jwpqt::qt::MainWindow window;
+  require(window.open_jwp_path(source_path),
+          "Could not open JWP code-page fixture");
+  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  require(editor != nullptr &&
+              editor->toPlainText() == QStringLiteral("\u00c0"),
+          "Default CP1252 interpretation was incorrect");
+
+  QAction* cp1251 =
+      find_encoding_action(window, QStringLiteral("windows-1251"));
+  require(cp1251 != nullptr, "CP1251 action was not created");
+  cp1251->trigger();
+  require(window.jwp_code_page() == jwpqt::core::LegacyCodePage::k1251 &&
+              editor->toPlainText() == QStringLiteral("\u0410"),
+          "Changing JWP code page did not reinterpret extended bytes");
+  require(!editor->document()->isModified(),
+          "Changing JWP code page changed the source document");
+
+  const QString saved_path = directory + QStringLiteral("/code-page-saved.jwp");
+  require(window.save_path(saved_path), "Could not save code-page fixture");
+  require(jwpqt::qt::read_jwp_file(saved_path).paragraphs[0].text ==
+              jwpqt::core::JwpText{0xc0},
+          "Code-page reinterpretation changed unchanged JWP tokens");
+}
+
+void test_jwp_code_page_can_be_selected_before_open(const QString& directory) {
+  jwpqt::core::JwpDocument source;
+  source.paragraphs = {jwpqt::core::JwpParagraph{{0x80}}};
+  const QString source_path = directory + QStringLiteral("/cp1251-only.jwp");
+  jwpqt::qt::write_jwp_file(source_path, source);
+
+  jwpqt::qt::MainWindow window;
+  QAction* cp1251 =
+      find_encoding_action(window, QStringLiteral("windows-1251"));
+  require(cp1251 != nullptr && cp1251->isEnabled(),
+          "JWP code page could not be selected before opening a file");
+  cp1251->trigger();
+  require(window.jwp_code_page() == jwpqt::core::LegacyCodePage::k1251,
+          "Preselected JWP code page was not retained");
+  require(window.open_path_detected(source_path,
+                                    jwpqt::qt::OpenMode::kNonInteractive),
+          "JWP file did not use the preselected code page");
+  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  require(editor != nullptr &&
+              editor->toPlainText() == QStringLiteral("\u0402"),
+          "CP1251-only JWP byte did not decode after preselection");
+}
+
+void test_zero_paragraph_jwp_save_is_not_normalized(const QString& directory) {
+  jwpqt::core::JwpDocument source;
+  source.summary[0] = {static_cast<jwpqt::core::JisCode>('Z')};
+  const QString source_path = directory + QStringLiteral("/empty-source.jwp");
+  const QString saved_path = directory + QStringLiteral("/empty-saved.jwp");
+  jwpqt::qt::write_jwp_file(source_path, source);
+
+  jwpqt::qt::MainWindow window;
+  require(window.open_jwp_path(source_path),
+          "Could not open zero-paragraph JWP fixture");
+  require(window.save_path(saved_path),
+          "Could not save zero-paragraph JWP fixture");
+  require(jwpqt::qt::read_jwp_file(saved_path) == source,
+          "Unedited zero-paragraph JWP file was normalized on save");
+
+  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  require(editor != nullptr, "Editor was not created for zero-paragraph JWP");
+  editor->insertPlainText(QStringLiteral("A"));
+  require(editor->document()->isModified(),
+          "Editing zero-paragraph JWP did not mark it modified");
+  editor->undo();
+  require(editor->toPlainText().isEmpty() &&
+              !editor->document()->isModified(),
+          "Undo did not restore zero-paragraph JWP saved state");
+  const QString undo_saved_path =
+      directory + QStringLiteral("/empty-undo-saved.jwp");
+  require(window.save_path(undo_saved_path),
+          "Could not save undone zero-paragraph JWP fixture");
+  require(jwpqt::qt::read_jwp_file(undo_saved_path) == source,
+          "Edit then undo normalized a zero-paragraph JWP file");
+}
+
+void test_jwp_rejects_lossy_edits(const QString& directory) {
+  jwpqt::core::JwpDocument source;
+  source.paragraphs = {paragraph(U"A"), paragraph(U""), paragraph(U"B")};
+  source.paragraphs[1].page_break = true;
+  const QString source_path = directory + QStringLiteral("/page-break.jwp");
+  jwpqt::qt::write_jwp_file(source_path, source);
+
+  jwpqt::qt::MainWindow window;
+  require(window.open_jwp_path(source_path),
+          "Could not open page-break fixture");
+  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  require(editor != nullptr && editor->toPlainText() == QStringLiteral("A\n\nB"),
+          "Page-break fixture was not rendered predictably");
+
+  QTextCursor cursor = editor->textCursor();
+  cursor.setPosition(1);
+  cursor.setPosition(2, QTextCursor::KeepAnchor);
+  cursor.removeSelectedText();
+  require(editor->toPlainText() == QStringLiteral("A\n\nB") &&
+              window.current_jwp_document() != nullptr &&
+              *window.current_jwp_document() == source,
+          "Edit crossing a hard page break was not reverted");
+  require(editor->textCursor().hasSelection() &&
+              editor->textCursor().selectionStart() == 1 &&
+              editor->textCursor().selectionEnd() == 2,
+          "Rejected deletion did not restore the deleted selection");
+
+  cursor = editor->textCursor();
+  cursor.setPosition(1);
+  cursor.insertText(QStringLiteral("C"));
+  require(editor->toPlainText() == QStringLiteral("AC\n\nB"),
+          "Representable JWP edit did not apply before rejection test");
+
+  cursor = editor->textCursor();
+  cursor.setPosition(0);
+  cursor.setPosition(1, QTextCursor::KeepAnchor);
+  editor->setTextCursor(cursor);
+  cursor.insertText(QString::fromUtf8("\xF0\x9F\x98\x80"));
+  require(editor->toPlainText() == QStringLiteral("AC\n\nB"),
+          "Unrepresentable JWP text edit was not reverted");
+  require(editor->textCursor().hasSelection() &&
+              editor->textCursor().selectionStart() == 0 &&
+              editor->textCursor().selectionEnd() == 1,
+          "Rejected replacement did not restore the prior selection");
+  editor->undo();
+  require(editor->toPlainText() == QStringLiteral("A\n\nB") &&
+              *window.current_jwp_document() == source &&
+              !editor->document()->isModified(),
+          "Rejected edit destroyed the prior valid undo entry");
+}
+
+void test_jwp_rejects_non_bmp_edit(const QString& directory) {
+  jwpqt::core::JwpDocument source;
+  source.paragraphs = {paragraph(U"AB")};
+  const QString source_path = directory + QStringLiteral("/non-bmp.jwp");
+  jwpqt::qt::write_jwp_file(source_path, source);
+
+  jwpqt::qt::MainWindow window;
+  require(window.open_jwp_path(source_path),
+          "Could not open non-BMP rejection fixture");
+  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  require(editor != nullptr, "Editor was not created for non-BMP fixture");
+  QTextCursor cursor = editor->textCursor();
+  cursor.setPosition(1);
+  cursor.insertText(QString::fromUtf8("\xF0\x9F\x98\x80"));
+  require(editor->toPlainText() == QStringLiteral("AB") &&
+              window.current_jwp_document() != nullptr &&
+              *window.current_jwp_document() == source &&
+              !editor->document()->isModified(),
+          "Rejected non-BMP edit corrupted the JWP document");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -252,6 +480,12 @@ int main(int argc, char* argv[]) {
     test_detected_bom_is_preserved(directory.path());
     test_detection_prompt_and_cancellation(directory.path());
     test_ascii_and_unknown_prompts(directory.path());
+    test_jwp_open_edit_and_save(directory.path());
+    test_jwp_code_page_switch(directory.path());
+    test_jwp_code_page_can_be_selected_before_open(directory.path());
+    test_zero_paragraph_jwp_save_is_not_normalized(directory.path());
+    test_jwp_rejects_lossy_edits(directory.path());
+    test_jwp_rejects_non_bmp_edit(directory.path());
     std::cout << "All main window tests passed\n";
     return 0;
   } catch (const std::exception& error) {

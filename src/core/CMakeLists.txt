@@ -11,6 +11,7 @@ add_library(jwpqt_core STATIC
   jwp_text_codec.cpp
   legacy_code_page.cpp
   legacy_text.cpp
+  plain_text_change.cpp
   text_detection.cpp
   text_file.cpp
   utf8.cpp
