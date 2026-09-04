@@ -45,9 +45,13 @@ legacy file structures.
 14. `8258437` opens, edits, and saves JWP documents in the native Qt window
     while preserving metadata, paragraph formatting, and hard page breaks. Its
     explicit code-page selector can be set before a file is opened.
-15. The current slice exposes Find, Find Next, and Find Previous for both plain
-    text and JWP documents, including legacy ASCII/JASCII comparison and
-    bounded wrapping behavior.
+15. `4c5d529` exposes Find, Find Next, and Find Previous for both plain text and
+    JWP documents, including legacy ASCII/JASCII comparison and bounded wrap.
+16. `748d9fb` enumerates non-overlapping document matches independently of
+    cursor direction and wrapping for deterministic whole-document operations.
+17. The current slice exposes Replace Next and Replace All natively. JWP
+    replacements preserve structure and metadata, and each accepted occurrence
+    remains independently undoable as in JWPxp.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -56,8 +60,8 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Expose replacement and portable undo/redo semantics through the native
-   editor. Selection, clipboard, and search actions are already available.
+1. Replace the temporary Qt undo stack with portable JWP transaction history.
+   Selection, clipboard, search, and replacement actions are already available.
 2. Port kana-to-kanji conversion and dictionary lookup with fixtures captured
    from the recovered implementation.
 3. Replace `QPlainTextEdit` scaffolding with a custom Qt editor surface once the

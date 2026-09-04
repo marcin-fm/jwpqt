@@ -36,9 +36,11 @@ class PromptingWindow : public jwpqt::qt::MainWindow {
  public:
   std::optional<jwpqt::core::TextEncoding> next_encoding;
   std::optional<jwpqt::qt::SearchRequest> next_search;
+  std::optional<jwpqt::qt::ReplaceRequest> next_replace;
   std::vector<jwpqt::core::TextEncoding> offered_encodings;
   QString explanation;
   int search_prompt_count = 0;
+  int replace_prompt_count = 0;
 
  protected:
   std::optional<jwpqt::core::TextEncoding> prompt_for_encoding(
@@ -53,6 +55,12 @@ class PromptingWindow : public jwpqt::qt::MainWindow {
       const jwpqt::qt::SearchRequest&) override {
     ++search_prompt_count;
     return next_search;
+  }
+
+  std::optional<jwpqt::qt::ReplaceRequest> prompt_for_replace(
+      const jwpqt::qt::ReplaceRequest&) override {
+    ++replace_prompt_count;
+    return next_replace;
   }
 };
 
@@ -405,6 +413,92 @@ void test_jwp_find_uses_legacy_comparison(const QString& directory) {
           "Searching changed the JWP source model");
 }
 
+void test_plain_text_replace_actions(const QString& directory) {
+  const QString path = directory + QStringLiteral("/replace.txt");
+  jwpqt::qt::write_text_file(
+      path, jwpqt::core::TextFile{U"aa AA \u00e9 \u00c9",
+                                 jwpqt::core::TextEncoding::kUtf8, false});
+
+  PromptingWindow window;
+  require(window.open_path(path, jwpqt::core::TextEncoding::kUtf8),
+          "Could not open plain replace fixture");
+  window.next_replace = jwpqt::qt::ReplaceRequest{
+      QStringLiteral("a"), QStringLiteral("x"),
+      jwpqt::core::JwpSearchOptions{}, jwpqt::qt::ReplaceMode::kAll};
+  QAction* replace = find_action(window, "replaceAction");
+  require(replace != nullptr, "Native replace action was not created");
+  replace->trigger();
+
+  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  require(window.replace_prompt_count == 1 && editor != nullptr &&
+              editor->toPlainText() == QStringLiteral("xx xx \u00e9 \u00c9"),
+          "Replace All action did not use ASCII-only comparison");
+  editor->undo();
+  require(editor->toPlainText() == QStringLiteral("ax xx \u00e9 \u00c9"),
+          "Replace All merged independent occurrences into one undo");
+  for (int count = 0; count < 3; ++count) {
+    editor->undo();
+  }
+  require(editor->toPlainText() == QStringLiteral("aa AA \u00e9 \u00c9"),
+          "Replace All occurrences were not separately undoable");
+
+  QTextCursor cursor = editor->textCursor();
+  cursor.setPosition(0);
+  editor->setTextCursor(cursor);
+  require(window.replace_next(QStringLiteral("a"), QStringLiteral("z")) &&
+              editor->toPlainText() == QStringLiteral("az AA \u00e9 \u00c9"),
+          "Replace Next did not replace the next candidate");
+}
+
+void test_jwp_replace_preserves_structure(const QString& directory) {
+  jwpqt::core::JwpDocument source;
+  source.summary[0] = jwpqt::core::encode_jwp_text(U"replace fixture");
+  source.paragraphs = {paragraph(U"\uff21a", 125), paragraph(U"", 150),
+                       paragraph(U"A", 175)};
+  source.paragraphs[1].page_break = true;
+  const QString path = directory + QStringLiteral("/replace.jwp");
+  jwpqt::qt::write_jwp_file(path, source);
+
+  jwpqt::qt::MainWindow window;
+  require(window.open_jwp_path(path), "Could not open JWP replace fixture");
+  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  require(editor != nullptr, "JWP replace window has no editor");
+  require(window.replace_all(QStringLiteral("a"), QStringLiteral("B")) == 3,
+          "JWP Replace All did not use legacy comparison");
+  require(editor->toPlainText() == QStringLiteral("BB\n\nB"),
+          "JWP Replace All produced the wrong visible text");
+  const jwpqt::core::JwpDocument* replaced = window.current_jwp_document();
+  require(replaced != nullptr && replaced->summary == source.summary &&
+              replaced->paragraphs.size() == 3 &&
+              replaced->paragraphs[0].line_spacing == 125 &&
+              replaced->paragraphs[1].page_break &&
+              replaced->paragraphs[1].line_spacing == 150 &&
+              replaced->paragraphs[2].line_spacing == 175,
+          "JWP Replace All changed document structure or metadata");
+
+  editor->undo();
+  require(editor->toPlainText() == QStringLiteral("\uff21B\n\nB"),
+          "JWP Replace All merged independent occurrences into one undo");
+  editor->undo();
+  editor->undo();
+  require(window.current_jwp_document() != nullptr &&
+              *window.current_jwp_document() == source,
+          "JWP Replace All occurrences were not separately undoable");
+
+  QTextCursor selection = editor->textCursor();
+  selection.setPosition(2);
+  selection.setPosition(3, QTextCursor::KeepAnchor);
+  editor->setTextCursor(selection);
+  const QString before = editor->toPlainText();
+  require(!window.replace_next(QStringLiteral("a"),
+                               QString::fromUtf8("\xF0\x9F\x98\x80")) &&
+              editor->toPlainText() == before &&
+              editor->textCursor().selectionStart() == 2 &&
+              editor->textCursor().selectionEnd() == 3 &&
+              *window.current_jwp_document() == source,
+          "Unrepresentable JWP replacement changed the document");
+}
+
 void test_jwp_open_edit_and_save(const QString& directory) {
   const QString source_path = directory + QStringLiteral("/source.jwp");
   const jwpqt::core::JwpDocument source = sample_jwp_document();
@@ -626,6 +720,8 @@ int main(int argc, char* argv[]) {
     test_ascii_and_unknown_prompts(directory.path());
     test_plain_text_find_actions(directory.path());
     test_jwp_find_uses_legacy_comparison(directory.path());
+    test_plain_text_replace_actions(directory.path());
+    test_jwp_replace_preserves_structure(directory.path());
     test_jwp_open_edit_and_save(directory.path());
     test_jwp_code_page_switch(directory.path());
     test_jwp_code_page_can_be_selected_before_open(directory.path());

@@ -34,6 +34,18 @@ struct SearchRequest {
   core::JwpSearchOptions options;
 };
 
+enum class ReplaceMode {
+  kNext,
+  kAll,
+};
+
+struct ReplaceRequest {
+  QString text;
+  QString replacement;
+  core::JwpSearchOptions options;
+  ReplaceMode mode = ReplaceMode::kNext;
+};
+
 class MainWindow : public QMainWindow {
  public:
   explicit MainWindow(QWidget* parent = nullptr);
@@ -52,6 +64,10 @@ class MainWindow : public QMainWindow {
   core::LegacyCodePage jwp_code_page() const noexcept;
   const core::JwpDocument* current_jwp_document() const noexcept;
   bool find_text(const QString& text, core::JwpSearchOptions options = {});
+  bool replace_next(const QString& text, const QString& replacement,
+                    core::JwpSearchOptions options = {});
+  std::size_t replace_all(const QString& text, const QString& replacement,
+                          core::JwpSearchOptions options = {});
 
  protected:
   void closeEvent(QCloseEvent* event) override;
@@ -60,6 +76,8 @@ class MainWindow : public QMainWindow {
       const QString& explanation);
   virtual std::optional<SearchRequest> prompt_for_search(
       const SearchRequest& initial);
+  virtual std::optional<ReplaceRequest> prompt_for_replace(
+      const ReplaceRequest& initial);
 
  private:
   void create_actions();
@@ -76,6 +94,7 @@ class MainWindow : public QMainWindow {
   void set_jwp_code_page(core::LegacyCodePage code_page);
   void find_document();
   void find_again(core::JwpSearchDirection direction);
+  void replace_document();
   bool find_jwp_text(const QString& text, core::JwpSearchOptions options);
   bool find_plain_text(const QString& text, core::JwpSearchOptions options);
   void synchronize_jwp_document(int position, int chars_removed,
@@ -100,6 +119,7 @@ class MainWindow : public QMainWindow {
   std::u32string rendered_jwp_text_;
   core::LegacyCodePage jwp_code_page_ = core::kDefaultLegacyCodePage;
   QString search_text_;
+  QString replacement_text_;
   core::JwpSearchOptions search_options_;
   bool updating_editor_ = false;
 };

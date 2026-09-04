@@ -31,6 +31,7 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QRadioButton>
+#include <QScopedValueRollback>
 #include <QStatusBar>
 #include <QTextCursor>
 #include <QTextDocument>
@@ -254,6 +255,12 @@ void MainWindow::create_actions() {
   connect(find_previous_action, &QAction::triggered, this, [this] {
     find_again(core::JwpSearchDirection::kBackward);
   });
+
+  QAction* replace_action = edit_menu->addAction(tr("&Replace..."));
+  replace_action->setObjectName(QStringLiteral("replaceAction"));
+  replace_action->setShortcut(QKeySequence::Replace);
+  connect(replace_action, &QAction::triggered, this,
+          [this] { replace_document(); });
 
   QMenu* encoding_menu = menuBar()->addMenu(tr("E&ncoding"));
   encoding_actions_->setExclusive(true);
@@ -624,6 +631,75 @@ std::optional<SearchRequest> MainWindow::prompt_for_search(
           ignore_case->isChecked(), jascii->isChecked(), wrap->isChecked()}};
 }
 
+std::optional<ReplaceRequest> MainWindow::prompt_for_replace(
+    const ReplaceRequest& initial) {
+  QDialog dialog(this);
+  dialog.setWindowTitle(tr("Replace"));
+
+  auto* layout = new QVBoxLayout(&dialog);
+  auto* form = new QFormLayout();
+  auto* text = new QLineEdit(initial.text, &dialog);
+  text->setObjectName(QStringLiteral("replaceFindText"));
+  form->addRow(tr("Find:"), text);
+  auto* replacement = new QLineEdit(initial.replacement, &dialog);
+  replacement->setObjectName(QStringLiteral("replacementText"));
+  form->addRow(tr("Replace with:"), replacement);
+  layout->addLayout(form);
+
+  auto* ignore_case = new QCheckBox(tr("Ignore ASCII case"), &dialog);
+  ignore_case->setChecked(initial.options.ignore_ascii_case);
+  layout->addWidget(ignore_case);
+  auto* jascii = new QCheckBox(tr("Treat full-width ASCII as ASCII"), &dialog);
+  jascii->setChecked(initial.options.jascii_ascii_equivalence);
+  jascii->setEnabled(is_jwp_document());
+  layout->addWidget(jascii);
+  auto* wrap = new QCheckBox(tr("Wrap around for Replace Next"), &dialog);
+  wrap->setChecked(initial.options.wrap);
+  layout->addWidget(wrap);
+
+  auto* direction = new QHBoxLayout();
+  auto* forward = new QRadioButton(tr("Forward"), &dialog);
+  auto* backward = new QRadioButton(tr("Backward"), &dialog);
+  forward->setChecked(initial.options.direction ==
+                      core::JwpSearchDirection::kForward);
+  backward->setChecked(initial.options.direction ==
+                       core::JwpSearchDirection::kBackward);
+  direction->addWidget(forward);
+  direction->addWidget(backward);
+  layout->addLayout(direction);
+
+  ReplaceMode mode = initial.mode;
+  auto* buttons = new QDialogButtonBox(&dialog);
+  QPushButton* replace_button = buttons->addButton(
+      tr("Replace Next"), QDialogButtonBox::ActionRole);
+  QPushButton* replace_all_button = buttons->addButton(
+      tr("Replace All"), QDialogButtonBox::ActionRole);
+  buttons->addButton(QDialogButtonBox::Cancel);
+  connect(replace_button, &QPushButton::clicked, &dialog, [&] {
+    mode = ReplaceMode::kNext;
+    dialog.accept();
+  });
+  connect(replace_all_button, &QPushButton::clicked, &dialog, [&] {
+    mode = ReplaceMode::kAll;
+    dialog.accept();
+  });
+  connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+  layout->addWidget(buttons);
+
+  text->selectAll();
+  text->setFocus();
+  if (dialog.exec() != QDialog::Accepted) {
+    return std::nullopt;
+  }
+  return ReplaceRequest{
+      text->text(), replacement->text(),
+      core::JwpSearchOptions{
+          backward->isChecked() ? core::JwpSearchDirection::kBackward
+                                : core::JwpSearchDirection::kForward,
+          ignore_case->isChecked(), jascii->isChecked(), wrap->isChecked()},
+      mode};
+}
+
 void MainWindow::set_text_encoding(core::TextEncoding encoding,
                                    bool mark_modified) {
   if (jwp_document_.has_value() || encoding_ == encoding) {
@@ -683,6 +759,19 @@ void MainWindow::find_again(core::JwpSearchDirection direction) {
   core::JwpSearchOptions options = search_options_;
   options.direction = direction;
   find_text(search_text_, options);
+}
+
+void MainWindow::replace_document() {
+  const std::optional<ReplaceRequest> request = prompt_for_replace(
+      ReplaceRequest{search_text_, replacement_text_, search_options_});
+  if (!request.has_value()) {
+    return;
+  }
+  if (request->mode == ReplaceMode::kAll) {
+    replace_all(request->text, request->replacement, request->options);
+  } else {
+    replace_next(request->text, request->replacement, request->options);
+  }
 }
 
 bool MainWindow::find_text(const QString& text,
@@ -777,6 +866,155 @@ bool MainWindow::find_plain_text(const QString& text,
                                    : tr("Match found"),
                            2000);
   return true;
+}
+
+bool MainWindow::replace_next(const QString& text,
+                              const QString& replacement,
+                              core::JwpSearchOptions options) {
+  replacement_text_ = replacement;
+  if (text.isEmpty()) {
+    statusBar()->showMessage(tr("Enter text to replace"), 3000);
+    return false;
+  }
+
+  const QTextCursor original = editor_->textCursor();
+  try {
+    if (is_jwp_document()) {
+      core::JwpDocumentModel validation;
+      core::replace_jwp_plain_text(validation, 0, 0,
+                                   from_qstring(replacement), jwp_code_page_);
+    }
+    if (!find_text(text, options)) {
+      return false;
+    }
+    QTextCursor match = editor_->textCursor();
+    std::optional<core::JwpDocument> expected_jwp;
+    if (is_jwp_document()) {
+      const QString current = editor_->toPlainText();
+      const std::size_t begin =
+          utf32_offset_for_utf16(current, match.selectionStart());
+      const std::size_t end =
+          utf32_offset_for_utf16(current, match.selectionEnd());
+      core::JwpDocumentModel candidate(jwp_document_->document());
+      core::replace_jwp_plain_text(candidate, begin, end - begin,
+                                   from_qstring(replacement), jwp_code_page_);
+      expected_jwp = candidate.document();
+    }
+
+    match.insertText(replacement);
+    if (expected_jwp.has_value() &&
+        (!jwp_document_.has_value() ||
+         jwp_document_->document() != *expected_jwp)) {
+      throw core::JwpPlainTextError(
+          "Native editor did not apply the validated JWP replacement");
+    }
+    statusBar()->showMessage(tr("Replaced one match"), 2000);
+    return true;
+  } catch (const std::exception& error) {
+    editor_->setTextCursor(original);
+    statusBar()->showMessage(
+        tr("Could not replace: %1").arg(QString::fromUtf8(error.what())),
+        5000);
+    return false;
+  }
+}
+
+std::size_t MainWindow::replace_all(const QString& text,
+                                    const QString& replacement,
+                                    core::JwpSearchOptions options) {
+  replacement_text_ = replacement;
+  if (text.isEmpty()) {
+    statusBar()->showMessage(tr("Enter text to replace"), 3000);
+    return 0;
+  }
+
+  try {
+    std::vector<std::pair<int, int>> matches;
+    std::optional<core::JwpDocumentModel> candidate_jwp;
+    std::u32string expected_jwp_text;
+    if (is_jwp_document()) {
+      const core::JwpText pattern =
+          core::encode_jwp_text(from_qstring(text), jwp_code_page_);
+      const std::vector<core::JwpRange> ranges =
+          core::find_all(*jwp_document_, pattern, options);
+      candidate_jwp.emplace(jwp_document_->document());
+      for (auto range = ranges.rbegin(); range != ranges.rend(); ++range) {
+        const std::size_t begin =
+            core::jwp_plain_text_offset(*jwp_document_, range->begin);
+        const std::size_t end =
+            core::jwp_plain_text_offset(*jwp_document_, range->end);
+        core::replace_jwp_plain_text(*candidate_jwp, begin, end - begin,
+                                     from_qstring(replacement),
+                                     jwp_code_page_);
+        matches.emplace_back(
+            utf16_offset_for_utf32(rendered_jwp_text_, begin),
+            utf16_offset_for_utf32(rendered_jwp_text_, end));
+      }
+      expected_jwp_text =
+          core::decode_jwp_plain_text(*candidate_jwp, jwp_code_page_);
+    } else {
+      const QString source = options.ignore_ascii_case
+                                 ? fold_ascii_case(editor_->toPlainText())
+                                 : editor_->toPlainText();
+      const QString pattern =
+          options.ignore_ascii_case ? fold_ascii_case(text) : text;
+      qsizetype offset = 0;
+      while (offset <= source.size() - pattern.size()) {
+        const qsizetype match = source.indexOf(pattern, offset);
+        if (match < 0) {
+          break;
+        }
+        matches.emplace_back(static_cast<int>(match),
+                             static_cast<int>(match + pattern.size()));
+        offset = match + pattern.size();
+      }
+      std::reverse(matches.begin(), matches.end());
+    }
+
+    if (matches.empty()) {
+      statusBar()->showMessage(tr("Text not found"), 3000);
+      return 0;
+    }
+    const QString original_text = editor_->toPlainText();
+    const QTextCursor original_cursor = editor_->textCursor();
+    const bool original_modified = editor_->document()->isModified();
+    {
+      QScopedValueRollback<bool> update_guard(updating_editor_,
+                                               candidate_jwp.has_value());
+      QTextCursor edit(editor_->document());
+      for (const auto& [begin, end] : matches) {
+        edit.setPosition(begin);
+        edit.setPosition(end, QTextCursor::KeepAnchor);
+        edit.insertText(replacement);
+      }
+      if (candidate_jwp.has_value() &&
+          editor_->toPlainText() != to_qstring(expected_jwp_text)) {
+        editor_->setPlainText(original_text);
+        editor_->setTextCursor(original_cursor);
+        editor_->document()->setModified(original_modified);
+        throw core::JwpPlainTextError(
+            "Native editor did not apply the validated JWP replacements");
+      }
+    }
+    if (candidate_jwp.has_value()) {
+      const bool modified = saved_jwp_document_.has_value() &&
+                            candidate_jwp->document() != *saved_jwp_document_;
+      jwp_document_.emplace(std::move(*candidate_jwp));
+      rendered_jwp_text_ = std::move(expected_jwp_text);
+      editor_->document()->setModified(modified);
+      update_title();
+    }
+    search_text_ = text;
+    search_options_ = options;
+    statusBar()->showMessage(tr("Replaced %1 matches").arg(matches.size()),
+                             3000);
+    return matches.size();
+  } catch (const std::exception& error) {
+    statusBar()->showMessage(
+        tr("Could not replace: %1").arg(QString::fromUtf8(error.what())),
+        5000);
+    return 0;
+  }
 }
 
 void MainWindow::synchronize_jwp_document(int position, int chars_removed,
