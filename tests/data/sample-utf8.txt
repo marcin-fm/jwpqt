@@ -1,0 +1,2 @@
+jwpqt UTF-8 smoke test
+日本語を編集できます。

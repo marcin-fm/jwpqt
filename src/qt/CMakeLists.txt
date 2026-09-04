@@ -1,0 +1,47 @@
+find_package(Qt6 REQUIRED COMPONENTS Widgets)
+
+add_library(jwpqt_qt_support STATIC
+  file_io.cpp
+  file_io.h
+  text_bridge.cpp
+  text_bridge.h
+)
+
+target_include_directories(jwpqt_qt_support
+  PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(jwpqt_qt_support
+  PUBLIC
+    jwpqt_core
+    Qt6::Core
+)
+
+target_compile_options(jwpqt_qt_support
+  PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+)
+
+qt_add_executable(jwpqt
+  main.cpp
+  main_window.cpp
+  main_window.h
+)
+
+target_link_libraries(jwpqt
+  PRIVATE
+    jwpqt_qt_support
+    Qt6::Widgets
+)
+
+target_compile_options(jwpqt
+  PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+)
+
+install(TARGETS jwpqt RUNTIME DESTINATION bin)
