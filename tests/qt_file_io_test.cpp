@@ -114,7 +114,7 @@ void test_jwp_encoding_failure_preserves_file(const QString& directory) {
 int main(int argc, char* argv[]) {
   QCoreApplication application(argc, argv);
   try {
-    QTemporaryDir directory(QDir::currentPath() +
+    QTemporaryDir directory(QDir::tempPath() +
                             QStringLiteral("/jwpqt-io-test-XXXXXX"));
     require(directory.isValid(), "Could not create temporary test directory");
     test_file_round_trip(directory.path(),

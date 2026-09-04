@@ -471,7 +471,7 @@ void test_jwp_rejects_non_bmp_edit(const QString& directory) {
 int main(int argc, char* argv[]) {
   QApplication application(argc, argv);
   try {
-    QTemporaryDir directory(QDir::currentPath() +
+    QTemporaryDir directory(QDir::tempPath() +
                             QStringLiteral("/jwpqt-window-test-XXXXXX"));
     require(directory.isValid(), "Could not create temporary test directory");
     test_explicit_open_and_encoding_action(directory.path());
