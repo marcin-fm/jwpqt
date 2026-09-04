@@ -3,13 +3,17 @@
 #include "main_window.h"
 
 #include <exception>
+#include <optional>
 
 #include <QAction>
+#include <QActionGroup>
 #include <QCloseEvent>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFontDatabase>
+#include <QInputDialog>
 #include <QKeySequence>
+#include <QLabel>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -17,20 +21,64 @@
 #include <QStatusBar>
 #include <QTextDocument>
 
-#include "jwpqt/core/utf8.h"
 #include "file_io.h"
 #include "text_bridge.h"
 
 namespace jwpqt::qt {
+namespace {
+
+QString encoding_name(core::TextEncoding encoding) {
+  const std::string_view name = core::text_encoding_name(encoding);
+  return QString::fromLatin1(name.data(), static_cast<qsizetype>(name.size()));
+}
+
+QString encoding_filter(core::TextEncoding encoding) {
+  switch (encoding) {
+    case core::TextEncoding::kUtf8:
+      return MainWindow::tr("UTF-8 text (*.txt *.utf8)");
+    case core::TextEncoding::kEucJp:
+      return MainWindow::tr("EUC-JP text (*.euc)");
+    case core::TextEncoding::kShiftJis:
+      return MainWindow::tr("Shift-JIS text (*.sjs *.sjis)");
+  }
+  throw core::TextFileError("Unknown text encoding");
+}
+
+QString file_filters() {
+  return encoding_filter(core::TextEncoding::kUtf8) + QStringLiteral(";;") +
+         encoding_filter(core::TextEncoding::kEucJp) + QStringLiteral(";;") +
+         encoding_filter(core::TextEncoding::kShiftJis) +
+         QStringLiteral(";;") + MainWindow::tr("All files (*)");
+}
+
+std::optional<core::TextEncoding> encoding_from_filter(const QString& filter) {
+  for (const core::TextEncoding encoding : {
+           core::TextEncoding::kUtf8,
+           core::TextEncoding::kEucJp,
+           core::TextEncoding::kShiftJis,
+       }) {
+    if (filter == encoding_filter(encoding)) {
+      return encoding;
+    }
+  }
+  return std::nullopt;
+}
+
+}  // namespace
 
 MainWindow::MainWindow(QWidget* parent)
-    : QMainWindow(parent), editor_(new QPlainTextEdit(this)) {
+    : QMainWindow(parent),
+      editor_(new QPlainTextEdit(this)),
+      encoding_label_(new QLabel(this)),
+      encoding_actions_(new QActionGroup(this)) {
   setCentralWidget(editor_);
   editor_->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
   editor_->setLineWrapMode(QPlainTextEdit::WidgetWidth);
 
   create_actions();
-  statusBar()->showMessage(tr("UTF-8"));
+  encoding_label_->setObjectName(QStringLiteral("documentEncoding"));
+  statusBar()->addPermanentWidget(encoding_label_);
+  update_encoding_display();
   resize(900, 680);
 
   connect(editor_->document(), &QTextDocument::modificationChanged, this,
@@ -106,6 +154,23 @@ void MainWindow::create_actions() {
   select_all_action->setShortcut(QKeySequence::SelectAll);
   connect(select_all_action, &QAction::triggered, editor_,
           &QPlainTextEdit::selectAll);
+
+  QMenu* encoding_menu = menuBar()->addMenu(tr("E&ncoding"));
+  encoding_actions_->setExclusive(true);
+  for (const core::TextEncoding encoding : {
+           core::TextEncoding::kUtf8,
+           core::TextEncoding::kEucJp,
+           core::TextEncoding::kShiftJis,
+       }) {
+    QAction* action = encoding_menu->addAction(encoding_name(encoding));
+    action->setCheckable(true);
+    action->setData(static_cast<int>(encoding));
+    encoding_actions_->addAction(action);
+    connect(action, &QAction::triggered, this, [this, encoding] {
+      set_text_encoding(encoding, true);
+    });
+  }
+  update_encoding_display();
 }
 
 void MainWindow::new_document() {
@@ -116,6 +181,7 @@ void MainWindow::new_document() {
   editor_->document()->setModified(false);
   current_path_.clear();
   has_byte_order_mark_ = false;
+  set_text_encoding(core::TextEncoding::kUtf8, false);
   update_title();
 }
 
@@ -123,23 +189,35 @@ void MainWindow::open_document() {
   if (!maybe_save()) {
     return;
   }
+  QString selected_filter = encoding_filter(encoding_);
   const QString path = QFileDialog::getOpenFileName(
-      this, tr("Open text file"), QString(),
-      tr("Text files (*.txt);;All files (*)"));
-  if (!path.isEmpty()) {
-    open_path(path);
+      this, tr("Open text file"), QString(), file_filters(), &selected_filter);
+  if (path.isEmpty()) {
+    return;
+  }
+  std::optional<core::TextEncoding> encoding =
+      encoding_from_filter(selected_filter);
+  if (!encoding.has_value()) {
+    encoding = choose_encoding();
+  }
+  if (encoding.has_value()) {
+    open_path(path, *encoding);
   }
 }
 
-bool MainWindow::open_path(const QString& path) {
+bool MainWindow::open_path(const QString& path,
+                           core::TextEncoding encoding) {
   try {
-    const core::Utf8File file = read_utf8_file(path);
+    const core::TextFile file = read_text_file(path, encoding);
     editor_->setPlainText(to_qstring(file.text));
     editor_->document()->setModified(false);
     current_path_ = path;
+    encoding_ = file.encoding;
     has_byte_order_mark_ = file.has_byte_order_mark;
+    update_encoding_display();
     update_title();
-    statusBar()->showMessage(tr("Opened %1 as UTF-8").arg(path), 3000);
+    statusBar()->showMessage(
+        tr("Opened %1 as %2").arg(path, encoding_name(encoding_)), 3000);
     return true;
   } catch (const std::exception& error) {
     show_error(tr("Could not open %1").arg(path), error);
@@ -148,31 +226,100 @@ bool MainWindow::open_path(const QString& path) {
 }
 
 bool MainWindow::save_document() {
-  return current_path_.isEmpty() ? save_document_as() : save_to(current_path_);
+  return current_path_.isEmpty() ? save_document_as()
+                                 : save_path(current_path_);
 }
 
 bool MainWindow::save_document_as() {
+  QString selected_filter = encoding_filter(encoding_);
   const QString path = QFileDialog::getSaveFileName(
-      this, tr("Save text file"), current_path_,
-      tr("Text files (*.txt);;All files (*)"));
-  return !path.isEmpty() && save_to(path);
+      this, tr("Save text file"), current_path_, file_filters(),
+      &selected_filter);
+  if (path.isEmpty()) {
+    return false;
+  }
+  std::optional<core::TextEncoding> encoding =
+      encoding_from_filter(selected_filter);
+  if (!encoding.has_value()) {
+    encoding = choose_encoding();
+  }
+  if (!encoding.has_value()) {
+    return false;
+  }
+  set_text_encoding(*encoding, true);
+  return save_path(path);
 }
 
-bool MainWindow::save_to(const QString& path) {
+bool MainWindow::save_path(const QString& path) {
   try {
-    write_utf8_file(path, core::Utf8File{
-                              from_qstring(editor_->toPlainText()),
+    write_text_file(path, core::TextFile{
+                              from_qstring(editor_->toPlainText()), encoding_,
                               has_byte_order_mark_,
                           });
     current_path_ = path;
     editor_->document()->setModified(false);
     update_title();
-    statusBar()->showMessage(tr("Saved %1 as UTF-8").arg(path), 3000);
+    statusBar()->showMessage(
+        tr("Saved %1 as %2").arg(path, encoding_name(encoding_)), 3000);
     return true;
   } catch (const std::exception& error) {
     show_error(tr("Could not save %1").arg(path), error);
     return false;
   }
+}
+
+std::optional<core::TextEncoding> MainWindow::choose_encoding() {
+  QStringList names;
+  for (const core::TextEncoding encoding : {
+           core::TextEncoding::kUtf8,
+           core::TextEncoding::kEucJp,
+           core::TextEncoding::kShiftJis,
+       }) {
+    names.append(encoding_name(encoding));
+  }
+  bool accepted = false;
+  const QString selected = QInputDialog::getItem(
+      this, tr("Select text encoding"), tr("Encoding:"), names,
+      static_cast<int>(encoding_), false, &accepted);
+  if (!accepted) {
+    return std::nullopt;
+  }
+  for (const core::TextEncoding encoding : {
+           core::TextEncoding::kUtf8,
+           core::TextEncoding::kEucJp,
+           core::TextEncoding::kShiftJis,
+       }) {
+    if (selected == encoding_name(encoding)) {
+      return encoding;
+    }
+  }
+  return std::nullopt;
+}
+
+void MainWindow::set_text_encoding(core::TextEncoding encoding,
+                                   bool mark_modified) {
+  if (encoding_ == encoding) {
+    return;
+  }
+  encoding_ = encoding;
+  if (encoding_ != core::TextEncoding::kUtf8) {
+    has_byte_order_mark_ = false;
+  }
+  update_encoding_display();
+  if (mark_modified) {
+    editor_->document()->setModified(true);
+  }
+}
+
+void MainWindow::update_encoding_display() {
+  encoding_label_->setText(encoding_name(encoding_));
+  for (QAction* action : encoding_actions_->actions()) {
+    action->setChecked(action->data().toInt() == static_cast<int>(encoding_));
+  }
+}
+
+core::TextEncoding MainWindow::text_encoding() const noexcept {
+  return encoding_;
 }
 
 bool MainWindow::maybe_save() {

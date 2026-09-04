@@ -25,23 +25,29 @@ target_compile_options(jwpqt_qt_support
     -Wpedantic
 )
 
-qt_add_executable(jwpqt
-  main.cpp
+add_library(jwpqt_qt_ui STATIC
   main_window.cpp
   main_window.h
 )
 
-target_link_libraries(jwpqt
-  PRIVATE
+target_link_libraries(jwpqt_qt_ui
+  PUBLIC
     jwpqt_qt_support
     Qt6::Widgets
 )
 
-target_compile_options(jwpqt
+target_compile_options(jwpqt_qt_ui
   PRIVATE
     -Wall
     -Wextra
     -Wpedantic
 )
+
+qt_add_executable(jwpqt
+  main.cpp
+)
+
+target_link_libraries(jwpqt PRIVATE jwpqt_qt_ui)
+target_compile_options(jwpqt PRIVATE -Wall -Wextra -Wpedantic)
 
 install(TARGETS jwpqt RUNTIME DESTINATION bin)

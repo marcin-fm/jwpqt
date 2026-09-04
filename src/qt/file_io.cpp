@@ -6,7 +6,6 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <utility>
 
 #include <QByteArray>
 #include <QFile>
@@ -60,16 +59,6 @@ void write_text_file(const QString& path, const core::TextFile& file) {
   if (!output.commit()) {
     throw io_error("Could not replace", path, output.errorString());
   }
-}
-
-core::Utf8File read_utf8_file(const QString& path) {
-  core::TextFile file = read_text_file(path, core::TextEncoding::kUtf8);
-  return {std::move(file.text), file.has_byte_order_mark};
-}
-
-void write_utf8_file(const QString& path, const core::Utf8File& file) {
-  write_text_file(path, {file.text, core::TextEncoding::kUtf8,
-                         file.has_byte_order_mark});
 }
 
 }  // namespace jwpqt::qt

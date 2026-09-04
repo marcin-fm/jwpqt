@@ -49,16 +49,6 @@ void test_file_round_trip(const QString& directory,
           "Text file byte-order mark did not round-trip");
 }
 
-void test_utf8_wrapper_round_trip(const QString& directory) {
-  const QString path = directory + QStringLiteral("/utf8-wrapper.txt");
-  const jwpqt::core::Utf8File expected{U"wrapper \u65e5\u672c\u8a9e", true};
-  jwpqt::qt::write_utf8_file(path, expected);
-  const jwpqt::core::Utf8File actual = jwpqt::qt::read_utf8_file(path);
-  require(actual.text == expected.text, "UTF-8 wrapper lost text");
-  require(actual.has_byte_order_mark,
-          "UTF-8 wrapper lost the byte-order mark");
-}
-
 void test_encoding_failure_preserves_file(const QString& directory) {
   const QString path = directory + QStringLiteral("/existing.txt");
   const QByteArray original("existing content");
@@ -95,7 +85,6 @@ int main(int argc, char* argv[]) {
                          jwpqt::core::TextEncoding::kEucJp, false);
     test_file_round_trip(directory.path(),
                          jwpqt::core::TextEncoding::kShiftJis, false);
-    test_utf8_wrapper_round_trip(directory.path());
     test_encoding_failure_preserves_file(directory.path());
     std::cout << "All Qt file I/O tests passed\n";
     return 0;
