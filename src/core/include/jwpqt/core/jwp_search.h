@@ -4,6 +4,7 @@
 
 #include <optional>
 #include <stdexcept>
+#include <vector>
 
 namespace jwpqt::core {
 
@@ -35,6 +36,12 @@ class JwpSearchError : public std::runtime_error {
 JwpSearchResult find_next(const JwpDocumentModel& model,
                           const JwpText& pattern, JwpPosition start,
                           JwpSearchOptions options = {});
+
+// Returns every non-overlapping match in document order. Direction and wrap
+// do not apply; the comparison flags in options are honored.
+std::vector<JwpRange> find_all(const JwpDocumentModel& model,
+                              const JwpText& pattern,
+                              JwpSearchOptions options = {});
 
 JwpPosition replace_range(JwpDocumentModel& model, JwpRange range,
                           const JwpText& replacement);

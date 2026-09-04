@@ -18,6 +18,7 @@ using jwpqt::core::JwpSearchDirection;
 using jwpqt::core::JwpSearchError;
 using jwpqt::core::JwpSearchOptions;
 using jwpqt::core::JwpText;
+using jwpqt::core::find_all;
 using jwpqt::core::find_next;
 using jwpqt::core::replace_range;
 
@@ -172,6 +173,52 @@ void test_undefined_jascii_tokens_follow_legacy_comparison() {
          "undefined JASCII tokens differ in exact mode");
 }
 
+void test_find_all_is_document_order_and_non_overlapping() {
+  JwpDocumentModel model =
+      model_with_paragraphs({{'A', 'A', 'A', 'A'}, {}, {'A', 'A'}});
+  JwpSearchOptions options;
+  options.direction = JwpSearchDirection::kBackward;
+  options.wrap = true;
+  const std::vector<JwpRange> matches =
+      find_all(model, JwpText{'a', 'a'}, options);
+  expect(matches.size() == 3, "find all match count");
+  expect(matches[0].begin == JwpPosition{0, 0} &&
+             matches[0].end == JwpPosition{0, 2},
+         "find all includes offset zero");
+  expect(matches[1].begin == JwpPosition{0, 2} &&
+             matches[1].end == JwpPosition{0, 4},
+         "find all returns adjacent non-overlapping match");
+  expect(matches[2].begin == JwpPosition{2, 0} &&
+             matches[2].end == JwpPosition{2, 2},
+         "find all continues in document order");
+
+  expect(find_all(model, JwpText{'A', 'A', 'A'}).size() == 1,
+         "find all skips overlapping candidates");
+  expect(find_all(model, {}).empty(), "empty find-all pattern is a no-op");
+  expect(find_all(model_with_paragraphs({{'A'}, {'A'}}), JwpText{'A', 'A'})
+             .empty(),
+         "find all does not cross paragraphs");
+}
+
+void test_find_all_honors_comparison_options() {
+  JwpDocumentModel model = model_with_paragraphs({{0x2341, 'A'}});
+  expect(find_all(model, JwpText{'a'}).size() == 2,
+         "find all applies default ASCII and JASCII folding");
+
+  JwpSearchOptions case_sensitive;
+  case_sensitive.ignore_ascii_case = false;
+  expect(find_all(model, JwpText{'a'}, case_sensitive).empty(),
+         "find all honors case-sensitive comparison");
+
+  JwpSearchOptions no_jascii;
+  no_jascii.jascii_ascii_equivalence = false;
+  const std::vector<JwpRange> ascii_only =
+      find_all(model, JwpText{'a'}, no_jascii);
+  expect(ascii_only.size() == 1 &&
+             ascii_only[0].begin == JwpPosition{0, 1},
+         "find all honors disabled JASCII equivalence");
+}
+
 void test_replace_is_strong_and_composes_with_history() {
   JwpDocumentModel model = model_with_paragraphs({{'A', 'B'}, {'C', 'D'}});
   JwpDocumentHistory history;
@@ -234,6 +281,8 @@ int main() {
   test_ascii_case_and_jascii_equivalence();
   test_empty_pattern_and_invalid_start();
   test_undefined_jascii_tokens_follow_legacy_comparison();
+  test_find_all_is_document_order_and_non_overlapping();
+  test_find_all_honors_comparison_options();
   test_replace_is_strong_and_composes_with_history();
   test_each_replacement_can_be_a_separate_history_entry();
   return 0;

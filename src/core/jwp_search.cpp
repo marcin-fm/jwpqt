@@ -182,6 +182,35 @@ JwpSearchResult find_next(const JwpDocumentModel& model,
   return find_forward(model, pattern, start, options);
 }
 
+std::vector<JwpRange> find_all(const JwpDocumentModel& model,
+                              const JwpText& pattern,
+                              JwpSearchOptions options) {
+  std::vector<JwpRange> matches;
+  if (pattern.empty()) {
+    return matches;
+  }
+
+  for (std::size_t paragraph = 0; paragraph < model.paragraph_count();
+       ++paragraph) {
+    const JwpText& text = model.paragraph(paragraph).text;
+    if (pattern.size() > text.size()) {
+      continue;
+    }
+    const std::size_t last = text.size() - pattern.size();
+    std::size_t offset = 0;
+    while (offset <= last) {
+      if (matches_at(text, offset, pattern, options)) {
+        matches.push_back({{paragraph, offset},
+                           {paragraph, offset + pattern.size()}});
+        offset += pattern.size();
+      } else {
+        ++offset;
+      }
+    }
+  }
+  return matches;
+}
+
 JwpPosition replace_range(JwpDocumentModel& model, JwpRange range,
                           const JwpText& replacement) {
   JwpDocumentModel updated(model.document());
