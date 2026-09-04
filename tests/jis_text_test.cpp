@@ -19,7 +19,7 @@ using jwpqt::core::JisTextEncoding;
 using jwpqt::core::JisTextError;
 
 constexpr std::array<JisTextEncoding, 3> kEncodings{
-    JisTextEncoding::kIso2022Jp,
+    JisTextEncoding::kNewJis,
     JisTextEncoding::kOldJis,
     JisTextEncoding::kNecJis,
 };
@@ -56,7 +56,7 @@ void require_error_contains(Function&& function, std::string_view expected,
 
 std::string enter(JisTextEncoding encoding) {
   switch (encoding) {
-    case JisTextEncoding::kIso2022Jp:
+    case JisTextEncoding::kNewJis:
       return "\x1b$B";
     case JisTextEncoding::kOldJis:
       return "\x1b$@";
@@ -68,7 +68,7 @@ std::string enter(JisTextEncoding encoding) {
 
 std::string leave(JisTextEncoding encoding) {
   switch (encoding) {
-    case JisTextEncoding::kIso2022Jp:
+    case JisTextEncoding::kNewJis:
     case JisTextEncoding::kOldJis:
       return "\x1b(J";
     case JisTextEncoding::kNecJis:
@@ -243,13 +243,13 @@ void check_rejections() {
   require_error_contains(
       [] {
         jwpqt::core::decode_jis_text("A\x1b$B\x24",
-                                     JisTextEncoding::kIso2022Jp);
+                                     JisTextEncoding::kNewJis);
       },
       "byte 4", "Decode errors must identify the source byte offset");
   require_error_contains(
       [] {
         jwpqt::core::encode_jis_text(U"A😀",
-                                     JisTextEncoding::kIso2022Jp);
+                                     JisTextEncoding::kNewJis);
       },
       "character 1", "Encode errors must identify the character offset");
 }

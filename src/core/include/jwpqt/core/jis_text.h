@@ -10,7 +10,7 @@
 namespace jwpqt::core {
 
 enum class JisTextEncoding {
-  kIso2022Jp,
+  kNewJis,
   kOldJis,
   kNecJis,
 };

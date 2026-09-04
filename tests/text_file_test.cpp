@@ -48,7 +48,14 @@ void test_encoding_names() {
           "Wrong EUC-JP display name");
   require(jwpqt::core::text_encoding_name(TextEncoding::kShiftJis) ==
               "Shift-JIS",
-          "Wrong Shift-JIS display name");
+           "Wrong Shift-JIS display name");
+  require(jwpqt::core::text_encoding_name(TextEncoding::kNewJis) ==
+              "New JIS",
+          "Wrong New JIS display name");
+  require(jwpqt::core::text_encoding_name(TextEncoding::kOldJis) == "Old JIS",
+          "Wrong Old JIS display name");
+  require(jwpqt::core::text_encoding_name(TextEncoding::kNecJis) == "NEC JIS",
+          "Wrong NEC JIS display name");
   require(jwpqt::core::parse_text_encoding("utf-8") == TextEncoding::kUtf8,
           "Could not parse utf-8");
   require(jwpqt::core::parse_text_encoding("euc-jp") == TextEncoding::kEucJp,
@@ -56,6 +63,15 @@ void test_encoding_names() {
   require(jwpqt::core::parse_text_encoding("shift-jis") ==
               TextEncoding::kShiftJis,
           "Could not parse shift-jis");
+  require(jwpqt::core::parse_text_encoding("new-jis") ==
+              TextEncoding::kNewJis,
+          "Could not parse new-jis");
+  require(jwpqt::core::parse_text_encoding("old-jis") ==
+              TextEncoding::kOldJis,
+          "Could not parse old-jis");
+  require(jwpqt::core::parse_text_encoding("nec-jis") ==
+              TextEncoding::kNecJis,
+          "Could not parse nec-jis");
   require(!jwpqt::core::parse_text_encoding("auto").has_value(),
           "Unknown encoding was accepted");
 }
@@ -123,6 +139,12 @@ int main() {
                      "ASCII \xc6\xfc\xcb\xdc\xb8\xec\n");
     test_legacy_file(TextEncoding::kShiftJis,
                      "ASCII \x93\xfa\x96\x7b\x8c\xea\n");
+    test_legacy_file(TextEncoding::kNewJis,
+                     "ASCII \x1b$B\x46\x7c\x4b\x5c\x38\x6c\x1b(J\n");
+    test_legacy_file(TextEncoding::kOldJis,
+                     "ASCII \x1b$@\x46\x7c\x4b\x5c\x38\x6c\x1b(J\n");
+    test_legacy_file(TextEncoding::kNecJis,
+                     "ASCII \x1bK\x46\x7c\x4b\x5c\x38\x6c\x1bH\n");
     test_invalid_metadata();
     std::cout << "All text file tests passed\n";
     return 0;

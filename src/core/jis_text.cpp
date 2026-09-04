@@ -15,8 +15,8 @@ constexpr unsigned int kEscape = 0x1bU;
 
 std::string_view encoding_name(JisTextEncoding encoding) {
   switch (encoding) {
-    case JisTextEncoding::kIso2022Jp:
-      return "ISO-2022-JP";
+    case JisTextEncoding::kNewJis:
+      return "New JIS";
     case JisTextEncoding::kOldJis:
       return "Old JIS";
     case JisTextEncoding::kNecJis:
@@ -44,7 +44,7 @@ unsigned int byte_at(std::string_view bytes, std::size_t index) {
 
 std::string_view enter_sequence(JisTextEncoding encoding) {
   switch (encoding) {
-    case JisTextEncoding::kIso2022Jp:
+    case JisTextEncoding::kNewJis:
       return "\x1b$B";
     case JisTextEncoding::kOldJis:
       return "\x1b$@";
@@ -56,7 +56,7 @@ std::string_view enter_sequence(JisTextEncoding encoding) {
 
 std::string_view exit_sequence(JisTextEncoding encoding) {
   switch (encoding) {
-    case JisTextEncoding::kIso2022Jp:
+    case JisTextEncoding::kNewJis:
     case JisTextEncoding::kOldJis:
       return "\x1b(J";
     case JisTextEncoding::kNecJis:

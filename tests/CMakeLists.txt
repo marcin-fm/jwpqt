@@ -67,6 +67,18 @@ string(ASCII 65 83 67 73 73 32 130 160 147 250 150 123 140 234 10
   sample_shift_jis)
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/sample-shift-jis.txt"
   "${sample_shift_jis}")
+string(ASCII 65 83 67 73 73 32 27 36 66 36 34 70 124 75 92 56 108 27 40 74 10
+  sample_new_jis)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/sample-new-jis.txt"
+  "${sample_new_jis}")
+string(ASCII 65 83 67 73 73 32 27 36 64 36 34 70 124 75 92 56 108 27 40 74 10
+  sample_old_jis)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/sample-old-jis.txt"
+  "${sample_old_jis}")
+string(ASCII 65 83 67 73 73 32 27 75 36 34 70 124 75 92 56 108 27 72 10
+  sample_nec_jis)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/sample-nec-jis.txt"
+  "${sample_nec_jis}")
 add_test(NAME application_encoding_euc_jp
   COMMAND jwpqt --smoke-test --encoding euc-jp
           "${CMAKE_CURRENT_BINARY_DIR}/sample-euc-jp.txt"
@@ -74,6 +86,18 @@ add_test(NAME application_encoding_euc_jp
 add_test(NAME application_encoding_shift_jis
   COMMAND jwpqt --smoke-test --encoding shift-jis
           "${CMAKE_CURRENT_BINARY_DIR}/sample-shift-jis.txt"
+)
+add_test(NAME application_encoding_new_jis
+  COMMAND jwpqt --smoke-test --encoding new-jis
+          "${CMAKE_CURRENT_BINARY_DIR}/sample-new-jis.txt"
+)
+add_test(NAME application_encoding_old_jis
+  COMMAND jwpqt --smoke-test --encoding old-jis
+          "${CMAKE_CURRENT_BINARY_DIR}/sample-old-jis.txt"
+)
+add_test(NAME application_encoding_nec_jis
+  COMMAND jwpqt --smoke-test --encoding nec-jis
+          "${CMAKE_CURRENT_BINARY_DIR}/sample-nec-jis.txt"
 )
 add_test(NAME application_invalid_encoding
   COMMAND "${CMAKE_COMMAND}"
@@ -85,6 +109,9 @@ set_tests_properties(
   application_open_utf8
   application_encoding_euc_jp
   application_encoding_shift_jis
+  application_encoding_new_jis
+  application_encoding_old_jis
+  application_encoding_nec_jis
   application_invalid_encoding
   PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen"

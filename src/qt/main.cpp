@@ -27,7 +27,8 @@ int main(int argc, char* argv[]) {
   parser.addOption(smoke_test);
   const QCommandLineOption encoding_option(
       {QStringLiteral("e"), QStringLiteral("encoding")},
-      QStringLiteral("Text encoding: utf-8, euc-jp, or shift-jis."),
+      QStringLiteral("Text encoding: utf-8, euc-jp, shift-jis, "
+                     "new-jis, old-jis, or nec-jis."),
       QStringLiteral("encoding"), QStringLiteral("utf-8"));
   parser.addOption(encoding_option);
   parser.addPositionalArgument(QStringLiteral("file"),

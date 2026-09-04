@@ -83,6 +83,17 @@ void test_explicit_open_and_encoding_action(const QString& directory) {
           "Encoding selection did not control saved bytes");
   require(!editor->document()->isModified(),
           "Successful explicit save did not clear modified state");
+
+  QAction* old_jis_action =
+      find_encoding_action(window, QStringLiteral("Old JIS"));
+  require(old_jis_action != nullptr, "Old JIS action was not created");
+  old_jis_action->trigger();
+  const QString old_jis_path = directory + QStringLiteral("/saved.old");
+  require(window.save_path(old_jis_path), "Could not save as Old JIS");
+  require(read_bytes(old_jis_path) ==
+              QByteArray::fromHex(
+                  "4153434949201b2440467c4b5c386c1b284a0a"),
+          "Old JIS action did not control saved bytes");
 }
 
 void test_leaving_utf8_drops_bom(const QString& directory) {

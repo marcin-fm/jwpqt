@@ -2,6 +2,7 @@
 
 #include "main_window.h"
 
+#include <array>
 #include <exception>
 #include <optional>
 
@@ -27,6 +28,12 @@
 namespace jwpqt::qt {
 namespace {
 
+constexpr std::array<core::TextEncoding, 6> kTextEncodings{
+    core::TextEncoding::kUtf8,      core::TextEncoding::kEucJp,
+    core::TextEncoding::kShiftJis,  core::TextEncoding::kNewJis,
+    core::TextEncoding::kOldJis,    core::TextEncoding::kNecJis,
+};
+
 QString encoding_name(core::TextEncoding encoding) {
   const std::string_view name = core::text_encoding_name(encoding);
   return QString::fromLatin1(name.data(), static_cast<qsizetype>(name.size()));
@@ -40,6 +47,12 @@ QString encoding_filter(core::TextEncoding encoding) {
       return MainWindow::tr("EUC-JP text (*.euc)");
     case core::TextEncoding::kShiftJis:
       return MainWindow::tr("Shift-JIS text (*.sjs *.sjis)");
+    case core::TextEncoding::kNewJis:
+      return MainWindow::tr("New JIS text (*.jis)");
+    case core::TextEncoding::kOldJis:
+      return MainWindow::tr("Old JIS text (*.old)");
+    case core::TextEncoding::kNecJis:
+      return MainWindow::tr("NEC JIS text (*.nec)");
   }
   throw core::TextFileError("Unknown text encoding");
 }
@@ -48,15 +61,17 @@ QString file_filters() {
   return encoding_filter(core::TextEncoding::kUtf8) + QStringLiteral(";;") +
          encoding_filter(core::TextEncoding::kEucJp) + QStringLiteral(";;") +
          encoding_filter(core::TextEncoding::kShiftJis) +
+         QStringLiteral(";;") +
+         encoding_filter(core::TextEncoding::kNewJis) +
+         QStringLiteral(";;") +
+         encoding_filter(core::TextEncoding::kOldJis) +
+         QStringLiteral(";;") +
+         encoding_filter(core::TextEncoding::kNecJis) +
          QStringLiteral(";;") + MainWindow::tr("All files (*)");
 }
 
 std::optional<core::TextEncoding> encoding_from_filter(const QString& filter) {
-  for (const core::TextEncoding encoding : {
-           core::TextEncoding::kUtf8,
-           core::TextEncoding::kEucJp,
-           core::TextEncoding::kShiftJis,
-       }) {
+  for (const core::TextEncoding encoding : kTextEncodings) {
     if (filter == encoding_filter(encoding)) {
       return encoding;
     }
@@ -157,11 +172,7 @@ void MainWindow::create_actions() {
 
   QMenu* encoding_menu = menuBar()->addMenu(tr("E&ncoding"));
   encoding_actions_->setExclusive(true);
-  for (const core::TextEncoding encoding : {
-           core::TextEncoding::kUtf8,
-           core::TextEncoding::kEucJp,
-           core::TextEncoding::kShiftJis,
-       }) {
+  for (const core::TextEncoding encoding : kTextEncodings) {
     QAction* action = encoding_menu->addAction(encoding_name(encoding));
     action->setCheckable(true);
     action->setData(static_cast<int>(encoding));
@@ -270,11 +281,7 @@ bool MainWindow::save_path(const QString& path) {
 
 std::optional<core::TextEncoding> MainWindow::choose_encoding() {
   QStringList names;
-  for (const core::TextEncoding encoding : {
-           core::TextEncoding::kUtf8,
-           core::TextEncoding::kEucJp,
-           core::TextEncoding::kShiftJis,
-       }) {
+  for (const core::TextEncoding encoding : kTextEncodings) {
     names.append(encoding_name(encoding));
   }
   bool accepted = false;
@@ -284,11 +291,7 @@ std::optional<core::TextEncoding> MainWindow::choose_encoding() {
   if (!accepted) {
     return std::nullopt;
   }
-  for (const core::TextEncoding encoding : {
-           core::TextEncoding::kUtf8,
-           core::TextEncoding::kEucJp,
-           core::TextEncoding::kShiftJis,
-       }) {
+  for (const core::TextEncoding encoding : kTextEncodings) {
     if (selected == encoding_name(encoding)) {
       return encoding;
     }
