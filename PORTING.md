@@ -1,0 +1,54 @@
+# Porting jwpqt
+
+jwpqt is replacing the JWPxp 1.67 Win32 application incrementally. The five
+recovered JWPce/JWPxp release commits and their tags remain the historical base;
+native Linux work begins after `jwpxp-1.67`.
+
+## Boundaries
+
+- `src/core` is portable C++ with no Qt, Win32, or operating-system APIs.
+- `src/qt` owns the Qt application, filesystem integration, and widgets.
+- The historical root sources remain the behavioral and format reference while
+  individual responsibilities move behind tested portable interfaces.
+- The native application does not depend on Wine, Winelib, or PE execution.
+
+The legacy program stores Japanese characters as 16-bit JIS row/cell values.
+That representation remains explicit at compatibility boundaries. Unicode is
+used for the native UI, not as an untested replacement for dictionary keys or
+legacy file structures.
+
+## Completed slices
+
+1. `980db33` adds the Qt 6 application shell, a strict UTF-8 core, atomic file
+   replacement through `QSaveFile`, and a basic open/edit/save path.
+2. `4a50fbe` extracts reversible JIS X 0208 pair transformations for EUC-JP
+   and Shift-JIS from the legacy conversion code.
+3. `3d9a5f1` maps the 6,892-character legacy JIS repertoire to and from Unicode
+   using the recovered JWP mapping data and canonical duplicate ordering.
+4. `883bd41` adds strict full-text EUC-JP and Shift-JIS codecs over those
+   primitives.
+
+The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
+vendor extensions, malformed byte sequences, unassigned table cells, and
+Unicode characters outside the recovered repertoire. Supporting any of these
+requires a separate fixture-backed change rather than silent substitution.
+
+## Next slices
+
+1. Add explicit document encoding selection and preserve the selected encoding
+   across native open/save operations. Do not guess between ambiguous Japanese
+   encodings without a user-visible fallback.
+2. Extract the `IO_cache` buffering and legacy JWP file container logic behind
+   portable byte-stream interfaces.
+3. Extract paragraph storage and document mutation independently of `HWND`,
+   `HDC`, scrolling, caret, and menu state.
+4. Port undo/redo over the portable document model.
+5. Port kana-to-kanji conversion and dictionary lookup with fixtures captured
+   from the recovered implementation.
+6. Replace `QPlainTextEdit` scaffolding with a custom Qt editor surface once the
+   paragraph model can drive wrapping, selection, conversion spans, and kanji
+   coloring.
+7. Port lookup tools, configuration, and printing as separate vertical slices.
+
+Each slice is committed independently after focused tests and the complete
+CTest suite pass.

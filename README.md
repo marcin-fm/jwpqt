@@ -5,7 +5,8 @@ release history while replacing the Win32 application layer with Qt 6.
 
 The port is intentionally incremental. The historical sources remain at the
 repository root as the behavior and format reference. New portable code lives
-under `src/core`; Qt-specific application code lives under `src/qt`.
+under `src/core`; Qt-specific application code lives under `src/qt`. See
+[`PORTING.md`](PORTING.md) for the extraction boundaries and roadmap.
 
 ## Build
 
@@ -31,10 +32,12 @@ Run the editor, optionally opening a UTF-8 file:
 
 ## Current scope
 
-The first native slice provides strict UTF-8 loading and saving plus a basic Qt
-text window. Legacy JWP/JIS encodings, the original paragraph model,
-kana-to-kanji conversion, dictionaries, lookup tools, and printing have not yet
-been ported.
+The native shell provides strict UTF-8 loading and saving plus a basic Qt text
+window. The portable core also provides validated JIS X 0208, EUC-JP, and
+Shift-JIS transformations for the 6,892 characters mapped by the recovered JWP
+tables. The GUI does not expose those legacy encodings yet. The JWP container,
+original paragraph model, kana-to-kanji conversion, dictionaries, lookup tools,
+and printing have not yet been ported.
 
 JWPce/JWPxp copyright and licensing notices remain in `_cpright.txt`,
 `_readme.txt`, and `gnugpl.txt`.
