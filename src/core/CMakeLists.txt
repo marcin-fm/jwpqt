@@ -1,4 +1,5 @@
 add_library(jwpqt_core STATIC
+  jis_encoding.cpp
   utf8.cpp
 )
 
