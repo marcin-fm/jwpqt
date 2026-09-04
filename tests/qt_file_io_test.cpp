@@ -12,6 +12,7 @@
 #include <QTemporaryDir>
 
 #include "file_io.h"
+#include "jwpqt/core/jwp_document.h"
 #include "jwpqt/core/utf8.h"
 
 namespace {
@@ -71,6 +72,43 @@ void test_encoding_failure_preserves_file(const QString& directory) {
           "Failed save changed the existing file");
 }
 
+void test_jwp_file_round_trip(const QString& directory) {
+  const QString path = directory + QStringLiteral("/document.jwp");
+  jwpqt::core::JwpDocument expected;
+  expected.landscape = true;
+  expected.summary[0] = {'T', 'i', 't', 'l', 'e'};
+  expected.paragraphs = {
+      jwpqt::core::JwpParagraph{{'A', 0x467c}, 120, -2, 3, 4, false},
+      jwpqt::core::JwpParagraph{{}, 100, 0, 0, 0, true},
+  };
+
+  jwpqt::qt::write_jwp_file(path, expected);
+  const jwpqt::core::JwpDocument actual = jwpqt::qt::read_jwp_file(path);
+  expected.source_version = jwpqt::core::JwpVersion::kJ120;
+  require(actual == expected, "JWP document did not round-trip");
+}
+
+void test_jwp_encoding_failure_preserves_file(const QString& directory) {
+  const QString path = directory + QStringLiteral("/existing.jwp");
+  const QByteArray original("existing content");
+  QFile output(path);
+  require(output.open(QIODevice::WriteOnly), "Could not create JWP test file");
+  require(output.write(original) == original.size(),
+          "Could not seed JWP test file");
+  output.close();
+
+  jwpqt::core::JwpDocument invalid;
+  invalid.summary[0] = {0};
+  invalid.paragraphs.push_back({});
+  try {
+    jwpqt::qt::write_jwp_file(path, invalid);
+    throw std::runtime_error("Invalid JWP document was saved");
+  } catch (const jwpqt::core::JwpFormatError&) {
+  }
+  require(read_bytes(path) == original,
+          "Failed JWP save changed the existing file");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -86,6 +124,8 @@ int main(int argc, char* argv[]) {
     test_file_round_trip(directory.path(),
                          jwpqt::core::TextEncoding::kShiftJis, false);
     test_encoding_failure_preserves_file(directory.path());
+    test_jwp_file_round_trip(directory.path());
+    test_jwp_encoding_failure_preserves_file(directory.path());
     std::cout << "All Qt file I/O tests passed\n";
     return 0;
   } catch (const std::exception& error) {

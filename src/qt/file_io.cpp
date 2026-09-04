@@ -22,6 +22,27 @@ std::runtime_error io_error(const char* action, const QString& path,
   return std::runtime_error(message.toUtf8().toStdString());
 }
 
+void write_file_bytes(const QString& path, std::string_view bytes) {
+  if (bytes.size() >
+      static_cast<std::size_t>(std::numeric_limits<qint64>::max())) {
+    throw std::runtime_error("Document is too large to save");
+  }
+
+  QSaveFile output(path);
+  if (!output.open(QIODevice::WriteOnly)) {
+    throw io_error("Could not open", path, output.errorString());
+  }
+
+  const qint64 size = static_cast<qint64>(bytes.size());
+  if (output.write(bytes.data(), size) != size) {
+    output.cancelWriting();
+    throw io_error("Could not write", path, output.errorString());
+  }
+  if (!output.commit()) {
+    throw io_error("Could not replace", path, output.errorString());
+  }
+}
+
 }  // namespace
 
 std::string read_file_bytes(const QString& path) {
@@ -45,23 +66,16 @@ core::TextFile read_text_file(const QString& path,
 
 void write_text_file(const QString& path, const core::TextFile& file) {
   const std::string bytes = core::encode_text_file(file);
-  if (bytes.size() > static_cast<std::size_t>(std::numeric_limits<qint64>::max())) {
-    throw std::runtime_error("Document is too large to save");
-  }
+  write_file_bytes(path, bytes);
+}
 
-  QSaveFile output(path);
-  if (!output.open(QIODevice::WriteOnly)) {
-    throw io_error("Could not open", path, output.errorString());
-  }
+core::JwpDocument read_jwp_file(const QString& path) {
+  return core::decode_jwp_document(read_file_bytes(path));
+}
 
-  const qint64 size = static_cast<qint64>(bytes.size());
-  if (output.write(bytes.data(), size) != size) {
-    output.cancelWriting();
-    throw io_error("Could not write", path, output.errorString());
-  }
-  if (!output.commit()) {
-    throw io_error("Could not replace", path, output.errorString());
-  }
+void write_jwp_file(const QString& path, const core::JwpDocument& document) {
+  const std::string bytes = core::encode_jwp_document(document);
+  write_file_bytes(path, bytes);
 }
 
 }  // namespace jwpqt::qt
