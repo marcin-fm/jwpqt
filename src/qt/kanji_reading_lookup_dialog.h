@@ -3,6 +3,7 @@
 #pragma once
 
 #include <functional>
+#include <string_view>
 #include <vector>
 
 #include <QDialog>
@@ -30,6 +31,7 @@ class KanjiReadingLookupDialog : public QDialog {
                            QWidget* parent = nullptr);
 
   void set_query(const core::KanjiReadingQuery& query);
+  void set_query_text(std::u32string_view text);
   bool search();
   std::vector<core::JisCode> results() const;
 

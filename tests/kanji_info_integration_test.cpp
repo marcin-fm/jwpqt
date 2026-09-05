@@ -16,6 +16,7 @@
 #include "kanji_code_lookup_dialog.h"
 #include "kanji_info_dialog.h"
 #include "kanji_lookup_dialog.h"
+#include "kanji_reading_lookup_dialog.h"
 #include "main_window.h"
 
 namespace {
@@ -63,10 +64,11 @@ void write_database(const QString& path) {
   append_u16(bytes, 0x3021U);
   bytes.resize(28, '\0');
   put_u16(bytes, 12, 23U | (3U << 8U));
-  put_u16(bytes, 14, (1U << 8U) | (2U << 11U));
+  put_u16(bytes, 14, (1U << 4U) | (1U << 8U) | (2U << 11U));
   put_u16(bytes, 16, 3U);
   put_u16(bytes, 18, 1U);
   put_u32(bytes, 24, 28U << 8U);
+  bytes.append("tree\0", 5);
   append_u16(bytes, 0U);
   append_u32(bytes,
              (2U << 17U) | (4U << 22U) | (5U << 27U));
@@ -146,20 +148,25 @@ void test_integration(const QString& directory) {
       window.findChild<QAction*>(QStringLiteral("bushuLookupAction"));
   QAction* spahn_action =
       window.findChild<QAction*>(QStringLiteral("spahnLookupAction"));
+  QAction* reading_action = window.findChild<QAction*>(
+      QStringLiteral("kanjiReadingLookupAction"));
   require(skip_action != nullptr && skip_action->isEnabled() &&
               skip_action->shortcut() ==
                   QKeySequence(QStringLiteral("Ctrl+Shift+S")) &&
               four_corner_action != nullptr &&
               four_corner_action->isEnabled() &&
-               four_corner_action->shortcut() ==
-                   QKeySequence(QStringLiteral("Ctrl+4")) &&
-               bushu_action != nullptr && bushu_action->isEnabled() &&
-               bushu_action->shortcut() ==
-                   QKeySequence(QStringLiteral("Ctrl+Shift+L")) &&
-               spahn_action != nullptr && spahn_action->isEnabled() &&
-               spahn_action->shortcut() ==
-                   QKeySequence(QStringLiteral("Ctrl+H")),
-          "Kanji code lookup actions are unavailable");
+              four_corner_action->shortcut() ==
+                  QKeySequence(QStringLiteral("Ctrl+4")) &&
+              bushu_action != nullptr && bushu_action->isEnabled() &&
+              bushu_action->shortcut() ==
+                  QKeySequence(QStringLiteral("Ctrl+Shift+L")) &&
+              spahn_action != nullptr && spahn_action->isEnabled() &&
+              spahn_action->shortcut() ==
+                  QKeySequence(QStringLiteral("Ctrl+H")) &&
+               reading_action != nullptr && reading_action->isEnabled() &&
+               reading_action->shortcut() ==
+                   QKeySequence(QStringLiteral("Ctrl+Shift+R")),
+          "Kanji lookup actions are unavailable");
   skip_action->trigger();
   QApplication::processEvents();
   auto* code_dialog = dynamic_cast<jwpqt::qt::KanjiCodeLookupDialog*>(
@@ -219,6 +226,29 @@ void test_integration(const QString& directory) {
                       .size() == 1,
           "Integrated Spahn lookup returned wrong results or duplicate dialog");
 
+  reading_action->trigger();
+  QApplication::processEvents();
+  auto* reading_dialog = dynamic_cast<jwpqt::qt::KanjiReadingLookupDialog*>(
+      window.findChild<QDialog*>(QStringLiteral("kanjiReadingLookupDialog")));
+  require(reading_dialog != nullptr,
+          "Reading action did not open the reading lookup dialog");
+  jwpqt::core::KanjiReadingQuery reading;
+  reading.kind = jwpqt::core::KanjiReadingKind::kMeaning;
+  reading.text = U"tree";
+  reading_dialog->set_query(reading);
+  require(reading_dialog->search() && reading_dialog->results().size() == 1,
+          "Integrated reading lookup returned wrong results");
+  auto* reading_results = reading_dialog->findChild<QListWidget*>(
+      QStringLiteral("kanjiReadingResults"));
+  require(reading_results != nullptr && reading_results->count() == 1,
+          "Integrated reading lookup has no result list");
+  reading_results->item(0)->setSelected(true);
+  reading_dialog
+      ->findChild<QPushButton*>(QStringLiteral("kanjiReadingInsert"))
+      ->click();
+  require(window.current_jwp_document()->paragraphs[0].text.size() == 3,
+          "Reading lookup insertion did not mutate the JWP document");
+
   QAction* radical_action =
       window.findChild<QAction*>(QStringLiteral("radicalLookupAction"));
   require(radical_action != nullptr && radical_action->isEnabled() &&
@@ -240,7 +270,7 @@ void test_integration(const QString& directory) {
   radical_results->item(0)->setSelected(true);
   radical_dialog->findChild<QPushButton*>(QStringLiteral("kanjiLookupInsert"))
       ->click();
-  require(window.current_jwp_document()->paragraphs[0].text.size() == 3,
+  require(window.current_jwp_document()->paragraphs[0].text.size() == 4,
           "Radical lookup insertion did not mutate the JWP document");
 
   write_bytes(radical_path, QByteArray("bad"));
@@ -260,7 +290,10 @@ void test_integration(const QString& directory) {
               window.findChild<QDialog*>(QStringLiteral("kanjiInfoDialog")) ==
                   dialog &&
               window.findChild<QDialog*>(
-                  QStringLiteral("kanjiCodeLookupDialog")) == code_dialog,
+                  QStringLiteral("kanjiCodeLookupDialog")) == code_dialog &&
+              window.findChild<QDialog*>(
+                  QStringLiteral("kanjiReadingLookupDialog")) ==
+                  reading_dialog,
           "Malformed kanji information reload discarded working state");
   require(QFile::remove(info_path), "Could not remove database fixture");
   require(window.load_kanji_info(
@@ -270,10 +303,13 @@ void test_integration(const QString& directory) {
                !skip_action->isEnabled() &&
                !four_corner_action->isEnabled() &&
                !bushu_action->isEnabled() && !spahn_action->isEnabled() &&
+               !reading_action->isEnabled() &&
               window.findChild<QDialog*>(QStringLiteral("kanjiInfoDialog")) ==
                   nullptr &&
               window.findChild<QDialog*>(
-                  QStringLiteral("kanjiCodeLookupDialog")) == nullptr,
+                  QStringLiteral("kanjiCodeLookupDialog")) == nullptr &&
+              window.findChild<QDialog*>(
+                  QStringLiteral("kanjiReadingLookupDialog")) == nullptr,
           "Absent database reload retained stale kanji information state");
 }
 

@@ -146,6 +146,10 @@ void KanjiReadingLookupDialog::set_query(
   partial_words_->setChecked(query.partial_words);
 }
 
+void KanjiReadingLookupDialog::set_query_text(std::u32string_view text) {
+  query_->setText(to_qstring(text));
+}
+
 bool KanjiReadingLookupDialog::search() {
   core::KanjiReadingQuery query;
   query.kind = selected_kind(*kind_);

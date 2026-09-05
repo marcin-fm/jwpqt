@@ -47,6 +47,7 @@ class JwpEditor;
 class KanjiInfoDialog;
 class KanjiCodeLookupDialog;
 class KanjiLookupDialog;
+class KanjiReadingLookupDialog;
 class WnnUserDictionaryDialog;
 
 enum class OpenMode {
@@ -194,6 +195,7 @@ class MainWindow : public QMainWindow {
   void update_edict_actions();
   void update_kanji_info_action();
   void update_kanji_code_lookup_actions();
+  void update_kanji_reading_lookup_action();
   void update_kanji_lookup_action();
   void show_edict_results_window();
   void update_kanji_color_actions();
@@ -215,6 +217,7 @@ class MainWindow : public QMainWindow {
   void show_kanji_info_dialog();
   void show_kanji_info_code(core::JisCode code);
   void show_kanji_code_lookup_dialog(KanjiCodeLookupMode mode);
+  void show_kanji_reading_lookup_dialog();
   void show_kanji_lookup_dialog();
   std::optional<core::JisCode> kanji_info_target() const;
   std::u32string edict_query_seed() const;
@@ -266,6 +269,7 @@ class MainWindow : public QMainWindow {
   QAction* four_corner_lookup_action_ = nullptr;
   QAction* bushu_lookup_action_ = nullptr;
   QAction* spahn_lookup_action_ = nullptr;
+  QAction* kanji_reading_lookup_action_ = nullptr;
   QAction* kanji_lookup_action_ = nullptr;
   QAction* format_paragraph_action_ = nullptr;
   QAction* insert_page_break_action_ = nullptr;
@@ -306,6 +310,7 @@ class MainWindow : public QMainWindow {
   QString kanji_info_path_;
   KanjiInfoDialog* kanji_info_dialog_ = nullptr;
   KanjiCodeLookupDialog* kanji_code_lookup_dialog_ = nullptr;
+  KanjiReadingLookupDialog* kanji_reading_lookup_dialog_ = nullptr;
   std::unique_ptr<core::KanjiLookupLists> radical_lists_;
   std::unique_ptr<core::KanjiLookupLists> stroke_lists_;
   QPixmap radical_sheet_;
