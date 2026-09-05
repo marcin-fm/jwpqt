@@ -43,6 +43,12 @@ class WnnPreparedConversion {
   bool valid_ = false;
 };
 
+struct WnnAutomaticPreparation {
+  std::size_t matched_length = 0;
+  bool wait_for_more = false;
+  std::optional<WnnPreparedConversion> conversion;
+};
+
 class WnnConversionSession {
  public:
   WnnConversionSession(
@@ -52,6 +58,7 @@ class WnnConversionSession {
 
   bool begin(const JwpText& input);
   std::optional<WnnPreparedConversion> prepare(const JwpText& input) const;
+  WnnAutomaticPreparation prepare_automatic(const JwpText& input) const;
   void activate(WnnPreparedConversion prepared);
   void clear() noexcept;
 

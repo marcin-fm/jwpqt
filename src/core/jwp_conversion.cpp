@@ -2,6 +2,7 @@
 
 #include "jwpqt/core/jwp_conversion.h"
 
+#include <limits>
 #include <type_traits>
 #include <utility>
 
@@ -26,6 +27,19 @@ JwpText selected_text(const JwpDocumentModel& model, JwpRange range) {
       text.begin() + static_cast<JwpText::difference_type>(range.end.offset));
 }
 
+void validate_caret(const JwpDocumentModel& model, JwpRange range,
+                    JwpPosition caret) {
+  if (!model.valid_position(caret)) {
+    throw JwpConversionError("conversion caret is out of bounds");
+  }
+  if (caret != range.begin &&
+      (caret.paragraph != range.end.paragraph ||
+       caret.offset < range.end.offset)) {
+    throw JwpConversionError(
+        "conversion caret is neither at the start nor after the range");
+  }
+}
+
 }  // namespace
 
 static_assert(std::is_nothrow_move_assignable_v<JwpDocumentModel>);
@@ -43,24 +57,56 @@ bool JwpConversionTransaction::begin(JwpRange range, JwpPosition caret) {
   if (active_ || session_.active() || history_.transaction_active()) {
     throw JwpConversionError("conversion transaction is already active");
   }
-  if (caret != range.begin && caret != range.end) {
-    throw JwpConversionError("conversion caret is not at a range endpoint");
-  }
   const JwpText input = selected_text(model_, range);
-  JwpDocument original = model_.document();
-
+  validate_caret(model_, range, caret);
   std::optional<WnnPreparedConversion> prepared = session_.prepare(input);
   if (!prepared) {
     return false;
   }
+  start_prepared(range, caret, std::move(*prepared));
+  return true;
+}
+
+void JwpConversionTransaction::begin_prepared(
+    JwpRange range, JwpPosition caret, WnnPreparedConversion prepared) {
+  if (active_ || session_.active() || history_.transaction_active()) {
+    throw JwpConversionError("conversion transaction is already active");
+  }
+  if (selected_text(model_, range) != prepared.input()) {
+    throw JwpConversionError(
+        "prepared conversion does not match the document range");
+  }
+  validate_caret(model_, range, caret);
+  start_prepared(range, caret, std::move(prepared));
+}
+
+void JwpConversionTransaction::start_prepared(
+    JwpRange range, JwpPosition caret, WnnPreparedConversion prepared) {
+  caret_at_start_ = caret == range.begin;
+  if (!caret_at_start_) {
+    if (caret.paragraph != range.end.paragraph ||
+        caret.offset < range.end.offset) {
+      throw JwpConversionError(
+          "conversion caret is neither at the start nor after the range");
+    }
+    caret_tail_offset_ = caret.offset - range.end.offset;
+  } else {
+    caret_tail_offset_ = 0;
+  }
+
+  JwpDocument original = model_.document();
   JwpDocumentModel next(model_.document());
   const JwpPosition begin = next.erase(range);
-  const JwpPosition end = next.insert(begin, prepared->selected_candidate().text);
+  const JwpPosition end = next.insert(begin, prepared.selected_candidate().text);
+  const JwpPosition next_caret = adjusted_caret(begin, end);
+  if (!next.valid_position(next_caret)) {
+    throw JwpConversionError("converted caret is out of bounds");
+  }
   JwpDocument expected = next.document();
 
   history_.begin(model_, caret);
   try {
-    session_.activate(std::move(*prepared));
+    session_.activate(std::move(prepared));
     original_document_.emplace(std::move(original));
     expected_document_.emplace(std::move(expected));
     model_ = std::move(next);
@@ -68,10 +114,8 @@ bool JwpConversionTransaction::begin(JwpRange range, JwpPosition caret) {
     expected_session_generation_ = session_.generation();
     original_caret_ = caret;
     range_ = {begin, end};
-    caret_at_start_ = caret == range.begin;
-    caret_ = caret_at_start_ ? begin : end;
+    caret_ = next_caret;
     active_ = true;
-    return true;
   } catch (...) {
     history_.abandon_unchanged(model_);
     session_.clear();
@@ -176,14 +220,30 @@ bool JwpConversionTransaction::replace_with(std::size_t candidate_index) {
   const JwpPosition begin = next.erase(range_);
   const JwpPosition end = next.insert(
       begin, session_.result().candidates[candidate_index].text);
+  const JwpPosition next_caret = adjusted_caret(begin, end);
+  if (!next.valid_position(next_caret)) {
+    throw JwpConversionError("converted caret is out of bounds");
+  }
   JwpDocument expected = next.document();
   session_.select(candidate_index);
   expected_session_generation_ = session_.generation();
   model_ = std::move(next);
   expected_document_.emplace(std::move(expected));
   range_ = {begin, end};
-  caret_ = caret_at_start_ ? begin : end;
+  caret_ = next_caret;
   return true;
+}
+
+JwpPosition JwpConversionTransaction::adjusted_caret(
+    JwpPosition begin, JwpPosition end) const {
+  if (caret_at_start_) {
+    return begin;
+  }
+  if (caret_tail_offset_ >
+      std::numeric_limits<std::size_t>::max() - end.offset) {
+    throw JwpConversionError("converted caret offset overflows");
+  }
+  return {end.paragraph, end.offset + caret_tail_offset_};
 }
 
 void JwpConversionTransaction::rollback_noexcept() noexcept {
@@ -221,6 +281,7 @@ void JwpConversionTransaction::finish() noexcept {
   caret_ = {};
   expected_history_generation_ = 0;
   expected_session_generation_ = 0;
+  caret_tail_offset_ = 0;
   caret_at_start_ = false;
   active_ = false;
 }

@@ -2,6 +2,7 @@
 
 #include "jwpqt/core/wnn_session.h"
 
+#include <algorithm>
 #include <utility>
 
 namespace jwpqt::core {
@@ -93,6 +94,43 @@ std::optional<WnnPreparedConversion> WnnConversionSession::prepare(
   prepared.selected_index_ = *preferred;
   prepared.valid_ = true;
   return prepared;
+}
+
+WnnAutomaticPreparation WnnConversionSession::prepare_automatic(
+    const JwpText& input) const {
+  WnnAutomaticPreparation automatic;
+  if (input.empty()) {
+    return automatic;
+  }
+
+  std::optional<WnnPreparedConversion> prepared;
+  if (input.size() <= kWnnMaximumKeySize) {
+    prepared = prepare(input);
+    if (prepared) {
+      automatic.matched_length = input.size();
+      if (prepared->result().can_extend) {
+        automatic.wait_for_more = true;
+      } else {
+        automatic.conversion.emplace(std::move(*prepared));
+      }
+      return automatic;
+    }
+  }
+
+  const std::size_t first_prefix =
+      std::min(input.size() - 1U, kWnnMaximumKeySize);
+  for (std::size_t length = first_prefix; length > 0; --length) {
+    const JwpText prefix(input.begin(), input.begin() +
+                                            static_cast<JwpText::difference_type>(
+                                                length));
+    prepared = prepare(prefix);
+    if (prepared) {
+      automatic.matched_length = length;
+      automatic.conversion.emplace(std::move(*prepared));
+      return automatic;
+    }
+  }
+  return automatic;
 }
 
 void WnnConversionSession::activate(WnnPreparedConversion prepared) {

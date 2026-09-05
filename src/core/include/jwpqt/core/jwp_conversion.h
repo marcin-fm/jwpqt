@@ -32,6 +32,8 @@ class JwpConversionTransaction {
   JwpConversionTransaction& operator=(JwpConversionTransaction&&) = delete;
 
   bool begin(JwpRange range, JwpPosition caret);
+  void begin_prepared(JwpRange range, JwpPosition caret,
+                      WnnPreparedConversion prepared);
   bool active() const noexcept;
   JwpRange range() const;
   JwpPosition caret() const;
@@ -47,6 +49,9 @@ class JwpConversionTransaction {
  private:
   void require_active() const;
   void require_expected_document() const;
+  void start_prepared(JwpRange range, JwpPosition caret,
+                      WnnPreparedConversion prepared);
+  JwpPosition adjusted_caret(JwpPosition begin, JwpPosition end) const;
   bool replace_with(std::size_t candidate_index);
   void rollback_noexcept() noexcept;
   void finish() noexcept;
@@ -61,6 +66,7 @@ class JwpConversionTransaction {
   JwpPosition caret_;
   std::uint64_t expected_history_generation_ = 0;
   std::uint64_t expected_session_generation_ = 0;
+  std::size_t caret_tail_offset_ = 0;
   bool caret_at_start_ = false;
   bool active_ = false;
 };

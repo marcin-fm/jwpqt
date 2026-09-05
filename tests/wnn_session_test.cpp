@@ -51,6 +51,19 @@ WnnDictionary dictionary() {
   return WnnDictionary::parse(index, data);
 }
 
+WnnDictionary automatic_dictionary() {
+  const std::string first = std::string("\xa2", 1) + "*\xb0\xa1\n";
+  const std::string data = first + std::string("\xa2\xa4", 2) +
+                           "*\xb0\xa2\n";
+  std::string index({static_cast<char>(0xa2), static_cast<char>(0x80),
+                     static_cast<char>(0x80), 'w'});
+  append_u32_le(index, 0);
+  index.append({static_cast<char>(0xa2), static_cast<char>(0xa4),
+                static_cast<char>(0x80), 'w'});
+  append_u32_le(index, static_cast<std::uint32_t>(first.size()));
+  return WnnDictionary::parse(index, data);
+}
+
 JwpText input() { return JwpText{0x2422}; }
 
 void test_begin_cycle_accept_and_cancel() {
@@ -175,6 +188,49 @@ void test_lookup_failure_preserves_active_session() {
           "Failed lookup changed an active session");
 }
 
+void test_automatic_preparation_waits_and_uses_longest_prefix() {
+  const WnnDictionary system = automatic_dictionary();
+  WnnPreferences preferences(2);
+  WnnConversionSession session(system, preferences);
+
+  auto waiting = session.prepare_automatic(JwpText{0x2422});
+  require(waiting.wait_for_more && waiting.matched_length == 1 &&
+              !waiting.conversion && !session.active() &&
+              !preferences.changed(),
+          "Automatic preparation did not wait for a longer key");
+
+  auto full = session.prepare_automatic(JwpText{0x2422, 0x2424});
+  require(!full.wait_for_more && full.matched_length == 2 && full.conversion &&
+              full.conversion->selected_candidate().text == JwpText{0x3022},
+          "Automatic preparation did not convert a complete key");
+
+  auto prefix = session.prepare_automatic(JwpText{0x2422, 0x2426});
+  require(!prefix.wait_for_more && prefix.matched_length == 1 &&
+              prefix.conversion &&
+              prefix.conversion->selected_candidate().text == JwpText{0x3021},
+          "Automatic preparation did not choose the longest valid prefix");
+
+  auto none = session.prepare_automatic(JwpText{0x2428});
+  require(!none.wait_for_more && none.matched_length == 0 &&
+              !none.conversion && !session.active() &&
+              !preferences.changed(),
+          "Automatic no-match preparation changed session state");
+  auto empty = session.prepare_automatic({});
+  require(empty.matched_length == 0 && !empty.wait_for_more &&
+              !empty.conversion,
+          "Empty automatic preparation produced a match");
+
+  JwpText overlong{0x2422, 0x2424};
+  overlong.resize(jwpqt::core::kWnnMaximumKeySize + 1U, 0x2426);
+  auto bounded_prefix = session.prepare_automatic(overlong);
+  require(!bounded_prefix.wait_for_more &&
+              bounded_prefix.matched_length == 2 &&
+              bounded_prefix.conversion &&
+              bounded_prefix.conversion->selected_candidate().text ==
+                  JwpText{0x3022},
+          "Overlong automatic input did not back off to a valid prefix");
+}
+
 void run_tests() {
   test_begin_cycle_accept_and_cancel();
   test_previous_wrap_and_direct_selection();
@@ -182,6 +238,7 @@ void run_tests() {
   test_prepare_has_no_state_or_preference_side_effects();
   test_inactive_and_no_match_behavior();
   test_lookup_failure_preserves_active_session();
+  test_automatic_preparation_waits_and_uses_longest_prefix();
 }
 
 }  // namespace

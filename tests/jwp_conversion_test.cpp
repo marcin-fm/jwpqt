@@ -153,6 +153,44 @@ void test_end_oriented_rollback_returns_original_caret() {
           "Rollback did not return the original end caret");
 }
 
+void test_prepared_prefix_conversion_preserves_trailing_caret() {
+  const WnnDictionary system = dictionary();
+  WnnPreferences preferences(2);
+  WnnConversionSession session(system, preferences);
+  JwpDocumentModel model = document_model();
+  JwpDocumentHistory history;
+  JwpConversionTransaction conversion(model, history, session);
+
+  auto prepared = session.prepare(JwpText{0x2422});
+  require(prepared.has_value(), "Prefix conversion did not prepare");
+  conversion.begin_prepared({{0, 1}, {0, 2}}, {0, 3},
+                            std::move(*prepared));
+  require(text(model) == JwpText({'X', 0x3021, 'Y'}) &&
+              conversion.caret() == JwpPosition{0, 3},
+          "Prepared conversion did not preserve trailing caret distance");
+  require(conversion.cycle_next() &&
+              text(model) == JwpText({'X', 0x3022, 0x3023, 'Y'}) &&
+              conversion.caret() == JwpPosition{0, 4},
+          "Longer prepared candidate did not move the trailing caret");
+  require(conversion.accept(), "Prepared conversion did not commit");
+
+  JwpPosition caret{0, 4};
+  require(history.undo(model, caret) &&
+              text(model) == JwpText({'X', 0x2422, 'Y'}) &&
+              caret == JwpPosition{0, 3},
+          "Prepared conversion undo did not restore trailing caret");
+
+  auto mismatched = session.prepare(JwpText{0x2422});
+  require(mismatched.has_value(), "Mismatch conversion did not prepare");
+  JwpConversionTransaction second(model, history, session);
+  require_conversion_error(
+      [&] {
+        second.begin_prepared({{0, 0}, {0, 1}}, {0, 1},
+                              std::move(*mismatched));
+      },
+      "Prepared conversion accepted a mismatched document range");
+}
+
 void test_destructor_rolls_back_and_releases_shared_state() {
   const WnnDictionary system = dictionary();
   WnnPreferences preferences(2);
@@ -318,6 +356,7 @@ void run_tests() {
   test_cycle_accept_is_one_undo_transaction();
   test_internal_rollback_restores_exact_document_and_caret();
   test_end_oriented_rollback_returns_original_caret();
+  test_prepared_prefix_conversion_preserves_trailing_caret();
   test_destructor_rolls_back_and_releases_shared_state();
   test_external_mutation_is_not_committed_or_overwritten();
   test_external_collaborator_changes_are_rejected();

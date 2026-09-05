@@ -83,6 +83,10 @@ legacy file structures.
     printable desktop romaji through the portable composer, inserts recovered
     hiragana and katakana tokens through synchronized document history, and
     resolves or discards pending composition at command and document boundaries.
+28. The portable WNN session reproduces automatic conversion policy: wait while
+    a complete key can grow, convert a terminal complete key, or back off to the
+    longest valid prefix. Prepared prefix transactions retain a caret after the
+    unconverted suffix while candidate lengths change.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -91,7 +95,7 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Connect Kana Input output to automatic WNN prefix conversion attempts.
+1. Connect the portable automatic WNN policy to native Kana Input spans.
 2. Replace `QPlainTextEdit` scaffolding with a custom Qt editor surface once the
    paragraph model can drive wrapping, selection, conversion spans, and kanji
    coloring.
