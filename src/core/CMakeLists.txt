@@ -19,6 +19,7 @@ add_library(jwpqt_core STATIC
   wnn_dictionary.cpp
   wnn_lookup.cpp
   wnn_preferences.cpp
+  wnn_session.cpp
 )
 
 target_include_directories(jwpqt_core

@@ -69,6 +69,9 @@ legacy file structures.
 23. The Qt file boundary optionally loads `user.sel`, preserves partial legacy
     files through the portable parser, and atomically replaces changed
     preferences without clearing dirty state on failure.
+24. The portable WNN conversion session starts from stored preferences, repairs
+    stale offsets, wraps candidate cycling in both directions, learns choices,
+    and terminates explicitly through accept or cancel.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -77,8 +80,8 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Add the native conversion session that connects romaji composition,
-   candidate selection, preferences, and document transactions.
+1. Connect romaji composition and the WNN candidate session to native Qt input,
+   one portable document transaction, and atomic preference persistence.
 2. Replace `QPlainTextEdit` scaffolding with a custom Qt editor surface once the
    paragraph model can drive wrapping, selection, conversion spans, and kanji
    coloring.
