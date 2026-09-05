@@ -32,6 +32,8 @@ add_library(jwpqt_qt_ui STATIC
   jwp_editor.h
   main_window.cpp
   main_window.h
+  wnn_user_dictionary_dialog.cpp
+  wnn_user_dictionary_dialog.h
 )
 
 target_link_libraries(jwpqt_qt_ui

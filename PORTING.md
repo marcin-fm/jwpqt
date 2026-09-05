@@ -178,6 +178,11 @@ legacy file structures.
     with the source-shaped selection algorithm rather than assuming a strict
     comparator. A comparison-step budget fails pathological sorts locally
     without limiting dictionary loading, lookup, or unsorted source order.
+50. Native user-dictionary editing is split at a modeless working-copy dialog
+    boundary. Add, Edit, Delete, Move, Sort, and Import remain local until Save
+    publishes one complete dictionary; Cancel and failed saves publish nothing.
+    Existing imported inflection records round-trip without normalization, and
+    document insertion is an injected callback rather than hidden editor state.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -188,8 +193,8 @@ requires a separate fixture-backed change rather than silent substitution.
 
 1. Port paged printing and clipboard color policy over the rich JWP document
    layout.
-2. Add native editable WNN dictionary management UI, then port lookup tools as
-   separate vertical slices.
+2. Connect the native editable WNN dialog to MainWindow resource ownership and
+   exact document insertion, then port lookup tools as separate vertical slices.
 3. Port configuration, remaining import/export paths, and help.
 
 Each slice is committed independently after focused tests and the complete

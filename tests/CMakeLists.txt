@@ -31,6 +31,14 @@ add_executable(jwpqt_main_window_tests
 target_link_libraries(jwpqt_main_window_tests PRIVATE jwpqt_qt_ui)
 target_compile_options(jwpqt_main_window_tests PRIVATE -Wall -Wextra -Wpedantic)
 
+add_executable(jwpqt_wnn_user_dictionary_dialog_tests
+  wnn_user_dictionary_dialog_test.cpp
+)
+target_link_libraries(jwpqt_wnn_user_dictionary_dialog_tests
+  PRIVATE jwpqt_qt_ui)
+target_compile_options(jwpqt_wnn_user_dictionary_dialog_tests
+  PRIVATE -Wall -Wextra -Wpedantic)
+
 add_executable(jwpqt_jis_encoding_tests
   jis_encoding_test.cpp
 )
@@ -222,6 +230,8 @@ add_test(NAME core_text_detection COMMAND jwpqt_text_detection_tests)
 add_test(NAME qt_file_io COMMAND jwpqt_qt_io_tests)
 add_test(NAME qt_kanji_color_settings COMMAND jwpqt_kanji_color_settings_tests)
 add_test(NAME qt_main_window COMMAND jwpqt_main_window_tests)
+add_test(NAME qt_wnn_user_dictionary_dialog
+  COMMAND jwpqt_wnn_user_dictionary_dialog_tests)
 add_executable(jwpqt_jwp_editor_tests
   jwp_editor_test.cpp
 )
@@ -322,6 +332,10 @@ set_tests_properties(
   TIMEOUT 10
 )
 set_tests_properties(qt_main_window PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  TIMEOUT 10
+)
+set_tests_properties(qt_wnn_user_dictionary_dialog PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
   TIMEOUT 10
 )
