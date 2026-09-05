@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <QMainWindow>
+#include <QPixmap>
 #include <QString>
 
 #include "jwpqt/core/jwp_conversion.h"
@@ -19,6 +20,7 @@
 #include "jwpqt/core/kanji_color.h"
 #include "jwpqt/core/kanji_color_list.h"
 #include "jwpqt/core/kanji_info.h"
+#include "jwpqt/core/kanji_lookup_lists.h"
 #include "jwpqt/core/kana_input.h"
 #include "jwpqt/core/edict_user_dictionary.h"
 #include "jwpqt/core/legacy_code_page.h"
@@ -43,6 +45,7 @@ class EdictUserDictionaryDialog;
 struct EdictResourceSet;
 class JwpEditor;
 class KanjiInfoDialog;
+class KanjiLookupDialog;
 class WnnUserDictionaryDialog;
 
 enum class OpenMode {
@@ -124,7 +127,12 @@ class MainWindow : public QMainWindow {
       OpenMode mode = OpenMode::kInteractive);
   bool load_kanji_info(const QString& path,
                        OpenMode mode = OpenMode::kInteractive);
+  bool load_kanji_lookup(const QString& radical_path,
+                         const QString& stroke_path,
+                         const QString& radical_bitmap_path,
+                         OpenMode mode = OpenMode::kInteractive);
   const core::KanjiInfoDatabase* kanji_info_database() const noexcept;
+  bool has_kanji_lookup() const noexcept;
   const EdictResourceSet* edict_resources() const noexcept;
   const core::EdictUserDictionary* edict_user_dictionary() const noexcept;
   bool set_edict_user_dictionary(
@@ -177,6 +185,7 @@ class MainWindow : public QMainWindow {
   void update_conversion_actions();
   void update_edict_actions();
   void update_kanji_info_action();
+  void update_kanji_lookup_action();
   void show_edict_results_window();
   void update_kanji_color_actions();
   void update_kana_input_state();
@@ -195,6 +204,8 @@ class MainWindow : public QMainWindow {
   void show_edict_lookup_dialog();
   void show_edict_user_dictionary_dialog();
   void show_kanji_info_dialog();
+  void show_kanji_info_code(core::JisCode code);
+  void show_kanji_lookup_dialog();
   std::optional<core::JisCode> kanji_info_target() const;
   std::u32string edict_query_seed() const;
   void new_document();
@@ -241,6 +252,7 @@ class MainWindow : public QMainWindow {
   QAction* edict_results_action_ = nullptr;
   QAction* edict_user_dictionary_action_ = nullptr;
   QAction* kanji_info_action_ = nullptr;
+  QAction* kanji_lookup_action_ = nullptr;
   QAction* format_paragraph_action_ = nullptr;
   QAction* insert_page_break_action_ = nullptr;
   QAction* kanji_color_options_action_ = nullptr;
@@ -279,6 +291,10 @@ class MainWindow : public QMainWindow {
   std::unique_ptr<core::KanjiInfoDatabase> kanji_info_database_;
   QString kanji_info_path_;
   KanjiInfoDialog* kanji_info_dialog_ = nullptr;
+  std::unique_ptr<core::KanjiLookupLists> radical_lists_;
+  std::unique_ptr<core::KanjiLookupLists> stroke_lists_;
+  QPixmap radical_sheet_;
+  KanjiLookupDialog* kanji_lookup_dialog_ = nullptr;
   std::unique_ptr<core::JwpConversionTransaction> jwp_conversion_;
   std::optional<core::WnnPreferences> conversion_preferences_before_;
   core::KanaInputComposer kana_input_;

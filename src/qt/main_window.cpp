@@ -24,6 +24,7 @@
 #include <QEvent>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QFontDatabase>
 #include <QHBoxLayout>
@@ -57,6 +58,7 @@
 #include "file_io.h"
 #include "jwp_editor.h"
 #include "kanji_info_dialog.h"
+#include "kanji_lookup_dialog.h"
 #include "kanji_color_settings.h"
 #include "jwpqt/core/jwp_plain_text.h"
 #include "jwpqt/core/jwp_text_codec.h"
@@ -324,6 +326,7 @@ MainWindow::~MainWindow() {
   delete edict_results_window_;
   delete edict_user_dictionary_dialog_;
   delete kanji_info_dialog_;
+  delete kanji_lookup_dialog_;
 }
 
 bool MainWindow::load_kanji_info(const QString& path, OpenMode mode) {
@@ -334,11 +337,14 @@ bool MainWindow::load_kanji_info(const QString& path, OpenMode mode) {
     if (loaded.has_value()) {
       candidate = std::make_unique<core::KanjiInfoDatabase>(std::move(*loaded));
     }
+    delete kanji_lookup_dialog_;
+    kanji_lookup_dialog_ = nullptr;
     delete kanji_info_dialog_;
     kanji_info_dialog_ = nullptr;
     kanji_info_database_ = std::move(candidate);
     kanji_info_path_ = path;
     update_kanji_info_action();
+    update_kanji_lookup_action();
     statusBar()->showMessage(
         kanji_info_database_ != nullptr
             ? tr("Loaded kanji information for %1 characters")
@@ -354,9 +360,61 @@ bool MainWindow::load_kanji_info(const QString& path, OpenMode mode) {
   }
 }
 
+bool MainWindow::load_kanji_lookup(const QString& radical_path,
+                                   const QString& stroke_path,
+                                   const QString& radical_bitmap_path,
+                                   OpenMode mode) {
+  try {
+    std::optional<core::KanjiLookupLists> radicals =
+        read_kanji_lookup_lists_file(radical_path,
+                                     core::kRadicalListGroups);
+    std::optional<core::KanjiLookupLists> strokes =
+        read_kanji_lookup_lists_file(stroke_path, core::kStrokeListGroups);
+    if (radicals.has_value() != strokes.has_value()) {
+      throw core::KanjiLookupListError(
+          "Both radical.dat and stroke.dat are required");
+    }
+    std::unique_ptr<core::KanjiLookupLists> radical_candidate;
+    std::unique_ptr<core::KanjiLookupLists> stroke_candidate;
+    QPixmap sheet;
+    if (radicals.has_value()) {
+      radical_candidate =
+          std::make_unique<core::KanjiLookupLists>(std::move(*radicals));
+      stroke_candidate =
+          std::make_unique<core::KanjiLookupLists>(std::move(*strokes));
+      const QFileInfo bitmap(radical_bitmap_path);
+      if (bitmap.exists() && !sheet.load(radical_bitmap_path)) {
+        throw core::KanjiLookupListError(
+            "The radical sprite sheet is invalid");
+      }
+    }
+    delete kanji_lookup_dialog_;
+    kanji_lookup_dialog_ = nullptr;
+    radical_lists_ = std::move(radical_candidate);
+    stroke_lists_ = std::move(stroke_candidate);
+    radical_sheet_ = std::move(sheet);
+    update_kanji_lookup_action();
+    statusBar()->showMessage(
+        has_kanji_lookup() ? tr("Loaded radical and stroke lookup data")
+                           : tr("Radical lookup data is not installed"),
+        3000);
+    return true;
+  } catch (const std::exception& error) {
+    if (mode == OpenMode::kInteractive) {
+      show_error(tr("Could not load radical lookup data"), error);
+    }
+    return false;
+  }
+}
+
 const core::KanjiInfoDatabase* MainWindow::kanji_info_database()
     const noexcept {
   return kanji_info_database_.get();
+}
+
+bool MainWindow::has_kanji_lookup() const noexcept {
+  return kanji_info_database_ != nullptr && radical_lists_ != nullptr &&
+         stroke_lists_ != nullptr;
 }
 
 bool MainWindow::load_edict_configuration(const QString& registry_path,
@@ -901,6 +959,12 @@ void MainWindow::create_actions() {
   connect(kanji_info_action_, &QAction::triggered, this,
           [this] { show_kanji_info_dialog(); });
 
+  kanji_lookup_action_ = tools_menu->addAction(tr("&Radical Lookup"));
+  kanji_lookup_action_->setObjectName(QStringLiteral("radicalLookupAction"));
+  kanji_lookup_action_->setShortcut(QKeySequence(QStringLiteral("Ctrl+R")));
+  connect(kanji_lookup_action_, &QAction::triggered, this,
+          [this] { show_kanji_lookup_dialog(); });
+
   tools_menu->addSeparator();
   kanji_color_options_action_ =
       tools_menu->addAction(tr("Kanji Color &Options..."));
@@ -1151,6 +1215,7 @@ void MainWindow::update_conversion_actions() {
   update_kanji_color_actions();
   update_edict_actions();
   update_kanji_info_action();
+  update_kanji_lookup_action();
   update_kana_input_state();
 }
 
@@ -1183,6 +1248,14 @@ void MainWindow::update_edict_actions() {
 void MainWindow::update_kanji_info_action() {
   if (kanji_info_action_ != nullptr) {
     kanji_info_action_->setEnabled(kanji_info_target().has_value());
+  }
+}
+
+void MainWindow::update_kanji_lookup_action() {
+  if (kanji_lookup_action_ != nullptr) {
+    kanji_lookup_action_->setEnabled(has_kanji_lookup() &&
+                                     jwp_document_.has_value() &&
+                                     !conversion_active());
   }
 }
 
@@ -1700,20 +1773,30 @@ void MainWindow::show_edict_user_dictionary_dialog() {
 
 void MainWindow::show_kanji_info_dialog() {
   const std::optional<core::JisCode> target = kanji_info_target();
-  if (!target.has_value() || kanji_info_database_ == nullptr) {
+  if (!target.has_value()) {
     statusBar()->showMessage(tr("No kanji information is available here"),
                              3000);
     return;
   }
+  show_kanji_info_code(*target);
+}
+
+void MainWindow::show_kanji_info_code(core::JisCode code) {
+  if (kanji_info_database_ == nullptr ||
+      !kanji_info_database_->contains(code)) {
+    statusBar()->showMessage(tr("No information is available for this kanji"),
+                             3000);
+    return;
+  }
   if (kanji_info_dialog_ != nullptr) {
-    if (!kanji_info_dialog_->set_code(*target)) return;
+    if (!kanji_info_dialog_->set_code(code)) return;
     kanji_info_dialog_->show();
     kanji_info_dialog_->raise();
     kanji_info_dialog_->activateWindow();
     return;
   }
   auto* dialog = new KanjiInfoDialog(*kanji_info_database_, this);
-  if (!dialog->set_code(*target)) {
+  if (!dialog->set_code(code)) {
     delete dialog;
     return;
   }
@@ -1721,6 +1804,34 @@ void MainWindow::show_kanji_info_dialog() {
   connect(dialog, &QObject::destroyed, this,
           [this] { kanji_info_dialog_ = nullptr; });
   kanji_info_dialog_ = dialog;
+  dialog->show();
+}
+
+void MainWindow::show_kanji_lookup_dialog() {
+  if (!has_kanji_lookup() || !jwp_document_.has_value() ||
+      conversion_active()) {
+    statusBar()->showMessage(tr("Radical lookup is not available"), 3000);
+    return;
+  }
+  if (kanji_lookup_dialog_ != nullptr) {
+    kanji_lookup_dialog_->show();
+    kanji_lookup_dialog_->raise();
+    kanji_lookup_dialog_->activateWindow();
+    return;
+  }
+  auto* dialog = new KanjiLookupDialog(
+      *radical_lists_, *stroke_lists_, *kanji_info_database_, radical_sheet_,
+      [this](const std::vector<core::JisCode>& codes) {
+        if (!insert_edict_text(core::decode_jwp_text(codes))) {
+          throw std::runtime_error(
+              "Could not insert radical lookup results into the document");
+        }
+      },
+      [this](core::JisCode code) { show_kanji_info_code(code); }, this);
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  connect(dialog, &QObject::destroyed, this,
+          [this] { kanji_lookup_dialog_ = nullptr; });
+  kanji_lookup_dialog_ = dialog;
   dialog->show();
 }
 

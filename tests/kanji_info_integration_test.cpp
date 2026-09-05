@@ -7,11 +7,14 @@
 #include <QApplication>
 #include <QDialog>
 #include <QFile>
+#include <QListWidget>
+#include <QPushButton>
 #include <QTemporaryDir>
 
 #include "file_io.h"
 #include "jwpqt/core/kanji_info.h"
 #include "kanji_info_dialog.h"
+#include "kanji_lookup_dialog.h"
 #include "main_window.h"
 
 namespace {
@@ -51,9 +54,36 @@ void write_database(const QString& path) {
   write_bytes(path, bytes);
 }
 
+void write_lookup_lists(const QString& path, std::size_t groups,
+                        jwpqt::core::JisCode code) {
+  QByteArray bytes(static_cast<qsizetype>(groups * 4U), '\0');
+  std::size_t offset = groups * 4U;
+  for (std::size_t group = 0; group < groups; ++group) {
+    const quint16 count = group == 0 ? 1U : 0U;
+    bytes[static_cast<qsizetype>(group * 4U)] =
+        static_cast<char>(offset & 0xffU);
+    bytes[static_cast<qsizetype>(group * 4U + 1U)] =
+        static_cast<char>((offset >> 8U) & 0xffU);
+    bytes[static_cast<qsizetype>(group * 4U + 2U)] =
+        static_cast<char>(count & 0xffU);
+    bytes[static_cast<qsizetype>(group * 4U + 3U)] =
+        static_cast<char>((count >> 8U) & 0xffU);
+    if (count != 0) {
+      bytes.append(static_cast<char>(code & 0xffU));
+      bytes.append(static_cast<char>((code >> 8U) & 0xffU));
+      offset += 2U;
+    }
+  }
+  write_bytes(path, bytes);
+}
+
 void test_integration(const QString& directory) {
   const QString info_path = directory + QStringLiteral("/kanjinfo.dat");
   write_database(info_path);
+  const QString radical_path = directory + QStringLiteral("/radical.dat");
+  const QString stroke_path = directory + QStringLiteral("/stroke.dat");
+  write_lookup_lists(radical_path, jwpqt::core::kRadicalListGroups, 0x3021U);
+  write_lookup_lists(stroke_path, jwpqt::core::kStrokeListGroups, 0x3021U);
   jwpqt::core::JwpDocument document;
   document.paragraphs = {jwpqt::core::JwpParagraph{{0x3021U}}};
   const QString document_path = directory + QStringLiteral("/info.jwp");
@@ -63,6 +93,11 @@ void test_integration(const QString& directory) {
   require(window.load_kanji_info(
               info_path, jwpqt::qt::OpenMode::kNonInteractive) &&
               window.kanji_info_database() != nullptr &&
+              window.load_kanji_lookup(
+                  radical_path, stroke_path,
+                  directory + QStringLiteral("/missing-radicals.bmp"),
+                  jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.has_kanji_lookup() &&
               window.open_jwp_path(document_path),
           "Could not load native kanji information integration");
   QAction* action =
@@ -82,6 +117,39 @@ void test_integration(const QString& directory) {
               .size() == 1,
           "Kanji information action created duplicate dialogs");
 
+  QAction* radical_action =
+      window.findChild<QAction*>(QStringLiteral("radicalLookupAction"));
+  require(radical_action != nullptr && radical_action->isEnabled(),
+          "Radical lookup action is unavailable");
+  radical_action->trigger();
+  QApplication::processEvents();
+  auto* radical_dialog = dynamic_cast<jwpqt::qt::KanjiLookupDialog*>(
+      window.findChild<QDialog*>(QStringLiteral("kanjiLookupDialog")));
+  require(radical_dialog != nullptr,
+          "Radical lookup action did not open its dialog");
+  radical_dialog->set_selected_radicals({0});
+  require(radical_dialog->search() &&
+              radical_dialog->result_codes() ==
+                  std::vector<jwpqt::core::JisCode>{0x3021U},
+          "Integrated radical lookup returned wrong results");
+  auto* radical_results = radical_dialog->findChild<QListWidget*>(
+      QStringLiteral("kanjiLookupResults"));
+  radical_results->item(0)->setSelected(true);
+  radical_dialog->findChild<QPushButton*>(QStringLiteral("kanjiLookupInsert"))
+      ->click();
+  require(window.current_jwp_document()->paragraphs[0].text.size() == 2,
+          "Radical lookup insertion did not mutate the JWP document");
+
+  write_bytes(radical_path, QByteArray("bad"));
+  require(!window.load_kanji_lookup(
+              radical_path, stroke_path,
+              directory + QStringLiteral("/missing-radicals.bmp"),
+              jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.has_kanji_lookup() &&
+              window.findChild<QDialog*>(QStringLiteral("kanjiLookupDialog")) ==
+                  radical_dialog,
+          "Malformed radical reload discarded working lookup state");
+
   write_bytes(info_path, QByteArray("bad"));
   require(!window.load_kanji_info(
               info_path, jwpqt::qt::OpenMode::kNonInteractive) &&
@@ -93,6 +161,7 @@ void test_integration(const QString& directory) {
   require(window.load_kanji_info(
               info_path, jwpqt::qt::OpenMode::kNonInteractive) &&
               window.kanji_info_database() == nullptr && !action->isEnabled() &&
+              !radical_action->isEnabled() &&
               window.findChild<QDialog*>(QStringLiteral("kanjiInfoDialog")) ==
                   nullptr,
           "Absent database reload retained stale kanji information state");

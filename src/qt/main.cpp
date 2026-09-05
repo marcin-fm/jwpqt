@@ -88,6 +88,13 @@ int main(int argc, char* argv[]) {
     QTextStream(stderr) << "Could not load the kanji information database.\n";
     return 1;
   }
+  if (!window.load_kanji_lookup(
+          config.filePath(QStringLiteral("radical.dat")),
+          config.filePath(QStringLiteral("stroke.dat")),
+          config.filePath(QStringLiteral("radicals.bmp")), interaction_mode)) {
+    QTextStream(stderr) << "Could not load the radical lookup data.\n";
+    return 1;
+  }
   if (parser.isSet(wnn_data_directory_option)) {
     const QDir data_directory(parser.value(wnn_data_directory_option));
     const QString user_data =
