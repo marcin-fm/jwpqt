@@ -105,6 +105,104 @@ void test_recovered_euc_jis_x_0212_subset() {
       "truncated JIS X 0212 sequence");
 }
 
+void test_mixed_record_definitions() {
+  const std::string prefix = jwpqt::core::encode_legacy_text(
+      U"日本 [にほん]", jwpqt::core::LegacyEncoding::kEucJp);
+  const std::string bytes = prefix + " /caf\xe9/letters \xc0\xc1/\n";
+  const EdictDictionary western = EdictDictionary::parse(
+      bytes, EdictEncoding::kMixed, EdictParseLimits{},
+      jwpqt::core::LegacyCodePage::k1252);
+  require(western.encoding() == EdictEncoding::kMixed &&
+              western.mixed_code_page() ==
+                  jwpqt::core::LegacyCodePage::k1252 &&
+              western.records().size() == 1 &&
+              western.records()[0].headword == U"日本" &&
+              western.records()[0].readings ==
+                  std::vector<std::u32string>{U"にほん"} &&
+              western.records()[0].definitions ==
+                  std::vector<std::u32string>{U"café", U"letters ÀÁ"},
+          "Mixed EDICT headword or CP1252 definitions decoded incorrectly");
+
+  const EdictDictionary cyrillic = EdictDictionary::parse(
+      prefix + " /\x8f\xc0\xc1/\n", EdictEncoding::kMixed, EdictParseLimits{},
+      jwpqt::core::LegacyCodePage::k1251);
+  require(cyrillic.mixed_code_page() ==
+                  jwpqt::core::LegacyCodePage::k1251 &&
+              cyrillic.records()[0].definitions ==
+                  std::vector<std::u32string>{U"ЏАБ"},
+          "Mixed EDICT did not honor the selected legacy code page");
+
+  EdictParseLimits exact_spaced;
+  exact_spaced.decoded_code_points = 8;
+  require(EdictDictionary::parse("word /x/\n", EdictEncoding::kMixed,
+                                 exact_spaced)
+                  .records()[0]
+                  .headword == U"word",
+          "Mixed EDICT charged a synthetic spaced-record separator");
+  EdictParseLimits exact_compact;
+  exact_compact.decoded_code_points = 7;
+  require(EdictDictionary::parse("word/x/\n", EdictEncoding::kMixed,
+                                 exact_compact)
+                  .records()[0]
+                  .headword == U"word",
+          "Mixed EDICT charged a synthetic compact-record separator");
+
+  const EdictDictionary fallback = EdictDictionary::parse(
+      prefix + " /caf\xe9/\n", EdictEncoding::kMixed, EdictParseLimits{},
+      static_cast<jwpqt::core::LegacyCodePage>(9999));
+  require(fallback.mixed_code_page() ==
+                  jwpqt::core::kDefaultLegacyCodePage &&
+              fallback.records()[0].definitions ==
+                  std::vector<std::u32string>{U"café"},
+          "Mixed EDICT did not apply the recovered unknown-page fallback");
+}
+
+void test_invalid_mixed_records() {
+  expect_error(
+      [] {
+        EdictDictionary::parse(std::string("word /bad \x81/\n"),
+                               EdictEncoding::kMixed);
+      },
+      "undefined mixed definition byte");
+  expect_error(
+      [] {
+        EdictDictionary::parse(std::string("\xa4 /value/\n"),
+                               EdictEncoding::kMixed);
+      },
+      "malformed mixed EUC headword");
+  expect_error(
+      [] {
+        EdictDictionary::parse(std::string("word\0 /value/\n", 14),
+                               EdictEncoding::kMixed);
+      },
+      "embedded NUL in mixed headword");
+  expect_error(
+      [] {
+        EdictDictionary::parse(std::string("\x8f\xa2\xaf /value/\n"),
+                               EdictEncoding::kMixed);
+      },
+      "unrepresentable 0x8f mixed headword pair");
+  expect_error(
+      [] {
+        EdictDictionary::parse(std::string("word definition\n"),
+                               EdictEncoding::kMixed);
+      },
+      "mixed record without definition delimiter");
+  expect_error(
+      [] {
+        EdictDictionary::parse({}, static_cast<EdictEncoding>(99));
+      },
+      "invalid encoding in an empty dictionary");
+
+  const EdictDictionary compact =
+      EdictDictionary::parse("word/definition/\n", EdictEncoding::kMixed);
+  require(compact.records().size() == 1 &&
+              compact.records()[0].headword == U"word" &&
+              compact.records()[0].definitions ==
+                  std::vector<std::u32string>{U"definition"},
+          "Mixed EDICT did not accept the recovered first-slash boundary");
+}
+
 void test_invalid_records() {
   const auto parse = [](std::string_view bytes) {
     return EdictDictionary::parse(bytes, EdictEncoding::kUtf8);
@@ -215,6 +313,8 @@ int main() {
     test_utf8_records_and_boundaries();
     test_euc_jp_record();
     test_recovered_euc_jis_x_0212_subset();
+    test_mixed_record_definitions();
+    test_invalid_mixed_records();
     test_invalid_records();
     test_delimiter_and_line_break_boundaries();
     test_resource_limits();

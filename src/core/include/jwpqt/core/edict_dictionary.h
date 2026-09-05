@@ -10,6 +10,8 @@
 #include <string_view>
 #include <vector>
 
+#include "jwpqt/core/legacy_code_page.h"
+
 namespace jwpqt::core {
 
 std::optional<std::uint8_t> edict_euc_0212_byte(
@@ -18,6 +20,7 @@ std::optional<std::uint8_t> edict_euc_0212_byte(
 enum class EdictEncoding {
   kEucJp,
   kUtf8,
+  kMixed,
 };
 
 struct EdictParseLimits {
@@ -48,13 +51,18 @@ class EdictDictionary {
   static EdictDictionary parse(
       std::string_view bytes, EdictEncoding encoding,
       const EdictParseLimits& limits = EdictParseLimits{});
+  static EdictDictionary parse(std::string_view bytes, EdictEncoding encoding,
+                               const EdictParseLimits& limits,
+                               LegacyCodePage mixed_code_page);
 
   EdictEncoding encoding() const noexcept;
+  LegacyCodePage mixed_code_page() const noexcept;
   std::string_view source_bytes() const noexcept;
   const std::vector<EdictRecord>& records() const noexcept;
 
  private:
   EdictEncoding encoding_ = EdictEncoding::kEucJp;
+  LegacyCodePage mixed_code_page_ = kDefaultLegacyCodePage;
   std::string source_bytes_;
   std::vector<EdictRecord> records_;
 };

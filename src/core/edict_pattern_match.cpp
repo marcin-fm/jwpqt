@@ -131,6 +131,21 @@ std::vector<SourceToken> decode_record(
         throw EdictPatternError(error.what());
       }
       offset += width;
+    } else if (dictionary.encoding() == EdictEncoding::kMixed) {
+      const auto first = static_cast<unsigned char>(source[offset++]);
+      if ((first & 0x80U) == 0) {
+        value = first;
+      } else {
+        if (offset == end) {
+          fail("Mixed EDICT pattern token is truncated");
+        }
+        const auto second = static_cast<unsigned char>(source[offset++]);
+        const std::uint16_t encoded = static_cast<std::uint16_t>(
+            (static_cast<std::uint16_t>(first) << 8U) |
+            static_cast<std::uint16_t>(second));
+        value = static_cast<std::uint16_t>(
+            encoded & static_cast<std::uint16_t>(0x7f7fU));
+      }
     } else if (dictionary.encoding() == EdictEncoding::kEucJp) {
       const auto first = static_cast<unsigned char>(source[offset++]);
       if ((first & 0x80U) == 0) {
@@ -213,7 +228,9 @@ std::uint16_t normalize_anchor_token(std::uint16_t token) noexcept {
 
 std::uint16_t normalize_literal_token(std::uint16_t token,
                                       EdictEncoding encoding) noexcept {
-  if (encoding == EdictEncoding::kEucJp && token >= 'A' && token <= 'Z') {
+  if ((encoding == EdictEncoding::kEucJp ||
+       encoding == EdictEncoding::kMixed) &&
+      token >= 'A' && token <= 'Z') {
     return static_cast<std::uint16_t>(token + ('a' - 'A'));
   }
   return token;

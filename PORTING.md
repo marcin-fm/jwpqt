@@ -264,6 +264,12 @@ legacy file structures.
     ordered flag/name/path triples, every format/name/special/runtime flag,
     duplicate entries, and source-valid empty fields while enforcing exact
     terminators, surrogate validity, canonical flag order, and explicit budgets.
+64. Mixed EDICT resources decode EUC-compatible headwords and readings while
+    decoding meaning bytes independently through the selected CP1250-CP1258
+    page, with the recovered unknown-page fallback to CP1252. Indexed and
+    wildcard matching intentionally retains JINDEX's two-byte high-bit source
+    stepping, including `0x8f`, while malformed unrepresentable headword pairs
+    and embedded NULs fail explicitly.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and

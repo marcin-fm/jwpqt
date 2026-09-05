@@ -118,6 +118,52 @@ void test_utf8_index() {
           "UTF-8 JDX lookup did not prefer recovered JIS Cyrillic mapping");
 }
 
+void test_mixed_index() {
+  using namespace jwpqt::core;
+  const std::string prefix =
+      encode_legacy_text(U"日本", LegacyEncoding::kEucJp);
+  const std::string source = prefix + " /word \xc0\xc1 \x8f\xa1/\n";
+  const EdictDictionary dictionary = EdictDictionary::parse(
+      source, EdictEncoding::kMixed, EdictParseLimits{},
+      LegacyCodePage::k1251);
+  const std::size_t word = source.find("word");
+  const std::size_t extended = source.find("\xc0\xc1");
+  const std::size_t page_byte = source.find("\x8f\xa1");
+  const EdictIndex index = EdictIndex::parse(
+      index_bytes(static_cast<std::uint32_t>(source.size()),
+                  {1, static_cast<std::uint32_t>(word + 1),
+                   static_cast<std::uint32_t>(extended + 1),
+                   static_cast<std::uint32_t>(page_byte + 1)}),
+      dictionary);
+
+  require(index.find({0x467c, 0x4b5c}) ==
+                  std::vector<EdictIndexEntry>{{0, 0}} &&
+              index.find({'w', 'o', 'r', 'd'}) ==
+                  std::vector<EdictIndexEntry>{{word, 0}} &&
+              index.find_matches({0x4041}) ==
+                  std::vector<EdictIndexMatch>{{extended, 2, 0}} &&
+              index.find_matches({0x0f21}) ==
+                  std::vector<EdictIndexMatch>{{page_byte, 2, 0}} &&
+              index.find({0xc1}).empty(),
+          "Mixed JDX lookup did not preserve recovered non-UTF byte stepping");
+  require_throws(
+      [&] {
+        EdictIndex::parse(
+            index_bytes(static_cast<std::uint32_t>(source.size()),
+                        {static_cast<std::uint32_t>(extended + 2)}),
+            dictionary);
+      },
+      "Mixed JDX accepted an offset inside a high-bit pair");
+  require_throws(
+      [&] {
+        EdictIndex::parse(
+            index_bytes(static_cast<std::uint32_t>(source.size()),
+                        {static_cast<std::uint32_t>(page_byte + 2)}),
+            dictionary);
+      },
+      "Mixed JDX treated the byte after 0x8f as a character start");
+}
+
 void test_malformed_indexes() {
   using namespace jwpqt::core;
   const std::string source = "word /definition/\n";
@@ -221,6 +267,7 @@ int main() {
   test_euc_index_round_trip_and_query();
   test_kana_normalization();
   test_utf8_index();
+  test_mixed_index();
   test_malformed_indexes();
   test_euc_jis_x0212_match_span();
   return 0;

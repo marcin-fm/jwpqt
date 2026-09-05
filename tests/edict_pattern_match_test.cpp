@@ -146,6 +146,12 @@ void test_preserves_euc_and_utf_literal_behavior() {
                .has_value(),
           "UTF pattern literals unexpectedly lowercased dictionary ASCII");
 
+  const EdictDictionary mixed_dictionary = EdictDictionary::parse(
+      euc_source, EdictEncoding::kMixed);
+  require(jwpqt::core::match_edict_pattern(mixed_dictionary, {3, 2, 0}, plan)
+              .has_value(),
+          "Mixed pattern literals did not preserve legacy ASCII folding");
+
   const std::string cyrillic_source =
       "\xd0\x90\xe4\xba\x9c /definition/\n";
   const EdictDictionary cyrillic_dictionary =
@@ -172,6 +178,19 @@ void test_preserves_euc_and_utf_literal_behavior() {
                pattern_plan({0x3021}, {0x82}, {']'}))
                .has_value(),
           "UTF matcher accepted a recovered Windows misconstruction");
+}
+
+void test_mixed_dictionary_definition_bytes() {
+  const std::string source = "word /a\x8f\xa1/\n";
+  const EdictDictionary dictionary = EdictDictionary::parse(
+      source, EdictEncoding::kMixed, jwpqt::core::EdictParseLimits{},
+      jwpqt::core::LegacyCodePage::k1251);
+  const std::size_t anchor_offset = source.find('a');
+  const EdictSearchPlan plan = pattern_plan({'a'}, {}, {'?', ']'});
+  require(jwpqt::core::match_edict_pattern(
+              dictionary, {anchor_offset, 1, 0}, plan) ==
+              EdictPatternMatch{anchor_offset, 3, 0},
+          "Mixed pattern matcher did not preserve recovered high-bit pair stepping");
 }
 
 void test_rejects_invalid_anchors_and_bounds_work() {
@@ -224,6 +243,7 @@ int main() {
     test_assertions_and_character_classes();
     test_record_local_and_jis_x0212_matching();
     test_preserves_euc_and_utf_literal_behavior();
+    test_mixed_dictionary_definition_bytes();
     test_rejects_invalid_anchors_and_bounds_work();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

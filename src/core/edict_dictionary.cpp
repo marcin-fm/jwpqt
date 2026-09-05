@@ -218,6 +218,21 @@ std::u32string decode_edict_euc(std::string_view bytes,
   return result;
 }
 
+std::u32string decode_mixed_headword(std::string_view bytes,
+                                     std::size_t byte_offset) {
+  for (std::size_t index = 0; index < bytes.size(); ++index) {
+    const auto byte = static_cast<std::uint8_t>(bytes[index]);
+    if (byte == 0x8fU) {
+      fail(byte_offset + index,
+           "mixed dictionary headword contains an unmapped high-bit pair");
+    }
+    if ((byte & 0x80U) != 0) {
+      ++index;
+    }
+  }
+  return decode_legacy_text(bytes, LegacyEncoding::kEucJp);
+}
+
 void consume_budget(std::size_t amount, std::size_t& used, std::size_t limit,
                     std::size_t byte_offset, std::string_view name) {
   if (amount > limit - used) {
@@ -243,6 +258,24 @@ std::u32string decode_line(std::string_view bytes, EdictEncoding encoding,
     fail(byte_offset, error.what());
   }
   fail(byte_offset, "dictionary encoding is unsupported");
+}
+
+std::u32string decode_mixed_definitions(std::string_view bytes,
+                                        std::size_t byte_offset,
+                                        LegacyCodePage code_page) {
+  std::u32string result;
+  result.reserve(bytes.size());
+  for (std::size_t index = 0; index < bytes.size(); ++index) {
+    const auto byte = static_cast<std::uint8_t>(bytes[index]);
+    const std::optional<char32_t> code_point =
+        legacy_byte_to_unicode(byte, code_page);
+    if (!code_point.has_value() || *code_point == U'\0') {
+      fail(byte_offset + index,
+           "mixed dictionary definition byte is unmapped");
+    }
+    result.push_back(*code_point);
+  }
+  return result;
 }
 
 std::u32string_view trim_trailing_spaces(std::u32string_view text) {
@@ -310,13 +343,18 @@ void parse_definitions(std::u32string_view text, EdictRecord& record,
 }
 
 EdictRecord parse_record(std::string_view bytes, EdictEncoding encoding,
-                         std::size_t byte_offset,
-                         std::size_t& decoded_code_points,
-                         std::size_t& definition_count,
-                         const EdictParseLimits& limits, bool strip_utf8_bom) {
+                          std::size_t byte_offset,
+                          std::size_t& decoded_code_points,
+                          std::size_t& definition_count,
+                          const EdictParseLimits& limits, bool strip_utf8_bom,
+                          LegacyCodePage mixed_code_page) {
   EdictRecord record;
   record.byte_offset = byte_offset;
   record.byte_length = bytes.size();
+  const std::size_t nul = bytes.find('\0');
+  if (nul != std::string_view::npos) {
+    fail(byte_offset + nul, "dictionary record contains an embedded NUL");
+  }
 
   if (strip_utf8_bom && bytes.size() >= 3 &&
       static_cast<unsigned char>(bytes[0]) == 0xefU &&
@@ -324,10 +362,48 @@ EdictRecord parse_record(std::string_view bytes, EdictEncoding encoding,
       static_cast<unsigned char>(bytes[2]) == 0xbfU) {
     bytes.remove_prefix(3);
   }
-  const std::u32string line = decode_line(bytes, encoding, byte_offset);
-  consume_budget(line.size(), decoded_code_points,
-                 limits.decoded_code_points, byte_offset,
-                 "decoded code-point");
+  std::u32string line;
+  bool decoded_budget_consumed = false;
+  if (encoding == EdictEncoding::kMixed) {
+    const std::size_t definitions_start = bytes.find('/');
+    if (definitions_start == std::string_view::npos) {
+      fail(byte_offset, "mixed dictionary definition list is missing");
+    }
+    try {
+      std::u32string headword =
+          decode_mixed_headword(bytes.substr(0, definitions_start), byte_offset);
+      std::u32string definitions = decode_mixed_definitions(
+          bytes.substr(definitions_start + 1),
+          byte_offset + definitions_start + 1, mixed_code_page);
+      consume_budget(headword.size(), decoded_code_points,
+                     limits.decoded_code_points, byte_offset,
+                     "decoded code-point");
+      consume_budget(1, decoded_code_points, limits.decoded_code_points,
+                     byte_offset + definitions_start, "decoded code-point");
+      consume_budget(definitions.size(), decoded_code_points,
+                     limits.decoded_code_points,
+                     byte_offset + definitions_start + 1,
+                     "decoded code-point");
+      decoded_budget_consumed = true;
+      line = std::move(headword);
+      if (line.empty() || line.back() != U' ') {
+        line.push_back(U' ');
+      }
+      line.push_back(U'/');
+      line += definitions;
+    } catch (const EdictDictionaryError&) {
+      throw;
+    } catch (const std::exception& error) {
+      fail(byte_offset, error.what());
+    }
+  } else {
+    line = decode_line(bytes, encoding, byte_offset);
+  }
+  if (!decoded_budget_consumed) {
+    consume_budget(line.size(), decoded_code_points,
+                   limits.decoded_code_points, byte_offset,
+                   "decoded code-point");
+  }
 
   const std::size_t definitions_start = line.find(U" /");
   if (definitions_start == std::u32string::npos) {
@@ -356,12 +432,33 @@ bool EdictRecord::operator==(const EdictRecord& other) const noexcept {
 EdictDictionary EdictDictionary::parse(std::string_view bytes,
                                        EdictEncoding encoding,
                                        const EdictParseLimits& limits) {
+  return parse(bytes, encoding, limits, kDefaultLegacyCodePage);
+}
+
+EdictDictionary EdictDictionary::parse(std::string_view bytes,
+                                       EdictEncoding encoding,
+                                       const EdictParseLimits& limits,
+                                       LegacyCodePage mixed_code_page) {
   if (bytes.size() > limits.encoded_bytes) {
     throw EdictDictionaryError("EDICT dictionary exceeds the encoded size limit");
   }
 
+  switch (encoding) {
+    case EdictEncoding::kEucJp:
+    case EdictEncoding::kUtf8:
+    case EdictEncoding::kMixed:
+      break;
+    default:
+      throw EdictDictionaryError("EDICT dictionary encoding is invalid");
+  }
+  if (encoding == EdictEncoding::kMixed &&
+      legacy_code_page_name(mixed_code_page) == "Unknown") {
+    mixed_code_page = kDefaultLegacyCodePage;
+  }
+
   EdictDictionary dictionary;
   dictionary.encoding_ = encoding;
+  dictionary.mixed_code_page_ = mixed_code_page;
   dictionary.source_bytes_.assign(bytes);
   std::size_t decoded_code_points = 0;
   std::size_t definition_count = 0;
@@ -398,7 +495,8 @@ EdictDictionary EdictDictionary::parse(std::string_view bytes,
     dictionary.records_.push_back(parse_record(
         bytes.substr(line_start, line_end - line_start), encoding, line_start,
         decoded_code_points, definition_count, limits,
-        line_start == 0 && encoding == EdictEncoding::kUtf8));
+        line_start == 0 && encoding == EdictEncoding::kUtf8,
+        mixed_code_page));
 
     previous_line_break = bytes[line_end];
     ++line_end;
@@ -408,6 +506,10 @@ EdictDictionary EdictDictionary::parse(std::string_view bytes,
 }
 
 EdictEncoding EdictDictionary::encoding() const noexcept { return encoding_; }
+
+LegacyCodePage EdictDictionary::mixed_code_page() const noexcept {
+  return mixed_code_page_;
+}
 
 std::string_view EdictDictionary::source_bytes() const noexcept {
   return source_bytes_;

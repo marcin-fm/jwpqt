@@ -100,6 +100,24 @@ std::uint16_t euc_runtime_token(std::string_view source, std::size_t offset,
   return static_cast<std::uint16_t>(pair & 0x7f7fU);
 }
 
+std::uint16_t mixed_runtime_token(std::string_view source, std::size_t offset,
+                                  std::size_t& width) {
+  const auto first = static_cast<unsigned char>(source[offset]);
+  if ((first & 0x80U) == 0) {
+    width = 1;
+    return first;
+  }
+  if (source.size() - offset < 2) {
+    throw EdictIndexError("Mixed EDICT token is truncated");
+  }
+  width = 2;
+  const auto second = static_cast<unsigned char>(source[offset + 1]);
+  const auto pair = static_cast<std::uint16_t>(
+      (static_cast<std::uint16_t>(first) << 8U) |
+      static_cast<std::uint16_t>(second));
+  return static_cast<std::uint16_t>(pair & 0x7f7fU);
+}
+
 std::uint16_t source_token(std::string_view source, EdictEncoding encoding,
                            LegacyCodePage utf8_code_page, std::size_t offset,
                            std::size_t& width) {
@@ -108,6 +126,9 @@ std::uint16_t source_token(std::string_view source, EdictEncoding encoding,
   }
   if (encoding == EdictEncoding::kUtf8) {
     return unicode_token(source, offset, utf8_code_page, width);
+  }
+  if (encoding == EdictEncoding::kMixed) {
+    return mixed_runtime_token(source, offset, width);
   }
   return euc_runtime_token(source, offset, width);
 }
@@ -123,6 +144,8 @@ std::vector<bool> character_starts(const EdictDictionary& dictionary) {
       const unsigned char lead = static_cast<unsigned char>(source[offset]);
       if (dictionary.encoding() == EdictEncoding::kUtf8) {
         width = utf8_width(lead);
+      } else if (dictionary.encoding() == EdictEncoding::kMixed) {
+        width = (lead & 0x80U) != 0 ? 2 : 1;
       } else if (lead == 0x8fU) {
         width = 3;
       } else if ((lead & 0x80U) != 0) {
