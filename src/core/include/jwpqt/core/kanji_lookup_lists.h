@@ -25,6 +25,8 @@ struct KanjiLookupListLimits {
   std::size_t memberships = 100'000;
 };
 
+void validate_kanji_lookup_list_limits(const KanjiLookupListLimits& limits);
+
 class KanjiLookupLists {
  public:
   static KanjiLookupLists parse(

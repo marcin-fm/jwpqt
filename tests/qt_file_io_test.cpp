@@ -170,6 +170,40 @@ void test_kanji_info_file_loading(const QString& directory) {
           "Missing kanji information file bypassed limit validation");
 }
 
+void test_kanji_lookup_list_loading(const QString& directory) {
+  const QString path = directory + QStringLiteral("/radical.dat");
+  require(!jwpqt::qt::read_kanji_lookup_lists_file(path, 1).has_value(),
+          "Missing kanji lookup list did not remain optional");
+  QByteArray bytes;
+  bytes.append(char(4));
+  bytes.append(char(0));
+  bytes.append(char(1));
+  bytes.append(char(0));
+  bytes.append(char(0x21));
+  bytes.append(char(0x30));
+  QFile output(path);
+  require(output.open(QIODevice::WriteOnly) &&
+              output.write(bytes) == bytes.size(),
+          "Could not write kanji lookup list fixture");
+  output.close();
+  const auto loaded =
+      jwpqt::qt::read_kanji_lookup_lists_file(path, 1);
+  require(loaded.has_value() && loaded->membership_count() == 1 &&
+              loaded->group(0) ==
+                  std::vector<jwpqt::core::JisCode>{0x3021U},
+          "Kanji lookup list did not load through the Qt boundary");
+  require(QFile::remove(path), "Could not remove kanji lookup list fixture");
+  jwpqt::core::KanjiLookupListLimits invalid;
+  invalid.groups = 0;
+  bool bad_limits = false;
+  try {
+    (void)jwpqt::qt::read_kanji_lookup_lists_file(path, 1, invalid);
+  } catch (const jwpqt::core::KanjiLookupListError&) {
+    bad_limits = true;
+  }
+  require(bad_limits, "Missing kanji lookup list bypassed limit validation");
+}
+
 void test_kanji_color_list_file_round_trip(const QString& directory) {
   const QString path = directory + QStringLiteral("/colkanji.lst");
   require(!jwpqt::qt::read_kanji_color_list_file(path).has_value(),
@@ -598,6 +632,7 @@ int main(int argc, char* argv[]) {
     test_jwp_file_round_trip(directory.path());
     test_jwp_encoding_failure_preserves_file(directory.path());
     test_kanji_info_file_loading(directory.path());
+    test_kanji_lookup_list_loading(directory.path());
     test_kanji_color_list_file_round_trip(directory.path());
     test_kanji_color_list_file_errors(directory.path());
     test_wnn_preference_file_round_trip(directory.path());

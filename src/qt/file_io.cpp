@@ -128,6 +128,21 @@ std::optional<core::KanjiInfoDatabase> read_kanji_info_file(
                                         limits);
 }
 
+std::optional<core::KanjiLookupLists> read_kanji_lookup_lists_file(
+    const QString& path, std::size_t group_count,
+    const core::KanjiLookupListLimits& limits) {
+  core::validate_kanji_lookup_list_limits(limits);
+  QFile input(path);
+  if (!input.open(QIODevice::ReadOnly)) {
+    if (path_is_missing(path)) {
+      return std::nullopt;
+    }
+    throw io_error("Could not open", path, input.errorString());
+  }
+  return core::KanjiLookupLists::parse(read_open_file_bytes(input, path),
+                                       group_count, limits);
+}
+
 std::optional<core::WnnPreferences> read_wnn_preferences_file(
     const QString& path, std::size_t capacity) {
   QFile input(path);

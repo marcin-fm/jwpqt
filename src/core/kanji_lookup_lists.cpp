@@ -17,7 +17,7 @@ std::uint16_t read_u16(std::string_view bytes, std::size_t offset) {
        << 8U));
 }
 
-void validate_limits(const KanjiLookupListLimits& limits) {
+void validate_limits_impl(const KanjiLookupListLimits& limits) {
   if (limits.encoded_bytes == 0 || limits.groups == 0 ||
       limits.memberships == 0) {
     throw KanjiLookupListError("Kanji lookup list limits must be positive");
@@ -29,7 +29,7 @@ void validate_limits(const KanjiLookupListLimits& limits) {
 KanjiLookupLists KanjiLookupLists::parse(
     std::string_view bytes, std::size_t group_count,
     const KanjiLookupListLimits& limits) {
-  validate_limits(limits);
+  validate_kanji_lookup_list_limits(limits);
   if (bytes.size() > limits.encoded_bytes) {
     throw KanjiLookupListError("Kanji lookup list exceeds its byte limit");
   }
@@ -75,6 +75,11 @@ KanjiLookupLists KanjiLookupLists::parse(
     throw KanjiLookupListError("Kanji lookup list contains trailing bytes");
   }
   return result;
+}
+
+void validate_kanji_lookup_list_limits(
+    const KanjiLookupListLimits& limits) {
+  validate_limits_impl(limits);
 }
 
 std::size_t KanjiLookupLists::group_count() const noexcept {

@@ -14,6 +14,7 @@
 #include "jwpqt/core/jwp_document.h"
 #include "jwpqt/core/kanji_color_list.h"
 #include "jwpqt/core/kanji_info.h"
+#include "jwpqt/core/kanji_lookup_lists.h"
 #include "jwpqt/core/text_file.h"
 #include "jwpqt/core/wnn_preferences.h"
 #include "jwpqt/core/wnn_user_dictionary.h"
@@ -33,6 +34,10 @@ void write_kanji_color_list_file(const QString& path,
 std::optional<core::KanjiInfoDatabase> read_kanji_info_file(
     const QString& path,
     const core::KanjiInfoLimits& limits = core::KanjiInfoLimits{});
+std::optional<core::KanjiLookupLists> read_kanji_lookup_lists_file(
+    const QString& path, std::size_t group_count,
+    const core::KanjiLookupListLimits& limits =
+        core::KanjiLookupListLimits{});
 std::optional<core::WnnPreferences> read_wnn_preferences_file(
     const QString& path,
     std::size_t capacity = core::kWnnDefaultPreferenceCapacity);
