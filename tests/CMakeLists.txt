@@ -207,6 +207,14 @@ add_executable(jwpqt_jis_table_tests
 target_link_libraries(jwpqt_jis_table_tests PRIVATE jwpqt_core)
 target_compile_options(jwpqt_jis_table_tests PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME core_jis_table COMMAND jwpqt_jis_table_tests)
+add_executable(jwpqt_kanji_bushu_selector_tests
+  kanji_bushu_selector_test.cpp
+)
+target_link_libraries(jwpqt_kanji_bushu_selector_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_kanji_bushu_selector_tests
+  PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME core_kanji_bushu_selector
+  COMMAND jwpqt_kanji_bushu_selector_tests)
 add_test(NAME core_jis_unicode COMMAND jwpqt_jis_unicode_tests)
 add_test(NAME core_jis_text COMMAND jwpqt_jis_text_tests)
 add_executable(jwpqt_kanji_color_tests

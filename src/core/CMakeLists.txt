@@ -14,6 +14,7 @@ add_library(jwpqt_core STATIC
   jis_table.cpp
   jis_text.cpp
   jis_unicode.cpp
+  kanji_bushu_selector.cpp
   kanji_count.cpp
   kanji_code_search.cpp
   kanji_info.cpp
