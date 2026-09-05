@@ -152,8 +152,11 @@ std::vector<SourceToken> decode_record(
           fail("EDICT pattern EUC-JP character is truncated");
         }
         const auto second = static_cast<unsigned char>(source[offset++]);
+        const std::uint16_t encoded = static_cast<std::uint16_t>(
+            (static_cast<std::uint16_t>(first) << 8U) |
+            static_cast<std::uint16_t>(second));
         value = static_cast<std::uint16_t>(
-            ((static_cast<std::uint16_t>(first) << 8U) | second) & 0x7f7fU);
+            encoded & static_cast<std::uint16_t>(0x7f7fU));
       }
     } else {
       fail("EDICT pattern dictionary encoding is unsupported");
