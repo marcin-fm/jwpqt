@@ -221,6 +221,14 @@ legacy file structures.
     covers every recovered godan ending, permits the 101-token temporary
     candidate from a 100-token query, and enforces explicit result/work budgets.
     Pattern queries fail explicitly until the separate pattern engine is ported.
+57. Portable EDICT orchestration runs direct search first, then source-ordered
+    adaptive passes under the recovered Always and Keep Searching policies. All
+    sibling ending variants in one truncation pass run before accepted filtered
+    matches decide whether another pass runs. Distinct index occurrences remain
+    distinct, and global limits account for attempted queries, raw candidates,
+    accepted results, and actual index-comparison work. The public direct API
+    retains its 100-token boundary; only the private adaptive path may use a
+    generated 101-token temporary key.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -229,9 +237,8 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Orchestrate direct and adaptive EDICT searches over the completed query,
-   filter, and deinflection boundaries, then add separate resource and native
-   result-view slices.
+1. Port EDICT pattern and contingent search, then add ordered dictionary
+   resources and native result-view slices.
 2. Port paged printing and clipboard color policy over the rich JWP document
    layout.
 3. Port configuration, remaining import/export paths, and help.

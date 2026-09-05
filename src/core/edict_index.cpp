@@ -262,10 +262,11 @@ const std::vector<EdictIndexEntry>& EdictIndex::entries() const noexcept {
 int EdictIndex::compare_with_key(std::size_t byte_offset,
                                  const JwpText& normalized_key,
                                  std::size_t& steps,
+                                 std::size_t work_limit,
                                  std::size_t* matched_bytes) const {
   std::size_t source_offset = byte_offset;
   for (const std::uint16_t expected : normalized_key) {
-    if (steps >= lookup_steps_) {
+    if (steps >= work_limit) {
       throw EdictIndexError("EDICT index lookup exceeds its work limit");
     }
     ++steps;
@@ -289,22 +290,30 @@ int EdictIndex::compare_with_key(std::size_t byte_offset,
 
 std::vector<EdictIndexMatch> EdictIndex::find_matches(
     const JwpText& key) const {
+  return find_matches_bounded(key, lookup_steps_, matches_).matches;
+}
+
+EdictIndexLookup EdictIndex::find_matches_bounded(
+    const JwpText& key, std::size_t work_steps,
+    std::size_t matches_limit) const {
   const JwpText normalized_key = normalize_key(key);
-  std::vector<EdictIndexMatch> matches;
-  std::size_t steps = 0;
+  EdictIndexLookup lookup;
+  const std::size_t work_limit = std::min(work_steps, lookup_steps_);
+  const std::size_t result_limit = std::min(matches_limit, matches_);
   for (const EdictIndexEntry& entry : entries_) {
     std::size_t byte_length = 0;
-    if (compare_with_key(entry.byte_offset, normalized_key, steps,
+    if (compare_with_key(entry.byte_offset, normalized_key, lookup.work_steps,
+                         work_limit,
                          &byte_length) != 0) {
       continue;
     }
-    if (matches.size() >= matches_) {
+    if (lookup.matches.size() >= result_limit) {
       throw EdictIndexError("EDICT index lookup exceeds its result limit");
     }
-    matches.push_back(
+    lookup.matches.push_back(
         {entry.byte_offset, byte_length, entry.record_index});
   }
-  return matches;
+  return lookup;
 }
 
 std::vector<EdictIndexEntry> EdictIndex::find(const JwpText& key) const {

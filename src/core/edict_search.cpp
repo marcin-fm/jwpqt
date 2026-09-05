@@ -2,6 +2,8 @@
 
 #include "jwpqt/core/edict_search.h"
 
+#include "edict_search_internal.h"
+
 #include <algorithm>
 #include <cstdint>
 #include <limits>
@@ -11,6 +13,7 @@ namespace jwpqt::core {
 namespace {
 
 constexpr std::size_t kMaximumQueryLength = 100;
+constexpr std::size_t kMaximumAdaptiveQueryLength = 101;
 
 std::uint16_t normalize_query_token(std::uint16_t token) noexcept {
   if (token >= 'A' && token <= 'Z') {
@@ -73,15 +76,17 @@ bool japanese_end_matches(std::string_view source, const EdictRecord& record,
          source[offset] == ' ';
 }
 
-}  // namespace
-
-EdictQuery prepare_edict_query(const JwpText& input) {
+EdictQuery prepare_query(const JwpText& input, std::size_t maximum_length,
+                         bool truncate_excess) {
   if (input.empty()) {
     throw EdictSearchError("EDICT query is empty");
   }
+  if (!truncate_excess && input.size() > maximum_length) {
+    throw EdictSearchError("adaptive EDICT query is too long");
+  }
 
   EdictQuery query;
-  const std::size_t length = std::min(input.size(), kMaximumQueryLength);
+  const std::size_t length = std::min(input.size(), maximum_length);
   query.truncated = input.size() > length;
   query.key.reserve(length);
 
@@ -106,22 +111,22 @@ EdictQuery prepare_edict_query(const JwpText& input) {
   return query;
 }
 
-std::vector<EdictIndexMatch> search_edict_direct(
+EdictDirectSearchReport search_validated(
     const EdictDictionary& dictionary, const EdictIndex& index,
-    const EdictQuery& query, const EdictDirectSearchOptions& options) {
-  const EdictQuery validated_query = prepare_edict_query(query.key);
+    const EdictQuery& validated_query,
+    const EdictDirectSearchOptions& options) {
   if (index.source_bytes() != dictionary.source_bytes()) {
     throw EdictSearchError("EDICT index belongs to a different dictionary");
   }
 
-  const std::vector<EdictIndexMatch> candidates =
-      index.find_matches(validated_query.key);
+  EdictIndexLookup lookup = index.find_matches_bounded(
+      validated_query.key, options.lookup_steps, options.candidate_matches);
   std::vector<EdictIndexMatch> results;
-  results.reserve(std::min(options.results, candidates.size()));
+  results.reserve(std::min(options.results, lookup.matches.size()));
   const std::string_view source = dictionary.source_bytes();
   const std::vector<EdictRecord>& records = dictionary.records();
 
-  for (const EdictIndexMatch& candidate : candidates) {
+  for (const EdictIndexMatch& candidate : lookup.matches) {
     if (candidate.record_index >= records.size()) {
       throw EdictSearchError("EDICT index record mapping is invalid");
     }
@@ -154,7 +159,42 @@ std::vector<EdictIndexMatch> search_edict_direct(
     }
     results.push_back(candidate);
   }
-  return results;
+  return {std::move(results), lookup.matches.size(), lookup.work_steps};
+}
+
+}  // namespace
+
+EdictQuery prepare_edict_query(const JwpText& input) {
+  return prepare_query(input, kMaximumQueryLength, true);
+}
+
+EdictQuery prepare_edict_adaptive_query(const JwpText& input) {
+  EdictQuery query =
+      prepare_query(input, kMaximumAdaptiveQueryLength, false);
+  if (query.kind != EdictQueryKind::kJapanese) {
+    throw EdictSearchError("adaptive EDICT query is not Japanese text");
+  }
+  return query;
+}
+
+std::vector<EdictIndexMatch> search_edict_direct(
+    const EdictDictionary& dictionary, const EdictIndex& index,
+    const EdictQuery& query, const EdictDirectSearchOptions& options) {
+  return search_edict_direct_report(dictionary, index, query, options).matches;
+}
+
+EdictDirectSearchReport search_edict_direct_report(
+    const EdictDictionary& dictionary, const EdictIndex& index,
+    const EdictQuery& query, const EdictDirectSearchOptions& options) {
+  return search_validated(dictionary, index, prepare_edict_query(query.key),
+                          options);
+}
+
+EdictDirectSearchReport search_edict_adaptive_report(
+    const EdictDictionary& dictionary, const EdictIndex& index,
+    const EdictQuery& query, const EdictDirectSearchOptions& options) {
+  return search_validated(dictionary, index,
+                          prepare_edict_adaptive_query(query.key), options);
 }
 
 }  // namespace jwpqt::core

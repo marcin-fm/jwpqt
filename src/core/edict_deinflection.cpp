@@ -78,10 +78,12 @@ class Generator {
   explicit Generator(const EdictDeinflectionOptions& options)
       : options_(options) {}
 
-  std::vector<JwpText> run(JwpText key) {
+  std::vector<EdictDeinflectionQuery> run(JwpText key) {
     bool first = true;
     JisCode truncated = 0;
+    std::size_t pass = 0;
     while (!key.empty()) {
+      pass_ = pass++;
       spend_work();
       if (!first && !is_single_kana(key) &&
           truncated != kJapaneseAsterisk) {
@@ -110,7 +112,7 @@ class Generator {
       throw EdictDeinflectionError(
           "EDICT deinflection queries exceed the configured limit");
     }
-    results_.push_back(key);
+    results_.push_back({key, pass_});
   }
 
   void append(const JwpText& key, JisCode ending) {
@@ -180,12 +182,18 @@ class Generator {
 
   const EdictDeinflectionOptions& options_;
   std::size_t work_steps_ = 0;
-  std::vector<JwpText> results_;
+  std::size_t pass_ = 0;
+  std::vector<EdictDeinflectionQuery> results_;
 };
 
 }  // namespace
 
-std::vector<JwpText> generate_edict_deinflection_queries(
+bool EdictDeinflectionQuery::operator==(
+    const EdictDeinflectionQuery& other) const noexcept {
+  return key == other.key && pass == other.pass;
+}
+
+std::vector<EdictDeinflectionQuery> generate_edict_deinflection_steps(
     const EdictQuery& query, const EdictDeinflectionOptions& options) {
   const EdictQuery validated = prepare_edict_query(query.key);
   if (validated.kind == EdictQueryKind::kAscii) {
@@ -198,6 +206,18 @@ std::vector<JwpText> generate_edict_deinflection_queries(
     }
   }
   return Generator(options).run(validated.key);
+}
+
+std::vector<JwpText> generate_edict_deinflection_queries(
+    const EdictQuery& query, const EdictDeinflectionOptions& options) {
+  const std::vector<EdictDeinflectionQuery> steps =
+      generate_edict_deinflection_steps(query, options);
+  std::vector<JwpText> queries;
+  queries.reserve(steps.size());
+  for (const EdictDeinflectionQuery& step : steps) {
+    queries.push_back(step.key);
+  }
+  return queries;
 }
 
 }  // namespace jwpqt::core

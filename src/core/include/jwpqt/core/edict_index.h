@@ -43,6 +43,11 @@ struct EdictIndexMatch {
   bool operator==(const EdictIndexMatch& other) const noexcept;
 };
 
+struct EdictIndexLookup {
+  std::vector<EdictIndexMatch> matches;
+  std::size_t work_steps = 0;
+};
+
 class EdictIndex {
  public:
   static EdictIndex parse(
@@ -54,12 +59,16 @@ class EdictIndex {
   std::string_view source_bytes() const noexcept;
   const std::vector<EdictIndexEntry>& entries() const noexcept;
   std::vector<EdictIndexMatch> find_matches(const JwpText& key) const;
+  EdictIndexLookup find_matches_bounded(const JwpText& key,
+                                        std::size_t work_steps,
+                                        std::size_t matches) const;
   std::vector<EdictIndexEntry> find(const JwpText& key) const;
 
  private:
   int compare_with_key(std::size_t byte_offset,
                        const JwpText& normalized_key,
                        std::size_t& steps,
+                       std::size_t work_limit,
                        std::size_t* matched_bytes) const;
 
   EdictEncoding encoding_ = EdictEncoding::kEucJp;

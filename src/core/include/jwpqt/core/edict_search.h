@@ -33,11 +33,24 @@ struct EdictDirectSearchOptions {
   bool require_end = false;
   bool full_ascii_boundaries = false;
   std::size_t results = 1'000'000;
+  std::size_t candidate_matches = 1'000'000;
+  std::size_t lookup_steps = 64U * 1024U * 1024U;
+};
+
+struct EdictDirectSearchReport {
+  std::vector<EdictIndexMatch> matches;
+  std::size_t candidate_matches = 0;
+  std::size_t lookup_steps = 0;
 };
 
 EdictQuery prepare_edict_query(const JwpText& input);
 
 std::vector<EdictIndexMatch> search_edict_direct(
+    const EdictDictionary& dictionary, const EdictIndex& index,
+    const EdictQuery& query,
+    const EdictDirectSearchOptions& options = EdictDirectSearchOptions{});
+
+EdictDirectSearchReport search_edict_direct_report(
     const EdictDictionary& dictionary, const EdictIndex& index,
     const EdictQuery& query,
     const EdictDirectSearchOptions& options = EdictDirectSearchOptions{});

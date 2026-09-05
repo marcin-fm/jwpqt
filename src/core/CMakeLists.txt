@@ -2,6 +2,7 @@ add_library(jwpqt_core STATIC
   byte_io.cpp
   edict_deinflection.cpp
   edict_dictionary.cpp
+  edict_engine.cpp
   edict_filter.cpp
   edict_index.cpp
   edict_search.cpp

@@ -166,6 +166,14 @@ target_compile_options(jwpqt_edict_filter_tests
   PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME core_edict_filter COMMAND jwpqt_edict_filter_tests)
 
+add_executable(jwpqt_edict_engine_tests
+  edict_engine_test.cpp
+)
+target_link_libraries(jwpqt_edict_engine_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_edict_engine_tests
+  PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME core_edict_engine COMMAND jwpqt_edict_engine_tests)
+
 add_executable(jwpqt_edict_deinflection_tests
   edict_deinflection_test.cpp
 )
