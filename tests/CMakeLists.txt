@@ -381,6 +381,13 @@ add_test(NAME core_jwp_text_codec COMMAND jwpqt_jwp_text_codec_tests)
 add_test(NAME core_jwp_document_model COMMAND jwpqt_jwp_document_model_tests)
 add_test(NAME core_jwp_document_history COMMAND jwpqt_jwp_document_history_tests)
 add_test(NAME core_jwp_plain_text COMMAND jwpqt_jwp_plain_text_tests)
+add_executable(jwpqt_jwp_project_tests
+  jwp_project_test.cpp
+)
+target_link_libraries(jwpqt_jwp_project_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_jwp_project_tests
+  PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME core_jwp_project COMMAND jwpqt_jwp_project_tests)
 add_test(NAME core_jwp_search COMMAND jwpqt_jwp_search_tests)
 add_test(NAME core_plain_text_change COMMAND jwpqt_plain_text_change_tests)
 add_test(NAME core_legacy_code_page COMMAND jwpqt_legacy_code_page_tests)
