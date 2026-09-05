@@ -31,9 +31,14 @@ enum class WnnUserInflection {
   kIAdjective,
 };
 
+inline constexpr std::size_t kWnnMaximumSortComparisonSteps = 5'000'000;
+
 WnnUserEntry make_wnn_user_entry(
     JwpText reading, std::vector<JwpText> candidates,
     WnnUserInflection inflection = WnnUserInflection::kUninflected);
+
+std::vector<WnnUserEntry> sort_wnn_user_entries(
+    std::vector<WnnUserEntry> entries);
 
 class WnnUserDictionary {
  public:

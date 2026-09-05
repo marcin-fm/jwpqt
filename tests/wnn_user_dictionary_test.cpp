@@ -334,6 +334,67 @@ void test_invalid_new_entries() {
       "overlong editable inflected stem");
 }
 
+void test_legacy_sort_order() {
+  const WnnUserEntry a_second{{0x2422}, '*', {{0x3022}}};
+  const WnnUserEntry uninflected_kiru{{0x242d, 0x246b}, '*', {{0x3021}}};
+  const WnnUserEntry godan_kiru{{0x242d, 0x246b}, 'r', {{0x3021}}};
+  const WnnUserEntry a_first{{0x2422}, '*', {{0x3021}}};
+  const WnnUserEntry ichidan_kiru{{0x242d, 0x246b}, '1', {{0x3021}}};
+  const std::vector<WnnUserEntry> original{
+      a_second, uninflected_kiru, godan_kiru, a_first, ichidan_kiru};
+
+  const std::vector<WnnUserEntry> sorted =
+      jwpqt::core::sort_wnn_user_entries(original);
+  require(original.front() == a_second,
+          "User conversion sort mutated its input copy");
+  require(sorted == std::vector<WnnUserEntry>({
+                        a_first, a_second, uninflected_kiru, ichidan_kiru,
+                        godan_kiru}),
+          "User conversions did not follow legacy display ordering");
+
+  const std::vector<WnnUserEntry> duplicates{a_first, a_first};
+  require(jwpqt::core::sort_wnn_user_entries(duplicates) == duplicates,
+          "User conversion sort did not preserve exact duplicates");
+
+  const WnnUserEntry uninflected_ai{{0x2422, 0x2424}, '*', {{0x3021}}};
+  const WnnUserEntry adjective_ai{{0x2422, 0x2424}, 'i', {{0x3021}}};
+  require(jwpqt::core::sort_wnn_user_entries(
+              {adjective_ai, uninflected_ai}) ==
+              std::vector<WnnUserEntry>({uninflected_ai, adjective_ai}),
+          "User conversion sort did not apply i-adjective marker ordering");
+
+  const WnnUserEntry slash_row{{0x2422}, '*', {{0x3021}, {0x3023}}};
+  const WnnUserEntry inner_punctuation{{0x2422}, '*', {{0x3021, 0x2130}}};
+  require(jwpqt::core::sort_wnn_user_entries(
+              {slash_row, inner_punctuation}) ==
+              std::vector<WnnUserEntry>({inner_punctuation, slash_row}),
+          "User conversion sort did not use the recovered slash separator");
+
+  const WnnUserEntry plain_candidate{{0x2422}, '*', {{0x3001}}};
+  const WnnUserEntry bracket_candidate{{0x2422}, '*', {{'[', 0x222a}}};
+  require(jwpqt::core::sort_wnn_user_entries(
+              {plain_candidate, bracket_candidate}) ==
+              std::vector<WnnUserEntry>({bracket_candidate,
+                                         plain_candidate}),
+          "User conversion sort did not reproduce pathological legacy order");
+
+  expect_error(
+      [] {
+        jwpqt::core::sort_wnn_user_entries(
+            {WnnUserEntry{{0x2422}, '?', {{0x3021}}}});
+      },
+      "invalid sortable entry");
+
+  expect_error(
+      [] {
+        std::vector<WnnUserEntry> pathological(
+            1600,
+            WnnUserEntry{{0x2422}, '*', {{0x3021}}});
+        jwpqt::core::sort_wnn_user_entries(std::move(pathological));
+      },
+      "interactive sort work limit");
+}
+
 void test_parse_resource_limits() {
   expect_error(
       [] {
@@ -392,6 +453,7 @@ int main() {
     test_invalid_entry_model();
     test_new_entry_factory();
     test_invalid_new_entries();
+    test_legacy_sort_order();
     test_parse_resource_limits();
   } catch (const std::exception& error) {
     std::cerr << "wnn_user_dictionary_test: " << error.what() << '\n';

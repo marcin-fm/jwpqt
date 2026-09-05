@@ -192,6 +192,92 @@ std::vector<std::uint8_t> key_for_entry(const WnnUserEntry& entry) {
   return key;
 }
 
+constexpr JisCode kDisplaySpace = 0x2121;
+constexpr JisCode kDisplaySlash = 0x213f;
+constexpr JisCode kDisplayArrow = 0x222a;
+
+bool is_display_bracket(JisCode code) {
+  return code == '[' || code == '(' || code == '{' || code == ']' ||
+         code == ')' || code == '}';
+}
+
+JwpText display_text_for_entry(const WnnUserEntry& entry) {
+  JwpText display;
+  display.reserve(entry.reading.size() + 3U +
+                  entry.candidates.size() + 2U);
+
+  const JisCode suffix = suffix_for_ending(entry.ending);
+  if (suffix == 0) {
+    display.insert(display.end(), entry.reading.begin(), entry.reading.end());
+  } else {
+    display.insert(display.end(), entry.reading.begin(),
+                   entry.reading.end() - 1);
+    const char open =
+        entry.ending == '1' ? '(' : entry.ending == 'i' ? '{' : '[';
+    const char close =
+        entry.ending == '1' ? ')' : entry.ending == 'i' ? '}' : ']';
+    display.push_back(static_cast<JisCode>(open));
+    display.push_back(suffix);
+    display.push_back(static_cast<JisCode>(close));
+  }
+
+  display.push_back(kDisplaySpace);
+  display.push_back(kDisplayArrow);
+  display.push_back(kDisplaySpace);
+  for (std::size_t index = 0; index < entry.candidates.size(); ++index) {
+    if (index != 0) {
+      display.push_back(kDisplaySlash);
+    }
+    display.insert(display.end(), entry.candidates[index].begin(),
+                   entry.candidates[index].end());
+  }
+  return display;
+}
+
+JisCode display_token(const JwpText& text, std::size_t index) {
+  return index < text.size() ? text[index] : 0;
+}
+
+void consume_sort_work(std::size_t& remaining_work) {
+  if (remaining_work == 0) {
+    throw WnnUserDictionaryError(
+        "WNN user dictionary exceeds the interactive sort work limit");
+  }
+  --remaining_work;
+}
+
+bool second_display_precedes_first(const JwpText& first, const JwpText& second,
+                                   std::size_t& remaining_work) {
+  std::size_t first_index = 0;
+  std::size_t second_index = 0;
+  JisCode first_bracket = 0;
+  JisCode second_bracket = 0;
+
+  for (;;) {
+    consume_sort_work(remaining_work);
+    const JisCode first_token = display_token(first, first_index);
+    const JisCode second_token = display_token(second, second_index);
+    if (first_token != second_token) {
+      return second_token < first_token;
+    }
+    if (first_token == 0) {
+      return false;
+    }
+    ++first_index;
+    ++second_index;
+    if (is_display_bracket(display_token(first, first_index))) {
+      first_bracket = display_token(first, first_index++);
+    }
+    if (is_display_bracket(display_token(second, second_index))) {
+      second_bracket = display_token(second, second_index++);
+    }
+    if (display_token(first, first_index) == kDisplayArrow &&
+        first_bracket != second_bracket) {
+      return second_bracket < first_bracket;
+    }
+  }
+}
+
 }  // namespace
 
 bool WnnUserEntry::operator==(const WnnUserEntry& other) const noexcept {
@@ -271,6 +357,47 @@ WnnUserEntry make_wnn_user_entry(JwpText reading,
   WnnUserEntry entry{std::move(reading), ending, std::move(candidates)};
   WnnUserDictionary::from_entries({entry});
   return entry;
+}
+
+std::vector<WnnUserEntry> sort_wnn_user_entries(
+    std::vector<WnnUserEntry> entries) {
+  validate_entries(entries);
+  struct SortableEntry {
+    WnnUserEntry entry;
+    JwpText display;
+  };
+
+  std::vector<SortableEntry> sortable;
+  sortable.reserve(entries.size());
+  for (WnnUserEntry& entry : entries) {
+    JwpText display = display_text_for_entry(entry);
+    sortable.push_back({std::move(entry), std::move(display)});
+  }
+  // The recovered comparator is stateful around inflection brackets and is not
+  // a strict weak ordering for arbitrary candidate tokens. Reproduce the
+  // original selection sort rather than passing it to a standard sort.
+  std::size_t remaining_work = kWnnMaximumSortComparisonSteps;
+  for (std::size_t first = 0; first < sortable.size(); ++first) {
+    std::size_t selected = first;
+    for (std::size_t candidate = first + 1; candidate < sortable.size();
+         ++candidate) {
+      if (second_display_precedes_first(sortable[selected].display,
+                                        sortable[candidate].display,
+                                        remaining_work)) {
+        selected = candidate;
+      }
+    }
+    if (selected != first) {
+      std::swap(sortable[first], sortable[selected]);
+    }
+  }
+
+  entries.clear();
+  entries.reserve(sortable.size());
+  for (SortableEntry& item : sortable) {
+    entries.push_back(std::move(item.entry));
+  }
+  return entries;
 }
 
 WnnUserDictionary WnnUserDictionary::parse(std::string_view bytes) {

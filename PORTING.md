@@ -173,6 +173,11 @@ legacy file structures.
     permissive import codec. It derives all nine godan endings, validates the
     recovered ichidan i/e stem set and i-adjective endings, rejects multiple
     inflected candidates, and strips a matching kana suffix exactly once.
+49. Explicit user-dictionary sorting reproduces the recovered display-row
+    ordering, including slash-separated candidates and bracketed inflections,
+    with the source-shaped selection algorithm rather than assuming a strict
+    comparator. A comparison-step budget fails pathological sorts locally
+    without limiting dictionary loading, lookup, or unsorted source order.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
