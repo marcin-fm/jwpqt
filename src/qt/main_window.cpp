@@ -50,6 +50,7 @@
 
 #include "edict_lookup_dialog.h"
 #include "edict_resource_search.h"
+#include "edict_results_window.h"
 #include "edict_resources.h"
 #include "file_io.h"
 #include "jwp_editor.h"
@@ -247,6 +248,7 @@ MainWindow::MainWindow(QWidget* parent)
 MainWindow::~MainWindow() {
   delete wnn_user_dictionary_dialog_;
   delete edict_lookup_dialog_;
+  delete edict_results_window_;
 }
 
 bool MainWindow::load_edict_configuration(const QString& registry_path,
@@ -261,6 +263,8 @@ bool MainWindow::load_edict_configuration(const QString& registry_path,
 
     delete edict_lookup_dialog_;
     edict_lookup_dialog_ = nullptr;
+    delete edict_results_window_;
+    edict_results_window_ = nullptr;
     edict_resources_ = std::move(candidate);
     edict_config_directory_ = directory;
     update_edict_actions();
@@ -646,6 +650,13 @@ void MainWindow::create_actions() {
   connect(edict_lookup_action_, &QAction::triggered, this,
           [this] { show_edict_lookup_dialog(); });
 
+  edict_results_action_ = tools_menu->addAction(tr("Dictionary &Results"));
+  edict_results_action_->setObjectName(QStringLiteral("edictResultsAction"));
+  edict_results_action_->setEnabled(false);
+  connect(edict_results_action_, &QAction::triggered, this, [this] {
+    show_edict_results_window();
+  });
+
   tools_menu->addSeparator();
   kanji_color_options_action_ =
       tools_menu->addAction(tr("Kanji Color &Options..."));
@@ -913,6 +924,9 @@ void MainWindow::update_edict_actions() {
     }
   }
   edict_lookup_action_->setEnabled(available);
+  if (edict_results_action_ != nullptr) {
+    edict_results_action_->setEnabled(edict_results_window_ != nullptr);
+  }
 }
 
 void MainWindow::update_kanji_color_actions() {
@@ -1495,12 +1509,17 @@ void MainWindow::show_edict_lookup_dialog() {
         if (edict_resources_ == nullptr) {
           throw std::runtime_error("Dictionary resources are not available");
         }
+        show_edict_results_window();
         EdictResourceSearchOptions search;
         search.personal_names = options.personal_names;
         search.place_names = options.place_names;
         search.classical = options.classical;
-        return search_edict_resources(*edict_resources_,
-                                      edict_config_directory_, query, search);
+        EdictResourceSearchReport report = search_edict_resources(
+            *edict_resources_, edict_config_directory_, query, search);
+        if (edict_results_window_ != nullptr) {
+          edict_results_window_->append_report(report);
+        }
+        return report;
       },
       [this](const std::u32string& text) { return insert_edict_text(text); },
       this);
@@ -1512,6 +1531,31 @@ void MainWindow::show_edict_lookup_dialog() {
           [this] { edict_lookup_dialog_ = nullptr; });
   edict_lookup_dialog_ = dialog;
   dialog->show();
+}
+
+void MainWindow::show_edict_results_window() {
+  if (edict_results_window_ != nullptr) {
+    edict_results_window_->show();
+    edict_results_window_->raise();
+    edict_results_window_->activateWindow();
+    return;
+  }
+
+  auto* results = new EdictResultsWindow(this);
+  results->set_insert_handler(
+      [this](const std::u32string& text) { return insert_edict_text(text); });
+  results->setAttribute(Qt::WA_DeleteOnClose);
+  connect(results, &QObject::destroyed, this, [this] {
+    edict_results_window_ = nullptr;
+    if (edict_results_action_ != nullptr) {
+      edict_results_action_->setEnabled(false);
+    }
+  });
+  edict_results_window_ = results;
+  if (edict_results_action_ != nullptr) {
+    edict_results_action_->setEnabled(true);
+  }
+  results->show();
 }
 
 std::u32string MainWindow::edict_query_seed() const {

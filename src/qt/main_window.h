@@ -36,6 +36,7 @@ class QTextEdit;
 namespace jwpqt::qt {
 
 class EdictLookupDialog;
+class EdictResultsWindow;
 struct EdictResourceSet;
 class JwpEditor;
 class WnnUserDictionaryDialog;
@@ -162,6 +163,7 @@ class MainWindow : public QMainWindow {
   void update_undo_actions();
   void update_conversion_actions();
   void update_edict_actions();
+  void show_edict_results_window();
   void update_kanji_color_actions();
   void update_kana_input_state();
   void set_kana_input_enabled(bool enabled);
@@ -219,6 +221,7 @@ class MainWindow : public QMainWindow {
   QAction* kana_input_action_ = nullptr;
   QAction* user_dictionary_action_ = nullptr;
   QAction* edict_lookup_action_ = nullptr;
+  QAction* edict_results_action_ = nullptr;
   QAction* format_paragraph_action_ = nullptr;
   QAction* insert_page_break_action_ = nullptr;
   QAction* kanji_color_options_action_ = nullptr;
@@ -251,6 +254,7 @@ class MainWindow : public QMainWindow {
   std::unique_ptr<EdictResourceSet> edict_resources_;
   QString edict_config_directory_;
   EdictLookupDialog* edict_lookup_dialog_ = nullptr;
+  EdictResultsWindow* edict_results_window_ = nullptr;
   std::unique_ptr<core::JwpConversionTransaction> jwp_conversion_;
   std::optional<core::WnnPreferences> conversion_preferences_before_;
   core::KanaInputComposer kana_input_;

@@ -27,6 +27,7 @@
 
 #include "file_io.h"
 #include "edict_lookup_dialog.h"
+#include "edict_results_window.h"
 #include "edict_resources.h"
 #include "jwp_editor.h"
 #include "jwpqt/core/jis_unicode.h"
@@ -1683,6 +1684,17 @@ void test_edict_lookup_integration(const QString& directory) {
       dialog->findChild<QListWidget*>(QStringLiteral("edictResults"));
   require(results != nullptr && results->count() == 1,
           "Native EDICT lookup did not expose the configured result");
+  auto* accumulated =
+      dynamic_cast<jwpqt::qt::EdictResultsWindow*>(window.findChild<QWidget*>(
+          QStringLiteral("edictResultsWindow")));
+  QAction* accumulated_action = find_action(window, "edictResultsAction");
+  require(accumulated != nullptr && accumulated_action != nullptr &&
+              accumulated_action->isEnabled() &&
+              accumulated->result_count() == 1,
+          "Native EDICT lookup did not append to accumulated results");
+  accumulated_action->trigger();
+  require(accumulated->isVisible(),
+          "Dictionary Results action did not reopen accumulated results");
   results->setCurrentRow(0);
   require(dialog->insert_selected(),
           "Native EDICT result could not be inserted into JWP");
@@ -1708,14 +1720,20 @@ void test_edict_lookup_integration(const QString& directory) {
               registry_path, jwpqt::qt::OpenMode::kNonInteractive) &&
               window.edict_resources()->resources.size() == 1 &&
               window.findChild<QDialog*>(QStringLiteral("edictLookupDialog")) ==
-                  dialog,
+                  dialog &&
+              dynamic_cast<jwpqt::qt::EdictResultsWindow*>(
+                  window.findChild<QWidget*>(
+                      QStringLiteral("edictResultsWindow"))) == accumulated,
           "Malformed EDICT reload discarded the prior working state");
   write_bytes(registry_path, valid_registry);
   require(window.load_edict_configuration(
               registry_path, jwpqt::qt::OpenMode::kNonInteractive) &&
               window.findChild<QDialog*>(QStringLiteral("edictLookupDialog")) ==
-                  nullptr,
-          "Successful EDICT reload retained a stale lookup dialog");
+                  nullptr &&
+              window.findChild<QWidget*>(
+                  QStringLiteral("edictResultsWindow")) == nullptr &&
+              !accumulated_action->isEnabled(),
+          "Successful EDICT reload retained stale dictionary windows");
 
   jwpqt::qt::MainWindow plain;
   const QString plain_path = directory + QStringLiteral("/lookup.txt");
@@ -1738,9 +1756,15 @@ void test_edict_lookup_integration(const QString& directory) {
           "EDICT lookup was unavailable for owner-destruction fixture");
   owner_lookup->trigger();
   QApplication::processEvents();
-  require(owner->findChild<QDialog*>(QStringLiteral("edictLookupDialog")) !=
-              nullptr,
-          "EDICT owner-destruction fixture did not create the child dialog");
+  auto* owner_dialog = dynamic_cast<jwpqt::qt::EdictLookupDialog*>(
+      owner->findChild<QDialog*>(QStringLiteral("edictLookupDialog")));
+  if (owner_dialog != nullptr) {
+    owner_dialog->set_query(U"cat");
+  }
+  require(owner_dialog != nullptr && owner_dialog->search() &&
+              owner->findChild<QWidget*>(
+                  QStringLiteral("edictResultsWindow")) != nullptr,
+          "EDICT owner-destruction fixture did not create child windows");
   owner.reset();
   QApplication::processEvents();
 }
