@@ -25,6 +25,20 @@
 namespace jwpqt::qt {
 namespace {
 
+std::vector<core::JwpDocument> copy_documents(
+    const std::vector<const core::JwpDocument*>& documents) {
+  if (documents.empty())
+    throw core::KanjiInfoError("Kanji count requires a current document");
+  std::vector<core::JwpDocument> snapshots;
+  snapshots.reserve(documents.size());
+  for (const core::JwpDocument* document : documents) {
+    if (document == nullptr)
+      throw core::KanjiInfoError("Kanji count document is null");
+    snapshots.push_back(*document);
+  }
+  return snapshots;
+}
+
 void append_joined(std::u32string& output,
                    const std::vector<std::u32string>& values) {
   for (std::size_t index = 0; index < values.size(); ++index) {
@@ -46,7 +60,7 @@ KanjiCountDialog::KanjiCountDialog(
     const core::KanjiInfoDatabase* information, InsertHandler insert_handler,
     InfoHandler info_handler, QWidget* parent)
     : QDialog(parent),
-      documents_(std::move(documents)),
+      documents_(copy_documents(documents)),
       color_list_(color_list),
       information_(information),
       insert_handler_(std::move(insert_handler)),
@@ -62,12 +76,6 @@ KanjiCountDialog::KanjiCountDialog(
       copy_button_(new QPushButton(tr("&Copy"), this)),
       insert_button_(new QPushButton(tr("&Insert"), this)),
       info_button_(new QPushButton(tr("&Information"), this)) {
-  if (documents_.empty() || documents_[0] == nullptr)
-    throw core::KanjiInfoError("Kanji count requires a current document");
-  for (const core::JwpDocument* document : documents_) {
-    if (document == nullptr)
-      throw core::KanjiInfoError("Kanji count document is null");
-  }
   setObjectName(QStringLiteral("kanjiCountDialog"));
   setWindowTitle(tr("Count Kanji"));
   setModal(false);
@@ -162,10 +170,13 @@ bool KanjiCountDialog::count() {
   try {
     const KanjiCountDisplayOptions options = display_options();
     std::vector<const core::JwpDocument*> selected;
-    if (options.all_documents)
-      selected = documents_;
-    else
-      selected.push_back(documents_[0]);
+    if (options.all_documents) {
+      selected.reserve(documents_.size());
+      for (const core::JwpDocument& document : documents_)
+        selected.push_back(&document);
+    } else {
+      selected.push_back(&documents_.front());
+    }
     return publish(core::count_kanji(selected, color_list_, options.filter),
                    options);
   } catch (const std::exception& error) {

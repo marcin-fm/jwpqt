@@ -59,7 +59,7 @@ class KanjiCountDialog : public QDialog {
   void insert_results();
   void show_information();
 
-  std::vector<const core::JwpDocument*> documents_;
+  std::vector<core::JwpDocument> documents_;
   const core::KanjiColorList& color_list_;
   const core::KanjiInfoDatabase* information_;
   InsertHandler insert_handler_;

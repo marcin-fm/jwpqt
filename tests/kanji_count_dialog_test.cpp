@@ -27,8 +27,8 @@ jwpqt::core::JwpDocument document(std::initializer_list<std::uint16_t> text) {
 }
 
 void test_dialog() {
-  const auto first = document({0x3021, 0x3021, 0x3022, 0x0020});
-  const auto second = document({0x3022, 0x3022, 0x3022});
+  auto first = document({0x3021, 0x3021, 0x3022, 0x0020});
+  auto second = document({0x3022, 0x3022, 0x3022});
   jwpqt::core::KanjiColorList color_list;
   require(color_list.add(0x3021), "Could not create count-dialog color list");
   std::u32string inserted;
@@ -37,6 +37,8 @@ void test_dialog() {
       {&first, &second}, color_list, nullptr,
       [&](std::u32string text) { inserted = std::move(text); },
       [&](jwpqt::core::JisCode code) { shown = code; });
+  first.paragraphs.clear();
+  second.paragraphs.clear();
   require(dialog.count() && dialog.results().size() == 2 &&
               dialog.results()[0].code == 0x3021 &&
               dialog.results()[0].count == 2,
