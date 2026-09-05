@@ -53,7 +53,7 @@ class WnnConversionSession {
  public:
   WnnConversionSession(
       const WnnDictionary& system_dictionary, WnnPreferences& preferences,
-      const std::vector<WnnRecord>* user_records = nullptr,
+      std::vector<WnnRecord> user_records = {},
       std::size_t maximum_output_cells = kWnnDefaultMaximumLookupCells);
 
   bool begin(const JwpText& input);
@@ -81,7 +81,7 @@ class WnnConversionSession {
 
   const WnnDictionary& system_dictionary_;
   WnnPreferences& preferences_;
-  const std::vector<WnnRecord>* user_records_;
+  std::vector<WnnRecord> user_records_;
   std::size_t maximum_output_cells_;
   JwpText input_;
   WnnLookupResult result_;

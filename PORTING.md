@@ -153,6 +153,10 @@ legacy file structures.
     records. It reconstructs full readings for editing, preserves imported
     multi-candidate inflected records, enforces all allocation budgets before
     growth, and exposes unsorted lookup records without a system index.
+44. Each WNN conversion session owns a snapshot of optional user records.
+    Manual and automatic lookup search those records after system data, and
+    longer user keys participate in automatic conversion's wait decision
+    without borrowing caller-owned storage.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -163,8 +167,8 @@ requires a separate fixture-backed change rather than silent substitution.
 
 1. Port paged printing and clipboard color policy over the rich JWP document
    layout.
-2. Connect editable WNN user records to lookup, atomic file lifecycle, and
-   native management UI; then port lookup tools as separate vertical slices.
+2. Add atomic editable WNN dictionary file lifecycle and native management UI;
+   then port lookup tools as separate vertical slices.
 3. Port configuration, remaining import/export paths, and help.
 
 Each slice is committed independently after focused tests and the complete

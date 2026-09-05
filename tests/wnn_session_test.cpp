@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "jwpqt/core/wnn_session.h"
+#include "jwpqt/core/wnn_user_dictionary.h"
 
 #include <cstdint>
 #include <cstdlib>
@@ -18,6 +19,8 @@ using jwpqt::core::WnnConversionSession;
 using jwpqt::core::WnnDictionary;
 using jwpqt::core::WnnPreferences;
 using jwpqt::core::WnnSessionError;
+using jwpqt::core::WnnUserDictionary;
+using jwpqt::core::WnnUserEntry;
 
 void require(bool condition, std::string_view message) {
   if (!condition) {
@@ -231,6 +234,33 @@ void test_automatic_preparation_waits_and_uses_longest_prefix() {
           "Overlong automatic input did not back off to a valid prefix");
 }
 
+void test_user_dictionary_records_are_owned_and_searched() {
+  const WnnDictionary system = dictionary();
+  WnnPreferences preferences(2);
+  const WnnUserDictionary user_dictionary = WnnUserDictionary::from_entries({
+      WnnUserEntry{{0x2422}, '*', {{0x3023}}},
+      WnnUserEntry{{0x2422, 0x2424}, '*', {{0x3024}}},
+  });
+  std::vector<jwpqt::core::WnnRecord> user_records =
+      user_dictionary.lookup_records();
+  WnnConversionSession session(system, preferences, user_records);
+  user_records.clear();
+
+  const auto prepared = session.prepare(input());
+  require(prepared && prepared->result().can_extend &&
+              prepared->result().candidates.size() == 4 &&
+              prepared->result().candidates[0].text == JwpText{0x3021} &&
+              prepared->result().candidates[1].text == JwpText{0x3022} &&
+              prepared->result().candidates[2].text == JwpText{0x3023} &&
+              prepared->result().candidates[3].original_kana,
+          "Session did not search its owned user dictionary after system data");
+
+  auto automatic = session.prepare_automatic(input());
+  require(automatic.wait_for_more && automatic.matched_length == 1 &&
+              !automatic.conversion,
+          "Automatic conversion ignored a longer user dictionary key");
+}
+
 void run_tests() {
   test_begin_cycle_accept_and_cancel();
   test_previous_wrap_and_direct_selection();
@@ -239,6 +269,7 @@ void run_tests() {
   test_inactive_and_no_match_behavior();
   test_lookup_failure_preserves_active_session();
   test_automatic_preparation_waits_and_uses_longest_prefix();
+  test_user_dictionary_records_are_owned_and_searched();
 }
 
 }  // namespace

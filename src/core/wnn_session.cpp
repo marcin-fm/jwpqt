@@ -60,11 +60,11 @@ const WnnCandidate& WnnPreparedConversion::selected_candidate() const {
 
 WnnConversionSession::WnnConversionSession(
     const WnnDictionary& system_dictionary, WnnPreferences& preferences,
-    const std::vector<WnnRecord>* user_records,
+    std::vector<WnnRecord> user_records,
     std::size_t maximum_output_cells)
     : system_dictionary_(system_dictionary),
       preferences_(preferences),
-      user_records_(user_records),
+      user_records_(std::move(user_records)),
       maximum_output_cells_(maximum_output_cells) {}
 
 bool WnnConversionSession::begin(const JwpText& input) {
@@ -82,7 +82,8 @@ std::optional<WnnPreparedConversion> WnnConversionSession::prepare(
   WnnPreparedConversion prepared;
   prepared.input_ = input;
   prepared.result_ = lookup_wnn_candidates(
-      system_dictionary_, input, user_records_, maximum_output_cells_);
+      system_dictionary_, input,
+      user_records_.empty() ? nullptr : &user_records_, maximum_output_cells_);
   if (prepared.result_.candidates.empty()) {
     return std::nullopt;
   }
