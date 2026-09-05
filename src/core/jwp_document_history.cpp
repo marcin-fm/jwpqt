@@ -36,6 +36,10 @@ bool JwpDocumentHistory::transaction_active() const noexcept {
   return transaction_start_.has_value();
 }
 
+std::uint64_t JwpDocumentHistory::generation() const noexcept {
+  return generation_;
+}
+
 void JwpDocumentHistory::require_caret(const JwpDocumentModel& model,
                                        JwpPosition caret) {
   if (!model.valid_position(caret)) {
@@ -68,6 +72,7 @@ void JwpDocumentHistory::begin(const JwpDocumentModel& model,
   require_current_document(model);
   require_caret(model, caret);
   transaction_start_.emplace(State{model.document(), caret});
+  ++generation_;
 }
 
 bool JwpDocumentHistory::commit(const JwpDocumentModel& model,
@@ -81,6 +86,7 @@ bool JwpDocumentHistory::commit(const JwpDocumentModel& model,
   if (transaction_start_->document == after.document) {
     transaction_start_.reset();
     break_coalescing();
+    ++generation_;
     return false;
   }
 
@@ -103,12 +109,24 @@ bool JwpDocumentHistory::commit(const JwpDocumentModel& model,
   redo_entries_.clear();
   transaction_start_.reset();
   may_coalesce_ = kind != JwpHistoryKind::kNone;
+  ++generation_;
   return true;
+}
+
+void JwpDocumentHistory::abandon_unchanged(
+    const JwpDocumentModel& model) {
+  if (!transaction_start_) {
+    throw JwpDocumentHistoryError("no history transaction is active");
+  }
+  require_document(model, transaction_start_->document);
+  transaction_start_.reset();
+  ++generation_;
 }
 
 void JwpDocumentHistory::cancel() noexcept {
   transaction_start_.reset();
   break_coalescing();
+  ++generation_;
 }
 
 void JwpDocumentHistory::break_coalescing() noexcept {
@@ -120,6 +138,7 @@ void JwpDocumentHistory::clear() noexcept {
   redo_entries_.clear();
   transaction_start_.reset();
   break_coalescing();
+  ++generation_;
 }
 
 bool JwpDocumentHistory::undo(JwpDocumentModel& model, JwpPosition& caret) {
@@ -139,6 +158,7 @@ bool JwpDocumentHistory::undo(JwpDocumentModel& model, JwpPosition& caret) {
   model = std::move(restored);
   caret = entry.before.caret;
   break_coalescing();
+  ++generation_;
   return true;
 }
 
@@ -159,6 +179,7 @@ bool JwpDocumentHistory::redo(JwpDocumentModel& model, JwpPosition& caret) {
   model = std::move(restored);
   caret = entry.after.caret;
   break_coalescing();
+  ++generation_;
   return true;
 }
 

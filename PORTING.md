@@ -72,6 +72,9 @@ legacy file structures.
 24. The portable WNN conversion session starts from stored preferences, repairs
     stale offsets, wraps candidate cycling in both directions, learns choices,
     and terminates explicitly through accept or cancel.
+25. The portable JWP conversion transaction replaces selected kana with WNN
+    candidates, tracks variable-length selections and caret direction, groups
+    all cycling into one undo entry, and rolls back safely on controller failure.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -80,8 +83,8 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Connect romaji composition and the WNN candidate session to native Qt input,
-   one portable document transaction, and atomic preference persistence.
+1. Connect romaji composition and the portable WNN conversion transaction to
+   native Qt input and atomic preference persistence.
 2. Replace `QPlainTextEdit` scaffolding with a custom Qt editor surface once the
    paragraph model can drive wrapping, selection, conversion spans, and kanji
    coloring.

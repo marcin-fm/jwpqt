@@ -4,6 +4,8 @@
 #define JWPQT_CORE_WNN_SESSION_H
 
 #include <cstddef>
+#include <cstdint>
+#include <optional>
 #include <stdexcept>
 #include <vector>
 
@@ -18,6 +20,29 @@ class WnnSessionError : public std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
+class WnnPreparedConversion {
+ public:
+  WnnPreparedConversion(const WnnPreparedConversion&) = delete;
+  WnnPreparedConversion& operator=(const WnnPreparedConversion&) = delete;
+  WnnPreparedConversion(WnnPreparedConversion&& other) noexcept;
+  WnnPreparedConversion& operator=(WnnPreparedConversion&& other) noexcept;
+
+  const JwpText& input() const;
+  const WnnLookupResult& result() const;
+  std::size_t selected_index() const;
+  const WnnCandidate& selected_candidate() const;
+
+ private:
+  friend class WnnConversionSession;
+
+  WnnPreparedConversion() = default;
+
+  JwpText input_;
+  WnnLookupResult result_;
+  std::size_t selected_index_ = 0;
+  bool valid_ = false;
+};
+
 class WnnConversionSession {
  public:
   WnnConversionSession(
@@ -26,9 +51,12 @@ class WnnConversionSession {
       std::size_t maximum_output_cells = kWnnDefaultMaximumLookupCells);
 
   bool begin(const JwpText& input);
+  std::optional<WnnPreparedConversion> prepare(const JwpText& input) const;
+  void activate(WnnPreparedConversion prepared);
   void clear() noexcept;
 
   bool active() const noexcept;
+  std::uint64_t generation() const noexcept;
   const JwpText& input() const;
   const WnnLookupResult& result() const;
   std::size_t selected_index() const;
@@ -52,6 +80,7 @@ class WnnConversionSession {
   WnnLookupResult result_;
   std::size_t selected_index_ = 0;
   bool active_ = false;
+  std::uint64_t generation_ = 0;
 };
 
 }  // namespace jwpqt::core

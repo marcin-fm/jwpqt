@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -116,6 +117,33 @@ void test_stale_preference_is_repaired_on_begin() {
           "Session start did not repair a stale preference offset");
 }
 
+void test_prepare_has_no_state_or_preference_side_effects() {
+  const WnnDictionary system = dictionary();
+  std::string bytes(2 * jwpqt::core::kWnnPreferenceRecordSize, '\0');
+  bytes[0] = static_cast<char>(0xa2);
+  bytes[6] = 99;
+  WnnPreferences preferences = WnnPreferences::parse(bytes, 2);
+  WnnConversionSession session(system, preferences);
+
+  auto prepared = session.prepare(input());
+  require(prepared && prepared->selected_index() == 0 &&
+              prepared->selected_candidate().text == JwpText{0x3021},
+          "Prepared conversion did not expose the preferred candidate");
+  require(!session.active() && !preferences.changed() &&
+              preferences.entries()[0].selected_offset == 99,
+          "Preparing conversion changed session or preferences");
+
+  session.activate(std::move(*prepared));
+  require(session.active() && preferences.changed() &&
+              preferences.entries()[0].selected_offset == 0,
+          "Activating conversion did not repair stale preference");
+
+  auto second = session.prepare(input());
+  auto moved = std::move(*second);
+  require_session_error([&] { second->selected_candidate(); },
+                        "Moved-from preparation exposed a candidate");
+}
+
 void test_inactive_and_no_match_behavior() {
   const WnnDictionary system = dictionary();
   WnnPreferences preferences(2);
@@ -151,6 +179,7 @@ void run_tests() {
   test_begin_cycle_accept_and_cancel();
   test_previous_wrap_and_direct_selection();
   test_stale_preference_is_repaired_on_begin();
+  test_prepare_has_no_state_or_preference_side_effects();
   test_inactive_and_no_match_behavior();
   test_lookup_failure_preserves_active_session();
 }

@@ -3,6 +3,7 @@
 #include "jwpqt/core/jwp_document_model.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <stdexcept>
 #include <vector>
@@ -35,10 +36,12 @@ class JwpDocumentHistory {
   bool can_undo() const noexcept;
   bool can_redo() const noexcept;
   bool transaction_active() const noexcept;
+  std::uint64_t generation() const noexcept;
 
   void begin(const JwpDocumentModel& model, JwpPosition caret);
   bool commit(const JwpDocumentModel& model, JwpPosition caret,
               JwpHistoryKind kind = JwpHistoryKind::kNone);
+  void abandon_unchanged(const JwpDocumentModel& model);
   void cancel() noexcept;
   void break_coalescing() noexcept;
   void clear() noexcept;
@@ -69,6 +72,7 @@ class JwpDocumentHistory {
   std::vector<Entry> redo_entries_;
   std::optional<State> transaction_start_;
   bool may_coalesce_ = false;
+  std::uint64_t generation_ = 0;
 };
 
 }  // namespace jwpqt::core

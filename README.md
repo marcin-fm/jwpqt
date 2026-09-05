@@ -38,9 +38,9 @@ paragraph formatting, hard page breaks, code-page interpretation, native
 search/replace, and portable transaction history. The portable core also
 contains the recovered desktop romaji-to-kana composer plus bounded WNN
 dictionary parsing, ordered candidate lookup, a portable user-selection cache,
-atomic preference file I/O, and candidate-session state. Native conversion UI,
-lookup tools, custom layout/rendering, configuration, and printing remain in
-progress.
+atomic preference file I/O, candidate-session state, and one-undo document
+conversion transactions. Native conversion UI, lookup tools, custom
+layout/rendering, configuration, and printing remain in progress.
 
 JWPce/JWPxp copyright and licensing notices remain in `_cpright.txt`,
 `_readme.txt`, and `gnugpl.txt`.

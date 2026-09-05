@@ -160,6 +160,26 @@ target_compile_options(jwpqt_wnn_session_tests
 )
 
 add_test(NAME core_wnn_session COMMAND jwpqt_wnn_session_tests)
+
+add_executable(jwpqt_jwp_conversion_tests
+  jwp_conversion_test.cpp
+)
+
+target_link_libraries(jwpqt_jwp_conversion_tests
+  PRIVATE
+    jwpqt_core
+)
+
+target_compile_options(jwpqt_jwp_conversion_tests
+  PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+    -Wconversion
+    -Wsign-conversion
+)
+
+add_test(NAME core_jwp_conversion COMMAND jwpqt_jwp_conversion_tests)
 add_test(NAME core_jwp_document COMMAND jwpqt_jwp_document_tests)
 add_test(NAME core_jwp_text_codec COMMAND jwpqt_jwp_text_codec_tests)
 add_test(NAME core_jwp_document_model COMMAND jwpqt_jwp_document_model_tests)

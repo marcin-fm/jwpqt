@@ -119,6 +119,25 @@ void test_typing_coalesces_until_broken() {
          "broken typing run undoes separately");
 }
 
+void test_unchanged_abandon_preserves_typing_coalescing() {
+  JwpDocumentModel model = model_with_text();
+  JwpDocumentHistory history;
+  JwpPosition caret{};
+
+  insert_transaction(history, model, caret, 'A', JwpHistoryKind::kTyping);
+  history.begin(model, caret);
+  history.abandon_unchanged(model);
+  insert_transaction(history, model, caret, 'B', JwpHistoryKind::kTyping);
+  expect(history.undo_depth() == 1,
+         "unchanged abandoned transaction preserves typing run");
+
+  history.begin(model, caret);
+  model.insert(caret, JwpText{'C'});
+  expect_error([&] { history.abandon_unchanged(model); },
+               "abandon after document mutation");
+  history.cancel();
+}
+
 void test_deletions_coalesce_but_not_with_typing() {
   JwpDocumentModel model = model_with_text({'A', 'B', 'C'});
   JwpDocumentHistory history;
@@ -227,6 +246,7 @@ int main() {
   test_defaults_and_limits();
   test_grouped_transaction_restores_document_and_caret();
   test_typing_coalesces_until_broken();
+  test_unchanged_abandon_preserves_typing_coalescing();
   test_deletions_coalesce_but_not_with_typing();
   test_new_edit_invalidates_redo();
   test_noop_cancel_and_clear();

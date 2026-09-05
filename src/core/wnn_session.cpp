@@ -6,6 +6,57 @@
 
 namespace jwpqt::core {
 
+WnnPreparedConversion::WnnPreparedConversion(
+    WnnPreparedConversion&& other) noexcept
+    : input_(std::move(other.input_)),
+      result_(std::move(other.result_)),
+      selected_index_(other.selected_index_),
+      valid_(other.valid_) {
+  other.selected_index_ = 0;
+  other.valid_ = false;
+}
+
+WnnPreparedConversion& WnnPreparedConversion::operator=(
+    WnnPreparedConversion&& other) noexcept {
+  if (this != &other) {
+    input_ = std::move(other.input_);
+    result_ = std::move(other.result_);
+    selected_index_ = other.selected_index_;
+    valid_ = other.valid_;
+    other.selected_index_ = 0;
+    other.valid_ = false;
+  }
+  return *this;
+}
+
+const JwpText& WnnPreparedConversion::input() const {
+  if (!valid_) {
+    throw WnnSessionError("prepared WNN conversion is no longer valid");
+  }
+  return input_;
+}
+
+const WnnLookupResult& WnnPreparedConversion::result() const {
+  if (!valid_) {
+    throw WnnSessionError("prepared WNN conversion is no longer valid");
+  }
+  return result_;
+}
+
+std::size_t WnnPreparedConversion::selected_index() const {
+  if (!valid_) {
+    throw WnnSessionError("prepared WNN conversion is no longer valid");
+  }
+  return selected_index_;
+}
+
+const WnnCandidate& WnnPreparedConversion::selected_candidate() const {
+  if (!valid_ || selected_index_ >= result_.candidates.size()) {
+    throw WnnSessionError("prepared WNN candidate is unavailable");
+  }
+  return result_.candidates[selected_index_];
+}
+
 WnnConversionSession::WnnConversionSession(
     const WnnDictionary& system_dictionary, WnnPreferences& preferences,
     const std::vector<WnnRecord>* user_records,
@@ -16,37 +67,67 @@ WnnConversionSession::WnnConversionSession(
       maximum_output_cells_(maximum_output_cells) {}
 
 bool WnnConversionSession::begin(const JwpText& input) {
-  JwpText next_input = input;
-  WnnLookupResult next_result = lookup_wnn_candidates(
-      system_dictionary_, input, user_records_, maximum_output_cells_);
-  if (next_result.candidates.empty()) {
+  std::optional<WnnPreparedConversion> prepared = prepare(input);
+  if (!prepared) {
     clear();
     return false;
   }
-  const std::optional<std::size_t> preferred =
-      preferences_.preferred_candidate(input, next_result);
-  if (!preferred || *preferred >= next_result.candidates.size()) {
-    throw WnnSessionError("WNN preferences returned an invalid candidate");
-  }
-
-  preferences_.remember(input, next_result, *preferred);
-  input_.swap(next_input);
-  result_.candidates.swap(next_result.candidates);
-  std::swap(result_.can_extend, next_result.can_extend);
-  selected_index_ = *preferred;
-  active_ = true;
+  activate(std::move(*prepared));
   return true;
 }
 
+std::optional<WnnPreparedConversion> WnnConversionSession::prepare(
+    const JwpText& input) const {
+  WnnPreparedConversion prepared;
+  prepared.input_ = input;
+  prepared.result_ = lookup_wnn_candidates(
+      system_dictionary_, input, user_records_, maximum_output_cells_);
+  if (prepared.result_.candidates.empty()) {
+    return std::nullopt;
+  }
+  const std::optional<std::size_t> preferred =
+      preferences_.preferred_candidate(input, prepared.result_);
+  if (!preferred || *preferred >= prepared.result_.candidates.size()) {
+    throw WnnSessionError("WNN preferences returned an invalid candidate");
+  }
+  prepared.selected_index_ = *preferred;
+  prepared.valid_ = true;
+  return prepared;
+}
+
+void WnnConversionSession::activate(WnnPreparedConversion prepared) {
+  if (!prepared.valid_ || prepared.result_.candidates.empty() ||
+      prepared.selected_index_ >= prepared.result_.candidates.size()) {
+    throw WnnSessionError("prepared WNN conversion is invalid");
+  }
+  preferences_.remember(prepared.input_, prepared.result_,
+                        prepared.selected_index_);
+  input_.swap(prepared.input_);
+  result_.candidates.swap(prepared.result_.candidates);
+  std::swap(result_.can_extend, prepared.result_.can_extend);
+  selected_index_ = prepared.selected_index_;
+  active_ = true;
+  ++generation_;
+  prepared.valid_ = false;
+}
+
 void WnnConversionSession::clear() noexcept {
+  const bool was_active = active_;
   JwpText{}.swap(input_);
   std::vector<WnnCandidate>{}.swap(result_.candidates);
   result_.can_extend = false;
   selected_index_ = 0;
   active_ = false;
+  if (was_active) {
+    ++generation_;
+  }
 }
 
 bool WnnConversionSession::active() const noexcept { return active_; }
+
+std::uint64_t WnnConversionSession::generation() const noexcept {
+  return generation_;
+}
 
 const JwpText& WnnConversionSession::input() const {
   require_active();
@@ -78,6 +159,7 @@ bool WnnConversionSession::select(std::size_t candidate_index) {
   }
   preferences_.remember(input_, result_, candidate_index);
   selected_index_ = candidate_index;
+  ++generation_;
   return true;
 }
 
