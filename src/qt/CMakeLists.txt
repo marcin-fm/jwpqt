@@ -1,6 +1,8 @@
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
 add_library(jwpqt_qt_support STATIC
+  edict_resource_search.cpp
+  edict_resource_search.h
   edict_resources.cpp
   edict_resources.h
   file_io.cpp

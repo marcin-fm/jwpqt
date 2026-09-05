@@ -295,6 +295,11 @@ legacy file structures.
     either source-bound JDX lookup or the physical unindexed scan through the
     same filtering, boundary, continuation, result, candidate, query, and work
     limits. Linear wildcard expansion uses the dictionary-owned extension page.
+69. Ordered resource dispatch searches normal dictionaries in configured order,
+    routes indexed and unindexed resources through their matching backend, and
+    optionally appends personal-name and place-name passes from the first names
+    dictionary. One remaining-budget ledger spans every pass; non-keep files are
+    reloaded for each search and failures retain their quiet diagnostic state.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -303,8 +308,7 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Dispatch one bounded EDICT search across the ordered loaded resources, then
-   add native result-view slices.
+1. Add native EDICT search and result-view slices over the ordered dispatcher.
 2. Port paged printing and clipboard color policy over the rich JWP document
    layout.
 3. Port configuration, remaining import/export paths, and help.
