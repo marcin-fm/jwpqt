@@ -545,4 +545,80 @@ std::vector<WnnRecord> WnnUserDictionary::lookup_records() const {
   return records;
 }
 
+WnnUserDictionaryEditor::WnnUserDictionaryEditor(
+    const WnnUserDictionary& dictionary)
+    : entries_(dictionary.entries()) {}
+
+const std::vector<WnnUserEntry>& WnnUserDictionaryEditor::entries() const
+    noexcept {
+  return entries_;
+}
+
+std::size_t WnnUserDictionaryEditor::add(WnnUserEntry entry) {
+  std::vector<WnnUserEntry> candidate = entries_;
+  candidate.push_back(std::move(entry));
+  const std::size_t index = candidate.size() - 1;
+  publish(std::move(candidate));
+  return index;
+}
+
+void WnnUserDictionaryEditor::replace(std::size_t index,
+                                      WnnUserEntry entry) {
+  if (index >= entries_.size()) {
+    throw WnnUserDictionaryError("WNN user entry index is out of bounds");
+  }
+  std::vector<WnnUserEntry> candidate = entries_;
+  candidate[index] = std::move(entry);
+  publish(std::move(candidate));
+}
+
+void WnnUserDictionaryEditor::erase(std::size_t index) {
+  if (index >= entries_.size()) {
+    throw WnnUserDictionaryError("WNN user entry index is out of bounds");
+  }
+  std::vector<WnnUserEntry> candidate = entries_;
+  candidate.erase(candidate.begin() + static_cast<std::ptrdiff_t>(index));
+  publish(std::move(candidate));
+}
+
+bool WnnUserDictionaryEditor::move_up(std::size_t index) {
+  if (index >= entries_.size()) {
+    throw WnnUserDictionaryError("WNN user entry index is out of bounds");
+  }
+  if (index == 0) {
+    return false;
+  }
+  std::vector<WnnUserEntry> candidate = entries_;
+  std::swap(candidate[index - 1], candidate[index]);
+  publish(std::move(candidate));
+  return true;
+}
+
+bool WnnUserDictionaryEditor::move_down(std::size_t index) {
+  if (index >= entries_.size()) {
+    throw WnnUserDictionaryError("WNN user entry index is out of bounds");
+  }
+  if (index + 1 == entries_.size()) {
+    return false;
+  }
+  std::vector<WnnUserEntry> candidate = entries_;
+  std::swap(candidate[index], candidate[index + 1]);
+  publish(std::move(candidate));
+  return true;
+}
+
+void WnnUserDictionaryEditor::sort() {
+  publish(sort_wnn_user_entries(entries_));
+}
+
+WnnUserDictionary WnnUserDictionaryEditor::dictionary() const {
+  return WnnUserDictionary::from_entries(entries_);
+}
+
+void WnnUserDictionaryEditor::publish(
+    std::vector<WnnUserEntry> candidate) {
+  WnnUserDictionary::from_entries(candidate);
+  entries_.swap(candidate);
+}
+
 }  // namespace jwpqt::core

@@ -53,4 +53,23 @@ class WnnUserDictionary {
   std::vector<WnnUserEntry> entries_;
 };
 
+class WnnUserDictionaryEditor {
+ public:
+  explicit WnnUserDictionaryEditor(const WnnUserDictionary& dictionary);
+
+  const std::vector<WnnUserEntry>& entries() const noexcept;
+  std::size_t add(WnnUserEntry entry);
+  void replace(std::size_t index, WnnUserEntry entry);
+  void erase(std::size_t index);
+  bool move_up(std::size_t index);
+  bool move_down(std::size_t index);
+  void sort();
+  WnnUserDictionary dictionary() const;
+
+ private:
+  void publish(std::vector<WnnUserEntry> candidate);
+
+  std::vector<WnnUserEntry> entries_;
+};
+
 }  // namespace jwpqt::core

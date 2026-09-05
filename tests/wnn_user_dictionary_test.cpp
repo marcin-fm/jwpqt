@@ -17,6 +17,7 @@ namespace {
 using jwpqt::core::JwpText;
 using jwpqt::core::JisCode;
 using jwpqt::core::WnnUserDictionary;
+using jwpqt::core::WnnUserDictionaryEditor;
 using jwpqt::core::WnnUserDictionaryError;
 using jwpqt::core::WnnUserEntry;
 using jwpqt::core::WnnUserInflection;
@@ -442,6 +443,74 @@ void test_parse_resource_limits() {
                "candidate-cell limit");
 }
 
+void test_ordered_edit_session() {
+  const WnnUserEntry first{{0x2422}, '*', {{0x3021}}};
+  const WnnUserEntry second{{0x2424}, '*', {{0x3022}}};
+  const WnnUserEntry third{{0x2426}, '*', {{0x3023}}};
+  const WnnUserEntry replacement{{0x2428}, '*', {{0x3024}}};
+  WnnUserDictionaryEditor editor(
+      WnnUserDictionary::from_entries({first, second}));
+
+  require(editor.add(third) == 2 &&
+              editor.entries() ==
+                  std::vector<WnnUserEntry>({first, second, third}),
+          "Edit session did not append an entry");
+  require(!editor.move_up(0) && !editor.move_down(2),
+          "Edit session moved a boundary entry");
+  require(editor.move_up(2) &&
+              editor.entries() ==
+                  std::vector<WnnUserEntry>({first, third, second}),
+          "Edit session did not move an entry up");
+  require(editor.move_down(1) &&
+              editor.entries() ==
+                  std::vector<WnnUserEntry>({first, second, third}),
+          "Edit session did not move an entry down");
+
+  editor.replace(1, replacement);
+  editor.erase(0);
+  require(editor.entries() ==
+              std::vector<WnnUserEntry>({replacement, third}) &&
+              editor.dictionary().entries() == editor.entries(),
+          "Edit session did not replace, erase, or publish its dictionary");
+
+  editor.sort();
+  require(editor.entries() ==
+              jwpqt::core::sort_wnn_user_entries({replacement, third}),
+          "Edit session did not apply portable sort order");
+}
+
+void test_edit_session_failures_are_atomic() {
+  const WnnUserEntry entry{{0x2422}, '*', {{0x3021}}};
+  WnnUserDictionaryEditor editor(WnnUserDictionary::from_entries({entry}));
+  const auto require_unchanged = [&] {
+    require(editor.entries() == std::vector<WnnUserEntry>({entry}),
+            "Failed edit session operation changed live entries");
+  };
+
+  expect_error([&] { editor.add({{}, '*', {{0x3022}}}); }, "invalid add");
+  require_unchanged();
+  expect_error([&] { editor.replace(0, {{0x2424}, '*', {}}); },
+               "invalid replacement");
+  require_unchanged();
+  expect_error([&] { editor.replace(1, entry); },
+               "out-of-range replacement");
+  require_unchanged();
+  expect_error([&] { editor.erase(1); }, "out-of-range erase");
+  require_unchanged();
+  expect_error([&] { editor.move_up(1); }, "out-of-range move up");
+  require_unchanged();
+  expect_error([&] { editor.move_down(1); }, "out-of-range move down");
+  require_unchanged();
+
+  const std::vector<WnnUserEntry> pathological(
+      1600, WnnUserEntry{{0x2422}, '*', {{0x3021}}});
+  WnnUserDictionaryEditor large_editor(
+      WnnUserDictionary::from_entries(pathological));
+  expect_error([&] { large_editor.sort(); }, "edit-session sort work limit");
+  require(large_editor.entries() == pathological,
+          "Failed edit-session sort changed live entries");
+}
+
 }  // namespace
 
 int main() {
@@ -455,6 +524,8 @@ int main() {
     test_invalid_new_entries();
     test_legacy_sort_order();
     test_parse_resource_limits();
+    test_ordered_edit_session();
+    test_edit_session_failures_are_atomic();
   } catch (const std::exception& error) {
     std::cerr << "wnn_user_dictionary_test: " << error.what() << '\n';
     return EXIT_FAILURE;
