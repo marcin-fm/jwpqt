@@ -200,6 +200,13 @@ target_compile_options(jwpqt_edict_deinflection_tests
 add_test(NAME core_edict_deinflection
   COMMAND jwpqt_edict_deinflection_tests)
 add_test(NAME core_jis_encoding COMMAND jwpqt_jis_encoding_tests)
+
+add_executable(jwpqt_jis_table_tests
+  jis_table_test.cpp
+)
+target_link_libraries(jwpqt_jis_table_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_jis_table_tests PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME core_jis_table COMMAND jwpqt_jis_table_tests)
 add_test(NAME core_jis_unicode COMMAND jwpqt_jis_unicode_tests)
 add_test(NAME core_jis_text COMMAND jwpqt_jis_text_tests)
 add_executable(jwpqt_kanji_color_tests
