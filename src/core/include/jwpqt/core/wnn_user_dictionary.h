@@ -37,6 +37,8 @@ WnnUserEntry make_wnn_user_entry(
     JwpText reading, std::vector<JwpText> candidates,
     WnnUserInflection inflection = WnnUserInflection::kUninflected);
 
+JwpText render_wnn_user_entry(const WnnUserEntry& entry);
+
 std::vector<WnnUserEntry> sort_wnn_user_entries(
     std::vector<WnnUserEntry> entries);
 

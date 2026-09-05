@@ -56,6 +56,7 @@
 #include "jwpqt/core/plain_text_change.h"
 #include "jwpqt/core/text_detection.h"
 #include "text_bridge.h"
+#include "wnn_user_dictionary_dialog.h"
 
 namespace jwpqt::qt {
 namespace {
@@ -683,6 +684,14 @@ void MainWindow::create_actions() {
   connect(kana_input_action_, &QAction::toggled, this,
           [this](bool enabled) { set_kana_input_enabled(enabled); });
 
+  convert_menu->addSeparator();
+  user_dictionary_action_ =
+      convert_menu->addAction(tr("&User Conversions..."));
+  user_dictionary_action_->setObjectName(
+      QStringLiteral("userDictionaryAction"));
+  connect(user_dictionary_action_, &QAction::triggered, this,
+          [this] { show_wnn_user_dictionary_dialog(); });
+
   QMenu* encoding_menu = menuBar()->addMenu(tr("E&ncoding"));
   encoding_actions_->setExclusive(true);
   for (const core::TextEncoding encoding : kTextEncodings) {
@@ -834,6 +843,7 @@ void MainWindow::update_conversion_actions() {
   previous_candidate_action_->setEnabled(active);
   next_candidate_action_->setEnabled(active);
   accept_candidate_action_->setEnabled(active);
+  user_dictionary_action_->setEnabled(!active && wnn_resources_ != nullptr);
   format_paragraph_action_->setEnabled(!active && jwp_document_.has_value());
   insert_page_break_action_->setEnabled(!active && jwp_document_.has_value());
   update_kanji_color_actions();
@@ -1218,6 +1228,8 @@ bool MainWindow::load_wnn_resources(const QString& index_path,
     auto resources = std::make_unique<WnnResources>(
         std::move(dictionary), std::move(preferences),
         std::move(user_dictionary), preferences_path, user_dictionary_path);
+    delete wnn_user_dictionary_dialog_;
+    wnn_user_dictionary_dialog_ = nullptr;
     wnn_resources_ = std::move(resources);
     update_conversion_actions();
     statusBar()->showMessage(tr("Loaded WNN conversion dictionaries"), 3000);
@@ -1272,6 +1284,125 @@ bool MainWindow::set_wnn_user_dictionary(
     if (mode == OpenMode::kInteractive) {
       show_error(tr("Could not update user conversion dictionary"), error);
     }
+    return false;
+  }
+}
+
+void MainWindow::show_wnn_user_dictionary_dialog() {
+  if (conversion_active() || wnn_resources_ == nullptr) {
+    statusBar()->showMessage(tr("WNN user conversions are not available"),
+                             3000);
+    return;
+  }
+  finish_kana_input();
+  if (conversion_active() || wnn_resources_ == nullptr) {
+    return;
+  }
+  if (wnn_user_dictionary_dialog_ != nullptr) {
+    wnn_user_dictionary_dialog_->show();
+    wnn_user_dictionary_dialog_->raise();
+    wnn_user_dictionary_dialog_->activateWindow();
+    return;
+  }
+
+  auto* dialog = new WnnUserDictionaryDialog(
+      wnn_resources_->user_dictionary,
+      [this](core::WnnUserDictionary dictionary) {
+        return set_wnn_user_dictionary(std::move(dictionary));
+      },
+      [this](const core::WnnUserEntry& entry) {
+        if (!insert_wnn_user_entry(entry)) {
+          throw std::runtime_error(
+              "Could not insert the user conversion into the document");
+        }
+      },
+      this);
+  dialog->setObjectName(QStringLiteral("userDictionaryDialog"));
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  connect(dialog, &QObject::destroyed, this,
+          [this] { wnn_user_dictionary_dialog_ = nullptr; });
+  wnn_user_dictionary_dialog_ = dialog;
+  dialog->show();
+}
+
+bool MainWindow::insert_wnn_user_entry(const core::WnnUserEntry& entry) {
+  if (conversion_active() || !jwp_document_.has_value()) {
+    return false;
+  }
+  finish_kana_input();
+  if (conversion_active() || !jwp_document_.has_value()) {
+    return false;
+  }
+
+  try {
+    const core::JwpText inserted = core::render_wnn_user_entry(entry);
+    const QString original_text = editor_->toPlainText();
+    const QTextCursor original_cursor = editor_->textCursor();
+    const bool original_modified = editor_->document()->isModified();
+    const core::JwpPosition caret = core::jwp_plain_text_position(
+        *jwp_document_,
+        utf32_offset_for_utf16(original_text, original_cursor.position()));
+    const core::JwpPosition selection_begin = core::jwp_plain_text_position(
+        *jwp_document_, utf32_offset_for_utf16(
+                            original_text, original_cursor.selectionStart()));
+    const core::JwpPosition selection_end = core::jwp_plain_text_position(
+        *jwp_document_, utf32_offset_for_utf16(
+                            original_text, original_cursor.selectionEnd()));
+
+    core::JwpDocumentModel candidate = *jwp_document_;
+    core::JwpDocumentHistory history = jwp_history_;
+    history.begin(candidate, caret);
+    const core::JwpPosition insertion =
+        candidate.erase({selection_begin, selection_end});
+    candidate.insert(insertion, inserted);
+    const core::JwpPosition following{
+        insertion.paragraph, insertion.offset + inserted.size()};
+    if (!history.commit(candidate, following)) {
+      return false;
+    }
+
+    std::u32string rendered =
+        core::decode_jwp_plain_text(candidate, jwp_code_page_);
+    const QString qt_text = to_qstring(rendered);
+    const int qt_caret = utf16_offset_for_utf32(
+        rendered, core::jwp_plain_text_offset(candidate, following));
+
+    updating_editor_ = true;
+    try {
+      editor_->setPlainText(qt_text);
+      apply_jwp_presentation(candidate.document(), jwp_code_page_);
+      QTextCursor cursor(editor_->document());
+      cursor.setPosition(qt_caret);
+      editor_->setTextCursor(cursor);
+    } catch (...) {
+      editor_->setPlainText(original_text);
+      apply_jwp_presentation(jwp_document_->document(), jwp_code_page_);
+      editor_->setTextCursor(original_cursor);
+      editor_->document()->setModified(original_modified);
+      updating_editor_ = false;
+      throw;
+    }
+    updating_editor_ = false;
+
+    jwp_document_ = std::move(candidate);
+    jwp_history_ = std::move(history);
+    jwp_caret_ = following;
+    expected_jwp_caret_.reset();
+    rendered_jwp_text_ = std::move(rendered);
+    editor_->document()->setModified(
+        !saved_jwp_document_.has_value() ||
+        jwp_document_->document() != *saved_jwp_document_);
+    update_undo_actions();
+    update_conversion_actions();
+    update_title();
+    statusBar()->showMessage(tr("Inserted user conversion"), 2000);
+    return true;
+  } catch (const std::exception& error) {
+    updating_editor_ = false;
+    statusBar()->showMessage(
+        tr("Could not insert user conversion: %1")
+            .arg(QString::fromUtf8(error.what())),
+        5000);
     return false;
   }
 }

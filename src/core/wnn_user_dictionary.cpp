@@ -359,6 +359,13 @@ WnnUserEntry make_wnn_user_entry(JwpText reading,
   return entry;
 }
 
+JwpText render_wnn_user_entry(const WnnUserEntry& entry) {
+  std::size_t candidate_count = 0;
+  std::size_t candidate_cells = 0;
+  validate_entry(entry, 0, candidate_count, candidate_cells);
+  return display_text_for_entry(entry);
+}
+
 std::vector<WnnUserEntry> sort_wnn_user_entries(
     std::vector<WnnUserEntry> entries) {
   validate_entries(entries);

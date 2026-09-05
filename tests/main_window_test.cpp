@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -14,6 +15,7 @@
 #include <QFontMetricsF>
 #include <QLabel>
 #include <QKeyEvent>
+#include <QListWidget>
 #include <QSettings>
 #include <QSignalBlocker>
 #include <QTextEdit>
@@ -28,6 +30,7 @@
 #include "jwpqt/core/jwp_text_codec.h"
 #include "kanji_color_settings.h"
 #include "main_window.h"
+#include "wnn_user_dictionary_dialog.h"
 
 namespace {
 
@@ -1509,6 +1512,124 @@ void test_jwp_wnn_user_dictionary(const QString& directory) {
           "Missing WNN user dictionary did not load as empty");
 }
 
+void test_jwp_wnn_user_dictionary_dialog(const QString& directory) {
+  const WnnFixture fixture = write_wnn_fixture(directory);
+  const QString user_dictionary_path =
+      directory + QStringLiteral("/dialog-user.cnv");
+  jwpqt::core::JwpDocument source;
+  source.paragraphs = {paragraph(U"AB")};
+  const QString source_path = directory + QStringLiteral("/dialog-user.jwp");
+  jwpqt::qt::write_jwp_file(source_path, source);
+
+  jwpqt::qt::MainWindow window;
+  QAction* action = find_action(window, "userDictionaryAction");
+  require(action != nullptr && !action->isEnabled(),
+          "User dictionary action was enabled without WNN resources");
+  require(window.load_wnn_resources(
+              fixture.index_path, fixture.data_path,
+              fixture.preferences_path, user_dictionary_path,
+              jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.open_jwp_path(source_path) && action->isEnabled(),
+          "Could not prepare native user dictionary dialog fixture");
+
+  action->trigger();
+  QApplication::processEvents();
+  auto* dialog = dynamic_cast<jwpqt::qt::WnnUserDictionaryDialog*>(
+      window.findChild<QDialog*>(QStringLiteral("userDictionaryDialog")));
+  require(dialog != nullptr,
+          "User dictionary action did not create one modeless dialog");
+  action->trigger();
+  QApplication::processEvents();
+  require(window.findChildren<QDialog*>(QStringLiteral("userDictionaryDialog"))
+              .size() == 1,
+          "User dictionary action created duplicate modeless dialogs");
+  require(window.load_wnn_resources(
+              fixture.index_path, fixture.data_path,
+              fixture.preferences_path, user_dictionary_path,
+              jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.findChild<QDialog*>(
+                  QStringLiteral("userDictionaryDialog")) == nullptr,
+          "Reloaded WNN resources left a stale user dictionary dialog");
+  action->trigger();
+  QApplication::processEvents();
+  dialog = dynamic_cast<jwpqt::qt::WnnUserDictionaryDialog*>(
+      window.findChild<QDialog*>(QStringLiteral("userDictionaryDialog")));
+  require(dialog != nullptr,
+          "User dictionary dialog could not reopen after resource reload");
+
+  const auto entry = jwpqt::core::make_wnn_user_entry(
+      {0x2422}, {jwpqt::core::JwpText{0x3023}});
+  dialog->add_entry(entry);
+  const bool saved = dialog->save_changes();
+  const QLabel* dialog_status =
+      dialog->findChild<QLabel*>(QStringLiteral("wnnUserStatus"));
+  require(saved,
+          std::string("Modeless user dictionary dialog could not publish an "
+                      "entry: ") +
+              (dialog_status == nullptr ? "missing status"
+                                        : dialog_status->text().toStdString()));
+  const auto* published = window.wnn_user_dictionary();
+  const auto persisted =
+      jwpqt::qt::read_wnn_user_dictionary_file(user_dictionary_path);
+  require(published != nullptr && published->entries().size() == 1 &&
+              published->entries()[0] == entry &&
+              persisted.has_value() && persisted->entries() == published->entries(),
+          "Dialog save did not atomically publish and persist the dictionary");
+
+  QTextEdit* editor = window.findChild<QTextEdit*>();
+  require(editor != nullptr, "User dictionary dialog fixture has no editor");
+  QTextCursor selection = editor->textCursor();
+  selection.setPosition(0);
+  selection.setPosition(1, QTextCursor::KeepAnchor);
+  editor->setTextCursor(selection);
+  QListWidget* entries = dialog->findChild<QListWidget*>();
+  require(entries != nullptr, "User dictionary dialog has no entry list");
+  entries->setCurrentRow(0);
+  require(dialog->insert_selected(),
+          "Dialog could not insert the selected user conversion");
+  jwpqt::core::JwpText expected = jwpqt::core::render_wnn_user_entry(entry);
+  expected.push_back(static_cast<std::uint16_t>('B'));
+  require(window.current_jwp_document()->paragraphs[0].text == expected &&
+              editor->textCursor().position() ==
+                  static_cast<int>(expected.size() - 1),
+          "Insert to File did not replace selection with the display row");
+
+  QAction* undo = find_action(window, "undoAction");
+  QAction* redo = find_action(window, "redoAction");
+  require(undo != nullptr && redo != nullptr && undo->isEnabled(),
+          "Insert to File did not create one portable history entry");
+  undo->trigger();
+  require(*window.current_jwp_document() == source && redo->isEnabled(),
+          "Insert to File undo did not restore the original document");
+  redo->trigger();
+  require(window.current_jwp_document()->paragraphs[0].text == expected,
+          "Insert to File redo did not restore the display row");
+
+  QTextCursor converting = editor->textCursor();
+  converting.setPosition(0);
+  converting.setPosition(1, QTextCursor::KeepAnchor);
+  editor->setTextCursor(converting);
+  require(window.convert_selection(),
+          "Could not start WNN conversion for Insert rejection test");
+  const jwpqt::core::JwpDocument converting_document =
+      *window.current_jwp_document();
+  require(!dialog->insert_selected() &&
+              *window.current_jwp_document() == converting_document,
+          "Insert to File mutated an active WNN conversion");
+  require(window.accept_conversion(),
+          "Could not finish WNN conversion after Insert rejection");
+
+  jwpqt::qt::MainWindow plain;
+  const QString plain_path = directory + QStringLiteral("/dialog-plain.txt");
+  jwpqt::qt::write_text_file(
+      plain_path,
+      jwpqt::core::TextFile{U"plain", jwpqt::core::TextEncoding::kUtf8,
+                           false});
+  require(plain.open_path(plain_path, jwpqt::core::TextEncoding::kUtf8) &&
+              !plain.insert_wnn_user_entry(entry),
+          "Insert to File unexpectedly mutated a plain-text document");
+}
+
 void test_jwp_wnn_preference_write_failure(const QString& directory) {
   const WnnFixture fixture = write_wnn_fixture(directory);
   const QString blocked_path = directory + QStringLiteral("/blocked-user.sel");
@@ -2263,6 +2384,7 @@ int main(int argc, char* argv[]) {
     test_jwp_wnn_conversion(directory.path());
     test_jwp_wnn_conversion_boundaries(directory.path());
     test_jwp_wnn_user_dictionary(directory.path());
+    test_jwp_wnn_user_dictionary_dialog(directory.path());
     test_jwp_wnn_preference_write_failure(directory.path());
     test_jwp_kana_input_mode(directory.path());
     test_jwp_automatic_wnn_conversion(directory.path());

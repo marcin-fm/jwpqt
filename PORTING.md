@@ -183,6 +183,12 @@ legacy file structures.
     publishes one complete dictionary; Cancel and failed saves publish nothing.
     Existing imported inflection records round-trip without normalization, and
     document insertion is an injected callback rather than hidden editor state.
+51. MainWindow owns at most one modeless user-dictionary editor for the current
+    WNN resource generation. Successful resource reloads discard stale working
+    copies; Save atomically replaces the live `user.cnv` bundle, and Insert to
+    File writes the exact legacy display row into a JWP selection as one
+    portable-history transaction. Plain text and active conversion reject
+    insertion without mutation.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -193,8 +199,8 @@ requires a separate fixture-backed change rather than silent substitution.
 
 1. Port paged printing and clipboard color policy over the rich JWP document
    layout.
-2. Connect the native editable WNN dialog to MainWindow resource ownership and
-   exact document insertion, then port lookup tools as separate vertical slices.
+2. Port EDICT and kanji lookup tools as separate codec, index, search, resource,
+   and native result-view slices.
 3. Port configuration, remaining import/export paths, and help.
 
 Each slice is committed independently after focused tests and the complete

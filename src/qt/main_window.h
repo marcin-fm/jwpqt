@@ -36,6 +36,7 @@ class QTextEdit;
 namespace jwpqt::qt {
 
 class JwpEditor;
+class WnnUserDictionaryDialog;
 
 enum class OpenMode {
   kInteractive,
@@ -91,6 +92,7 @@ class MainWindow : public QMainWindow {
       core::WnnUserDictionary user_dictionary,
       OpenMode mode = OpenMode::kInteractive);
   const core::WnnUserDictionary* wnn_user_dictionary() const noexcept;
+  bool insert_wnn_user_entry(const core::WnnUserEntry& entry);
   bool convert_selection();
   bool cycle_conversion(bool previous = false);
   bool accept_conversion();
@@ -165,6 +167,7 @@ class MainWindow : public QMainWindow {
   void restore_jwp_conversion_state();
   void rollback_conversion_noexcept() noexcept;
   void save_wnn_preferences();
+  void show_wnn_user_dictionary_dialog();
   void new_document();
   void open_document();
   bool save_document();
@@ -204,6 +207,7 @@ class MainWindow : public QMainWindow {
   QAction* next_candidate_action_ = nullptr;
   QAction* accept_candidate_action_ = nullptr;
   QAction* kana_input_action_ = nullptr;
+  QAction* user_dictionary_action_ = nullptr;
   QAction* format_paragraph_action_ = nullptr;
   QAction* insert_page_break_action_ = nullptr;
   QAction* kanji_color_options_action_ = nullptr;
@@ -232,6 +236,7 @@ class MainWindow : public QMainWindow {
   std::u32string rendered_jwp_text_;
   core::LegacyCodePage jwp_code_page_ = core::kDefaultLegacyCodePage;
   std::unique_ptr<WnnResources> wnn_resources_;
+  WnnUserDictionaryDialog* wnn_user_dictionary_dialog_ = nullptr;
   std::unique_ptr<core::JwpConversionTransaction> jwp_conversion_;
   std::optional<core::WnnPreferences> conversion_preferences_before_;
   core::KanaInputComposer kana_input_;

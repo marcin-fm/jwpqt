@@ -85,6 +85,32 @@ void test_empty_and_ordered_round_trip() {
           "User entries did not produce lookup stems");
 }
 
+void test_rendered_entry_text() {
+  require(jwpqt::core::render_wnn_user_entry(
+              {{0x2422}, '*', {{0x3021}, {0x3022}}}) ==
+              JwpText({0x2422, 0x2121, 0x222a, 0x2121, 0x3021, 0x213f,
+                       0x3022}),
+          "Uninflected user entry rendered incorrectly");
+  require(jwpqt::core::render_wnn_user_entry(
+              {{0x2422, 0x246b}, '1', {{0x3021}}}) ==
+              JwpText({0x2422, '(', 0x246b, ')', 0x2121, 0x222a, 0x2121,
+                       0x3021}),
+          "Ichidan user entry rendered incorrectly");
+  require(jwpqt::core::render_wnn_user_entry(
+              {{0x2422, 0x2424}, 'i', {{0x3021}}}) ==
+              JwpText({0x2422, '{', 0x2424, '}', 0x2121, 0x222a, 0x2121,
+                       0x3021}),
+          "I-adjective user entry rendered incorrectly");
+  require(jwpqt::core::render_wnn_user_entry(
+              {{0x2422, 0x242f}, 'k', {{0x3021}}}) ==
+              JwpText({0x2422, '[', 0x242f, ']', 0x2121, 0x222a, 0x2121,
+                       0x3021}),
+          "Godan user entry rendered incorrectly");
+  expect_error(
+      [] { jwpqt::core::render_wnn_user_entry({{0x3021}, '*', {{0x3022}}}); },
+      "invalid rendered entry");
+}
+
 void test_all_inflection_endings() {
   const std::vector<std::pair<char, jwpqt::core::JisCode>> endings{
       {'u', 0x2426}, {'k', 0x242f}, {'g', 0x2430}, {'s', 0x2439},
@@ -516,6 +542,7 @@ void test_edit_session_failures_are_atomic() {
 int main() {
   try {
     test_empty_and_ordered_round_trip();
+    test_rendered_entry_text();
     test_all_inflection_endings();
     test_long_stem_and_imported_inflected_candidates();
     test_invalid_wire_data();
