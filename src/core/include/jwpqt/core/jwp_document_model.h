@@ -64,6 +64,7 @@ class JwpDocumentModel {
   JwpPosition erase(JwpRange range);
   JwpPosition split_paragraph(JwpPosition position);
   JwpPosition join_with_next(std::size_t paragraph);
+  JwpPosition insert_page_break(JwpPosition position);
   void set_page_break(std::size_t paragraph, bool page_break);
   void format_paragraphs(std::size_t first_paragraph,
                          std::size_t last_paragraph,

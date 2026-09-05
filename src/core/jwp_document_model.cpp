@@ -160,6 +160,72 @@ JwpPosition JwpDocumentModel::join_with_next(std::size_t paragraph_index) {
   return {paragraph_index, join_offset};
 }
 
+JwpPosition JwpDocumentModel::insert_page_break(JwpPosition position) {
+  require_position(position);
+  const JwpParagraph source = document_.paragraphs[position.paragraph];
+  if (source.page_break && !source.text.empty()) {
+    throw JwpDocumentEditError("page break contains text");
+  }
+
+  JwpDocument updated = document_;
+  auto& paragraphs = updated.paragraphs;
+  const auto after = paragraphs.begin() +
+                     static_cast<std::ptrdiff_t>(position.paragraph + 1);
+
+  if (source.page_break) {
+    paragraphs.insert(after, source);
+    document_ = std::move(updated);
+    return {position.paragraph + 1, 0};
+  }
+
+  if (source.text.empty()) {
+    paragraphs[position.paragraph].page_break = true;
+    if (position.paragraph + 1 == paragraphs.size()) {
+      paragraphs.push_back(source);
+    }
+    document_ = std::move(updated);
+    return {position.paragraph + 1, 0};
+  }
+
+  JwpParagraph page_break = source;
+  page_break.text.clear();
+  page_break.page_break = true;
+
+  if (position.offset == 0) {
+    paragraphs[position.paragraph] = page_break;
+    paragraphs.insert(after, source);
+    document_ = std::move(updated);
+    return {position.paragraph + 1, 0};
+  }
+
+  if (position.offset == source.text.size()) {
+    const bool had_successor = position.paragraph + 1 < paragraphs.size();
+    paragraphs.insert(after, page_break);
+    if (!had_successor) {
+      JwpParagraph trailing = source;
+      trailing.text.clear();
+      paragraphs.push_back(std::move(trailing));
+    }
+    document_ = std::move(updated);
+    return {position.paragraph + 2, 0};
+  }
+
+  JwpParagraph suffix = source;
+  suffix.text.erase(
+      suffix.text.begin(),
+      suffix.text.begin() + static_cast<JwpText::difference_type>(position.offset));
+  paragraphs[position.paragraph].text.erase(
+      paragraphs[position.paragraph].text.begin() +
+          static_cast<JwpText::difference_type>(position.offset),
+      paragraphs[position.paragraph].text.end());
+  paragraphs.insert(after, page_break);
+  paragraphs.insert(paragraphs.begin() +
+                        static_cast<std::ptrdiff_t>(position.paragraph + 2),
+                    std::move(suffix));
+  document_ = std::move(updated);
+  return {position.paragraph + 2, 0};
+}
+
 void JwpDocumentModel::set_page_break(std::size_t paragraph_index,
                                       bool page_break) {
   if (paragraph_index >= paragraph_count()) {

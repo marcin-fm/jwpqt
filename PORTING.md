@@ -106,6 +106,10 @@ legacy file structures.
     paragraph or inclusive selected paragraphs as one portable undo entry,
     validates margins against the visible dynamic character width, preserves
     selection and hard breaks, and updates rich layout without rewriting text.
+33. Portable hard-page-break insertion reproduces the legacy empty,
+    paragraph-start, paragraph-middle, paragraph-end, and existing-break
+    structures with copied formatting, exact following-caret placement, and
+    candidate-document publication for strong failure safety.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and

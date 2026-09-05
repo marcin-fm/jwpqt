@@ -164,6 +164,130 @@ void test_set_page_break_clears_text() {
          "clearing page break keeps paragraph empty");
 }
 
+void test_insert_page_break_matches_legacy_structure() {
+  {
+    JwpDocument document;
+    document.paragraphs = {paragraph({}, 110), paragraph({'S'}, 120)};
+    JwpDocumentModel model(std::move(document));
+    expect(model.insert_page_break({0, 0}) == JwpPosition{1, 0},
+           "empty paragraph page-break caret");
+    expect(model.document().paragraphs ==
+               std::vector<JwpParagraph>{paragraph({}, 110, true),
+                                         paragraph({'S'}, 120)},
+           "empty paragraph with successor page-break structure");
+  }
+
+  {
+    JwpDocument document;
+    document.paragraphs = {paragraph({}, 110)};
+    JwpDocumentModel model(std::move(document));
+    expect(model.insert_page_break({0, 0}) == JwpPosition{1, 0},
+           "final empty paragraph page-break caret");
+    expect(model.document().paragraphs ==
+               std::vector<JwpParagraph>{paragraph({}, 110, true),
+                                         paragraph({}, 110)},
+           "final empty paragraph adds trailing paragraph");
+  }
+
+  {
+    JwpDocument document;
+    document.paragraphs = {paragraph({'A', 'B'}, 110),
+                           paragraph({'S'}, 120)};
+    JwpDocumentModel model(std::move(document));
+    expect(model.insert_page_break({0, 0}) == JwpPosition{1, 0},
+           "paragraph-start page-break caret");
+    expect(model.document().paragraphs ==
+               std::vector<JwpParagraph>{paragraph({}, 110, true),
+                                         paragraph({'A', 'B'}, 110),
+                                         paragraph({'S'}, 120)},
+           "paragraph-start page-break structure");
+  }
+
+  {
+    JwpDocument document;
+    document.paragraphs = {paragraph({'A', 'B'}, 110),
+                           paragraph({'S'}, 120)};
+    JwpDocumentModel model(std::move(document));
+    expect(model.insert_page_break({0, 1}) == JwpPosition{2, 0},
+           "paragraph-middle page-break caret");
+    expect(model.document().paragraphs ==
+               std::vector<JwpParagraph>{paragraph({'A'}, 110),
+                                         paragraph({}, 110, true),
+                                         paragraph({'B'}, 110),
+                                         paragraph({'S'}, 120)},
+           "paragraph-middle page-break structure");
+  }
+
+  {
+    JwpDocument document;
+    document.paragraphs = {paragraph({'A'}, 110),
+                           paragraph({'S'}, 120)};
+    JwpDocumentModel model(std::move(document));
+    expect(model.insert_page_break({0, 1}) == JwpPosition{2, 0},
+           "paragraph-end page-break caret");
+    expect(model.document().paragraphs ==
+               std::vector<JwpParagraph>{paragraph({'A'}, 110),
+                                         paragraph({}, 110, true),
+                                         paragraph({'S'}, 120)},
+           "paragraph-end with successor page-break structure");
+  }
+
+  {
+    JwpDocument document;
+    document.paragraphs = {paragraph({'A'}, 110)};
+    JwpDocumentModel model(std::move(document));
+    expect(model.insert_page_break({0, 1}) == JwpPosition{2, 0},
+           "final paragraph-end page-break caret");
+    expect(model.document().paragraphs ==
+               std::vector<JwpParagraph>{paragraph({'A'}, 110),
+                                         paragraph({}, 110, true),
+                                         paragraph({}, 110)},
+           "final paragraph-end adds trailing paragraph");
+  }
+
+  {
+    JwpDocument document;
+    document.paragraphs = {paragraph({}, 110, true),
+                           paragraph({'S'}, 120)};
+    JwpDocumentModel model(std::move(document));
+    expect(model.insert_page_break({0, 0}) == JwpPosition{1, 0},
+           "existing page-break caret");
+    expect(model.document().paragraphs ==
+               std::vector<JwpParagraph>{paragraph({}, 110, true),
+                                         paragraph({}, 110, true),
+                                         paragraph({'S'}, 120)},
+           "existing page break adds adjacent break");
+  }
+
+  {
+    JwpDocument document;
+    document.paragraphs = {paragraph({}, 110, true)};
+    JwpDocumentModel model(std::move(document));
+    expect(model.insert_page_break({0, 0}) == JwpPosition{1, 0},
+           "final existing page-break caret");
+    expect(model.document().paragraphs ==
+               std::vector<JwpParagraph>{paragraph({}, 110, true),
+                                         paragraph({}, 110, true)},
+           "final existing page break adds adjacent break");
+  }
+}
+
+void test_insert_page_break_failures_are_atomic() {
+  JwpDocument document;
+  document.paragraphs = {paragraph({'A'}, 110, true)};
+  JwpDocumentModel model(std::move(document));
+  const JwpDocument before = model.document();
+
+  expect_error([&] { model.insert_page_break({1, 0}); },
+               "page-break paragraph index");
+  expect_error([&] { model.insert_page_break({0, 2}); },
+               "page-break paragraph offset");
+  expect_error([&] { model.insert_page_break({0, 0}); },
+               "page break containing hidden text");
+  expect(model.document() == before,
+         "failed page-break insertion preserves document");
+}
+
 void test_format_paragraph_range() {
   JwpDocument document;
   document.paragraphs.push_back(paragraph({'A'}, 110));
@@ -279,6 +403,8 @@ int main() {
   test_erase_across_paragraphs();
   test_join_matches_legacy_page_break_cases();
   test_set_page_break_clears_text();
+  test_insert_page_break_matches_legacy_structure();
+  test_insert_page_break_failures_are_atomic();
   test_format_paragraph_range();
   test_invalid_paragraph_formats_are_atomic();
   test_malformed_page_break_split_is_rejected();
