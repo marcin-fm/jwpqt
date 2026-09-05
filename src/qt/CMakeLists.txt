@@ -32,6 +32,8 @@ target_compile_options(jwpqt_qt_support
 )
 
 add_library(jwpqt_qt_ui STATIC
+  edict_lookup_dialog.cpp
+  edict_lookup_dialog.h
   jwp_editor.cpp
   jwp_editor.h
   main_window.cpp
