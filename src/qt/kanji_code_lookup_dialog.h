@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <QDialog>
+#include <QPixmap>
 
 #include "jwpqt/core/kanji_code_search.h"
 
@@ -25,9 +26,10 @@ class KanjiCodeLookupDialog : public QDialog {
   using InfoHandler = std::function<void(core::JisCode)>;
 
   KanjiCodeLookupDialog(const core::KanjiInfoDatabase& information,
-                        InsertHandler insert_handler,
-                        InfoHandler info_handler,
-                        QWidget* parent = nullptr);
+                         InsertHandler insert_handler,
+                         InfoHandler info_handler,
+                         QWidget* parent = nullptr,
+                         QPixmap radical_sheet = QPixmap{});
 
   void set_skip_query(const core::KanjiSkipQuery& query);
   void set_four_corner_query(const core::KanjiFourCornerQuery& query);
@@ -37,10 +39,12 @@ class KanjiCodeLookupDialog : public QDialog {
   void select_four_corner_mode();
   void select_bushu_mode();
   void select_spahn_mode();
+  void select_stroke_bushu_mode();
   bool search_skip();
   bool search_four_corner();
   bool search_bushu();
   bool search_spahn();
+  bool search_stroke_bushu();
   std::vector<core::KanjiCodeMatch> results() const;
 
  private:
@@ -50,6 +54,7 @@ class KanjiCodeLookupDialog : public QDialog {
   void copy_results();
   void insert_results();
   void show_information();
+  void populate_stroke_bushu_choices();
 
   const core::KanjiInfoDatabase& information_;
   InsertHandler insert_handler_;
@@ -68,6 +73,14 @@ class KanjiCodeLookupDialog : public QDialog {
   QSpinBox* spahn_radical_;
   QSpinBox* spahn_other_strokes_;
   QSpinBox* spahn_index_;
+  QSpinBox* stroke_bushu_radical_strokes_;
+  QCheckBox* stroke_bushu_variants_;
+  QListWidget* stroke_bushu_radicals_;
+  QSpinBox* stroke_bushu_minimum_strokes_;
+  QSpinBox* stroke_bushu_maximum_strokes_;
+  QCheckBox* stroke_bushu_nelson_;
+  QCheckBox* stroke_bushu_classical_;
+  QPixmap radical_sheet_;
   QListWidget* results_;
   QLabel* status_;
   QPushButton* copy_button_;

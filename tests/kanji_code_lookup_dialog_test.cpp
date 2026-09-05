@@ -8,6 +8,7 @@
 #include <QCheckBox>
 #include <QListWidget>
 #include <QPushButton>
+#include <QSpinBox>
 
 #include "jwpqt/core/kanji_info.h"
 #include "kanji_code_lookup_dialog.h"
@@ -118,6 +119,42 @@ void test_dialog() {
   dialog.findChild<QPushButton*>(QStringLiteral("kanjiCodeSearch"))->click();
   require(dialog.results().size() == 1,
           "Native Spahn-Hadamitzky dialog returned wrong results");
+
+  auto* radical_strokes = dialog.findChild<QSpinBox*>(
+      QStringLiteral("strokeBushuRadicalStrokes"));
+  auto* variants =
+      dialog.findChild<QCheckBox*>(QStringLiteral("strokeBushuVariants"));
+  auto* radicals =
+      dialog.findChild<QListWidget*>(QStringLiteral("strokeBushuRadicals"));
+  auto* minimum = dialog.findChild<QSpinBox*>(
+      QStringLiteral("strokeBushuMinimumStrokes"));
+  auto* maximum = dialog.findChild<QSpinBox*>(
+      QStringLiteral("strokeBushuMaximumStrokes"));
+  require(radical_strokes != nullptr && variants != nullptr &&
+              radicals != nullptr && minimum != nullptr && maximum != nullptr,
+          "Native Stroke/Bushu controls were not created");
+  radical_strokes->setValue(2);
+  variants->setChecked(false);
+  bool selected_bushu = false;
+  for (int row = 0; row < radicals->count(); ++row) {
+    if (radicals->item(row)->data(Qt::UserRole).toUInt() == 22U) {
+      radicals->setCurrentRow(row);
+      selected_bushu = true;
+      break;
+    }
+  }
+  minimum->setValue(3);
+  maximum->setValue(3);
+  require(selected_bushu && dialog.search_stroke_bushu() &&
+              dialog.results().size() == 1,
+          "Native Stroke/Bushu lookup returned wrong results");
+  radical_strokes->setValue(4);
+  variants->setChecked(true);
+  require(radicals->count() == 44,
+          "Stroke/Bushu variants did not preserve every source sprite");
+  variants->setChecked(false);
+  require(radicals->count() == 35,
+          "Stroke/Bushu reduced choices are not source-compatible");
 }
 
 }  // namespace

@@ -14,15 +14,19 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSpinBox>
 #include <QTabWidget>
 #include <QVBoxLayout>
 
 #include "jwpqt/core/jwp_text_codec.h"
+#include "jwpqt/core/kanji_bushu_selector.h"
 #include "text_bridge.h"
 
 namespace jwpqt::qt {
 namespace {
+
+constexpr int kRadicalSourceSize = 16;
 
 QSpinBox* wildcard_spin(int maximum, const QString& object_name,
                         QWidget* parent) {
@@ -63,7 +67,7 @@ core::KanjiNumericRange spin_range(const QSpinBox& spin,
 
 KanjiCodeLookupDialog::KanjiCodeLookupDialog(
     const core::KanjiInfoDatabase& information, InsertHandler insert_handler,
-    InfoHandler info_handler, QWidget* parent)
+    InfoHandler info_handler, QWidget* parent, QPixmap radical_sheet)
     : QDialog(parent),
       information_(information),
       insert_handler_(std::move(insert_handler)),
@@ -83,6 +87,14 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
       spahn_other_strokes_(wildcard_spin(
           26, QStringLiteral("spahnOtherStrokes"), this)),
       spahn_index_(wildcard_spin(47, QStringLiteral("spahnIndex"), this)),
+      stroke_bushu_radical_strokes_(new QSpinBox(this)),
+      stroke_bushu_variants_(new QCheckBox(tr("Include &variants"), this)),
+      stroke_bushu_radicals_(new QListWidget(this)),
+      stroke_bushu_minimum_strokes_(new QSpinBox(this)),
+      stroke_bushu_maximum_strokes_(new QSpinBox(this)),
+      stroke_bushu_nelson_(new QCheckBox(tr("&Nelson radical"), this)),
+      stroke_bushu_classical_(new QCheckBox(tr("&Classical radical"), this)),
+      radical_sheet_(std::move(radical_sheet)),
       results_(new QListWidget(this)),
       status_(new QLabel(this)),
       copy_button_(new QPushButton(tr("&Copy"), this)),
@@ -133,6 +145,55 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
   spahn_layout->addRow(tr("Other strokes"), spahn_other_strokes_);
   spahn_layout->addRow(tr("Kanji index"), spahn_index_);
   tabs_->addTab(spahn_page, tr("Spahn-Hadamitzky"));
+
+  auto* stroke_bushu_page = new QWidget(tabs_);
+  auto* stroke_bushu_layout = new QVBoxLayout(stroke_bushu_page);
+  auto* stroke_bushu_controls = new QFormLayout;
+  stroke_bushu_radical_strokes_->setObjectName(
+      QStringLiteral("strokeBushuRadicalStrokes"));
+  stroke_bushu_radical_strokes_->setRange(
+      0, core::kMaximumBushuRadicalStrokes);
+  stroke_bushu_variants_->setObjectName(
+      QStringLiteral("strokeBushuVariants"));
+  stroke_bushu_variants_->setChecked(true);
+  stroke_bushu_controls->addRow(tr("Radical strokes"),
+                                stroke_bushu_radical_strokes_);
+  stroke_bushu_controls->addRow(stroke_bushu_variants_);
+  stroke_bushu_layout->addLayout(stroke_bushu_controls);
+  stroke_bushu_radicals_->setObjectName(
+      QStringLiteral("strokeBushuRadicals"));
+  stroke_bushu_radicals_->setSelectionMode(QAbstractItemView::SingleSelection);
+  stroke_bushu_radicals_->setViewMode(QListView::IconMode);
+  stroke_bushu_radicals_->setResizeMode(QListView::Adjust);
+  stroke_bushu_radicals_->setMovement(QListView::Static);
+  stroke_bushu_radicals_->setIconSize(QSize(22, 22));
+  stroke_bushu_radicals_->setGridSize(QSize(54, 46));
+  stroke_bushu_layout->addWidget(stroke_bushu_radicals_, 1);
+  auto* stroke_range = new QHBoxLayout;
+  stroke_bushu_minimum_strokes_->setObjectName(
+      QStringLiteral("strokeBushuMinimumStrokes"));
+  stroke_bushu_maximum_strokes_->setObjectName(
+      QStringLiteral("strokeBushuMaximumStrokes"));
+  stroke_bushu_minimum_strokes_->setRange(0, 30);
+  stroke_bushu_maximum_strokes_->setRange(0, 30);
+  stroke_bushu_maximum_strokes_->setValue(30);
+  stroke_range->addWidget(new QLabel(tr("Kanji strokes from"), this));
+  stroke_range->addWidget(stroke_bushu_minimum_strokes_);
+  stroke_range->addWidget(new QLabel(tr("to"), this));
+  stroke_range->addWidget(stroke_bushu_maximum_strokes_);
+  stroke_range->addStretch();
+  stroke_bushu_layout->addLayout(stroke_range);
+  stroke_bushu_nelson_->setObjectName(QStringLiteral("strokeBushuNelson"));
+  stroke_bushu_classical_->setObjectName(
+      QStringLiteral("strokeBushuClassical"));
+  stroke_bushu_nelson_->setChecked(true);
+  stroke_bushu_classical_->setChecked(true);
+  auto* stroke_systems = new QHBoxLayout;
+  stroke_systems->addWidget(stroke_bushu_nelson_);
+  stroke_systems->addWidget(stroke_bushu_classical_);
+  stroke_systems->addStretch();
+  stroke_bushu_layout->addLayout(stroke_systems);
+  tabs_->addTab(stroke_bushu_page, tr("Stroke/Bushu"));
   outer->addWidget(tabs_);
 
   auto* search_button = new QPushButton(tr("&Search"), this);
@@ -164,8 +225,11 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
       case 2:
         (void)search_bushu();
         break;
-      default:
+      case 3:
         (void)search_spahn();
+        break;
+      default:
+        (void)search_stroke_bushu();
         break;
     }
   });
@@ -177,6 +241,20 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
     if (!checked && !bushu_nelson_->isChecked())
       bushu_nelson_->setChecked(true);
   });
+  connect(stroke_bushu_radical_strokes_, &QSpinBox::valueChanged, this,
+          [this] { populate_stroke_bushu_choices(); });
+  connect(stroke_bushu_variants_, &QCheckBox::toggled, this,
+          [this] { populate_stroke_bushu_choices(); });
+  connect(stroke_bushu_nelson_, &QCheckBox::toggled, this,
+          [this](bool checked) {
+            if (!checked && !stroke_bushu_classical_->isChecked())
+              stroke_bushu_classical_->setChecked(true);
+          });
+  connect(stroke_bushu_classical_, &QCheckBox::toggled, this,
+          [this](bool checked) {
+            if (!checked && !stroke_bushu_nelson_->isChecked())
+              stroke_bushu_nelson_->setChecked(true);
+          });
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
   connect(results_, &QListWidget::itemSelectionChanged, this,
           [this] { update_actions(); });
@@ -188,6 +266,7 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
           [this] { insert_results(); });
   connect(info_button_, &QPushButton::clicked, this,
           [this] { show_information(); });
+  populate_stroke_bushu_choices();
   update_actions();
 }
 
@@ -256,6 +335,10 @@ void KanjiCodeLookupDialog::select_bushu_mode() { tabs_->setCurrentIndex(2); }
 
 void KanjiCodeLookupDialog::select_spahn_mode() { tabs_->setCurrentIndex(3); }
 
+void KanjiCodeLookupDialog::select_stroke_bushu_mode() {
+  tabs_->setCurrentIndex(4);
+}
+
 bool KanjiCodeLookupDialog::search_skip() {
   core::KanjiSkipQuery query;
   query.type = spin_range(*skip_type_, 4);
@@ -315,6 +398,56 @@ bool KanjiCodeLookupDialog::search_four_corner() {
     status_->setText(QString::fromUtf8(error.what()));
   } catch (...) {
     status_->setText(tr("Four-corner lookup failed"));
+  }
+  return false;
+}
+
+void KanjiCodeLookupDialog::populate_stroke_bushu_choices() {
+  const auto choices = core::kanji_bushu_choices(
+      static_cast<std::uint8_t>(stroke_bushu_radical_strokes_->value()),
+      stroke_bushu_variants_->isChecked());
+  stroke_bushu_radicals_->clear();
+  auto* any = new QListWidgetItem(tr("Any"), stroke_bushu_radicals_);
+  any->setData(Qt::UserRole, 0U);
+  any->setSelected(true);
+  const bool has_sheet = !radical_sheet_.isNull() &&
+                         radical_sheet_.width() >= kRadicalSourceSize &&
+                         radical_sheet_.height() >= 241 * kRadicalSourceSize;
+  for (const core::KanjiBushuChoice& choice : choices) {
+    auto* item = new QListWidgetItem(
+        has_sheet
+            ? QIcon(radical_sheet_.copy(
+                  0, static_cast<int>(choice.sprite_index) * kRadicalSourceSize,
+                  kRadicalSourceSize, kRadicalSourceSize))
+            : QIcon(),
+        QString::number(choice.bushu), stroke_bushu_radicals_);
+    item->setToolTip(tr("Bushu %1").arg(choice.bushu));
+    item->setData(Qt::UserRole, choice.bushu);
+    item->setData(Qt::UserRole + 1, choice.sprite_index);
+  }
+  stroke_bushu_radicals_->setCurrentRow(0);
+}
+
+bool KanjiCodeLookupDialog::search_stroke_bushu() {
+  core::KanjiBushuQuery query;
+  const QListWidgetItem* selected = stroke_bushu_radicals_->currentItem();
+  const std::uint8_t bushu = selected == nullptr
+                                 ? 0
+                                 : static_cast<std::uint8_t>(
+                                       selected->data(Qt::UserRole).toUInt());
+  query.radical = bushu == 0 ? core::KanjiNumericRange{0, 255}
+                             : core::KanjiNumericRange{bushu, bushu};
+  query.strokes = {
+      static_cast<std::uint8_t>(stroke_bushu_minimum_strokes_->value()),
+      static_cast<std::uint8_t>(stroke_bushu_maximum_strokes_->value())};
+  query.nelson = stroke_bushu_nelson_->isChecked();
+  query.classical = stroke_bushu_classical_->isChecked();
+  try {
+    return publish(core::search_kanji_bushu(information_, query));
+  } catch (const std::exception& error) {
+    status_->setText(QString::fromUtf8(error.what()));
+  } catch (...) {
+    status_->setText(tr("Stroke/Bushu lookup failed"));
   }
   return false;
 }
