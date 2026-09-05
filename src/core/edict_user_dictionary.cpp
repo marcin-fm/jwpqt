@@ -264,57 +264,74 @@ void consume_sort_work(std::size_t& remaining) {
   --remaining;
 }
 
-char32_t normalized_reading_token(char32_t code) {
-  if (code >= U'\u30a1' && code <= U'\u30f6') {
-    return code - 0x60;
+struct SortableUserEntry {
+  EdictUserEntry entry;
+  JwpText display;
+};
+
+JwpText render_sort_key(const EdictUserEntry& entry,
+                        LegacyCodePage code_page) {
+  JwpText display;
+  display.reserve(entry.headword.size() + entry.reading.size() +
+                  entry.meaning.size() + 4U);
+  if (!entry.headword.empty()) {
+    display.insert(display.end(), entry.headword.begin(), entry.headword.end());
+    display.push_back(' ');
+    display.push_back('[');
   }
-  return code;
+  display.insert(display.end(), entry.reading.begin(), entry.reading.end());
+  if (!entry.headword.empty()) {
+    display.push_back(']');
+  }
+  display.push_back('\t');
+  const JwpText meaning = encode_jwp_text(entry.meaning, code_page);
+  display.insert(display.end(), meaning.begin(), meaning.end());
+  return display;
 }
 
-std::optional<bool> reading_precedes(const EdictUserEntry& first,
-                                     const EdictUserEntry& second,
-                                     std::size_t& remaining) {
-  const std::u32string first_reading = decode_jwp_text(first.reading);
-  const std::u32string second_reading = decode_jwp_text(second.reading);
-  for (std::size_t index = 0;; ++index) {
+std::optional<bool> reading_precedes(const JwpText& first,
+                                      const JwpText& second,
+                                      std::size_t& remaining) {
+  const std::size_t common = std::min(first.size(), second.size());
+  std::size_t index = 0;
+  for (; index < common; ++index) {
     consume_sort_work(remaining);
-    const char32_t first_code =
-        index < first_reading.size() ? first_reading[index] : char32_t{};
-    const char32_t second_code =
-        index < second_reading.size() ? second_reading[index] : char32_t{};
-    const char32_t first_folded = normalized_reading_token(first_code);
-    const char32_t second_folded = normalized_reading_token(second_code);
-    if (first_folded != second_folded) {
-      return second_folded < first_folded;
-    }
-    if (first_code == 0 && second_code == 0) {
-      return std::nullopt;
-    }
-    if (first_code != second_code) {
-      return second_code < first_code;
+    const JisCode first_cell = first[index] & 0xffU;
+    const JisCode second_cell = second[index] & 0xffU;
+    if (first_cell != second_cell) {
+      return second_cell < first_cell;
     }
   }
+  if (index != first.size() || index != second.size()) {
+    return second.size() < first.size();
+  }
+  for (index = 0; index < first.size(); ++index) {
+    consume_sort_work(remaining);
+    if (first[index] != second[index]) {
+      return second[index] < first[index];
+    }
+  }
+  return std::nullopt;
 }
 
-bool second_entry_precedes_first(const EdictUserEntry& first,
-                                 const EdictUserEntry& second,
-                                 std::size_t& remaining) {
-  const std::optional<bool> reading = reading_precedes(first, second, remaining);
+bool second_entry_precedes_first(const SortableUserEntry& first,
+                                  const SortableUserEntry& second,
+                                  std::size_t& remaining) {
+  const std::optional<bool> reading =
+      reading_precedes(first.entry.reading, second.entry.reading, remaining);
   if (reading.has_value()) {
     return *reading;
   }
 
-  const std::u32string first_display = render_entry_unchecked(first);
-  const std::u32string second_display = render_entry_unchecked(second);
-  const std::size_t common = std::min(first_display.size(), second_display.size());
+  const std::size_t common = std::min(first.display.size(), second.display.size());
   for (std::size_t index = 0; index < common; ++index) {
     consume_sort_work(remaining);
-    if (first_display[index] != second_display[index]) {
-      return second_display[index] < first_display[index];
+    if (first.display[index] != second.display[index]) {
+      return second.display[index] < first.display[index];
     }
   }
   consume_sort_work(remaining);
-  return second_display.size() < first_display.size();
+  return second.display.size() < first.display.size();
 }
 
 }  // namespace
@@ -350,24 +367,36 @@ std::u32string render_edict_user_entry(const EdictUserEntry& entry) {
 }
 
 std::vector<EdictUserEntry> sort_edict_user_entries(
-    std::vector<EdictUserEntry> entries) {
+    std::vector<EdictUserEntry> entries, LegacyCodePage code_page) {
   validate_entries(entries, EdictUserDictionaryLimits{}, false);
+  validate_code_page(code_page);
+  std::vector<SortableUserEntry> sortable;
+  sortable.reserve(entries.size());
+  for (EdictUserEntry& entry : entries) {
+    JwpText display = render_sort_key(entry, code_page);
+    sortable.push_back({std::move(entry), std::move(display)});
+  }
   std::size_t remaining = kEdictUserMaximumSortComparisonSteps;
-  for (std::size_t first = 0; first < entries.size(); ++first) {
+  for (std::size_t first = 0; first < sortable.size(); ++first) {
     std::size_t selected = first;
-    for (std::size_t candidate = first + 1; candidate < entries.size();
+    for (std::size_t candidate = first + 1; candidate < sortable.size();
          ++candidate) {
-      if (second_entry_precedes_first(entries[selected], entries[candidate],
+      if (second_entry_precedes_first(sortable[selected], sortable[candidate],
                                       remaining)) {
         selected = candidate;
       }
     }
     if (selected != first) {
-      EdictUserEntry value = std::move(entries[selected]);
-      entries.erase(entries.begin() + static_cast<std::ptrdiff_t>(selected));
-      entries.insert(entries.begin() + static_cast<std::ptrdiff_t>(first),
-                     std::move(value));
+      SortableUserEntry value = std::move(sortable[selected]);
+      sortable.erase(sortable.begin() + static_cast<std::ptrdiff_t>(selected));
+      sortable.insert(sortable.begin() + static_cast<std::ptrdiff_t>(first),
+                      std::move(value));
     }
+  }
+  entries.clear();
+  entries.reserve(sortable.size());
+  for (SortableUserEntry& value : sortable) {
+    entries.push_back(std::move(value.entry));
   }
   return entries;
 }
@@ -472,8 +501,10 @@ const std::vector<EdictUserEntry>& EdictUserDictionary::entries() const
 }
 
 EdictUserDictionaryEditor::EdictUserDictionaryEditor(
-    const EdictUserDictionary& dictionary)
-    : entries_(dictionary.entries()) {}
+    const EdictUserDictionary& dictionary, LegacyCodePage code_page)
+    : entries_(dictionary.entries()), code_page_(code_page) {
+  validate_code_page(code_page_);
+}
 
 const std::vector<EdictUserEntry>& EdictUserDictionaryEditor::entries() const
     noexcept {
@@ -544,7 +575,7 @@ bool EdictUserDictionaryEditor::move_down(std::size_t index) {
 }
 
 void EdictUserDictionaryEditor::sort() {
-  publish(sort_edict_user_entries(entries_));
+  publish(sort_edict_user_entries(entries_, code_page_));
 }
 
 EdictUserDictionary EdictUserDictionaryEditor::dictionary() const {

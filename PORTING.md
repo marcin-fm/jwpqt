@@ -336,7 +336,8 @@ legacy file structures.
     before publishing Add, Edit, Delete, Up, Down, or Sort. Sort reproduces the
     recovered reading-first, hiragana-before-katakana selection algorithm under
     an explicit comparison-work budget rather than trusting its stateful
-    comparator to a standard sorting algorithm.
+    comparator to a standard sorting algorithm. Raw JWP reading and whole-row
+    keys are precomputed once and preserve the configured meaning code page.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and

@@ -204,6 +204,21 @@ void test_render_and_legacy_sort() {
   const std::vector<EdictUserEntry> duplicates{hiragana, hiragana};
   require(jwpqt::core::sort_edict_user_entries(duplicates) == duplicates,
           "User dictionary sort did not preserve exact duplicates");
+  const EdictUserEntry later_cell =
+      make_edict_user_entry({0x2423}, {}, U"later cell");
+  const EdictUserEntry earlier_cell =
+      make_edict_user_entry({0x3022}, {}, U"earlier cell");
+  const EdictUserEntry later_headword =
+      make_edict_user_entry({0x2422}, {0x3022}, U"later headword");
+  const EdictUserEntry earlier_headword =
+      make_edict_user_entry({0x2422}, {0x3021}, U"earlier headword");
+  const std::vector<EdictUserEntry> raw_sorted =
+      jwpqt::core::sort_edict_user_entries(
+          {later_cell, earlier_cell, later_headword, earlier_headword});
+  require(raw_sorted == std::vector<EdictUserEntry>(
+                            {earlier_headword, later_headword, earlier_cell,
+                             later_cell}),
+          "User dictionary sort did not use raw cell and whole-row order");
 
   std::vector<EdictUserEntry> pathological(
       1600, make_edict_user_entry({0x2422}, {}, U"same"));
@@ -244,7 +259,14 @@ void test_candidate_first_editor() {
   require_error([&] { (void)editor.move_up(99); },
                 "Out-of-range user dictionary move was accepted");
   require(editor.entries() == saved,
-          "Failed user dictionary edits changed live entries");
+           "Failed user dictionary edits changed live entries");
+  require_error(
+      [&] {
+        EdictUserDictionaryEditor invalid(
+            EdictUserDictionary::from_entries({first}),
+            static_cast<LegacyCodePage>(999));
+      },
+      "Invalid editor code page was accepted");
 }
 
 }  // namespace

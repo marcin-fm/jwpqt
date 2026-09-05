@@ -40,7 +40,8 @@ EdictUserEntry make_edict_user_entry(JwpText reading, JwpText headword,
                                      std::u32string meaning);
 std::u32string render_edict_user_entry(const EdictUserEntry& entry);
 std::vector<EdictUserEntry> sort_edict_user_entries(
-    std::vector<EdictUserEntry> entries);
+    std::vector<EdictUserEntry> entries,
+    LegacyCodePage code_page = kDefaultLegacyCodePage);
 
 class EdictUserDictionary {
  public:
@@ -66,7 +67,9 @@ class EdictUserDictionary {
 
 class EdictUserDictionaryEditor {
  public:
-  explicit EdictUserDictionaryEditor(const EdictUserDictionary& dictionary);
+  explicit EdictUserDictionaryEditor(
+      const EdictUserDictionary& dictionary,
+      LegacyCodePage code_page = kDefaultLegacyCodePage);
 
   const std::vector<EdictUserEntry>& entries() const noexcept;
   std::size_t add(EdictUserEntry entry);
@@ -81,6 +84,7 @@ class EdictUserDictionaryEditor {
   void publish(std::vector<EdictUserEntry> candidate);
 
   std::vector<EdictUserEntry> entries_;
+  LegacyCodePage code_page_;
 };
 
 }  // namespace jwpqt::core
