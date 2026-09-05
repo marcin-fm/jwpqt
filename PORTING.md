@@ -259,6 +259,11 @@ legacy file structures.
     personal/place rejection. Direct, contingent, and following adaptive stages
     share query, raw-candidate, accepted-result, and actual index/matcher work
     budgets; continuation depends on accepted filtered results.
+63. The portable dictionary registry codec reads and writes the recovered binary
+    `dict.cfg` format in both ANSI-byte and UTF-16LE wire variants. It preserves
+    ordered flag/name/path triples, every format/name/special/runtime flag,
+    duplicate entries, and source-valid empty fields while enforcing exact
+    terminators, surrogate validity, canonical flag order, and explicit budgets.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -267,7 +272,8 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Add ordered EDICT dictionary resources and native result-view slices.
+1. Load ordered EDICT dictionary resources from the portable registry, then add
+   native result-view slices.
 2. Port paged printing and clipboard color policy over the rich JWP document
    layout.
 3. Port configuration, remaining import/export paths, and help.
