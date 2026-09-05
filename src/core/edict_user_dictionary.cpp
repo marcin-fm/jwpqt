@@ -5,8 +5,11 @@
 #include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <sstream>
 #include <utility>
+
+#include "jwpqt/core/jwp_text_codec.h"
 
 namespace jwpqt::core {
 namespace {
@@ -236,6 +239,84 @@ std::string encode_meaning(std::u32string_view meaning,
   return bytes;
 }
 
+std::u32string render_entry_unchecked(const EdictUserEntry& entry) {
+  std::u32string display;
+  const std::u32string headword = decode_jwp_text(entry.headword);
+  const std::u32string reading = decode_jwp_text(entry.reading);
+  if (!headword.empty()) {
+    display.append(headword);
+    display.append(U" [");
+  }
+  display.append(reading);
+  if (!headword.empty()) {
+    display.push_back(U']');
+  }
+  display.push_back(U'\t');
+  display.append(entry.meaning);
+  return display;
+}
+
+void consume_sort_work(std::size_t& remaining) {
+  if (remaining == 0) {
+    throw EdictUserDictionaryError(
+        "EDICT user dictionary exceeds the interactive sort work limit");
+  }
+  --remaining;
+}
+
+char32_t normalized_reading_token(char32_t code) {
+  if (code >= U'\u30a1' && code <= U'\u30f6') {
+    return code - 0x60;
+  }
+  return code;
+}
+
+std::optional<bool> reading_precedes(const EdictUserEntry& first,
+                                     const EdictUserEntry& second,
+                                     std::size_t& remaining) {
+  const std::u32string first_reading = decode_jwp_text(first.reading);
+  const std::u32string second_reading = decode_jwp_text(second.reading);
+  for (std::size_t index = 0;; ++index) {
+    consume_sort_work(remaining);
+    const char32_t first_code =
+        index < first_reading.size() ? first_reading[index] : char32_t{};
+    const char32_t second_code =
+        index < second_reading.size() ? second_reading[index] : char32_t{};
+    const char32_t first_folded = normalized_reading_token(first_code);
+    const char32_t second_folded = normalized_reading_token(second_code);
+    if (first_folded != second_folded) {
+      return second_folded < first_folded;
+    }
+    if (first_code == 0 && second_code == 0) {
+      return std::nullopt;
+    }
+    if (first_code != second_code) {
+      return second_code < first_code;
+    }
+  }
+}
+
+bool second_entry_precedes_first(const EdictUserEntry& first,
+                                 const EdictUserEntry& second,
+                                 std::size_t& remaining) {
+  const std::optional<bool> reading = reading_precedes(first, second, remaining);
+  if (reading.has_value()) {
+    return *reading;
+  }
+
+  const std::u32string first_display = render_entry_unchecked(first);
+  const std::u32string second_display = render_entry_unchecked(second);
+  const std::size_t common = std::min(first_display.size(), second_display.size());
+  for (std::size_t index = 0; index < common; ++index) {
+    consume_sort_work(remaining);
+    if (first_display[index] != second_display[index]) {
+      return second_display[index] < first_display[index];
+    }
+  }
+  consume_sort_work(remaining);
+  return second_display.size() < first_display.size();
+}
+
 }  // namespace
 
 bool EdictUserEntry::operator==(const EdictUserEntry& other) const noexcept {
@@ -261,6 +342,34 @@ EdictUserEntry make_edict_user_entry(JwpText reading, JwpText headword,
     throw EdictUserDictionaryError("EDICT user entry exceeds its size limit");
   }
   return entry;
+}
+
+std::u32string render_edict_user_entry(const EdictUserEntry& entry) {
+  validate_entries({entry}, EdictUserDictionaryLimits{}, false);
+  return render_entry_unchecked(entry);
+}
+
+std::vector<EdictUserEntry> sort_edict_user_entries(
+    std::vector<EdictUserEntry> entries) {
+  validate_entries(entries, EdictUserDictionaryLimits{}, false);
+  std::size_t remaining = kEdictUserMaximumSortComparisonSteps;
+  for (std::size_t first = 0; first < entries.size(); ++first) {
+    std::size_t selected = first;
+    for (std::size_t candidate = first + 1; candidate < entries.size();
+         ++candidate) {
+      if (second_entry_precedes_first(entries[selected], entries[candidate],
+                                      remaining)) {
+        selected = candidate;
+      }
+    }
+    if (selected != first) {
+      EdictUserEntry value = std::move(entries[selected]);
+      entries.erase(entries.begin() + static_cast<std::ptrdiff_t>(selected));
+      entries.insert(entries.begin() + static_cast<std::ptrdiff_t>(first),
+                     std::move(value));
+    }
+  }
+  return entries;
 }
 
 EdictUserDictionary EdictUserDictionary::parse(
@@ -360,6 +469,86 @@ std::string EdictUserDictionary::serialize(
 const std::vector<EdictUserEntry>& EdictUserDictionary::entries() const
     noexcept {
   return entries_;
+}
+
+EdictUserDictionaryEditor::EdictUserDictionaryEditor(
+    const EdictUserDictionary& dictionary)
+    : entries_(dictionary.entries()) {}
+
+const std::vector<EdictUserEntry>& EdictUserDictionaryEditor::entries() const
+    noexcept {
+  return entries_;
+}
+
+void EdictUserDictionaryEditor::publish(
+    std::vector<EdictUserEntry> candidate) {
+  EdictUserDictionary validated =
+      EdictUserDictionary::from_entries(std::move(candidate));
+  entries_ = validated.entries();
+}
+
+std::size_t EdictUserDictionaryEditor::add(EdictUserEntry entry) {
+  std::vector<EdictUserEntry> candidate = entries_;
+  candidate.push_back(std::move(entry));
+  publish(std::move(candidate));
+  return entries_.size() - 1;
+}
+
+void EdictUserDictionaryEditor::replace(std::size_t index,
+                                        EdictUserEntry entry) {
+  if (index >= entries_.size()) {
+    throw EdictUserDictionaryError(
+        "EDICT user dictionary entry index is out of bounds");
+  }
+  std::vector<EdictUserEntry> candidate = entries_;
+  candidate[index] = std::move(entry);
+  publish(std::move(candidate));
+}
+
+void EdictUserDictionaryEditor::erase(std::size_t index) {
+  if (index >= entries_.size()) {
+    throw EdictUserDictionaryError(
+        "EDICT user dictionary entry index is out of bounds");
+  }
+  std::vector<EdictUserEntry> candidate = entries_;
+  candidate.erase(candidate.begin() + static_cast<std::ptrdiff_t>(index));
+  publish(std::move(candidate));
+}
+
+bool EdictUserDictionaryEditor::move_up(std::size_t index) {
+  if (index >= entries_.size()) {
+    throw EdictUserDictionaryError(
+        "EDICT user dictionary entry index is out of bounds");
+  }
+  if (index == 0) {
+    return false;
+  }
+  std::vector<EdictUserEntry> candidate = entries_;
+  std::swap(candidate[index], candidate[index - 1]);
+  publish(std::move(candidate));
+  return true;
+}
+
+bool EdictUserDictionaryEditor::move_down(std::size_t index) {
+  if (index >= entries_.size()) {
+    throw EdictUserDictionaryError(
+        "EDICT user dictionary entry index is out of bounds");
+  }
+  if (index + 1 == entries_.size()) {
+    return false;
+  }
+  std::vector<EdictUserEntry> candidate = entries_;
+  std::swap(candidate[index], candidate[index + 1]);
+  publish(std::move(candidate));
+  return true;
+}
+
+void EdictUserDictionaryEditor::sort() {
+  publish(sort_edict_user_entries(entries_));
+}
+
+EdictUserDictionary EdictUserDictionaryEditor::dictionary() const {
+  return EdictUserDictionary::from_entries(entries_);
 }
 
 }  // namespace jwpqt::core

@@ -34,8 +34,13 @@ class EdictUserDictionaryError : public std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
+inline constexpr std::size_t kEdictUserMaximumSortComparisonSteps = 5'000'000;
+
 EdictUserEntry make_edict_user_entry(JwpText reading, JwpText headword,
                                      std::u32string meaning);
+std::u32string render_edict_user_entry(const EdictUserEntry& entry);
+std::vector<EdictUserEntry> sort_edict_user_entries(
+    std::vector<EdictUserEntry> entries);
 
 class EdictUserDictionary {
  public:
@@ -56,6 +61,25 @@ class EdictUserDictionary {
   const std::vector<EdictUserEntry>& entries() const noexcept;
 
  private:
+  std::vector<EdictUserEntry> entries_;
+};
+
+class EdictUserDictionaryEditor {
+ public:
+  explicit EdictUserDictionaryEditor(const EdictUserDictionary& dictionary);
+
+  const std::vector<EdictUserEntry>& entries() const noexcept;
+  std::size_t add(EdictUserEntry entry);
+  void replace(std::size_t index, EdictUserEntry entry);
+  void erase(std::size_t index);
+  bool move_up(std::size_t index);
+  bool move_down(std::size_t index);
+  void sort();
+  EdictUserDictionary dictionary() const;
+
+ private:
+  void publish(std::vector<EdictUserEntry> candidate);
+
   std::vector<EdictUserEntry> entries_;
 };
 

@@ -332,6 +332,11 @@ legacy file structures.
     prepares the full canonical payload before `QSaveFile` replacement, so
     malformed input, unrepresentable meanings, dangling links, and unavailable
     output parents never publish partial state or damage an existing file.
+74. A portable `user.dct` editor validates a complete candidate entry vector
+    before publishing Add, Edit, Delete, Up, Down, or Sort. Sort reproduces the
+    recovered reading-first, hiragana-before-katakana selection algorithm under
+    an explicit comparison-work budget rather than trusting its stateful
+    comparator to a standard sorting algorithm.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and

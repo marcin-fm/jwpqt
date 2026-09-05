@@ -16,6 +16,7 @@ using jwpqt::core::EdictUserDictionaryLimits;
 using jwpqt::core::EdictUserEntry;
 using jwpqt::core::JwpText;
 using jwpqt::core::LegacyCodePage;
+using jwpqt::core::make_edict_user_entry;
 
 void require(bool condition, const char* message) {
   if (!condition) {
@@ -185,6 +186,67 @@ void test_limits_are_atomic() {
       "User dictionary meaning limit was not enforced");
 }
 
+void test_render_and_legacy_sort() {
+  const EdictUserEntry hiragana =
+      make_edict_user_entry({0x2422}, {}, U"hiragana");
+  const EdictUserEntry katakana =
+      make_edict_user_entry({0x2522}, {}, U"katakana");
+  const EdictUserEntry kanji =
+      make_edict_user_entry({0x2422}, {0x3021}, U"kanji");
+  require(jwpqt::core::render_edict_user_entry(kanji) ==
+              U"\u4e9c [\u3042]\tkanji",
+          "User dictionary display row is wrong");
+
+  const std::vector<EdictUserEntry> sorted =
+      jwpqt::core::sort_edict_user_entries({katakana, kanji, hiragana});
+  require(sorted == std::vector<EdictUserEntry>({hiragana, kanji, katakana}),
+          "User dictionary sort did not follow reading and kana tie breaks");
+  const std::vector<EdictUserEntry> duplicates{hiragana, hiragana};
+  require(jwpqt::core::sort_edict_user_entries(duplicates) == duplicates,
+          "User dictionary sort did not preserve exact duplicates");
+
+  std::vector<EdictUserEntry> pathological(
+      1600, make_edict_user_entry({0x2422}, {}, U"same"));
+  require_error(
+      [&] {
+        (void)jwpqt::core::sort_edict_user_entries(std::move(pathological));
+      },
+      "User dictionary interactive sort work limit was not enforced");
+}
+
+void test_candidate_first_editor() {
+  using jwpqt::core::EdictUserDictionaryEditor;
+  const EdictUserEntry first =
+      make_edict_user_entry({0x2424}, {}, U"first");
+  const EdictUserEntry second =
+      make_edict_user_entry({0x2422}, {}, U"second");
+  EdictUserDictionaryEditor editor(
+      EdictUserDictionary::from_entries({first}));
+  require(editor.add(second) == 1 && editor.entries().size() == 2,
+          "User dictionary editor did not append an entry");
+  require(editor.move_up(1) && !editor.move_up(0) && editor.move_down(0) &&
+              !editor.move_down(1),
+          "User dictionary editor move boundaries are wrong");
+  editor.replace(1, second);
+  editor.sort();
+  require(editor.entries().front() == second &&
+              editor.dictionary().entries() == editor.entries(),
+          "User dictionary editor did not publish replacement or sort");
+  editor.erase(1);
+  require(editor.entries() == std::vector<EdictUserEntry>{second},
+          "User dictionary editor did not erase an entry");
+
+  const std::vector<EdictUserEntry> saved = editor.entries();
+  require_error([&] { editor.erase(99); },
+                "Out-of-range user dictionary erase was accepted");
+  require_error([&] { editor.replace(99, first); },
+                "Out-of-range user dictionary replacement was accepted");
+  require_error([&] { (void)editor.move_up(99); },
+                "Out-of-range user dictionary move was accepted");
+  require(editor.entries() == saved,
+          "Failed user dictionary edits changed live entries");
+}
+
 }  // namespace
 
 int main() {
@@ -193,5 +255,7 @@ int main() {
   test_new_entry_validation();
   test_malformed_and_code_page_failures();
   test_limits_are_atomic();
+  test_render_and_legacy_sort();
+  test_candidate_first_editor();
   return EXIT_SUCCESS;
 }
