@@ -17,6 +17,14 @@ add_executable(jwpqt_qt_io_tests
 target_link_libraries(jwpqt_qt_io_tests PRIVATE jwpqt_qt_support)
 target_compile_options(jwpqt_qt_io_tests PRIVATE -Wall -Wextra -Wpedantic)
 
+add_executable(jwpqt_kanji_color_settings_tests
+  kanji_color_settings_test.cpp
+)
+target_link_libraries(jwpqt_kanji_color_settings_tests
+  PRIVATE jwpqt_qt_support)
+target_compile_options(jwpqt_kanji_color_settings_tests
+  PRIVATE -Wall -Wextra -Wpedantic)
+
 add_executable(jwpqt_main_window_tests
   main_window_test.cpp
 )
@@ -204,6 +212,7 @@ add_test(NAME core_legacy_text COMMAND jwpqt_legacy_text_tests)
 add_test(NAME core_text_file COMMAND jwpqt_text_file_tests)
 add_test(NAME core_text_detection COMMAND jwpqt_text_detection_tests)
 add_test(NAME qt_file_io COMMAND jwpqt_qt_io_tests)
+add_test(NAME qt_kanji_color_settings COMMAND jwpqt_kanji_color_settings_tests)
 add_test(NAME qt_main_window COMMAND jwpqt_main_window_tests)
 add_executable(jwpqt_jwp_editor_tests
   jwp_editor_test.cpp

@@ -129,6 +129,9 @@ legacy file structures.
 38. Qt file I/O treats a genuinely absent `colkanji.lst` as an optional empty
     list, rejects malformed files and dangling links, and serializes the full
     canonical list before atomically replacing the destination.
+39. Kanji display policy persists as one versioned Qt settings record with
+    strict canonical mode, color, and toggle fields. Corrupt records fail as a
+    unit instead of silently coercing or mixing individual options.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and

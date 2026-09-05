@@ -3,6 +3,8 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets)
 add_library(jwpqt_qt_support STATIC
   file_io.cpp
   file_io.h
+  kanji_color_settings.cpp
+  kanji_color_settings.h
   text_bridge.cpp
   text_bridge.h
 )
