@@ -969,7 +969,7 @@ void MainWindow::create_actions() {
   skip_lookup_action_->setShortcut(
       QKeySequence(QStringLiteral("Ctrl+Shift+S")));
   connect(skip_lookup_action_, &QAction::triggered, this,
-          [this] { show_kanji_code_lookup_dialog(false); });
+          [this] { show_kanji_code_lookup_dialog(KanjiCodeLookupMode::kSkip); });
 
   four_corner_lookup_action_ =
       tools_menu->addAction(tr("&Four-Corner Lookup"));
@@ -978,7 +978,23 @@ void MainWindow::create_actions() {
   four_corner_lookup_action_->setShortcut(
       QKeySequence(QStringLiteral("Ctrl+4")));
   connect(four_corner_lookup_action_, &QAction::triggered, this,
-          [this] { show_kanji_code_lookup_dialog(true); });
+          [this] {
+            show_kanji_code_lookup_dialog(KanjiCodeLookupMode::kFourCorner);
+          });
+
+  bushu_lookup_action_ = tools_menu->addAction(tr("&Bushu Lookup"));
+  bushu_lookup_action_->setObjectName(QStringLiteral("bushuLookupAction"));
+  bushu_lookup_action_->setShortcut(
+      QKeySequence(QStringLiteral("Ctrl+Shift+L")));
+  connect(bushu_lookup_action_, &QAction::triggered, this,
+          [this] { show_kanji_code_lookup_dialog(KanjiCodeLookupMode::kBushu); });
+
+  spahn_lookup_action_ =
+      tools_menu->addAction(tr("Spahn-&Hadamitzky Lookup"));
+  spahn_lookup_action_->setObjectName(QStringLiteral("spahnLookupAction"));
+  spahn_lookup_action_->setShortcut(QKeySequence(QStringLiteral("Ctrl+H")));
+  connect(spahn_lookup_action_, &QAction::triggered, this,
+          [this] { show_kanji_code_lookup_dialog(KanjiCodeLookupMode::kSpahn); });
 
   kanji_lookup_action_ = tools_menu->addAction(tr("&Radical Lookup"));
   kanji_lookup_action_->setObjectName(QStringLiteral("radicalLookupAction"));
@@ -1279,6 +1295,10 @@ void MainWindow::update_kanji_code_lookup_actions() {
   if (skip_lookup_action_ != nullptr) skip_lookup_action_->setEnabled(enabled);
   if (four_corner_lookup_action_ != nullptr)
     four_corner_lookup_action_->setEnabled(enabled);
+  if (bushu_lookup_action_ != nullptr)
+    bushu_lookup_action_->setEnabled(enabled);
+  if (spahn_lookup_action_ != nullptr)
+    spahn_lookup_action_->setEnabled(enabled);
 }
 
 void MainWindow::update_kanji_lookup_action() {
@@ -1837,17 +1857,30 @@ void MainWindow::show_kanji_info_code(core::JisCode code) {
   dialog->show();
 }
 
-void MainWindow::show_kanji_code_lookup_dialog(bool four_corner) {
+void MainWindow::show_kanji_code_lookup_dialog(KanjiCodeLookupMode mode) {
   if (kanji_info_database_ == nullptr || !jwp_document_.has_value() ||
       conversion_active()) {
     statusBar()->showMessage(tr("Kanji code lookup is not available"), 3000);
     return;
   }
+  const auto select_mode = [mode](KanjiCodeLookupDialog& dialog) {
+    switch (mode) {
+      case KanjiCodeLookupMode::kSkip:
+        dialog.select_skip_mode();
+        break;
+      case KanjiCodeLookupMode::kFourCorner:
+        dialog.select_four_corner_mode();
+        break;
+      case KanjiCodeLookupMode::kBushu:
+        dialog.select_bushu_mode();
+        break;
+      case KanjiCodeLookupMode::kSpahn:
+        dialog.select_spahn_mode();
+        break;
+    }
+  };
   if (kanji_code_lookup_dialog_ != nullptr) {
-    if (four_corner)
-      kanji_code_lookup_dialog_->select_four_corner_mode();
-    else
-      kanji_code_lookup_dialog_->select_skip_mode();
+    select_mode(*kanji_code_lookup_dialog_);
     kanji_code_lookup_dialog_->show();
     kanji_code_lookup_dialog_->raise();
     kanji_code_lookup_dialog_->activateWindow();
@@ -1862,7 +1895,7 @@ void MainWindow::show_kanji_code_lookup_dialog(bool four_corner) {
         }
       },
       [this](core::JisCode code) { show_kanji_info_code(code); }, this);
-  if (four_corner) dialog->select_four_corner_mode();
+  select_mode(*dialog);
   dialog->setAttribute(Qt::WA_DeleteOnClose);
   connect(dialog, &QObject::destroyed, this,
           [this] { kanji_code_lookup_dialog_ = nullptr; });

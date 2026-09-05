@@ -54,6 +54,13 @@ enum class OpenMode {
   kNonInteractive,
 };
 
+enum class KanjiCodeLookupMode {
+  kSkip,
+  kFourCorner,
+  kBushu,
+  kSpahn,
+};
+
 struct SearchRequest {
   QString text;
   core::JwpSearchOptions options;
@@ -207,7 +214,7 @@ class MainWindow : public QMainWindow {
   void show_edict_user_dictionary_dialog();
   void show_kanji_info_dialog();
   void show_kanji_info_code(core::JisCode code);
-  void show_kanji_code_lookup_dialog(bool four_corner);
+  void show_kanji_code_lookup_dialog(KanjiCodeLookupMode mode);
   void show_kanji_lookup_dialog();
   std::optional<core::JisCode> kanji_info_target() const;
   std::u32string edict_query_seed() const;
@@ -257,6 +264,8 @@ class MainWindow : public QMainWindow {
   QAction* kanji_info_action_ = nullptr;
   QAction* skip_lookup_action_ = nullptr;
   QAction* four_corner_lookup_action_ = nullptr;
+  QAction* bushu_lookup_action_ = nullptr;
+  QAction* spahn_lookup_action_ = nullptr;
   QAction* kanji_lookup_action_ = nullptr;
   QAction* format_paragraph_action_ = nullptr;
   QAction* insert_page_break_action_ = nullptr;

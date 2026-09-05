@@ -62,14 +62,15 @@ void write_database(const QString& path) {
   append_u16(bytes, 1U);
   append_u16(bytes, 0x3021U);
   bytes.resize(28, '\0');
-  put_u16(bytes, 12, 3U << 8U);
+  put_u16(bytes, 12, 23U | (3U << 8U));
   put_u16(bytes, 14, (1U << 8U) | (2U << 11U));
   put_u16(bytes, 16, 3U);
   put_u16(bytes, 18, 1U);
   put_u32(bytes, 24, 28U << 8U);
   append_u16(bytes, 0U);
-  append_u32(bytes, 0U);
-  append_u32(bytes, (1234U << 6U) | (5U << 20U));
+  append_u32(bytes,
+             (2U << 17U) | (4U << 22U) | (5U << 27U));
+  append_u32(bytes, 7U | (1234U << 6U) | (5U << 20U));
   bytes.append('\0');
   write_bytes(path, bytes);
 }
@@ -141,13 +142,23 @@ void test_integration(const QString& directory) {
       window.findChild<QAction*>(QStringLiteral("skipLookupAction"));
   QAction* four_corner_action =
       window.findChild<QAction*>(QStringLiteral("fourCornerLookupAction"));
+  QAction* bushu_action =
+      window.findChild<QAction*>(QStringLiteral("bushuLookupAction"));
+  QAction* spahn_action =
+      window.findChild<QAction*>(QStringLiteral("spahnLookupAction"));
   require(skip_action != nullptr && skip_action->isEnabled() &&
               skip_action->shortcut() ==
                   QKeySequence(QStringLiteral("Ctrl+Shift+S")) &&
               four_corner_action != nullptr &&
               four_corner_action->isEnabled() &&
-              four_corner_action->shortcut() ==
-                  QKeySequence(QStringLiteral("Ctrl+4")),
+               four_corner_action->shortcut() ==
+                   QKeySequence(QStringLiteral("Ctrl+4")) &&
+               bushu_action != nullptr && bushu_action->isEnabled() &&
+               bushu_action->shortcut() ==
+                   QKeySequence(QStringLiteral("Ctrl+Shift+L")) &&
+               spahn_action != nullptr && spahn_action->isEnabled() &&
+               spahn_action->shortcut() ==
+                   QKeySequence(QStringLiteral("Ctrl+H")),
           "Kanji code lookup actions are unavailable");
   skip_action->trigger();
   QApplication::processEvents();
@@ -183,6 +194,30 @@ void test_integration(const QString& directory) {
   require(code_dialog->search_four_corner() &&
               code_dialog->results().size() == 1,
           "Integrated four-corner lookup returned wrong results");
+
+  bushu_action->trigger();
+  QApplication::processEvents();
+  jwpqt::core::KanjiBushuQuery bushu;
+  bushu.radical = {22, 22};
+  bushu.strokes = {3, 3};
+  bushu.classical = false;
+  code_dialog->set_bushu_query(bushu);
+  require(code_dialog->search_bushu() && code_dialog->results().size() == 1,
+          "Integrated Bushu lookup returned wrong results");
+
+  spahn_action->trigger();
+  QApplication::processEvents();
+  jwpqt::core::KanjiSpahnQuery spahn;
+  spahn.radical_strokes = {2, 2};
+  spahn.radical = {4, 4};
+  spahn.other_strokes = {5, 5};
+  spahn.index = {7, 7};
+  code_dialog->set_spahn_query(spahn);
+  require(code_dialog->search_spahn() && code_dialog->results().size() == 1 &&
+              window.findChildren<QDialog*>(
+                        QStringLiteral("kanjiCodeLookupDialog"))
+                      .size() == 1,
+          "Integrated Spahn lookup returned wrong results or duplicate dialog");
 
   QAction* radical_action =
       window.findChild<QAction*>(QStringLiteral("radicalLookupAction"));
@@ -232,8 +267,9 @@ void test_integration(const QString& directory) {
               info_path, jwpqt::qt::OpenMode::kNonInteractive) &&
               window.kanji_info_database() == nullptr && !action->isEnabled() &&
               !radical_action->isEnabled() &&
-              !skip_action->isEnabled() &&
-              !four_corner_action->isEnabled() &&
+               !skip_action->isEnabled() &&
+               !four_corner_action->isEnabled() &&
+               !bushu_action->isEnabled() && !spahn_action->isEnabled() &&
               window.findChild<QDialog*>(QStringLiteral("kanjiInfoDialog")) ==
                   nullptr &&
               window.findChild<QDialog*>(
