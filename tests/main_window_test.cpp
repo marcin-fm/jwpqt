@@ -14,6 +14,7 @@
 #include <QFontMetricsF>
 #include <QLabel>
 #include <QKeyEvent>
+#include <QSignalBlocker>
 #include <QTextEdit>
 #include <QTemporaryDir>
 #include <QTextBlock>
@@ -133,10 +134,13 @@ class PromptingWindow : public jwpqt::qt::MainWindow {
   std::optional<jwpqt::core::TextEncoding> next_encoding;
   std::optional<jwpqt::qt::SearchRequest> next_search;
   std::optional<jwpqt::qt::ReplaceRequest> next_replace;
+  std::optional<jwpqt::core::JwpParagraphFormat> next_paragraph_format;
+  std::optional<jwpqt::core::JwpParagraphFormat> offered_paragraph_format;
   std::vector<jwpqt::core::TextEncoding> offered_encodings;
   QString explanation;
   int search_prompt_count = 0;
   int replace_prompt_count = 0;
+  int paragraph_format_prompt_count = 0;
 
  protected:
   std::optional<jwpqt::core::TextEncoding> prompt_for_encoding(
@@ -157,6 +161,14 @@ class PromptingWindow : public jwpqt::qt::MainWindow {
       const jwpqt::qt::ReplaceRequest&) override {
     ++replace_prompt_count;
     return next_replace;
+  }
+
+  std::optional<jwpqt::core::JwpParagraphFormat>
+  prompt_for_paragraph_format(
+      const jwpqt::core::JwpParagraphFormat& initial) override {
+    ++paragraph_format_prompt_count;
+    offered_paragraph_format = initial;
+    return next_paragraph_format;
   }
 };
 
@@ -918,6 +930,129 @@ void test_jwp_history_actions(const QString& directory) {
           "Undo after save did not restore pre-edit state");
 }
 
+void test_jwp_paragraph_formatting(const QString& directory) {
+  jwpqt::core::JwpDocument source;
+  source.paragraphs = {paragraph(U"A"), paragraph(U""), paragraph(U"B")};
+  source.paragraphs[0].left_indent = 1;
+  source.paragraphs[0].right_indent = 2;
+  source.paragraphs[0].first_indent = -1;
+  source.paragraphs[0].line_spacing = 110;
+  source.paragraphs[1].left_indent = 3;
+  source.paragraphs[1].right_indent = 4;
+  source.paragraphs[1].first_indent = -2;
+  source.paragraphs[1].line_spacing = 120;
+  source.paragraphs[1].page_break = true;
+  source.paragraphs[2].left_indent = 5;
+  source.paragraphs[2].right_indent = 6;
+  source.paragraphs[2].first_indent = -3;
+  source.paragraphs[2].line_spacing = 130;
+  const QString source_path = directory + QStringLiteral("/paragraph-format.jwp");
+  const QString saved_path =
+      directory + QStringLiteral("/paragraph-format-saved.jwp");
+  jwpqt::qt::write_jwp_file(source_path, source);
+
+  PromptingWindow window;
+  require(window.open_jwp_path(source_path),
+          "Could not open paragraph-format fixture");
+  window.show();
+  QApplication::processEvents();
+  QTextEdit* editor = window.findChild<QTextEdit*>();
+  QAction* format = find_action(window, "formatParagraphAction");
+  QAction* undo = find_action(window, "undoAction");
+  QAction* redo = find_action(window, "redoAction");
+  require(editor != nullptr && format != nullptr && undo != nullptr &&
+              redo != nullptr && format->isEnabled(),
+          "JWP paragraph-format controls were not enabled");
+
+  QTextCursor selection = editor->textCursor();
+  selection.setPosition(0);
+  selection.setPosition(2, QTextCursor::KeepAnchor);
+  editor->setTextCursor(selection);
+
+  format->trigger();
+  require(window.paragraph_format_prompt_count == 1 &&
+              window.offered_paragraph_format ==
+                  jwpqt::core::JwpParagraphFormat{3, 4, -2, 120} &&
+              *window.current_jwp_document() == source,
+          "Cancelled paragraph formatting changed the JWP document");
+
+  const jwpqt::core::JwpParagraphFormat applied{12, 23, -7, 175};
+  window.next_paragraph_format = applied;
+  format->trigger();
+  require(window.paragraph_format_prompt_count == 2,
+          "Paragraph-format action did not prompt exactly once");
+  const jwpqt::core::JwpDocument formatted = *window.current_jwp_document();
+  require(formatted.paragraphs[0].left_indent == 12 &&
+              formatted.paragraphs[0].right_indent == 23 &&
+              formatted.paragraphs[0].first_indent == -7 &&
+              formatted.paragraphs[0].line_spacing == 175 &&
+              formatted.paragraphs[1].left_indent == 12 &&
+              formatted.paragraphs[1].right_indent == 23 &&
+              formatted.paragraphs[1].first_indent == -7 &&
+              formatted.paragraphs[1].line_spacing == 175 &&
+              formatted.paragraphs[1].page_break &&
+              formatted.paragraphs[2] == source.paragraphs[2],
+          "Paragraph formatting did not apply to the inclusive selection");
+  require(editor->textCursor().selectionStart() == 0 &&
+              editor->textCursor().selectionEnd() == 2 &&
+              editor->document()->isModified() && undo->isEnabled(),
+          "Paragraph formatting did not preserve selection and history");
+  require_jwp_layout(editor, formatted);
+
+  require(!window.format_paragraphs({1, 0, -2, 100}) &&
+              *window.current_jwp_document() == formatted,
+          "Invalid native paragraph format changed the document");
+  require(window.format_paragraphs(applied),
+          "No-op paragraph formatting was rejected");
+  undo->trigger();
+  require(*window.current_jwp_document() == source && redo->isEnabled(),
+          "Paragraph formatting did not undo as one transaction");
+  redo->trigger();
+  require(*window.current_jwp_document() == formatted,
+          "Paragraph formatting redo did not restore the transaction");
+  window.resize(320, 300);
+  QApplication::processEvents();
+  require(window.format_paragraphs(applied) &&
+              *window.current_jwp_document() == formatted,
+          "Unchanged paragraph format failed after the page narrowed");
+  require(!window.format_paragraphs({255, 255, -127, 100}) &&
+              *window.current_jwp_document() == formatted,
+          "Paragraph formatting accepted margins wider than the page");
+
+  require(window.save_path(saved_path) &&
+              jwpqt::qt::read_jwp_file(saved_path) == formatted,
+          "Paragraph formatting did not survive a JWP save");
+  const QString text_path = directory + QStringLiteral("/paragraph-format.txt");
+  write_bytes(text_path, QByteArray("plain"));
+  require(window.open_path(text_path, jwpqt::core::TextEncoding::kUtf8) &&
+              !format->isEnabled() && !window.format_paragraphs(applied),
+          "Plain text did not disable JWP paragraph formatting");
+
+  PromptingWindow mismatched;
+  require(mismatched.open_jwp_path(source_path),
+          "Could not open paragraph layout failure fixture");
+  QTextEdit* mismatched_editor = mismatched.findChild<QTextEdit*>();
+  QAction* mismatched_undo = find_action(mismatched, "undoAction");
+  require(mismatched_editor != nullptr && mismatched_undo != nullptr,
+          "Paragraph layout failure fixture has no controls");
+  {
+    const QSignalBlocker blocker(mismatched_editor->document());
+    mismatched_editor->append(QStringLiteral("orphan block"));
+  }
+  mismatched_editor->document()->setModified(false);
+  require(!mismatched.format_paragraphs(applied) &&
+              *mismatched.current_jwp_document() == source &&
+              !mismatched_undo->isEnabled() &&
+              !mismatched_editor->document()->isModified(),
+          "Failed paragraph layout published document or history state");
+
+  PromptingWindow hidden;
+  require(hidden.open_jwp_path(source_path) &&
+              hidden.format_paragraphs({20, 20, -10, 150}) &&
+              hidden.current_jwp_document()->paragraphs[0].left_indent == 20,
+          "Hidden editor geometry rejected a valid paragraph format");
+}
+
 void test_jwp_rejects_non_bmp_edit(const QString& directory) {
   jwpqt::core::JwpDocument source;
   source.paragraphs = {paragraph(U"AB")};
@@ -1311,6 +1446,7 @@ int main(int argc, char* argv[]) {
     test_jwp_rejects_lossy_edits(directory.path());
     test_jwp_rejects_non_bmp_edit(directory.path());
     test_jwp_history_actions(directory.path());
+    test_jwp_paragraph_formatting(directory.path());
     test_jwp_wnn_conversion(directory.path());
     test_jwp_wnn_conversion_boundaries(directory.path());
     test_jwp_wnn_preference_write_failure(directory.path());

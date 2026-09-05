@@ -88,6 +88,7 @@ class MainWindow : public QMainWindow {
                     core::JwpSearchOptions options = {});
   std::size_t replace_all(const QString& text, const QString& replacement,
                           core::JwpSearchOptions options = {});
+  bool format_paragraphs(const core::JwpParagraphFormat& format);
 
  protected:
   void closeEvent(QCloseEvent* event) override;
@@ -99,6 +100,8 @@ class MainWindow : public QMainWindow {
       const SearchRequest& initial);
   virtual std::optional<ReplaceRequest> prompt_for_replace(
       const ReplaceRequest& initial);
+  virtual std::optional<core::JwpParagraphFormat>
+  prompt_for_paragraph_format(const core::JwpParagraphFormat& initial);
 
  private:
   struct WnnResources;
@@ -135,6 +138,7 @@ class MainWindow : public QMainWindow {
   void find_document();
   void find_again(core::JwpSearchDirection direction);
   void replace_document();
+  void format_document_paragraphs();
   bool find_jwp_text(const QString& text, core::JwpSearchOptions options);
   bool find_plain_text(const QString& text, core::JwpSearchOptions options);
   void synchronize_jwp_document(int position, int chars_removed,
@@ -154,6 +158,7 @@ class MainWindow : public QMainWindow {
   QAction* next_candidate_action_ = nullptr;
   QAction* accept_candidate_action_ = nullptr;
   QAction* kana_input_action_ = nullptr;
+  QAction* format_paragraph_action_ = nullptr;
   QLabel* input_mode_label_;
   QActionGroup* encoding_actions_;
   QMenu* jwp_code_page_menu_;

@@ -3,6 +3,7 @@
 #include "jwp_editor.h"
 
 #include <algorithm>
+#include <cmath>
 #include <stdexcept>
 #include <utility>
 
@@ -55,6 +56,18 @@ void preserve_document_state(QTextDocument* document, Update&& update) {
 
 JwpEditor::JwpEditor(QWidget* parent) : QTextEdit(parent) {
   setAcceptRichText(false);
+}
+
+int JwpEditor::character_page_width() const {
+  if (!isVisible()) {
+    return 0;
+  }
+  const qreal width = static_cast<qreal>(viewport()->width()) -
+                      2.0 * document()->documentMargin();
+  if (width <= 0.0) {
+    return 0;
+  }
+  return std::max(1, static_cast<int>(std::floor(width / indent_unit())));
 }
 
 void JwpEditor::apply_jwp_layout(const core::JwpDocument& jwp_document) {

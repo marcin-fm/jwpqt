@@ -102,6 +102,10 @@ legacy file structures.
     bounds and left-margin relationship before atomically applying left, right,
     first-line, and proportional-spacing values to an inclusive paragraph
     range. Page-width-dependent validation remains a native command concern.
+32. The native Format Paragraph command applies one format to the caret
+    paragraph or inclusive selected paragraphs as one portable undo entry,
+    validates margins against the visible dynamic character width, preserves
+    selection and hard breaks, and updates rich layout without rewriting text.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -110,8 +114,8 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Port paragraph format editing and paged printing over the rich JWP document
-   layout.
+1. Port document-backed kanji coloring and paged printing over the rich JWP
+   document layout.
 2. Port editable WNN user dictionaries and lookup tools as separate vertical
    slices.
 3. Port configuration, remaining import/export paths, and help.

@@ -47,8 +47,9 @@ hiragana and katakana while preserving portable document history. Kana Input
 tracks automatic conversion spans, waits for extendable WNN keys, applies
 terminal or longest-prefix candidates, and leaves unmatched suffixes at the
 caret. JWP paragraph indents, proportional spacing, and hard page breaks now
-drive a rich Qt document layout. User dictionary management, lookup tools,
-configuration, and printing remain in progress.
+drive a rich Qt document layout; Format Paragraph edits those values across the
+caret paragraph or selected paragraphs with portable undo. User dictionary
+management, lookup tools, configuration, and printing remain in progress.
 
 JWPce/JWPxp copyright and licensing notices remain in `_cpright.txt`,
 `_readme.txt`, and `gnugpl.txt`.

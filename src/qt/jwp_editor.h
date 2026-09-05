@@ -17,6 +17,7 @@ class JwpEditor final : public QTextEdit {
 
   explicit JwpEditor(QWidget* parent = nullptr);
 
+  int character_page_width() const;
   void apply_jwp_layout(const core::JwpDocument& document);
   void clear_jwp_layout();
 

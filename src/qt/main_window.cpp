@@ -16,6 +16,7 @@
 #include <QCloseEvent>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QDoubleSpinBox>
 #include <QEvent>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -36,6 +37,7 @@
 #include <QRadioButton>
 #include <QScopedValueRollback>
 #include <QSignalBlocker>
+#include <QSpinBox>
 #include <QStatusBar>
 #include <QTextCursor>
 #include <QTextDocument>
@@ -355,6 +357,16 @@ void MainWindow::create_actions() {
   connect(replace_action, &QAction::triggered, this,
           [this] { replace_document(); });
 
+  QMenu* format_menu = menuBar()->addMenu(tr("F&ormat"));
+  format_paragraph_action_ =
+      format_menu->addAction(tr("&Paragraph..."));
+  format_paragraph_action_->setObjectName(
+      QStringLiteral("formatParagraphAction"));
+  format_paragraph_action_->setShortcut(
+      QKeySequence(QStringLiteral("Alt+Shift+F")));
+  connect(format_paragraph_action_, &QAction::triggered, this,
+          [this] { format_document_paragraphs(); });
+
   QMenu* convert_menu = menuBar()->addMenu(tr("&Convert"));
   convert_action_ = convert_menu->addAction(tr("Convert &Selection"));
   convert_action_->setObjectName(QStringLiteral("convertSelectionAction"));
@@ -535,6 +547,7 @@ void MainWindow::update_conversion_actions() {
   previous_candidate_action_->setEnabled(active);
   next_candidate_action_->setEnabled(active);
   accept_candidate_action_->setEnabled(active);
+  format_paragraph_action_->setEnabled(!active && jwp_document_.has_value());
   update_kana_input_state();
 }
 
@@ -1534,6 +1547,55 @@ std::optional<ReplaceRequest> MainWindow::prompt_for_replace(
       mode};
 }
 
+std::optional<core::JwpParagraphFormat>
+MainWindow::prompt_for_paragraph_format(
+    const core::JwpParagraphFormat& initial) {
+  QDialog dialog(this);
+  dialog.setWindowTitle(tr("Paragraph Format"));
+
+  auto* layout = new QVBoxLayout(&dialog);
+  auto* form = new QFormLayout();
+  auto* left = new QSpinBox(&dialog);
+  left->setObjectName(QStringLiteral("paragraphLeftIndent"));
+  left->setRange(0, 255);
+  left->setValue(initial.left_indent);
+  form->addRow(tr("Left indent (characters):"), left);
+
+  auto* right = new QSpinBox(&dialog);
+  right->setObjectName(QStringLiteral("paragraphRightIndent"));
+  right->setRange(0, 255);
+  right->setValue(initial.right_indent);
+  form->addRow(tr("Right indent (characters):"), right);
+
+  auto* first = new QSpinBox(&dialog);
+  first->setObjectName(QStringLiteral("paragraphFirstIndent"));
+  first->setRange(-127, 127);
+  first->setValue(initial.first_indent);
+  form->addRow(tr("First-line indent (characters):"), first);
+
+  auto* spacing = new QDoubleSpinBox(&dialog);
+  spacing->setObjectName(QStringLiteral("paragraphLineSpacing"));
+  spacing->setRange(1.0, 10.0);
+  spacing->setDecimals(2);
+  spacing->setSingleStep(0.05);
+  spacing->setValue(static_cast<double>(initial.line_spacing) / 100.0);
+  form->addRow(tr("Line spacing:"), spacing);
+  layout->addLayout(form);
+
+  auto* buttons = new QDialogButtonBox(
+      QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+  connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+  connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+  layout->addWidget(buttons);
+
+  if (dialog.exec() != QDialog::Accepted) {
+    return std::nullopt;
+  }
+  return core::JwpParagraphFormat{
+      left->value(), right->value(), first->value(),
+      static_cast<int>(spacing->value() * 100.0 + 0.5)};
+}
+
 void MainWindow::set_text_encoding(core::TextEncoding encoding,
                                    bool mark_modified) {
   if (jwp_document_.has_value() || encoding_ == encoding) {
@@ -1610,6 +1672,31 @@ void MainWindow::replace_document() {
     replace_all(request->text, request->replacement, request->options);
   } else {
     replace_next(request->text, request->replacement, request->options);
+  }
+}
+
+void MainWindow::format_document_paragraphs() {
+  finish_kana_input();
+  if (conversion_active() || !jwp_document_.has_value()) {
+    return;
+  }
+  try {
+    const QString text = editor_->toPlainText();
+    const QTextCursor cursor = editor_->textCursor();
+    const core::JwpPosition caret = core::jwp_plain_text_position(
+        *jwp_document_,
+        utf32_offset_for_utf16(text, cursor.position()));
+    const std::optional<core::JwpParagraphFormat> format =
+        prompt_for_paragraph_format(
+            jwp_document_->paragraph_format(caret.paragraph));
+    if (format.has_value()) {
+      format_paragraphs(*format);
+    }
+  } catch (const std::exception& error) {
+    statusBar()->showMessage(
+        tr("Could not format paragraphs: %1")
+            .arg(QString::fromUtf8(error.what())),
+        5000);
   }
 }
 
@@ -1899,6 +1986,65 @@ std::size_t MainWindow::replace_all(const QString& text,
         tr("Could not replace: %1").arg(QString::fromUtf8(error.what())),
         5000);
     return 0;
+  }
+}
+
+bool MainWindow::format_paragraphs(
+    const core::JwpParagraphFormat& format) {
+  finish_kana_input();
+  if (conversion_active() || !jwp_document_.has_value()) {
+    return false;
+  }
+
+  try {
+    const QString text = editor_->toPlainText();
+    const QTextCursor cursor = editor_->textCursor();
+    const core::JwpPosition caret = core::jwp_plain_text_position(
+        *jwp_document_,
+        utf32_offset_for_utf16(text, cursor.position()));
+    const core::JwpPosition selection_begin = core::jwp_plain_text_position(
+        *jwp_document_,
+        utf32_offset_for_utf16(text, cursor.selectionStart()));
+    const core::JwpPosition selection_end = core::jwp_plain_text_position(
+        *jwp_document_,
+        utf32_offset_for_utf16(text, cursor.selectionEnd()));
+
+    core::JwpDocumentModel candidate = *jwp_document_;
+    core::JwpDocumentHistory history = jwp_history_;
+    history.begin(candidate, caret);
+    candidate.format_paragraphs(selection_begin.paragraph,
+                                selection_end.paragraph, format);
+    if (!history.commit(candidate, caret)) {
+      return true;
+    }
+    const int page_width = editor_->character_page_width();
+    if (page_width > 0 &&
+        (format.left_indent + format.right_indent >= page_width ||
+         format.left_indent + format.right_indent + format.first_indent >=
+             page_width)) {
+      throw core::JwpDocumentEditError(
+          "paragraph indents leave no usable line width");
+    }
+
+    editor_->apply_jwp_layout(candidate.document());
+    jwp_document_ = std::move(candidate);
+    jwp_history_ = std::move(history);
+    jwp_caret_ = caret;
+    expected_jwp_caret_.reset();
+    editor_->setTextCursor(cursor);
+    const bool modified = !saved_jwp_document_.has_value() ||
+                          jwp_document_->document() != *saved_jwp_document_;
+    editor_->document()->setModified(modified);
+    update_undo_actions();
+    update_title();
+    statusBar()->showMessage(tr("Paragraph format applied"), 2000);
+    return true;
+  } catch (const std::exception& error) {
+    statusBar()->showMessage(
+        tr("Could not format paragraphs: %1")
+            .arg(QString::fromUtf8(error.what())),
+        5000);
+    return false;
   }
 }
 
