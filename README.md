@@ -37,9 +37,9 @@ New/Old/NEC JIS, and JWP B1/B2/J1.20 documents. JWP editing preserves metadata,
 paragraph formatting, hard page breaks, code-page interpretation, native
 search/replace, and portable transaction history. The portable core also
 contains the recovered desktop romaji-to-kana composer plus bounded WNN
-dictionary parsing, ordered candidate lookup, and the portable user-selection
-cache. Native preference file I/O and conversion sessions, lookup tools, custom
-layout/rendering, configuration, and printing remain in progress.
+dictionary parsing, ordered candidate lookup, a portable user-selection cache,
+and atomic preference file I/O. Native conversion sessions, lookup tools,
+custom layout/rendering, configuration, and printing remain in progress.
 
 JWPce/JWPxp copyright and licensing notices remain in `_cpright.txt`,
 `_readme.txt`, and `gnugpl.txt`.

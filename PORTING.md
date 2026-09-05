@@ -66,6 +66,9 @@ legacy file structures.
 22. The portable user-selection cache parses and writes the recovered 8-byte
     `user.sel` records, restores valid candidate offsets, and reproduces the
     fixed-capacity learning and eviction behavior without native structs.
+23. The Qt file boundary optionally loads `user.sel`, preserves partial legacy
+    files through the portable parser, and atomically replaces changed
+    preferences without clearing dirty state on failure.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -74,9 +77,8 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Add atomic file persistence for WNN preferences and the native conversion
-   session that connects romaji composition, candidate selection, and document
-   transactions.
+1. Add the native conversion session that connects romaji composition,
+   candidate selection, preferences, and document transactions.
 2. Replace `QPlainTextEdit` scaffolding with a custom Qt editor surface once the
    paragraph model can drive wrapping, selection, conversion spans, and kanji
    coloring.

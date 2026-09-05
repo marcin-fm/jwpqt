@@ -10,6 +10,7 @@
 #include <QByteArray>
 #include <QFile>
 #include <QFileDevice>
+#include <QFileInfo>
 #include <QSaveFile>
 
 namespace jwpqt::qt {
@@ -43,6 +44,14 @@ void write_file_bytes(const QString& path, std::string_view bytes) {
   }
 }
 
+std::string read_open_file_bytes(QFile& input, const QString& path) {
+  const QByteArray bytes = input.readAll();
+  if (input.error() != QFileDevice::NoError) {
+    throw io_error("Could not read", path, input.errorString());
+  }
+  return std::string(bytes.constData(), static_cast<std::size_t>(bytes.size()));
+}
+
 }  // namespace
 
 std::string read_file_bytes(const QString& path) {
@@ -51,11 +60,7 @@ std::string read_file_bytes(const QString& path) {
     throw io_error("Could not open", path, input.errorString());
   }
 
-  const QByteArray bytes = input.readAll();
-  if (input.error() != QFileDevice::NoError) {
-    throw io_error("Could not read", path, input.errorString());
-  }
-  return std::string(bytes.constData(), static_cast<std::size_t>(bytes.size()));
+  return read_open_file_bytes(input, path);
 }
 
 core::TextFile read_text_file(const QString& path,
@@ -76,6 +81,28 @@ core::JwpDocument read_jwp_file(const QString& path) {
 void write_jwp_file(const QString& path, const core::JwpDocument& document) {
   const std::string bytes = core::encode_jwp_document(document);
   write_file_bytes(path, bytes);
+}
+
+std::optional<core::WnnPreferences> read_wnn_preferences_file(
+    const QString& path, std::size_t capacity) {
+  QFile input(path);
+  if (!input.open(QIODevice::ReadOnly)) {
+    const QFileInfo info(path);
+    if (!info.exists() && !info.isSymbolicLink()) {
+      static_cast<void>(core::WnnPreferences(capacity));
+      return std::nullopt;
+    }
+    throw io_error("Could not open", path, input.errorString());
+  }
+  return core::WnnPreferences::parse(read_open_file_bytes(input, path),
+                                     capacity);
+}
+
+void write_wnn_preferences_file(const QString& path,
+                                core::WnnPreferences& preferences) {
+  const std::string bytes = preferences.serialize();
+  write_file_bytes(path, bytes);
+  preferences.mark_saved();
 }
 
 }  // namespace jwpqt::qt

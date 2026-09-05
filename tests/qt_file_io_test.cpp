@@ -14,6 +14,7 @@
 #include "file_io.h"
 #include "jwpqt/core/jwp_document.h"
 #include "jwpqt/core/utf8.h"
+#include "jwpqt/core/wnn_preferences.h"
 
 namespace {
 
@@ -109,6 +110,88 @@ void test_jwp_encoding_failure_preserves_file(const QString& directory) {
           "Failed JWP save changed the existing file");
 }
 
+void test_wnn_preference_file_round_trip(const QString& directory) {
+  const QString path = directory + QStringLiteral("/user.sel");
+  require(!jwpqt::qt::read_wnn_preferences_file(path, 2).has_value(),
+          "Missing WNN preference file did not remain optional");
+
+  jwpqt::core::WnnPreferences preferences(2);
+  const jwpqt::core::JwpText input{0x2422};
+  const jwpqt::core::WnnLookupResult result{
+      {{{0x3021}, 0, false}, {{0x3022}, 2, false}, {input, 4, true}},
+      false};
+  require(preferences.remember(input, result, 1),
+          "Could not seed WNN preference");
+  jwpqt::qt::write_wnn_preferences_file(path, preferences);
+  require(!preferences.changed(), "Successful save left preferences dirty");
+
+  const auto loaded = jwpqt::qt::read_wnn_preferences_file(path, 2);
+  require(loaded.has_value(), "Saved WNN preferences could not be loaded");
+  require(loaded->entries() == preferences.entries(),
+          "WNN preference file did not round-trip");
+  require(read_bytes(path).size() ==
+              static_cast<qsizetype>(2 * jwpqt::core::kWnnPreferenceRecordSize),
+          "WNN preference file has the wrong wire size");
+}
+
+void test_partial_wnn_preference_file(const QString& directory) {
+  const QString path = directory + QStringLiteral("/partial.sel");
+  QFile output(path);
+  require(output.open(QIODevice::WriteOnly),
+          "Could not create partial preference file");
+  require(output.write("abc", 3) == 3,
+          "Could not seed partial preference file");
+  output.close();
+
+  const auto loaded = jwpqt::qt::read_wnn_preferences_file(path, 2);
+  require(loaded.has_value(), "Partial WNN preferences were not loaded");
+  require(loaded->entries()[0].key[0] == 'a' &&
+              loaded->entries()[0].key[1] == 'b' &&
+              loaded->entries()[0].key[2] == 'c' &&
+              loaded->entries()[1] == jwpqt::core::WnnPreferenceEntry{},
+          "Partial WNN preferences were not zero-filled");
+}
+
+void test_wnn_preference_open_errors(const QString& directory) {
+  const QString missing = directory + QStringLiteral("/missing.sel");
+  bool invalid_capacity_rejected = false;
+  try {
+    static_cast<void>(jwpqt::qt::read_wnn_preferences_file(missing, 0));
+  } catch (const jwpqt::core::WnnPreferenceError&) {
+    invalid_capacity_rejected = true;
+  }
+  require(invalid_capacity_rejected,
+          "Missing preference file bypassed capacity validation");
+
+  const QString target = directory + QStringLiteral("/absent-target.sel");
+  const QString link = directory + QStringLiteral("/dangling.sel");
+  require(QFile::link(target, link),
+          "Could not create dangling preference symlink");
+  bool dangling_link_rejected = false;
+  try {
+    static_cast<void>(jwpqt::qt::read_wnn_preferences_file(link, 2));
+  } catch (const std::runtime_error&) {
+    dangling_link_rejected = true;
+  }
+  require(dangling_link_rejected,
+          "Dangling preference symlink was treated as a missing file");
+}
+
+void test_failed_wnn_preference_save_stays_dirty(const QString& directory) {
+  const QString path = directory + QStringLiteral("/missing/user.sel");
+  jwpqt::core::WnnPreferences preferences(2);
+  preferences.resize(3);
+  bool rejected = false;
+  try {
+    jwpqt::qt::write_wnn_preferences_file(path, preferences);
+  } catch (const std::runtime_error&) {
+    rejected = true;
+  }
+  require(rejected, "WNN preferences were written without a parent");
+  require(preferences.changed(),
+          "Failed WNN preference save cleared the dirty flag");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -126,6 +209,10 @@ int main(int argc, char* argv[]) {
     test_encoding_failure_preserves_file(directory.path());
     test_jwp_file_round_trip(directory.path());
     test_jwp_encoding_failure_preserves_file(directory.path());
+    test_wnn_preference_file_round_trip(directory.path());
+    test_partial_wnn_preference_file(directory.path());
+    test_wnn_preference_open_errors(directory.path());
+    test_failed_wnn_preference_save_stays_dirty(directory.path());
     std::cout << "All Qt file I/O tests passed\n";
     return 0;
   } catch (const std::exception& error) {
