@@ -1007,7 +1007,17 @@ void MainWindow::create_actions() {
   bushu_lookup_action_->setShortcut(
       QKeySequence(QStringLiteral("Ctrl+Shift+L")));
   connect(bushu_lookup_action_, &QAction::triggered, this,
-          [this] { show_kanji_code_lookup_dialog(KanjiCodeLookupMode::kBushu); });
+           [this] { show_kanji_code_lookup_dialog(KanjiCodeLookupMode::kBushu); });
+
+  stroke_bushu_lookup_action_ =
+      tools_menu->addAction(tr("Str&oke/Bushu Lookup"));
+  stroke_bushu_lookup_action_->setObjectName(
+      QStringLiteral("strokeBushuLookupAction"));
+  stroke_bushu_lookup_action_->setShortcut(
+      QKeySequence(QStringLiteral("Ctrl+Shift+B")));
+  connect(stroke_bushu_lookup_action_, &QAction::triggered, this, [this] {
+    show_kanji_code_lookup_dialog(KanjiCodeLookupMode::kStrokeBushu);
+  });
 
   spahn_lookup_action_ =
       tools_menu->addAction(tr("Spahn-&Hadamitzky Lookup"));
@@ -1350,6 +1360,8 @@ void MainWindow::update_kanji_code_lookup_actions() {
     four_corner_lookup_action_->setEnabled(enabled);
   if (bushu_lookup_action_ != nullptr)
     bushu_lookup_action_->setEnabled(enabled);
+  if (stroke_bushu_lookup_action_ != nullptr)
+    stroke_bushu_lookup_action_->setEnabled(enabled);
   if (spahn_lookup_action_ != nullptr)
     spahn_lookup_action_->setEnabled(enabled);
 }
@@ -1997,6 +2009,9 @@ void MainWindow::show_kanji_code_lookup_dialog(KanjiCodeLookupMode mode) {
       case KanjiCodeLookupMode::kSpahn:
         dialog.select_spahn_mode();
         break;
+      case KanjiCodeLookupMode::kStrokeBushu:
+        dialog.select_stroke_bushu_mode();
+        break;
     }
   };
   if (kanji_code_lookup_dialog_ != nullptr) {
@@ -2014,7 +2029,8 @@ void MainWindow::show_kanji_code_lookup_dialog(KanjiCodeLookupMode mode) {
               "Could not insert code lookup results into the document");
         }
       },
-      [this](core::JisCode code) { show_kanji_info_code(code); }, this);
+      [this](core::JisCode code) { show_kanji_info_code(code); }, this,
+      radical_sheet_);
   select_mode(*dialog);
   dialog->setAttribute(Qt::WA_DeleteOnClose);
   connect(dialog, &QObject::destroyed, this,

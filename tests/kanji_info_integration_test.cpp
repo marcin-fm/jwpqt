@@ -149,6 +149,8 @@ void test_integration(const QString& directory) {
       window.findChild<QAction*>(QStringLiteral("bushuLookupAction"));
   QAction* spahn_action =
       window.findChild<QAction*>(QStringLiteral("spahnLookupAction"));
+  QAction* stroke_bushu_action = window.findChild<QAction*>(
+      QStringLiteral("strokeBushuLookupAction"));
   QAction* reading_action = window.findChild<QAction*>(
       QStringLiteral("kanjiReadingLookupAction"));
   QAction* count_action =
@@ -164,9 +166,13 @@ void test_integration(const QString& directory) {
               bushu_action->shortcut() ==
                   QKeySequence(QStringLiteral("Ctrl+Shift+L")) &&
               spahn_action != nullptr && spahn_action->isEnabled() &&
-              spahn_action->shortcut() ==
-                  QKeySequence(QStringLiteral("Ctrl+H")) &&
-               reading_action != nullptr && reading_action->isEnabled() &&
+               spahn_action->shortcut() ==
+                   QKeySequence(QStringLiteral("Ctrl+H")) &&
+               stroke_bushu_action != nullptr &&
+               stroke_bushu_action->isEnabled() &&
+               stroke_bushu_action->shortcut() ==
+                   QKeySequence(QStringLiteral("Ctrl+Shift+B")) &&
+                reading_action != nullptr && reading_action->isEnabled() &&
                reading_action->shortcut() ==
                    QKeySequence(QStringLiteral("Ctrl+Shift+R")) &&
                count_action != nullptr && count_action->isEnabled() &&
@@ -217,6 +223,15 @@ void test_integration(const QString& directory) {
   code_dialog->set_bushu_query(bushu);
   require(code_dialog->search_bushu() && code_dialog->results().size() == 1,
           "Integrated Bushu lookup returned wrong results");
+
+  stroke_bushu_action->trigger();
+  QApplication::processEvents();
+  require(code_dialog->search_stroke_bushu() &&
+              code_dialog->results().size() == 1 &&
+              window.findChildren<QDialog*>(
+                        QStringLiteral("kanjiCodeLookupDialog"))
+                      .size() == 1,
+          "Integrated Stroke/Bushu lookup failed or created a duplicate dialog");
 
   spahn_action->trigger();
   QApplication::processEvents();
