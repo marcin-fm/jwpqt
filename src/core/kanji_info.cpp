@@ -40,7 +40,7 @@ std::uint32_t read_u32(std::string_view bytes, std::size_t offset) {
        << 24U));
 }
 
-void validate_limits(const KanjiInfoLimits& limits) {
+void validate_limits_impl(const KanjiInfoLimits& limits) {
   if (limits.encoded_bytes == 0 || limits.records == 0 ||
       limits.strings == 0 || limits.string_bytes == 0 || limits.codes == 0) {
     throw KanjiInfoError("Kanji information limits must be positive");
@@ -137,7 +137,7 @@ std::u32string decode_reading(std::string_view bytes, JisCode base) {
 
 KanjiInfoDatabase KanjiInfoDatabase::parse(std::string_view bytes,
                                            const KanjiInfoLimits& limits) {
-  validate_limits(limits);
+  validate_kanji_info_limits(limits);
   if (bytes.size() > limits.encoded_bytes) {
     throw KanjiInfoError("Kanji information data exceeds its byte limit");
   }
@@ -163,6 +163,10 @@ KanjiInfoDatabase KanjiInfoDatabase::parse(std::string_view bytes,
   database.maximum_code_ = static_cast<JisCode>(maximum & 0x7f7fU);
   database.limits_ = limits;
   return database;
+}
+
+void validate_kanji_info_limits(const KanjiInfoLimits& limits) {
+  validate_limits_impl(limits);
 }
 
 std::uint32_t KanjiInfoDatabase::flags() const noexcept { return flags_; }

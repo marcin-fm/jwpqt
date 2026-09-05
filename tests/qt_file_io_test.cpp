@@ -15,6 +15,7 @@
 #include "jwpqt/core/edict_registry.h"
 #include "jwpqt/core/jwp_document.h"
 #include "jwpqt/core/kanji_color_list.h"
+#include "jwpqt/core/kanji_info.h"
 #include "jwpqt/core/utf8.h"
 #include "jwpqt/core/wnn_preferences.h"
 #include "jwpqt/core/wnn_user_dictionary.h"
@@ -111,6 +112,62 @@ void test_jwp_encoding_failure_preserves_file(const QString& directory) {
   }
   require(read_bytes(path) == original,
           "Failed JWP save changed the existing file");
+}
+
+void test_kanji_info_file_loading(const QString& directory) {
+  const QString path = directory + QStringLiteral("/kanjinfo.dat");
+  require(!jwpqt::qt::read_kanji_info_file(path).has_value(),
+          "Missing kanji information file did not remain optional");
+
+  QByteArray bytes;
+  auto append_u16 = [&bytes](quint16 value) {
+    bytes.append(static_cast<char>(value & 0xffU));
+    bytes.append(static_cast<char>((value >> 8U) & 0xffU));
+  };
+  auto append_u32 = [&bytes](quint32 value) {
+    for (int shift = 0; shift < 32; shift += 8)
+      bytes.append(static_cast<char>((value >> shift) & 0xffU));
+  };
+  append_u32(jwpqt::core::kKanjiInfoMagic);
+  append_u32(0U);
+  append_u16(1U);
+  append_u16(0x3021U);
+  bytes.append(12, '\0');
+  append_u32(28U << 8U);
+  QFile output(path);
+  require(output.open(QIODevice::WriteOnly) &&
+              output.write(bytes) == bytes.size(),
+          "Could not create kanji information fixture");
+  output.close();
+  const auto loaded = jwpqt::qt::read_kanji_info_file(path);
+  require(loaded.has_value() && loaded->count() == 1 &&
+              loaded->record(0x3021U).code == 0x3021U,
+          "Kanji information file did not load through the Qt boundary");
+
+  output.setFileName(path);
+  require(output.open(QIODevice::WriteOnly | QIODevice::Truncate) &&
+              output.write("bad", 3) == 3,
+          "Could not create malformed kanji information fixture");
+  output.close();
+  bool malformed = false;
+  try {
+    (void)jwpqt::qt::read_kanji_info_file(path);
+  } catch (const jwpqt::core::KanjiInfoError&) {
+    malformed = true;
+  }
+  require(malformed, "Malformed kanji information file was accepted");
+
+  require(QFile::remove(path), "Could not remove kanji information fixture");
+  jwpqt::core::KanjiInfoLimits invalid;
+  invalid.records = 0;
+  bool bad_limits = false;
+  try {
+    (void)jwpqt::qt::read_kanji_info_file(path, invalid);
+  } catch (const jwpqt::core::KanjiInfoError&) {
+    bad_limits = true;
+  }
+  require(bad_limits,
+          "Missing kanji information file bypassed limit validation");
 }
 
 void test_kanji_color_list_file_round_trip(const QString& directory) {
@@ -540,6 +597,7 @@ int main(int argc, char* argv[]) {
     test_encoding_failure_preserves_file(directory.path());
     test_jwp_file_round_trip(directory.path());
     test_jwp_encoding_failure_preserves_file(directory.path());
+    test_kanji_info_file_loading(directory.path());
     test_kanji_color_list_file_round_trip(directory.path());
     test_kanji_color_list_file_errors(directory.path());
     test_wnn_preference_file_round_trip(directory.path());

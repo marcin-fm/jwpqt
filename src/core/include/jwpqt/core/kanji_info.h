@@ -28,6 +28,8 @@ struct KanjiInfoLimits {
   std::size_t codes = 100'000;
 };
 
+void validate_kanji_info_limits(const KanjiInfoLimits& limits);
+
 struct KanjiInfoSkipCode {
   std::uint8_t type = 0;
   std::uint8_t first = 0;

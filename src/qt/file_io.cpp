@@ -114,6 +114,20 @@ void write_kanji_color_list_file(const QString& path,
   write_file_bytes(path, bytes);
 }
 
+std::optional<core::KanjiInfoDatabase> read_kanji_info_file(
+    const QString& path, const core::KanjiInfoLimits& limits) {
+  core::validate_kanji_info_limits(limits);
+  QFile input(path);
+  if (!input.open(QIODevice::ReadOnly)) {
+    if (path_is_missing(path)) {
+      return std::nullopt;
+    }
+    throw io_error("Could not open", path, input.errorString());
+  }
+  return core::KanjiInfoDatabase::parse(read_open_file_bytes(input, path),
+                                        limits);
+}
+
 std::optional<core::WnnPreferences> read_wnn_preferences_file(
     const QString& path, std::size_t capacity) {
   QFile input(path);
