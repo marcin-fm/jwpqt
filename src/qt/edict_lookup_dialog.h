@@ -45,6 +45,7 @@ class EdictLookupDialog : public QDialog {
  private:
   static constexpr std::size_t kMaximumVisibleResults = 100'000;
 
+  std::u32string selected_rows() const;
   void update_actions();
   void show_status();
 

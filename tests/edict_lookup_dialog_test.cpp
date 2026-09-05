@@ -96,10 +96,9 @@ void test_search_render_status_copy_and_insert() {
   require(QApplication::clipboard()->text() ==
               QStringLiteral("\u3042 [\u3044] /cat/feline/\nAlice /name/"),
           "Dictionary result copy did not preserve selected row order");
-  list->setCurrentRow(0);
   require(dialog.insert_selected() &&
-              inserted == U"\u3042 [\u3044] /cat/feline/",
-          "Dictionary insertion callback did not receive the full result row");
+              inserted == U"\u3042 [\u3044] /cat/feline/\nAlice /name/",
+          "Dictionary insertion callback did not receive every selected row");
 }
 
 void test_empty_invalid_and_failed_search_are_contained() {
@@ -127,6 +126,37 @@ void test_empty_invalid_and_failed_search_are_contained() {
   require(!dialog.search() && searches == 1 &&
               status->text().contains(QStringLiteral("lookup exploded")),
           "Dictionary search callback failure escaped the dialog");
+
+  jwpqt::qt::EdictLookupDialog unknown_search(
+      [](const jwpqt::core::JwpText&,
+         const jwpqt::qt::EdictLookupOptions&)
+          -> jwpqt::qt::EdictResourceSearchReport { throw 7; });
+  auto* unknown_query =
+      unknown_search.findChild<QLineEdit*>(QStringLiteral("edictQuery"));
+  auto* unknown_status =
+      unknown_search.findChild<QLabel*>(QStringLiteral("edictStatus"));
+  unknown_query->setText(QStringLiteral("cat"));
+  require(!unknown_search.search() &&
+              unknown_status->text().contains(QStringLiteral("unknown error")),
+          "Unknown dictionary search failure escaped the dialog");
+
+  jwpqt::qt::EdictLookupDialog unknown_insert(
+      [](const jwpqt::core::JwpText&,
+         const jwpqt::qt::EdictLookupOptions&) {
+        jwpqt::qt::EdictResourceSearchReport report;
+        report.results = {result(0, QStringLiteral("Main"), U"cat", {},
+                                 {U"feline"})};
+        return report;
+      },
+      [](const std::u32string&) -> bool { throw 9; });
+  auto* insert_query =
+      unknown_insert.findChild<QLineEdit*>(QStringLiteral("edictQuery"));
+  auto* insert_status =
+      unknown_insert.findChild<QLabel*>(QStringLiteral("edictStatus"));
+  insert_query->setText(QStringLiteral("cat"));
+  require(unknown_insert.search() && !unknown_insert.insert_selected() &&
+              insert_status->text().contains(QStringLiteral("unknown error")),
+          "Unknown dictionary insertion failure escaped the dialog");
 }
 
 }  // namespace

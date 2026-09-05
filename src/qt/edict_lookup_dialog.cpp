@@ -184,17 +184,20 @@ bool EdictLookupDialog::search() {
     status_->setText(tr("Search failed: %1").arg(QString::fromUtf8(error.what())));
     query_edit_->setFocus();
     return false;
+  } catch (...) {
+    status_->setText(tr("Search failed with an unknown error."));
+    query_edit_->setFocus();
+    return false;
   }
 }
 
 bool EdictLookupDialog::insert_selected() {
-  const int row = results_->currentRow();
-  if (!insert_handler_ || row < 0 ||
-      static_cast<std::size_t>(row) >= rendered_rows_.size()) {
+  const std::u32string rows = selected_rows();
+  if (!insert_handler_ || rows.empty()) {
     return false;
   }
   try {
-    if (!insert_handler_(rendered_rows_[static_cast<std::size_t>(row)])) {
+    if (!insert_handler_(rows)) {
       status_->setText(tr("The selected entry could not be inserted."));
       return false;
     }
@@ -202,6 +205,9 @@ bool EdictLookupDialog::insert_selected() {
   } catch (const std::exception& error) {
     status_->setText(
         tr("Insert failed: %1").arg(QString::fromUtf8(error.what())));
+    return false;
+  } catch (...) {
+    status_->setText(tr("Insert failed with an unknown error."));
     return false;
   }
 }
@@ -223,8 +229,23 @@ const EdictResourceSearchReport& EdictLookupDialog::report() const noexcept {
   return report_;
 }
 
+std::u32string EdictLookupDialog::selected_rows() const {
+  std::u32string rows;
+  for (int row = 0; row < results_->count(); ++row) {
+    if (!results_->item(row)->isSelected()) {
+      continue;
+    }
+    if (!rows.empty()) {
+      rows.push_back(U'\n');
+    }
+    rows.append(rendered_rows_[static_cast<std::size_t>(row)]);
+  }
+  return rows;
+}
+
 void EdictLookupDialog::update_actions() {
-  insert_button_->setEnabled(insert_handler_ && results_->currentRow() >= 0);
+  insert_button_->setEnabled(insert_handler_ &&
+                             !results_->selectedItems().empty());
 }
 
 void EdictLookupDialog::show_status() {
