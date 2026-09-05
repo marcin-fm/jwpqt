@@ -59,12 +59,16 @@ class EdictDictionary {
   LegacyCodePage mixed_code_page() const noexcept;
   std::string_view source_bytes() const noexcept;
   const std::vector<EdictRecord>& records() const noexcept;
+  std::size_t definition_count() const noexcept;
+  std::size_t decoded_code_points() const noexcept;
 
  private:
   EdictEncoding encoding_ = EdictEncoding::kEucJp;
   LegacyCodePage mixed_code_page_ = kDefaultLegacyCodePage;
   std::string source_bytes_;
   std::vector<EdictRecord> records_;
+  std::size_t definition_count_ = 0;
+  std::size_t decoded_code_points_ = 0;
 };
 
 }  // namespace jwpqt::core

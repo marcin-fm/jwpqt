@@ -275,6 +275,14 @@ legacy file structures.
     serializes complete canonical bytes before atomically replacing the target.
     Invalid limits, malformed files, dangling links, and unavailable output
     parents fail without publishing partial state or damaging an existing file.
+66. Ordered EDICT resource loading preserves the complete registry while
+    attempting searched entries in configuration order. ANSI-byte and UTF-16
+    paths resolve explicitly against the configuration directory; configured
+    EUC-JP, UTF-8, or mixed dictionaries are bounded and owned; JDX is required
+    and source-bound only for indexed entries. Successful resources survive neighboring failures,
+    quiet state is retained in diagnostics, blocking special files are rejected,
+    and aggregate byte, structure, text, entry, attempt, and diagnostic budgets
+    span both successful and malformed resources.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -283,8 +291,8 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Load ordered EDICT dictionary resources from the portable registry, then add
-   native result-view slices.
+1. Dispatch one bounded EDICT search across the ordered loaded resources, then
+   add native result-view slices.
 2. Port paged printing and clipboard color policy over the rich JWP document
    layout.
 3. Port configuration, remaining import/export paths, and help.

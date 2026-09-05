@@ -1,6 +1,8 @@
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
 add_library(jwpqt_qt_support STATIC
+  edict_resources.cpp
+  edict_resources.h
   file_io.cpp
   file_io.h
   kanji_color_settings.cpp

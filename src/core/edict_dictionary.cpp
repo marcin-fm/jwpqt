@@ -502,6 +502,8 @@ EdictDictionary EdictDictionary::parse(std::string_view bytes,
     ++line_end;
     line_start = line_end;
   }
+  dictionary.definition_count_ = definition_count;
+  dictionary.decoded_code_points_ = decoded_code_points;
   return dictionary;
 }
 
@@ -517,6 +519,14 @@ std::string_view EdictDictionary::source_bytes() const noexcept {
 
 const std::vector<EdictRecord>& EdictDictionary::records() const noexcept {
   return records_;
+}
+
+std::size_t EdictDictionary::definition_count() const noexcept {
+  return definition_count_;
+}
+
+std::size_t EdictDictionary::decoded_code_points() const noexcept {
+  return decoded_code_points_;
 }
 
 }  // namespace jwpqt::core

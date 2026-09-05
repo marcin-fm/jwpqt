@@ -48,7 +48,10 @@ void test_utf8_records_and_boundaries() {
       EdictDictionary::parse(bytes, EdictEncoding::kUtf8);
   require(dictionary.encoding() == EdictEncoding::kUtf8 &&
               dictionary.source_bytes() == bytes &&
-              dictionary.records().size() == 4,
+              dictionary.records().size() == 4 &&
+              dictionary.definition_count() == 6 &&
+              dictionary.decoded_code_points() ==
+                  first.size() + second.size() + third.size() + fourth.size(),
           "UTF-8 EDICT ownership or record count is wrong");
   const auto& record = dictionary.records().front();
   require(record.byte_offset == 0 &&
