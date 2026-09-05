@@ -44,11 +44,31 @@ struct KanjiFourCornerQuery {
   std::array<std::int8_t, 5> digits{-1, -1, -1, -1, -1};
 };
 
+struct KanjiBushuQuery {
+  KanjiNumericRange radical{0, 255};
+  KanjiNumericRange strokes{0, 30};
+  bool nelson = true;
+  bool classical = true;
+};
+
+struct KanjiSpahnQuery {
+  KanjiNumericRange radical_strokes{0, 11};
+  KanjiNumericRange radical{0, 19};
+  KanjiNumericRange other_strokes{0, 26};
+  KanjiNumericRange index{0, 47};
+};
+
 KanjiCodeSearchReport search_kanji_skip(
     const KanjiInfoDatabase& information, const KanjiSkipQuery& query,
     const KanjiCodeSearchLimits& limits = KanjiCodeSearchLimits{});
 KanjiCodeSearchReport search_kanji_four_corner(
     const KanjiInfoDatabase& information, const KanjiFourCornerQuery& query,
+    const KanjiCodeSearchLimits& limits = KanjiCodeSearchLimits{});
+KanjiCodeSearchReport search_kanji_bushu(
+    const KanjiInfoDatabase& information, const KanjiBushuQuery& query,
+    const KanjiCodeSearchLimits& limits = KanjiCodeSearchLimits{});
+KanjiCodeSearchReport search_kanji_spahn(
+    const KanjiInfoDatabase& information, const KanjiSpahnQuery& query,
     const KanjiCodeSearchLimits& limits = KanjiCodeSearchLimits{});
 
 }  // namespace jwpqt::core

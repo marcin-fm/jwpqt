@@ -69,6 +69,19 @@ bool four_corner_matches(std::uint16_t main, std::uint8_t index,
          query.digits[4] == static_cast<std::int8_t>(index);
 }
 
+std::uint8_t normalized_nelson_bushu(std::uint8_t value) {
+  if (value == 23) return 22;
+  if (value == 35) return 34;
+  return value;
+}
+
+std::uint8_t normalized_classical_bushu(std::uint8_t value,
+                                        std::uint8_t nelson) {
+  if (value == 23) value = 22;
+  if (value == 25) value = 34;
+  return value == 0 ? nelson : value;
+}
+
 }  // namespace
 
 KanjiCodeSearchReport search_kanji_skip(
@@ -139,6 +152,61 @@ KanjiCodeSearchReport search_kanji_four_corner(
         if (!append(report, limits, code, true)) return report;
         break;
       }
+    }
+  }
+  return report;
+}
+
+KanjiCodeSearchReport search_kanji_bushu(
+    const KanjiInfoDatabase& information, const KanjiBushuQuery& query,
+    const KanjiCodeSearchLimits& limits) {
+  validate_limits(limits);
+  validate_range(query.radical, 255, "Bushu radical");
+  validate_range(query.strokes, 30, "Bushu stroke");
+  if (!query.nelson && !query.classical) {
+    throw KanjiInfoError("Bushu search requires a radical system");
+  }
+
+  KanjiCodeSearchReport report;
+  for (std::size_t index = 0; index < information.count(); ++index) {
+    charge(report, limits);
+    const JisCode code = code_at(index);
+    const KanjiInfoFixed fixed = information.record(code).fixed;
+    const std::uint8_t nelson = normalized_nelson_bushu(fixed.bushu);
+    const std::uint8_t classical =
+        normalized_classical_bushu(fixed.classical_bushu, nelson);
+    if (within(fixed.strokes, query.strokes) &&
+        ((query.nelson && within(nelson, query.radical)) ||
+         (query.classical && within(classical, query.radical))) &&
+        !append(report, limits, code, false)) {
+      return report;
+    }
+  }
+  return report;
+}
+
+KanjiCodeSearchReport search_kanji_spahn(
+    const KanjiInfoDatabase& information, const KanjiSpahnQuery& query,
+    const KanjiCodeSearchLimits& limits) {
+  validate_limits(limits);
+  validate_range(query.radical_strokes, 11, "Spahn radical stroke");
+  validate_range(query.radical, 19, "Spahn radical");
+  validate_range(query.other_strokes, 26, "Spahn other stroke");
+  validate_range(query.index, 47, "Spahn kanji index");
+
+  KanjiCodeSearchReport report;
+  for (std::size_t index = 0; index < information.count(); ++index) {
+    charge(report, limits);
+    const JisCode code = code_at(index);
+    const KanjiInfoRecord record = information.record(code);
+    if (!record.has_extended) continue;
+    const KanjiInfoExtended& extended = record.extended;
+    if (within(extended.spahn_radical_strokes, query.radical_strokes) &&
+        within(extended.spahn_radical, query.radical) &&
+        within(extended.spahn_other_strokes, query.other_strokes) &&
+        within(extended.spahn_index, query.index) &&
+        !append(report, limits, code, false)) {
+      return report;
     }
   }
   return report;

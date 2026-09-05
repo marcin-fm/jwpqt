@@ -55,14 +55,16 @@ jwpqt::core::KanjiInfoDatabase database() {
   append_u16(bytes, 0x3022U);
   bytes.resize(variable, '\0');
 
-  put_u16(bytes, 12, 3U << 8U);
+  put_u16(bytes, 12, 23U | (3U << 8U));
   put_u16(bytes, 14, (1U << 8U) | (2U << 11U));
   put_u16(bytes, 16, 3U);
   put_u16(bytes, 18, 1U);
-  put_u32(bytes, 24, static_cast<std::uint32_t>(variable) << 8U);
+  put_u32(bytes, 24,
+          25U | (static_cast<std::uint32_t>(variable) << 8U));
   append_u16(bytes, 0U);
-  append_u32(bytes, 0U);
-  append_u32(bytes, 1234U << 6U | 5U << 20U | 7U << 24U);
+  append_u32(bytes,
+             (2U << 17U) | (4U << 22U) | (5U << 27U));
+  append_u32(bytes, 7U | 1234U << 6U | 5U << 20U | 7U << 24U);
   const std::uint16_t miss =
       static_cast<std::uint16_t>((1U << 13U) | (4U << 10U) | (5U << 5U) |
                                  6U);
@@ -72,7 +74,7 @@ jwpqt::core::KanjiInfoDatabase database() {
   append_u16(bytes, miss);
   bytes.push_back('\0');
 
-  put_u16(bytes, 28, 4U << 8U);
+  put_u16(bytes, 28, 35U | (4U << 8U));
   put_u16(bytes, 30, (2U << 8U) | (3U << 11U));
   put_u16(bytes, 32, 4U);
   put_u32(bytes, 40, static_cast<std::uint32_t>(bytes.size()) << 8U);
@@ -117,6 +119,48 @@ void test_four_corner() {
           "Secondary four-corner code was not searched");
 }
 
+void test_bushu() {
+  const auto source = database();
+  jwpqt::core::KanjiBushuQuery query;
+  query.radical = {22, 22};
+  query.strokes = {3, 3};
+  query.classical = false;
+  auto report = jwpqt::core::search_kanji_bushu(source, query);
+  require(report.matches.size() == 1 &&
+              report.matches[0].code == 0x3021U,
+          "Nelson Bushu aliases were not normalized");
+
+  query.radical = {34, 34};
+  query.strokes = {3, 4};
+  query.nelson = false;
+  query.classical = true;
+  report = jwpqt::core::search_kanji_bushu(source, query);
+  require(report.matches.size() == 2 &&
+              report.matches[0].code == 0x3021U &&
+              report.matches[1].code == 0x3022U,
+          "Classical Bushu aliases or Nelson fallback are wrong");
+
+  query.nelson = false;
+  query.classical = false;
+  require_error(
+      [&] { (void)jwpqt::core::search_kanji_bushu(source, query); },
+      "Bushu search without a radical system was accepted");
+}
+
+void test_spahn() {
+  const auto source = database();
+  jwpqt::core::KanjiSpahnQuery query;
+  query.radical_strokes = {2, 2};
+  query.radical = {4, 4};
+  query.other_strokes = {5, 5};
+  query.index = {7, 7};
+  const auto report = jwpqt::core::search_kanji_spahn(source, query);
+  require(report.matches.size() == 1 &&
+              report.matches[0].code == 0x3021U &&
+              !report.matches[0].alternate,
+          "Spahn-Hadamitzky metadata search returned wrong results");
+}
+
 void test_limits_and_validation() {
   const auto source = database();
   jwpqt::core::KanjiSkipQuery skip;
@@ -140,6 +184,11 @@ void test_limits_and_validation() {
   const auto truncated = jwpqt::core::search_kanji_skip(source, {}, limits);
   require(truncated.matches.size() == 1 && truncated.truncated,
           "Kanji code result limit did not report truncation");
+  jwpqt::core::KanjiSpahnQuery spahn;
+  spahn.radical.maximum = 20;
+  require_error(
+      [&] { (void)jwpqt::core::search_kanji_spahn(source, spahn); },
+      "Invalid Spahn-Hadamitzky range was accepted");
 }
 
 }  // namespace
@@ -147,6 +196,8 @@ void test_limits_and_validation() {
 int main() {
   test_skip();
   test_four_corner();
+  test_bushu();
+  test_spahn();
   test_limits_and_validation();
   return EXIT_SUCCESS;
 }
