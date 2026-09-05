@@ -284,11 +284,13 @@ legacy file structures.
     and aggregate byte, structure, text, entry, attempt, and diagnostic budgets
     span both successful and malformed resources.
 67. Unindexed EDICT resources use a bounded physical source-order anchor scan
-    rather than a synthesized JDX. Every validated character-start occurrence
-    remains distinct, matching stops at record boundaries, EUC-JP, UTF-8,
+    rather than a synthesized JDX. The first matching character start in each
+    record yields one result before scanning advances to the next record,
+    matching stops at record boundaries, and EUC-JP, UTF-8,
     recovered JIS X 0212, mixed high-byte pairs, and extension pages retain
-    their established token semantics, and exact attempted comparison work is
-    reported under explicit result and work limits with constant extra memory.
+    their established token semantics. Raw high-bit query tokens normalize like
+    prepared searches, and exact attempted comparison work is reported under
+    explicit result and work limits with constant extra memory.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and

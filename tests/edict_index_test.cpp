@@ -325,9 +325,8 @@ void test_linear_lookup_preserves_source_order_and_occurrences() {
   const std::size_t third = source.find("alpha", second + 1);
   require(lookup.matches ==
               std::vector<EdictIndexMatch>{{0, 5, 0},
-                                           {second, 5, 0},
                                            {third, 5, 1}},
-          "Linear lookup did not preserve physical occurrence order");
+          "Linear lookup did not preserve one physical result per record");
 
   const EdictIndexLookup no_cross =
       find_edict_linear_matches(dictionary, {'t', '/', '\n', 'b'});
@@ -345,6 +344,11 @@ void test_linear_lookup_encodings() {
                   .matches ==
               std::vector<EdictIndexMatch>{{0, 7, 0}},
           "Linear EUC lookup did not fold katakana or decode JIS X 0212");
+  require(find_edict_linear_matches(euc_dictionary,
+                                    {0xa4ab, 0xa5ca, 0xa9})
+                  .matches ==
+              std::vector<EdictIndexMatch>{{0, 7, 0}},
+          "Linear lookup did not normalize raw high-bit kana query tokens");
 
   const std::string utf8 = "\xd0\x81 word /entry/\n";
   const EdictDictionary utf8_dictionary = EdictDictionary::parse(
@@ -370,12 +374,12 @@ void test_linear_lookup_encodings() {
 
 void test_linear_lookup_limits_and_validation() {
   using namespace jwpqt::core;
-  const std::string source = "word word /entry/\n";
+  const std::string source = "word word /entry/\nword /second/\n";
   const EdictDictionary dictionary =
       EdictDictionary::parse(source, EdictEncoding::kEucJp);
   const EdictIndexLookup one =
       find_edict_linear_matches(dictionary, {'w', 'o', 'r', 'd'}, 100, 2);
-  require(one.matches.size() == 2 && one.work_steps > source.size(),
+  require(one.matches.size() == 2 && one.work_steps == 8,
           "Linear lookup did not report attempted comparison work");
   require_throws(
       [&] {
@@ -399,20 +403,21 @@ void test_linear_lookup_limits_and_validation() {
 
 void test_linear_lookup_repeating_prefix_work() {
   using namespace jwpqt::core;
-  const std::u32string repeated(100, U'\u3042');
+  std::u32string repeated(99, U'\u3042');
+  repeated.push_back(U'\u3044');
   const std::string source =
       encode_legacy_text(repeated, LegacyEncoding::kEucJp) + " /entry/\n";
   const EdictDictionary dictionary =
       EdictDictionary::parse(source, EdictEncoding::kEucJp);
-  const JwpText key(100, 0x2422);
+  JwpText key(99, 0x2422);
+  key.push_back(0x2426);
   const EdictIndexLookup lookup =
-      find_edict_linear_matches(dictionary, key, 5'157, 1);
-  require(lookup.matches == std::vector<EdictIndexMatch>{{0, 200, 0}} &&
-              lookup.work_steps == 5'157,
+      find_edict_linear_matches(dictionary, key, 5'058, 1);
+  require(lookup.matches.empty() && lookup.work_steps == 5'058,
           "Linear repeating-prefix lookup work accounting is wrong");
   require_throws(
       [&] {
-        (void)find_edict_linear_matches(dictionary, key, 5'156, 1);
+        (void)find_edict_linear_matches(dictionary, key, 5'057, 1);
       },
       "Linear repeating-prefix lookup exceeded its work budget silently");
 }

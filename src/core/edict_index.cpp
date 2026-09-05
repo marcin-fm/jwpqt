@@ -184,6 +184,9 @@ JwpText normalize_key(const JwpText& key) {
   }
   JwpText normalized = key;
   for (std::uint16_t& token : normalized) {
+    if ((token & 0x8080U) == 0x8080U) {
+      token = static_cast<std::uint16_t>(token & 0x7f7fU);
+    }
     token = normalize_token(token);
   }
   return normalized;
@@ -442,6 +445,7 @@ EdictIndexLookup find_edict_linear_matches(
           }
           lookup.matches.push_back(
               {offset, source_offset - offset, record_index});
+          break;
         }
       }
       offset += first_width;
