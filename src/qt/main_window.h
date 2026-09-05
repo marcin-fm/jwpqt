@@ -35,6 +35,7 @@ class QCloseEvent;
 class QEvent;
 class QLabel;
 class QMenu;
+class QPrinter;
 class QTextEdit;
 
 namespace jwpqt::qt {
@@ -182,6 +183,8 @@ class MainWindow : public QMainWindow {
   prompt_for_paragraph_format(const core::JwpParagraphFormat& initial);
   virtual std::optional<core::JwpDocument> prompt_for_page_layout(
       const core::JwpDocument& initial);
+  virtual bool prompt_for_print(QPrinter& printer);
+  virtual bool prompt_for_printer_setup(QPrinter& printer);
   virtual std::optional<core::KanjiColorPolicy>
   prompt_for_kanji_color_policy(const core::KanjiColorPolicy& initial);
   virtual std::optional<KanjiColorListEditRequest>
@@ -250,6 +253,9 @@ class MainWindow : public QMainWindow {
   void replace_document();
   void format_document_paragraphs();
   void format_page_layout();
+  bool apply_page_layout(const core::JwpDocument& requested);
+  void print_current_document();
+  void setup_printer();
   void configure_kanji_colors();
   void edit_kanji_color_list();
   bool find_jwp_text(const QString& text, core::JwpSearchOptions options);
@@ -263,9 +269,12 @@ class MainWindow : public QMainWindow {
   void show_error(const QString& action, const std::exception& error);
 
   JwpEditor* editor_;
+  std::unique_ptr<QPrinter> printer_;
   QLabel* encoding_label_;
   QAction* undo_action_;
   QAction* redo_action_;
+  QAction* print_action_ = nullptr;
+  QAction* printer_setup_action_ = nullptr;
   QAction* convert_action_ = nullptr;
   QAction* previous_candidate_action_ = nullptr;
   QAction* next_candidate_action_ = nullptr;

@@ -18,7 +18,9 @@
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QPageLayout>
 #include <QPushButton>
+#include <QPrinter>
 #include <QSettings>
 #include <QSignalBlocker>
 #include <QTextEdit>
@@ -162,6 +164,12 @@ class PromptingWindow : public jwpqt::qt::MainWindow {
   int replace_prompt_count = 0;
   int paragraph_format_prompt_count = 0;
   int page_layout_prompt_count = 0;
+  int print_prompt_count = 0;
+  int printer_setup_prompt_count = 0;
+  bool accept_print_prompt = true;
+  bool accept_printer_setup_prompt = true;
+  bool printer_setup_landscape = false;
+  QString print_output_path;
   int kanji_color_prompt_count = 0;
   int kanji_color_list_prompt_count = 0;
 
@@ -199,6 +207,26 @@ class PromptingWindow : public jwpqt::qt::MainWindow {
     ++page_layout_prompt_count;
     offered_page_layout = initial;
     return next_page_layout;
+  }
+
+  bool prompt_for_print(QPrinter& printer) override {
+    ++print_prompt_count;
+    if (!accept_print_prompt)
+      return false;
+    printer.setOutputFormat(QPrinter::PdfFormat);
+    printer.setOutputFileName(print_output_path);
+    return true;
+  }
+
+  bool prompt_for_printer_setup(QPrinter& printer) override {
+    ++printer_setup_prompt_count;
+    if (accept_printer_setup_prompt) {
+      QPageLayout layout = printer.pageLayout();
+      layout.setOrientation(printer_setup_landscape ? QPageLayout::Landscape
+                                                    : QPageLayout::Portrait);
+      (void)printer.setPageLayout(layout);
+    }
+    return accept_printer_setup_prompt;
   }
 
   std::optional<jwpqt::core::KanjiColorPolicy>
@@ -2717,6 +2745,60 @@ void test_jwp_page_layout(const QString& directory) {
           "Page Layout action stayed enabled for plain text");
 }
 
+void test_native_print_commands(const QString& directory) {
+  const QString text_path = directory + QStringLiteral("/print.txt");
+  jwpqt::qt::write_text_file(
+      text_path, {U"Printable \u65e5\u672c", jwpqt::core::TextEncoding::kUtf8,
+                  false});
+  PromptingWindow window;
+  require(window.open_path(text_path, jwpqt::core::TextEncoding::kUtf8),
+          "Could not open native-print fixture");
+  QAction* print = find_action(window, "printAction");
+  QAction* setup = find_action(window, "printerSetupAction");
+  require(print != nullptr && print->isEnabled() && setup != nullptr &&
+              setup->isEnabled(),
+          "Native Print or Printer Setup action was not available");
+
+  window.print_output_path = directory + QStringLiteral("/plain-print.pdf");
+  print->trigger();
+  QFile plain_output(window.print_output_path);
+  require(window.print_prompt_count == 1 && plain_output.open(QIODevice::ReadOnly) &&
+              plain_output.read(4) == QByteArray("%PDF", 4),
+          "Native Print action did not produce the requested PDF");
+
+  setup->trigger();
+  require(window.printer_setup_prompt_count == 1,
+          "Printer Setup action did not use its native prompt boundary");
+
+  const QString cancelled_path = directory + QStringLiteral("/cancelled.pdf");
+  window.print_output_path = cancelled_path;
+  window.accept_print_prompt = false;
+  print->trigger();
+  require(window.print_prompt_count == 2 && !QFile::exists(cancelled_path),
+          "Cancelled Print action created output");
+
+  jwpqt::core::JwpDocument vertical = sample_jwp_document();
+  vertical.landscape = false;
+  vertical.vertical = true;
+  const QString vertical_path = directory + QStringLiteral("/vertical.jwp");
+  jwpqt::qt::write_jwp_file(vertical_path, vertical);
+  require(window.open_jwp_path(vertical_path),
+          "Could not open vertical-print fixture");
+  window.printer_setup_landscape = true;
+  setup->trigger();
+  require(window.printer_setup_prompt_count == 2 &&
+              window.current_jwp_document()->landscape &&
+              find_action(window, "undoAction")->isEnabled(),
+          "Printer Setup did not publish landscape as document metadata");
+  find_action(window, "undoAction")->trigger();
+  require(!window.current_jwp_document()->landscape,
+          "Undo did not restore the prior printer orientation");
+  const int prompts_before_vertical = window.print_prompt_count;
+  print->trigger();
+  require(window.print_prompt_count == prompts_before_vertical,
+          "Vertical printing reached the native dialog instead of failing explicitly");
+}
+
 void test_jis_table_integration(const QString& directory) {
   jwpqt::core::JwpDocument source;
   source.paragraphs = {paragraph(U"\u3042")};
@@ -2803,6 +2885,7 @@ int main(int argc, char* argv[]) {
     test_kanji_color_options(directory.path());
     test_kanji_color_list_commands(directory.path());
     test_jwp_page_layout(directory.path());
+    test_native_print_commands(directory.path());
     test_jis_table_integration(directory.path());
     std::cout << "All main window tests passed\n";
     return 0;

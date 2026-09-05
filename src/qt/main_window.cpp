@@ -37,6 +37,9 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPalette>
+#include <QPageSetupDialog>
+#include <QPrintDialog>
+#include <QPrinter>
 #include <QTextEdit>
 #include <QPushButton>
 #include <QRadioButton>
@@ -65,6 +68,7 @@
 #include "kanji_reading_lookup_dialog.h"
 #include "kanji_color_settings.h"
 #include "page_layout_dialog.h"
+#include "print_document.h"
 #include "jwpqt/core/jis_table.h"
 #include "jwpqt/core/jwp_plain_text.h"
 #include "jwpqt/core/jwp_text_codec.h"
@@ -263,6 +267,7 @@ struct MainWindow::EdictUserResources {
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
       editor_(new JwpEditor(this)),
+      printer_(std::make_unique<QPrinter>(QPrinter::HighResolution)),
       encoding_label_(new QLabel(this)),
       undo_action_(nullptr),
       redo_action_(nullptr),
@@ -828,6 +833,18 @@ void MainWindow::create_actions() {
           [this] { save_document_as(); });
 
   file_menu->addSeparator();
+  print_action_ = file_menu->addAction(tr("&Print..."));
+  print_action_->setObjectName(QStringLiteral("printAction"));
+  print_action_->setShortcut(QKeySequence::Print);
+  connect(print_action_, &QAction::triggered, this,
+          [this] { print_current_document(); });
+
+  printer_setup_action_ = file_menu->addAction(tr("Printer Set&up..."));
+  printer_setup_action_->setObjectName(QStringLiteral("printerSetupAction"));
+  connect(printer_setup_action_, &QAction::triggered, this,
+          [this] { setup_printer(); });
+
+  file_menu->addSeparator();
   QAction* quit_action = file_menu->addAction(tr("&Quit"));
   quit_action->setShortcut(QKeySequence::Quit);
   connect(quit_action, &QAction::triggered, this, &QWidget::close);
@@ -1298,6 +1315,8 @@ void MainWindow::update_conversion_actions() {
   previous_candidate_action_->setEnabled(active);
   next_candidate_action_->setEnabled(active);
   accept_candidate_action_->setEnabled(active);
+  print_action_->setEnabled(!active);
+  printer_setup_action_->setEnabled(!active);
   user_dictionary_action_->setEnabled(!active && wnn_resources_ != nullptr);
   format_paragraph_action_->setEnabled(!active && jwp_document_.has_value());
   page_layout_action_->setEnabled(!active && jwp_document_.has_value());
@@ -3113,6 +3132,18 @@ std::optional<core::JwpDocument> MainWindow::prompt_for_page_layout(
   return dialog.document();
 }
 
+bool MainWindow::prompt_for_print(QPrinter& printer) {
+  QPrintDialog dialog(&printer, this);
+  dialog.setOption(QAbstractPrintDialog::PrintSelection,
+                   editor_->textCursor().hasSelection());
+  return dialog.exec() == QDialog::Accepted;
+}
+
+bool MainWindow::prompt_for_printer_setup(QPrinter& printer) {
+  QPageSetupDialog dialog(&printer, this);
+  return dialog.exec() == QDialog::Accepted;
+}
+
 std::optional<core::KanjiColorPolicy>
 MainWindow::prompt_for_kanji_color_policy(
     const core::KanjiColorPolicy& initial) {
@@ -3333,34 +3364,82 @@ void MainWindow::format_page_layout() {
   try {
     const std::optional<core::JwpDocument> requested =
         prompt_for_page_layout(jwp_document_->document());
-    if (!requested.has_value() || *requested == jwp_document_->document())
-      return;
-
-    const QTextCursor cursor = editor_->textCursor();
-    const core::JwpPosition caret = core::jwp_plain_text_position(
-        *jwp_document_,
-        utf32_offset_for_utf16(editor_->toPlainText(), cursor.position()));
-    core::JwpDocumentModel candidate(*requested);
-    core::JwpDocumentHistory history = jwp_history_;
-    history.begin(*jwp_document_, caret);
-    if (!history.commit(candidate, caret))
-      return;
-
-    apply_jwp_presentation(candidate.document(), jwp_code_page_);
-    jwp_document_ = std::move(candidate);
-    jwp_history_ = std::move(history);
-    jwp_caret_ = caret;
-    expected_jwp_caret_.reset();
-    editor_->setTextCursor(cursor);
-    editor_->document()->setModified(
-        !saved_jwp_document_.has_value() ||
-        jwp_document_->document() != *saved_jwp_document_);
-    update_undo_actions();
-    update_title();
-    statusBar()->showMessage(tr("Page layout applied"), 2000);
+    if (requested.has_value() && apply_page_layout(*requested))
+      statusBar()->showMessage(tr("Page layout applied"), 2000);
   } catch (const std::exception& error) {
     statusBar()->showMessage(
         tr("Could not apply page layout: %1")
+            .arg(QString::fromUtf8(error.what())),
+        5000);
+  }
+}
+
+bool MainWindow::apply_page_layout(const core::JwpDocument& requested) {
+  if (!jwp_document_.has_value() || requested == jwp_document_->document())
+    return false;
+
+  const QTextCursor cursor = editor_->textCursor();
+  const core::JwpPosition caret = core::jwp_plain_text_position(
+      *jwp_document_,
+      utf32_offset_for_utf16(editor_->toPlainText(), cursor.position()));
+  core::JwpDocumentModel candidate(requested);
+  core::JwpDocumentHistory history = jwp_history_;
+  history.begin(*jwp_document_, caret);
+  if (!history.commit(candidate, caret))
+    return false;
+
+  apply_jwp_presentation(candidate.document(), jwp_code_page_);
+  jwp_document_ = std::move(candidate);
+  jwp_history_ = std::move(history);
+  jwp_caret_ = caret;
+  expected_jwp_caret_.reset();
+  editor_->setTextCursor(cursor);
+  editor_->document()->setModified(
+      !saved_jwp_document_.has_value() ||
+      jwp_document_->document() != *saved_jwp_document_);
+  update_undo_actions();
+  update_title();
+  return true;
+}
+
+void MainWindow::print_current_document() {
+  finish_kana_input();
+  if (conversion_active())
+    return;
+  try {
+    const core::JwpDocument* jwp =
+        jwp_document_.has_value() ? &jwp_document_->document() : nullptr;
+    if (jwp != nullptr)
+      configure_printer_for_jwp(*printer_, *jwp);
+    if (!prompt_for_print(*printer_))
+      return;
+    print_document(*printer_, *editor_->document(), jwp);
+    statusBar()->showMessage(tr("Document sent to printer"), 3000);
+  } catch (const std::exception& error) {
+    statusBar()->showMessage(
+        tr("Could not print document: %1")
+            .arg(QString::fromUtf8(error.what())),
+        5000);
+  }
+}
+
+void MainWindow::setup_printer() {
+  finish_kana_input();
+  if (conversion_active())
+    return;
+  try {
+    if (!prompt_for_printer_setup(*printer_))
+      return;
+    if (jwp_document_.has_value()) {
+      core::JwpDocument candidate = jwp_document_->document();
+      candidate.landscape =
+          printer_->pageLayout().orientation() == QPageLayout::Landscape;
+      (void)apply_page_layout(candidate);
+    }
+    statusBar()->showMessage(tr("Printer setup updated"), 2000);
+  } catch (const std::exception& error) {
+    statusBar()->showMessage(
+        tr("Could not configure printer: %1")
             .arg(QString::fromUtf8(error.what())),
         5000);
   }
