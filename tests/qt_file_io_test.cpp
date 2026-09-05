@@ -12,6 +12,7 @@
 #include <QTemporaryDir>
 
 #include "file_io.h"
+#include "jwpqt/core/edict_registry.h"
 #include "jwpqt/core/jwp_document.h"
 #include "jwpqt/core/kanji_color_list.h"
 #include "jwpqt/core/utf8.h"
@@ -326,6 +327,107 @@ void test_wnn_user_dictionary_file_errors(const QString& directory) {
           "WNN user dictionary was written without a parent directory");
 }
 
+void test_edict_registry_file_round_trip(const QString& directory) {
+  using namespace jwpqt::core;
+
+  const QString path = directory + QStringLiteral("/dict.cfg");
+  require(!jwpqt::qt::read_edict_registry_file(path).has_value(),
+          "Missing EDICT registry did not remain optional");
+
+  EdictRegistry registry;
+  registry.entries = {
+      {{u'M', u'a', u'i', u'n'},
+       {u'd', u'a', u't', u'a', u'/', u'e', u'd', u'i', u'c', u't'},
+       EdictRegistryEncoding::kEucJp,
+       EdictRegistryNames::kNone,
+       EdictRegistrySpecial::kNormal,
+       true,
+       false,
+       true,
+       true,
+       false},
+  };
+  jwpqt::qt::write_edict_registry_file(path, registry);
+  const auto loaded = jwpqt::qt::read_edict_registry_file(path);
+  require(loaded.has_value() && *loaded == registry,
+          "EDICT registry file did not round-trip");
+  require(jwpqt::qt::read_file_bytes(path) ==
+              jwpqt::core::serialize_edict_registry(registry),
+          "EDICT registry file was not written canonically");
+}
+
+void test_edict_registry_file_errors(const QString& directory) {
+  using namespace jwpqt::core;
+
+  EdictRegistryLimits invalid_limits;
+  invalid_limits.entries = 0;
+  bool invalid_limits_rejected = false;
+  try {
+    static_cast<void>(jwpqt::qt::read_edict_registry_file(
+        directory + QStringLiteral("/missing-invalid.cfg"), invalid_limits));
+  } catch (const EdictRegistryError&) {
+    invalid_limits_rejected = true;
+  }
+  require(invalid_limits_rejected,
+          "Missing EDICT registry bypassed configured-limit validation");
+
+  const QString malformed = directory + QStringLiteral("/malformed.cfg");
+  QFile malformed_file(malformed);
+  require(malformed_file.open(QIODevice::WriteOnly) &&
+              malformed_file.write("bad", 3) == 3,
+          "Could not seed malformed EDICT registry");
+  malformed_file.close();
+  bool malformed_rejected = false;
+  try {
+    static_cast<void>(jwpqt::qt::read_edict_registry_file(malformed));
+  } catch (const EdictRegistryError&) {
+    malformed_rejected = true;
+  }
+  require(malformed_rejected,
+          "Malformed EDICT registry was accepted by file I/O");
+
+  const QString target = directory + QStringLiteral("/absent-dict.cfg");
+  const QString link = directory + QStringLiteral("/dangling-dict.cfg");
+  require(QFile::link(target, link),
+          "Could not create dangling EDICT registry symlink");
+  bool dangling_rejected = false;
+  try {
+    static_cast<void>(jwpqt::qt::read_edict_registry_file(link));
+  } catch (const std::runtime_error&) {
+    dangling_rejected = true;
+  }
+  require(dangling_rejected,
+          "Dangling EDICT registry symlink was treated as missing");
+
+  EdictRegistry invalid;
+  invalid.wire_encoding = static_cast<EdictRegistryWireEncoding>(99);
+  const QString existing = directory + QStringLiteral("/existing-dict.cfg");
+  QFile existing_file(existing);
+  require(existing_file.open(QIODevice::WriteOnly) &&
+              existing_file.write("original", 8) == 8,
+          "Could not seed existing EDICT registry");
+  existing_file.close();
+  bool invalid_rejected = false;
+  try {
+    jwpqt::qt::write_edict_registry_file(existing, invalid);
+  } catch (const EdictRegistryError&) {
+    invalid_rejected = true;
+  }
+  require(invalid_rejected && read_bytes(existing) == QByteArray("original"),
+          "Failed EDICT registry serialization changed the existing file");
+
+  EdictRegistry empty;
+  bool missing_parent_rejected = false;
+  try {
+    jwpqt::qt::write_edict_registry_file(
+        directory + QStringLiteral("/missing/dict.cfg"), empty);
+  } catch (const std::runtime_error&) {
+    missing_parent_rejected = true;
+  }
+  require(missing_parent_rejected,
+          "EDICT registry was written without a parent directory");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -351,6 +453,8 @@ int main(int argc, char* argv[]) {
     test_failed_wnn_preference_save_stays_dirty(directory.path());
     test_wnn_user_dictionary_file_round_trip(directory.path());
     test_wnn_user_dictionary_file_errors(directory.path());
+    test_edict_registry_file_round_trip(directory.path());
+    test_edict_registry_file_errors(directory.path());
     std::cout << "All Qt file I/O tests passed\n";
     return 0;
   } catch (const std::exception& error) {

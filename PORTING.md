@@ -270,6 +270,11 @@ legacy file structures.
     wildcard matching intentionally retains JINDEX's two-byte high-bit source
     stepping, including `0x8f`, while malformed unrepresentable headword pairs
     and embedded NULs fail explicitly.
+65. The native `dict.cfg` file boundary treats only genuine absence as optional,
+    parses every present file through the strict binary registry codec, and
+    serializes complete canonical bytes before atomically replacing the target.
+    Invalid limits, malformed files, dangling links, and unavailable output
+    parents fail without publishing partial state or damaging an existing file.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and

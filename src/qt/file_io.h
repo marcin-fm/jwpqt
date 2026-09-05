@@ -9,6 +9,7 @@
 
 #include <QString>
 
+#include "jwpqt/core/edict_registry.h"
 #include "jwpqt/core/jwp_document.h"
 #include "jwpqt/core/kanji_color_list.h"
 #include "jwpqt/core/text_file.h"
@@ -36,6 +37,12 @@ std::optional<core::WnnUserDictionary> read_wnn_user_dictionary_file(
     const QString& path);
 void write_wnn_user_dictionary_file(
     const QString& path, const core::WnnUserDictionary& dictionary);
+std::optional<core::EdictRegistry> read_edict_registry_file(
+    const QString& path,
+    const core::EdictRegistryLimits& limits = core::EdictRegistryLimits{});
+void write_edict_registry_file(
+    const QString& path, const core::EdictRegistry& registry,
+    const core::EdictRegistryLimits& limits = core::EdictRegistryLimits{});
 
 }  // namespace jwpqt::qt
 
