@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <sstream>
 #include <utility>
 
@@ -51,6 +52,69 @@ JisCode suffix_for_ending(char ending) {
       return 0x246b;
     default:
       return 0xffff;
+  }
+}
+
+std::optional<char> godan_ending_for_suffix(JisCode suffix) {
+  switch (suffix) {
+    case 0x2426:
+      return 'u';
+    case 0x242f:
+      return 'k';
+    case 0x2430:
+      return 'g';
+    case 0x2439:
+      return 's';
+    case 0x2444:
+      return 't';
+    case 0x244c:
+      return 'n';
+    case 0x2456:
+      return 'b';
+    case 0x2460:
+      return 'm';
+    case 0x246b:
+      return 'r';
+    default:
+      return std::nullopt;
+  }
+}
+
+bool is_ichidan_stem_kana(JisCode kana) {
+  switch (kana) {
+    case 0x2423:
+    case 0x2424:
+    case 0x2427:
+    case 0x2428:
+    case 0x242d:
+    case 0x242e:
+    case 0x2431:
+    case 0x2432:
+    case 0x2437:
+    case 0x2438:
+    case 0x243b:
+    case 0x243c:
+    case 0x2441:
+    case 0x2442:
+    case 0x2446:
+    case 0x2447:
+    case 0x244b:
+    case 0x244d:
+    case 0x2452:
+    case 0x2453:
+    case 0x2454:
+    case 0x2458:
+    case 0x2459:
+    case 0x245a:
+    case 0x245f:
+    case 0x2461:
+    case 0x246a:
+    case 0x246c:
+    case 0x2470:
+    case 0x2471:
+      return true;
+    default:
+      return false;
   }
 }
 
@@ -133,6 +197,80 @@ std::vector<std::uint8_t> key_for_entry(const WnnUserEntry& entry) {
 bool WnnUserEntry::operator==(const WnnUserEntry& other) const noexcept {
   return reading == other.reading && ending == other.ending &&
          candidates == other.candidates;
+}
+
+WnnUserEntry make_wnn_user_entry(JwpText reading,
+                                 std::vector<JwpText> candidates,
+                                 WnnUserInflection inflection) {
+  constexpr JisCode kKanaI = 0x2424;
+  constexpr JisCode kKanaRu = 0x246b;
+
+  if (reading.empty() || candidates.empty()) {
+    throw WnnUserDictionaryError(
+        "WNN user conversion reading and candidates must not be empty");
+  }
+
+  char ending = '*';
+  std::optional<JisCode> removable_suffix;
+  if (inflection != WnnUserInflection::kUninflected) {
+    if (reading.size() < 2) {
+      throw WnnUserDictionaryError(
+          "Inflected WNN user conversion needs at least two kana");
+    }
+    if (candidates.size() != 1) {
+      throw WnnUserDictionaryError(
+          "Inflected WNN user conversion needs exactly one candidate");
+    }
+  }
+
+  switch (inflection) {
+    case WnnUserInflection::kUninflected:
+      break;
+    case WnnUserInflection::kGodan: {
+      const auto godan = godan_ending_for_suffix(reading.back());
+      if (!godan.has_value()) {
+        throw WnnUserDictionaryError(
+            "Godan WNN user conversion has an invalid final kana");
+      }
+      ending = *godan;
+      removable_suffix = reading.back();
+      break;
+    }
+    case WnnUserInflection::kIchidan:
+      if (reading.back() != kKanaRu ||
+          !is_ichidan_stem_kana(reading[reading.size() - 2])) {
+        throw WnnUserDictionaryError(
+            "Ichidan WNN user conversion must be an i/e-stem ending in ru");
+      }
+      ending = '1';
+      removable_suffix = kKanaRu;
+      break;
+    case WnnUserInflection::kIAdjective:
+      if (reading.back() != kKanaI) {
+        throw WnnUserDictionaryError(
+            "I-adjective WNN user conversion must end in i");
+      }
+      ending = 'i';
+      removable_suffix = kKanaI;
+      break;
+  }
+
+  if (candidates.front().empty()) {
+    throw WnnUserDictionaryError(
+        "WNN user conversion candidate must not be empty");
+  }
+  if (removable_suffix.has_value() &&
+      candidates.front().back() == *removable_suffix) {
+    candidates.front().pop_back();
+    if (candidates.front().empty()) {
+      throw WnnUserDictionaryError(
+          "WNN user conversion candidate became empty after suffix removal");
+    }
+  }
+
+  WnnUserEntry entry{std::move(reading), ending, std::move(candidates)};
+  WnnUserDictionary::from_entries({entry});
+  return entry;
 }
 
 WnnUserDictionary WnnUserDictionary::parse(std::string_view bytes) {

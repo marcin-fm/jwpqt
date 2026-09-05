@@ -169,6 +169,10 @@ legacy file structures.
     complete replacement resource/session bundle, atomically writes `user.cnv`,
     and swaps only after success. Active conversion and failed persistence
     retain the previous live lookup snapshot and persisted dictionary.
+48. New editable WNN entries use a strict portable factory separate from the
+    permissive import codec. It derives all nine godan endings, validates the
+    recovered ichidan i/e stem set and i-adjective endings, rejects multiple
+    inflected candidates, and strips a matching kana suffix exactly once.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and

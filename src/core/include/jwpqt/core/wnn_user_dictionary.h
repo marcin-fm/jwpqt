@@ -24,6 +24,17 @@ struct WnnUserEntry {
   bool operator==(const WnnUserEntry& other) const noexcept;
 };
 
+enum class WnnUserInflection {
+  kUninflected,
+  kGodan,
+  kIchidan,
+  kIAdjective,
+};
+
+WnnUserEntry make_wnn_user_entry(
+    JwpText reading, std::vector<JwpText> candidates,
+    WnnUserInflection inflection = WnnUserInflection::kUninflected);
+
 class WnnUserDictionary {
  public:
   static WnnUserDictionary parse(std::string_view bytes);
