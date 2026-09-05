@@ -56,6 +56,7 @@
 #include "edict_resources.h"
 #include "edict_user_dictionary_dialog.h"
 #include "file_io.h"
+#include "jis_table_dialog.h"
 #include "jwp_editor.h"
 #include "kanji_code_lookup_dialog.h"
 #include "kanji_count_dialog.h"
@@ -63,6 +64,7 @@
 #include "kanji_lookup_dialog.h"
 #include "kanji_reading_lookup_dialog.h"
 #include "kanji_color_settings.h"
+#include "jwpqt/core/jis_table.h"
 #include "jwpqt/core/jwp_plain_text.h"
 #include "jwpqt/core/jwp_text_codec.h"
 #include "jwpqt/core/plain_text_change.h"
@@ -329,6 +331,7 @@ MainWindow::~MainWindow() {
   delete edict_results_window_;
   delete edict_user_dictionary_dialog_;
   delete kanji_info_dialog_;
+  delete jis_table_dialog_;
   delete kanji_count_dialog_;
   delete kanji_code_lookup_dialog_;
   delete kanji_reading_lookup_dialog_;
@@ -356,6 +359,7 @@ bool MainWindow::load_kanji_info(const QString& path, OpenMode mode) {
     kanji_info_database_ = std::move(candidate);
     kanji_info_path_ = path;
     update_kanji_info_action();
+    update_jis_table_action();
     update_kanji_count_action();
     update_kanji_code_lookup_actions();
     update_kanji_reading_lookup_action();
@@ -974,6 +978,12 @@ void MainWindow::create_actions() {
   connect(kanji_info_action_, &QAction::triggered, this,
           [this] { show_kanji_info_dialog(); });
 
+  jis_table_action_ = tools_menu->addAction(tr("&JIS Table"));
+  jis_table_action_->setObjectName(QStringLiteral("jisTableAction"));
+  jis_table_action_->setShortcut(QKeySequence(QStringLiteral("Ctrl+T")));
+  connect(jis_table_action_, &QAction::triggered, this,
+          [this] { show_jis_table_dialog(); });
+
   skip_lookup_action_ = tools_menu->addAction(tr("&SKIP Lookup"));
   skip_lookup_action_->setObjectName(QStringLiteral("skipLookupAction"));
   skip_lookup_action_->setShortcut(
@@ -1278,6 +1288,7 @@ void MainWindow::update_conversion_actions() {
   update_kanji_color_actions();
   update_edict_actions();
   update_kanji_info_action();
+  update_jis_table_action();
   update_kanji_count_action();
   update_kanji_code_lookup_actions();
   update_kanji_reading_lookup_action();
@@ -1314,6 +1325,13 @@ void MainWindow::update_edict_actions() {
 void MainWindow::update_kanji_info_action() {
   if (kanji_info_action_ != nullptr) {
     kanji_info_action_->setEnabled(kanji_info_target().has_value());
+  }
+}
+
+void MainWindow::update_jis_table_action() {
+  if (jis_table_action_ != nullptr) {
+    jis_table_action_->setEnabled(jwp_document_.has_value() &&
+                                  !conversion_active());
   }
 }
 
@@ -1900,6 +1918,35 @@ void MainWindow::show_kanji_info_code(core::JisCode code) {
   dialog->show();
 }
 
+void MainWindow::show_jis_table_dialog() {
+  if (!jwp_document_.has_value() || conversion_active()) {
+    statusBar()->showMessage(tr("JIS table is not available"), 3000);
+    return;
+  }
+  const std::optional<core::JisCode> seed = jwp_character_target();
+  if (jis_table_dialog_ != nullptr) {
+    if (seed.has_value()) (void)jis_table_dialog_->set_jis(*seed);
+    jis_table_dialog_->show();
+    jis_table_dialog_->raise();
+    jis_table_dialog_->activateWindow();
+    return;
+  }
+  auto* dialog = new JisTableDialog(
+      [this](const core::JisTableEntry& entry) {
+        if (!insert_edict_text(core::decode_jwp_text({entry.jis}))) {
+          throw std::runtime_error(
+              "Could not insert the JIS table character into the document");
+        }
+      },
+      [this](core::JisCode code) { show_kanji_info_code(code); }, this);
+  if (seed.has_value()) (void)dialog->set_jis(*seed);
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  connect(dialog, &QObject::destroyed, this,
+          [this] { jis_table_dialog_ = nullptr; });
+  jis_table_dialog_ = dialog;
+  dialog->show();
+}
+
 void MainWindow::show_kanji_count_dialog() {
   if (!jwp_document_.has_value() || conversion_active()) {
     statusBar()->showMessage(tr("Count Kanji is not available"), 3000);
@@ -2036,8 +2083,8 @@ void MainWindow::show_kanji_lookup_dialog() {
   dialog->show();
 }
 
-std::optional<core::JisCode> MainWindow::kanji_info_target() const {
-  if (kanji_info_database_ == nullptr || !jwp_document_.has_value()) {
+std::optional<core::JisCode> MainWindow::jwp_character_target() const {
+  if (!jwp_document_.has_value()) {
     return std::nullopt;
   }
   try {
@@ -2058,12 +2105,20 @@ std::optional<core::JisCode> MainWindow::kanji_info_target() const {
       --offset;
     }
     const core::JisCode code = text[offset];
-    return kanji_info_database_->contains(code)
+    return core::describe_jis_character(code).has_value()
                ? std::optional<core::JisCode>(code)
                : std::nullopt;
   } catch (const std::exception&) {
     return std::nullopt;
   }
+}
+
+std::optional<core::JisCode> MainWindow::kanji_info_target() const {
+  if (kanji_info_database_ == nullptr) return std::nullopt;
+  const std::optional<core::JisCode> code = jwp_character_target();
+  return code.has_value() && kanji_info_database_->contains(*code)
+             ? code
+             : std::nullopt;
 }
 
 bool MainWindow::insert_edict_user_entry(const core::EdictUserEntry& entry) {

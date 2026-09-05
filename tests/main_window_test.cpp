@@ -10,6 +10,7 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QDialog>
 #include <QDir>
 #include <QFile>
 #include <QFontMetricsF>
@@ -17,6 +18,7 @@
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QPushButton>
 #include <QSettings>
 #include <QSignalBlocker>
 #include <QTextEdit>
@@ -34,6 +36,7 @@
 #include "jwpqt/core/jis_unicode.h"
 #include "jwpqt/core/jwp_text_codec.h"
 #include "kanji_color_settings.h"
+#include "jis_table_dialog.h"
 #include "main_window.h"
 #include "wnn_user_dictionary_dialog.h"
 
@@ -2656,6 +2659,52 @@ void test_kanji_color_list_commands(const QString& directory) {
           "Failed list persistence changed the prior overlay");
 }
 
+void test_jis_table_integration(const QString& directory) {
+  jwpqt::core::JwpDocument source;
+  source.paragraphs = {paragraph(U"\u3042")};
+  const QString path = directory + QStringLiteral("/jis-table.jwp");
+  jwpqt::qt::write_jwp_file(path, source);
+
+  jwpqt::qt::MainWindow window;
+  require(window.open_jwp_path(path), "Could not open JIS table fixture");
+  QTextEdit* editor = window.findChild<QTextEdit*>();
+  QAction* action = find_action(window, "jisTableAction");
+  require(editor != nullptr && action != nullptr && action->isEnabled() &&
+              action->shortcut() == QKeySequence(QStringLiteral("Ctrl+T")),
+          "Native JIS table action or shortcut is wrong");
+  QTextCursor end = editor->textCursor();
+  end.movePosition(QTextCursor::End);
+  editor->setTextCursor(end);
+  action->trigger();
+  auto* dialog = dynamic_cast<jwpqt::qt::JisTableDialog*>(
+      window.findChild<QDialog*>(QStringLiteral("jisTableDialog")));
+  require(dialog != nullptr && dialog->current().has_value() &&
+              dialog->current()->jis == 0x2422U,
+          "Native JIS table did not seed from the current character");
+  require(dialog->set_jis(0x2424U),
+          "Could not select JIS table insertion character");
+  dialog->findChild<QPushButton*>(QStringLiteral("jisTableInsert"))->click();
+  require(window.current_jwp_document()->paragraphs[0].text ==
+              jwpqt::core::JwpText{0x2422U, 0x2424U} &&
+              find_action(window, "undoAction")->isEnabled(),
+          "JIS table insertion did not use portable document history");
+  find_action(window, "undoAction")->trigger();
+  require(*window.current_jwp_document() == source,
+          "Undo did not restore JIS table insertion");
+  action->trigger();
+  require(window.findChildren<QDialog*>(QStringLiteral("jisTableDialog"))
+                  .size() == 1,
+          "JIS table action did not reuse its modeless dialog");
+
+  const QString text_path = directory + QStringLiteral("/jis-table.txt");
+  jwpqt::qt::write_text_file(
+      text_path, {U"plain", jwpqt::core::TextEncoding::kUtf8, false});
+  require(window.open_path(text_path, jwpqt::core::TextEncoding::kUtf8),
+          "Could not switch JIS table fixture to plain text");
+  require(!action->isEnabled(),
+          "JIS table action stayed enabled for a plain-text document");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -2695,6 +2744,7 @@ int main(int argc, char* argv[]) {
     test_kanji_color_configuration(directory.path());
     test_kanji_color_options(directory.path());
     test_kanji_color_list_commands(directory.path());
+    test_jis_table_integration(directory.path());
     std::cout << "All main window tests passed\n";
     return 0;
   } catch (const std::exception& error) {
