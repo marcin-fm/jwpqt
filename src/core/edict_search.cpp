@@ -123,35 +123,10 @@ EdictDirectSearchReport search_validated(
       validated_query.key, options.lookup_steps, options.candidate_matches);
   std::vector<EdictIndexMatch> results;
   results.reserve(std::min(options.results, lookup.matches.size()));
-  const std::string_view source = dictionary.source_bytes();
-  const std::vector<EdictRecord>& records = dictionary.records();
 
   for (const EdictIndexMatch& candidate : lookup.matches) {
-    if (candidate.record_index >= records.size()) {
-      throw EdictSearchError("EDICT index record mapping is invalid");
-    }
-    const EdictRecord& record = records[candidate.record_index];
-    if (candidate.byte_offset >
-            std::numeric_limits<std::size_t>::max() - candidate.byte_length ||
-        candidate.byte_offset < record.byte_offset ||
-        candidate.byte_offset + candidate.byte_length >
-            record.byte_offset + record.byte_length) {
-      throw EdictSearchError("EDICT index match span is invalid");
-    }
-    const std::size_t end = candidate.byte_offset + candidate.byte_length;
-    const bool beginning_matches =
-        validated_query.kind == EdictQueryKind::kAscii
-            ? ascii_beginning_matches(source, record, candidate.byte_offset,
-                                      options.full_ascii_boundaries)
-            : japanese_beginning_matches(source, record,
-                                         candidate.byte_offset);
-    const bool end_matches =
-        validated_query.kind == EdictQueryKind::kAscii
-            ? ascii_end_matches(source, record, end,
-                                options.full_ascii_boundaries)
-            : japanese_end_matches(source, record, end);
-    if ((options.require_beginning && !beginning_matches) ||
-        (options.require_end && !end_matches)) {
+    if (!edict_match_boundaries(dictionary, candidate, validated_query.kind,
+                                options)) {
       continue;
     }
     if (results.size() >= options.results) {
@@ -163,6 +138,39 @@ EdictDirectSearchReport search_validated(
 }
 
 }  // namespace
+
+bool edict_match_boundaries(const EdictDictionary& dictionary,
+                            const EdictIndexMatch& match,
+                            EdictQueryKind query_kind,
+                            const EdictDirectSearchOptions& options) {
+  const std::vector<EdictRecord>& records = dictionary.records();
+  if (match.record_index >= records.size()) {
+    throw EdictSearchError("EDICT index record mapping is invalid");
+  }
+  const EdictRecord& record = records[match.record_index];
+  if (match.byte_offset >
+          std::numeric_limits<std::size_t>::max() - match.byte_length ||
+      match.byte_offset < record.byte_offset ||
+      match.byte_offset + match.byte_length >
+          record.byte_offset + record.byte_length) {
+    throw EdictSearchError("EDICT index match span is invalid");
+  }
+
+  const std::string_view source = dictionary.source_bytes();
+  const std::size_t end = match.byte_offset + match.byte_length;
+  const bool beginning_matches =
+      query_kind == EdictQueryKind::kAscii
+          ? ascii_beginning_matches(source, record, match.byte_offset,
+                                    options.full_ascii_boundaries)
+          : japanese_beginning_matches(source, record, match.byte_offset);
+  const bool end_matches =
+      query_kind == EdictQueryKind::kAscii
+          ? ascii_end_matches(source, record, end,
+                              options.full_ascii_boundaries)
+          : japanese_end_matches(source, record, end);
+  return (!options.require_beginning || beginning_matches) &&
+         (!options.require_end || end_matches);
+}
 
 EdictQuery prepare_edict_query(const JwpText& input) {
   return prepare_query(input, kMaximumQueryLength, true);

@@ -255,6 +255,10 @@ std::string_view EdictIndex::source_bytes() const noexcept {
   return source_bytes_;
 }
 
+LegacyCodePage EdictIndex::utf8_code_page() const noexcept {
+  return utf8_code_page_;
+}
+
 const std::vector<EdictIndexEntry>& EdictIndex::entries() const noexcept {
   return entries_;
 }

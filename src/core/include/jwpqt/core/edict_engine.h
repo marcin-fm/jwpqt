@@ -8,6 +8,8 @@
 
 #include "jwpqt/core/edict_deinflection.h"
 #include "jwpqt/core/edict_filter.h"
+#include "jwpqt/core/edict_pattern.h"
+#include "jwpqt/core/edict_pattern_match.h"
 #include "jwpqt/core/edict_search.h"
 
 namespace jwpqt::core {
@@ -15,6 +17,7 @@ namespace jwpqt::core {
 enum class EdictSearchStage {
   kDirect,
   kAdaptive,
+  kPattern,
 };
 
 struct EdictSearchResult {
@@ -29,6 +32,7 @@ struct EdictSearchOptions {
   EdictDirectSearchOptions direct;
   EdictNameFilterOptions name_filter;
   EdictDeinflectionOptions deinflection;
+  EdictPatternMatchOptions pattern;
   bool adaptive = false;
   bool adaptive_always = true;
   bool adaptive_show_all = false;
@@ -49,6 +53,11 @@ struct EdictSearchReport {
 EdictSearchReport search_edict(
     const EdictDictionary& dictionary, const EdictIndex& index,
     const EdictQuery& query,
+    const EdictSearchOptions& options = EdictSearchOptions{});
+
+EdictSearchReport search_edict_pattern(
+    const EdictDictionary& dictionary, const EdictIndex& index,
+    const EdictSearchPlan& plan,
     const EdictSearchOptions& options = EdictSearchOptions{});
 
 }  // namespace jwpqt::core

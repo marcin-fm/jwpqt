@@ -242,6 +242,12 @@ legacy file structures.
     budget covers record decoding, boundary and anchor validation, assertions,
     and greedy-star backtracking; forged plans cannot exceed the source input
     bound or escape the selected record.
+60. Pattern orchestration counts every indexed anchor occurrence, composes
+    record-expansion work with the global index-work budget, applies configured
+    ASCII or Japanese boundaries to the expanded source-byte span, and filters
+    names before per-query and global accepted-result limits. UTF extension-page
+    interpretation comes from the source-bound index rather than mutable caller
+    state.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -250,8 +256,8 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Port EDICT pattern and contingent search, then add ordered dictionary
-   resources and native result-view slices.
+1. Port EDICT contingent search, then add ordered dictionary resources and
+   native result-view slices.
 2. Port paged printing and clipboard color policy over the rich JWP document
    layout.
 3. Port configuration, remaining import/export paths, and help.

@@ -10,6 +10,7 @@
 #include "jwpqt/core/edict_dictionary.h"
 #include "jwpqt/core/edict_engine.h"
 #include "jwpqt/core/edict_index.h"
+#include "jwpqt/core/edict_pattern.h"
 #include "jwpqt/core/jwp_text_codec.h"
 #include "jwpqt/core/utf8.h"
 
@@ -54,12 +55,14 @@ std::size_t offset_of(const std::string& source, std::string_view term,
 
 struct Fixture {
   Fixture(std::string source_value,
-          const std::vector<std::size_t>& indexed_offsets)
+          const std::vector<std::size_t>& indexed_offsets,
+          const jwpqt::core::EdictIndexOptions& index_options = {})
       : source(std::move(source_value)),
         dictionary(jwpqt::core::EdictDictionary::parse(
             source, jwpqt::core::EdictEncoding::kUtf8)),
         index(jwpqt::core::EdictIndex::parse(
-            index_bytes(source.size(), indexed_offsets), dictionary)) {}
+            index_bytes(source.size(), indexed_offsets), dictionary,
+            index_options)) {}
 
   std::string source;
   jwpqt::core::EdictDictionary dictionary;
@@ -286,6 +289,151 @@ void test_global_budgets_and_occurrence_identity() {
       "Global EDICT query limit was not enforced across adaptive search");
 }
 
+void test_pattern_search_expands_and_filters_records() {
+  const std::string first = "to swim /(s) name/\n";
+  const std::string second = "to swim /word/\n";
+  const std::string source = first + second;
+  const std::size_t first_anchor = offset_of(source, "swim");
+  const std::size_t second_anchor = offset_of(source, "swim", first_anchor + 1);
+  const Fixture fixture(source, {first_anchor, second_anchor});
+  const jwpqt::core::EdictSearchPlan plan =
+      jwpqt::core::prepare_edict_search_plan(
+          jwpqt::core::encode_jwp_text(U"to swim"));
+
+  jwpqt::core::EdictSearchOptions options;
+  options.direct.require_beginning = true;
+  options.direct.require_end = true;
+  options.name_filter.reject_personal_names = true;
+  const jwpqt::core::EdictSearchReport report =
+      jwpqt::core::search_edict_pattern(fixture.dictionary, fixture.index,
+                                        plan, options);
+  require(report.results.size() == 1 && report.rejected == 1 &&
+              report.candidate_matches == 2 && report.queries == 1 &&
+              report.lookup_steps > 0 &&
+              report.results[0].stage ==
+                  jwpqt::core::EdictSearchStage::kPattern &&
+              report.results[0].match.byte_offset == first.size() &&
+              report.results[0].match.byte_length == 7 &&
+              report.results[0].record.definitions ==
+                  std::vector<std::u32string>{U"word"},
+          "Pattern EDICT orchestration did not expand/filter its match");
+}
+
+void test_pattern_search_applies_expanded_ascii_boundaries() {
+  const std::string source = "not to swim /word/\n";
+  const std::size_t anchor = offset_of(source, "swim");
+  const Fixture fixture(source, {anchor});
+  const jwpqt::core::EdictSearchPlan plan =
+      jwpqt::core::prepare_edict_search_plan(
+          jwpqt::core::encode_jwp_text(U"to swim"));
+
+  jwpqt::core::EdictSearchOptions options;
+  options.direct.require_beginning = true;
+  const jwpqt::core::EdictSearchReport normal =
+      jwpqt::core::search_edict_pattern(fixture.dictionary, fixture.index,
+                                        plan, options);
+  require(normal.results.size() == 1,
+          "Normal ASCII boundaries rejected an expanded pattern word");
+
+  options.direct.full_ascii_boundaries = true;
+  const jwpqt::core::EdictSearchReport full =
+      jwpqt::core::search_edict_pattern(fixture.dictionary, fixture.index,
+                                        plan, options);
+  require(full.results.empty() && full.rejected == 1,
+          "Full ASCII boundaries ignored the expanded pattern span");
+}
+
+void test_pattern_search_limits_and_occurrence_identity() {
+  const std::string source = "\xe4\xba\x9c\xe6\x97\xa5 /word/\n";
+  const std::size_t anchor = offset_of(source, "\xe4\xba\x9c");
+  const Fixture fixture(source, {anchor, anchor});
+  const jwpqt::core::EdictSearchPlan plan =
+      jwpqt::core::prepare_edict_search_plan(
+          jwpqt::core::encode_jwp_text(U"[\u4e9c?]"));
+
+  jwpqt::core::EdictSearchOptions options;
+  const jwpqt::core::EdictSearchReport report =
+      jwpqt::core::search_edict_pattern(fixture.dictionary, fixture.index,
+                                        plan, options);
+  require(report.results.size() == 2 &&
+              report.results[0].match == report.results[1].match,
+          "Pattern EDICT search deduplicated distinct index occurrences");
+
+  options.candidate_matches = 1;
+  require_throws(
+      [&] { search_edict_pattern(fixture.dictionary, fixture.index, plan,
+                                 options); },
+      "Pattern EDICT search ignored its global candidate limit");
+  options.candidate_matches = 10;
+  options.results = 1;
+  require_throws(
+      [&] { search_edict_pattern(fixture.dictionary, fixture.index, plan,
+                                 options); },
+      "Pattern EDICT search ignored its global result limit");
+  options.results = 10;
+  options.lookup_steps = 1;
+  require_throws(
+      [&] { search_edict_pattern(fixture.dictionary, fixture.index, plan,
+                                 options); },
+      "Pattern EDICT search ignored its shared work limit");
+  options.lookup_steps = 1'000;
+  options.pattern.work_steps = 1;
+  require_throws(
+      [&] { search_edict_pattern(fixture.dictionary, fixture.index, plan,
+                                 options); },
+      "Pattern EDICT search ignored its matcher work limit");
+
+  const jwpqt::core::EdictSearchPlan direct =
+      jwpqt::core::prepare_edict_search_plan({'c', 'a', 't'});
+  require_throws(
+      [&] { search_edict_pattern(fixture.dictionary, fixture.index, direct); },
+      "Pattern EDICT orchestration accepted a direct search plan");
+}
+
+void test_pattern_search_uses_japanese_boundaries_and_index_code_page() {
+  const std::string embedded = "\xe6\x97\xa5\xe4\xba\x9c\xe6\x97\xa5";
+  const std::string leading = "\xe4\xba\x9c\xe6\x97\xa5";
+  const std::string source =
+      embedded + " /embedded/\n" + leading + " /leading/\n";
+  const std::size_t first_anchor = offset_of(source, "\xe4\xba\x9c");
+  const std::size_t second_anchor =
+      offset_of(source, "\xe4\xba\x9c", first_anchor + 1);
+  const Fixture fixture(source, {first_anchor, second_anchor});
+  const jwpqt::core::EdictSearchPlan plan =
+      jwpqt::core::prepare_edict_search_plan(
+          jwpqt::core::encode_jwp_text(U"\u4e9c?"));
+  jwpqt::core::EdictSearchOptions options;
+  options.direct.require_beginning = true;
+  const jwpqt::core::EdictSearchReport report =
+      jwpqt::core::search_edict_pattern(fixture.dictionary, fixture.index,
+                                        plan, options);
+  require(report.results.size() == 1 && report.rejected == 1 &&
+              report.results[0].record.definitions ==
+                  std::vector<std::u32string>{U"leading"},
+          "Pattern EDICT search ignored Japanese expanded-span boundaries");
+
+  const std::string cp_source =
+      "\xe4\xba\x9c\xe6\x97\xa5\xd0\x91 /cp1251/\n";
+  jwpqt::core::EdictIndexOptions cp_options;
+  cp_options.utf8_code_page = jwpqt::core::LegacyCodePage::k1251;
+  const Fixture cp_fixture(cp_source, {0}, cp_options);
+  jwpqt::core::EdictSearchPlan cp_plan;
+  cp_plan.kind = jwpqt::core::EdictSearchPlanKind::kPattern;
+  cp_plan.anchor = query(U"\u4e9c");
+  cp_plan.postfix = {'?'};
+  const jwpqt::core::JwpText cyrillic = jwpqt::core::encode_jwp_text(
+      U"\u0411", jwpqt::core::LegacyCodePage::k1251);
+  cp_plan.postfix.insert(cp_plan.postfix.end(), cyrillic.begin(),
+                         cyrillic.end());
+  cp_plan.postfix.push_back(']');
+  const jwpqt::core::EdictSearchReport cp_report =
+      jwpqt::core::search_edict_pattern(cp_fixture.dictionary,
+                                        cp_fixture.index, cp_plan);
+  require(cp_report.results.size() == 1 &&
+              cp_report.results[0].match.byte_length == 8,
+          "Pattern EDICT search ignored its index-owned UTF code page");
+}
+
 }  // namespace
 
 int main() {
@@ -297,5 +445,9 @@ int main() {
   test_always_and_show_all_policies();
   test_adaptive_search_preserves_101_token_candidates();
   test_global_budgets_and_occurrence_identity();
+  test_pattern_search_expands_and_filters_records();
+  test_pattern_search_applies_expanded_ascii_boundaries();
+  test_pattern_search_limits_and_occurrence_identity();
+  test_pattern_search_uses_japanese_boundaries_and_index_code_page();
   return 0;
 }

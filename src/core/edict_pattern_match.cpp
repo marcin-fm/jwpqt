@@ -2,6 +2,8 @@
 
 #include "jwpqt/core/edict_pattern_match.h"
 
+#include "edict_pattern_match_internal.h"
+
 #include <cstdint>
 #include <limits>
 #include <string_view>
@@ -352,10 +354,8 @@ bool EdictPatternMatch::operator==(
          record_index == other.record_index;
 }
 
-EdictPatternMatchReport match_edict_pattern_report(
-    const EdictDictionary& dictionary, const EdictIndexMatch& anchor,
-    const EdictSearchPlan& plan, const EdictPatternMatchOptions& options) {
-  if (plan.kind != EdictSearchPlanKind::kPattern) {
+void validate_edict_pattern_plan(const EdictSearchPlan& plan) {
+  if (plan.kind != EdictSearchPlanKind::kPattern || plan.anchor.key.empty()) {
     fail("EDICT pattern matcher requires a pattern search plan");
   }
   if (plan.anchor.key.size() > kMaximumPatternLength ||
@@ -364,6 +364,12 @@ EdictPatternMatchReport match_edict_pattern_report(
           kMaximumPatternLength - plan.anchor.key.size() - plan.prefix.size()) {
     fail("EDICT pattern plan exceeds its source input limit");
   }
+}
+
+EdictPatternMatchReport match_edict_pattern_report(
+    const EdictDictionary& dictionary, const EdictIndexMatch& anchor,
+    const EdictSearchPlan& plan, const EdictPatternMatchOptions& options) {
+  validate_edict_pattern_plan(plan);
   if (anchor.record_index >= dictionary.records().size()) {
     fail("EDICT pattern match has an invalid record index");
   }

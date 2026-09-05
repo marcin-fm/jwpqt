@@ -57,6 +57,7 @@ class EdictIndex {
   std::string serialize() const;
   std::uint32_t source_extent() const noexcept;
   std::string_view source_bytes() const noexcept;
+  LegacyCodePage utf8_code_page() const noexcept;
   const std::vector<EdictIndexEntry>& entries() const noexcept;
   std::vector<EdictIndexMatch> find_matches(const JwpText& key) const;
   EdictIndexLookup find_matches_bounded(const JwpText& key,
