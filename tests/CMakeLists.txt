@@ -325,6 +325,14 @@ target_link_libraries(jwpqt_edict_lookup_dialog_tests PRIVATE jwpqt_qt_ui)
 target_compile_options(jwpqt_edict_lookup_dialog_tests
   PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME qt_edict_lookup_dialog COMMAND jwpqt_edict_lookup_dialog_tests)
+
+add_executable(jwpqt_edict_results_window_tests
+  edict_results_window_test.cpp
+)
+target_link_libraries(jwpqt_edict_results_window_tests PRIVATE jwpqt_qt_ui)
+target_compile_options(jwpqt_edict_results_window_tests
+  PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME qt_edict_results_window COMMAND jwpqt_edict_results_window_tests)
 add_test(NAME qt_kanji_color_settings COMMAND jwpqt_kanji_color_settings_tests)
 add_test(NAME qt_main_window COMMAND jwpqt_main_window_tests)
 add_test(NAME qt_wnn_user_dictionary_dialog
