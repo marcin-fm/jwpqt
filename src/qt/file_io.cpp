@@ -2,8 +2,10 @@
 
 #include "file_io.h"
 
+#include <filesystem>
 #include <limits>
 #include <stdexcept>
+#include <system_error>
 #include <string>
 #include <string_view>
 
@@ -52,6 +54,17 @@ std::string read_open_file_bytes(QFile& input, const QString& path) {
   return std::string(bytes.constData(), static_cast<std::size_t>(bytes.size()));
 }
 
+bool path_is_missing(const QString& path) {
+  const QByteArray encoded = QFile::encodeName(path);
+  const std::filesystem::path native_path(
+      std::string(encoded.constData(), static_cast<std::size_t>(encoded.size())));
+  std::error_code error;
+  const std::filesystem::file_status status =
+      std::filesystem::symlink_status(native_path, error);
+  return (!error && status.type() == std::filesystem::file_type::not_found) ||
+         error == std::errc::no_such_file_or_directory;
+}
+
 }  // namespace
 
 std::string read_file_bytes(const QString& path) {
@@ -87,8 +100,7 @@ std::optional<core::KanjiColorList> read_kanji_color_list_file(
     const QString& path) {
   QFile input(path);
   if (!input.open(QIODevice::ReadOnly)) {
-    const QFileInfo info(path);
-    if (!info.exists() && !info.isSymbolicLink()) {
+    if (path_is_missing(path)) {
       return std::nullopt;
     }
     throw io_error("Could not open", path, input.errorString());
@@ -106,8 +118,7 @@ std::optional<core::WnnPreferences> read_wnn_preferences_file(
     const QString& path, std::size_t capacity) {
   QFile input(path);
   if (!input.open(QIODevice::ReadOnly)) {
-    const QFileInfo info(path);
-    if (!info.exists() && !info.isSymbolicLink()) {
+    if (path_is_missing(path)) {
       static_cast<void>(core::WnnPreferences(capacity));
       return std::nullopt;
     }
@@ -118,10 +129,28 @@ std::optional<core::WnnPreferences> read_wnn_preferences_file(
 }
 
 void write_wnn_preferences_file(const QString& path,
-                                core::WnnPreferences& preferences) {
+                                 core::WnnPreferences& preferences) {
   const std::string bytes = preferences.serialize();
   write_file_bytes(path, bytes);
   preferences.mark_saved();
+}
+
+std::optional<core::WnnUserDictionary> read_wnn_user_dictionary_file(
+    const QString& path) {
+  QFile input(path);
+  if (!input.open(QIODevice::ReadOnly)) {
+    if (path_is_missing(path)) {
+      return std::nullopt;
+    }
+    throw io_error("Could not open", path, input.errorString());
+  }
+  return core::WnnUserDictionary::parse(read_open_file_bytes(input, path));
+}
+
+void write_wnn_user_dictionary_file(
+    const QString& path, const core::WnnUserDictionary& dictionary) {
+  const std::string bytes = dictionary.serialize();
+  write_file_bytes(path, bytes);
 }
 
 }  // namespace jwpqt::qt

@@ -13,6 +13,7 @@
 #include "jwpqt/core/kanji_color_list.h"
 #include "jwpqt/core/text_file.h"
 #include "jwpqt/core/wnn_preferences.h"
+#include "jwpqt/core/wnn_user_dictionary.h"
 
 namespace jwpqt::qt {
 
@@ -30,7 +31,11 @@ std::optional<core::WnnPreferences> read_wnn_preferences_file(
     const QString& path,
     std::size_t capacity = core::kWnnDefaultPreferenceCapacity);
 void write_wnn_preferences_file(const QString& path,
-                                core::WnnPreferences& preferences);
+                                 core::WnnPreferences& preferences);
+std::optional<core::WnnUserDictionary> read_wnn_user_dictionary_file(
+    const QString& path);
+void write_wnn_user_dictionary_file(
+    const QString& path, const core::WnnUserDictionary& dictionary);
 
 }  // namespace jwpqt::qt
 

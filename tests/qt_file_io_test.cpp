@@ -16,6 +16,7 @@
 #include "jwpqt/core/kanji_color_list.h"
 #include "jwpqt/core/utf8.h"
 #include "jwpqt/core/wnn_preferences.h"
+#include "jwpqt/core/wnn_user_dictionary.h"
 
 namespace {
 
@@ -251,6 +252,80 @@ void test_failed_wnn_preference_save_stays_dirty(const QString& directory) {
           "Failed WNN preference save cleared the dirty flag");
 }
 
+void test_wnn_user_dictionary_file_round_trip(const QString& directory) {
+  const QString path = directory + QStringLiteral("/user.cnv");
+  require(!jwpqt::qt::read_wnn_user_dictionary_file(path).has_value(),
+          "Missing WNN user dictionary did not remain optional");
+
+  const jwpqt::core::WnnUserDictionary dictionary =
+      jwpqt::core::WnnUserDictionary::from_entries({
+          {{0x2422}, '*', {{0x3021}, {0x3022}}},
+          {{0x2424, 0x246b}, '1', {{0x3023}}},
+      });
+  jwpqt::qt::write_wnn_user_dictionary_file(path, dictionary);
+  const auto loaded = jwpqt::qt::read_wnn_user_dictionary_file(path);
+  require(loaded && loaded->entries() == dictionary.entries(),
+          "WNN user dictionary file did not round-trip");
+  require(jwpqt::qt::read_file_bytes(path) == dictionary.serialize(),
+          "WNN user dictionary file was not written canonically");
+}
+
+void test_wnn_user_dictionary_file_errors(const QString& directory) {
+  const QString malformed = directory + QStringLiteral("/malformed.cnv");
+  QFile malformed_file(malformed);
+  require(malformed_file.open(QIODevice::WriteOnly) &&
+              malformed_file.write("ascii*\xb0\xa1\n", 9) == 9,
+          "Could not seed malformed WNN user dictionary");
+  malformed_file.close();
+  bool malformed_rejected = false;
+  try {
+    static_cast<void>(jwpqt::qt::read_wnn_user_dictionary_file(malformed));
+  } catch (const jwpqt::core::WnnUserDictionaryError&) {
+    malformed_rejected = true;
+  }
+  require(malformed_rejected,
+          "Malformed WNN user dictionary was accepted by file I/O");
+
+  const QString target = directory + QStringLiteral("/absent-user.cnv");
+  const QString link = directory + QStringLiteral("/dangling-user.cnv");
+  require(QFile::link(target, link),
+          "Could not create dangling WNN user dictionary symlink");
+  bool dangling_rejected = false;
+  try {
+    static_cast<void>(jwpqt::qt::read_wnn_user_dictionary_file(link));
+  } catch (const std::runtime_error&) {
+    dangling_rejected = true;
+  }
+  require(dangling_rejected,
+          "Dangling WNN user dictionary symlink was treated as missing");
+
+  const QString nondirectory = directory + QStringLiteral("/not-a-directory");
+  QFile nondirectory_file(nondirectory);
+  require(nondirectory_file.open(QIODevice::WriteOnly),
+          "Could not seed non-directory WNN user dictionary parent");
+  nondirectory_file.close();
+  bool nondirectory_rejected = false;
+  try {
+    static_cast<void>(jwpqt::qt::read_wnn_user_dictionary_file(
+        nondirectory + QStringLiteral("/user.cnv")));
+  } catch (const std::runtime_error&) {
+    nondirectory_rejected = true;
+  }
+  require(nondirectory_rejected,
+          "Non-directory WNN user dictionary path was treated as missing");
+
+  bool write_rejected = false;
+  try {
+    jwpqt::qt::write_wnn_user_dictionary_file(
+        directory + QStringLiteral("/missing/user.cnv"),
+        jwpqt::core::WnnUserDictionary::from_entries({}));
+  } catch (const std::runtime_error&) {
+    write_rejected = true;
+  }
+  require(write_rejected,
+          "WNN user dictionary was written without a parent directory");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -274,6 +349,8 @@ int main(int argc, char* argv[]) {
     test_partial_wnn_preference_file(directory.path());
     test_wnn_preference_open_errors(directory.path());
     test_failed_wnn_preference_save_stays_dirty(directory.path());
+    test_wnn_user_dictionary_file_round_trip(directory.path());
+    test_wnn_user_dictionary_file_errors(directory.path());
     std::cout << "All Qt file I/O tests passed\n";
     return 0;
   } catch (const std::exception& error) {
