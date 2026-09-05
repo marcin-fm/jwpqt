@@ -961,6 +961,88 @@ void test_jwp_wnn_preference_write_failure(const QString& directory) {
           "Preference write failure discarded conversion history");
 }
 
+void send_text_key(QPlainTextEdit* editor, int key, const QString& text,
+                   Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+  QKeyEvent event(QEvent::KeyPress, key, modifiers, text);
+  QApplication::sendEvent(editor, &event);
+}
+
+void test_jwp_kana_input_mode(const QString& directory) {
+  jwpqt::core::JwpDocument source;
+  source.paragraphs = {jwpqt::core::JwpParagraph{}};
+  const QString source_path = directory + QStringLiteral("/kana-input.jwp");
+  jwpqt::qt::write_jwp_file(source_path, source);
+
+  jwpqt::qt::MainWindow window;
+  require(window.open_jwp_path(source_path),
+          "Could not open kana-input fixture");
+  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QAction* kana = find_action(window, "kanaInputAction");
+  QLabel* input_mode = window.findChild<QLabel*>(QStringLiteral("inputMode"));
+  require(editor != nullptr && kana != nullptr && input_mode != nullptr &&
+              kana->isEnabled() && !window.kana_input_enabled() &&
+              input_mode->text() == QStringLiteral("Direct"),
+          "Kana-input controls did not start in direct mode");
+
+  kana->trigger();
+  require(window.kana_input_enabled() && kana->isChecked() &&
+              input_mode->text() == QStringLiteral("Kana"),
+          "Kana-input action did not enable composition");
+  send_text_key(editor, Qt::Key_K, QStringLiteral("k"));
+  send_text_key(editor, Qt::Key_A, QStringLiteral("a"));
+  require(editor->toPlainText() == QStringLiteral("\u304b") &&
+              window.current_jwp_document()->paragraphs[0].text ==
+                  jwpqt::core::JwpText{0x242b},
+          "Romaji input did not insert synchronized hiragana");
+
+  send_text_key(editor, Qt::Key_K, QStringLiteral("k"));
+  send_text_key(editor, Qt::Key_Backspace, QString());
+  require(editor->toPlainText() == QStringLiteral("\u304b"),
+          "Backspace mutated the document instead of discarding pending kana");
+  send_text_key(editor, Qt::Key_A, QStringLiteral("a"));
+  require(editor->toPlainText() == QStringLiteral("\u304b\u3042"),
+          "Discarded composition leaked into the next kana input");
+
+  send_text_key(editor, Qt::Key_K, QStringLiteral("K"), Qt::ShiftModifier);
+  send_text_key(editor, Qt::Key_A, QStringLiteral("A"), Qt::ShiftModifier);
+  require(editor->toPlainText() == QStringLiteral("\u304b\u3042\u30ab"),
+          "Uppercase romaji did not insert katakana");
+
+  kana->trigger();
+  send_text_key(editor, Qt::Key_K, QStringLiteral("k"));
+  send_text_key(editor, Qt::Key_A, QStringLiteral("a"));
+  require(!window.kana_input_enabled() &&
+              editor->toPlainText() == QStringLiteral("\u304b\u3042\u30abka"),
+          "Direct mode unexpectedly composed romaji");
+
+  kana->trigger();
+  send_text_key(editor, Qt::Key_N, QStringLiteral("n"));
+  const QString saved_path = directory + QStringLiteral("/kana-pending.jwp");
+  require(window.save_path(saved_path),
+          "Could not save pending kana fixture");
+  const std::u32string saved_text = jwpqt::core::decode_jwp_text(
+      jwpqt::qt::read_jwp_file(saved_path).paragraphs[0].text);
+  require(editor->toPlainText().endsWith(QStringLiteral("\u3093")) &&
+              !saved_text.empty() && saved_text.back() == U'\u3093',
+          "Save did not commit pending kana before writing");
+
+  send_text_key(editor, Qt::Key_K, QStringLiteral("k"));
+  QAction* undo = find_action(window, "undoAction");
+  require(undo != nullptr && undo->isEnabled(),
+          "Kana input did not create portable history");
+  undo->trigger();
+  send_text_key(editor, Qt::Key_A, QStringLiteral("a"));
+  require(editor->toPlainText().endsWith(QStringLiteral("\u3042")),
+          "Undo action left pre-command kana composition pending");
+
+  const QString text_path = directory + QStringLiteral("/plain-kana.txt");
+  write_bytes(text_path, QByteArray("plain"));
+  require(window.open_path(text_path, jwpqt::core::TextEncoding::kUtf8) &&
+              !kana->isEnabled() && !kana->isChecked() &&
+              !window.kana_input_enabled(),
+          "Plain text document did not disable JWP kana input");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -989,6 +1071,7 @@ int main(int argc, char* argv[]) {
     test_jwp_wnn_conversion(directory.path());
     test_jwp_wnn_conversion_boundaries(directory.path());
     test_jwp_wnn_preference_write_failure(directory.path());
+    test_jwp_kana_input_mode(directory.path());
     std::cout << "All main window tests passed\n";
     return 0;
   } catch (const std::exception& error) {

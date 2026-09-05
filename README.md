@@ -41,9 +41,11 @@ dictionary parsing, ordered candidate lookup, a portable user-selection cache,
 atomic preference file I/O, candidate-session state, and one-undo document
 conversion transactions. With `--wnn-data-dir`, the native JWP editor converts
 selected kana, cycles candidates with Space or Shift+Space, accepts with Enter
-or Escape, and stores learned choices under the XDG user-data directory. Romaji
-input interception, lookup tools, custom layout/rendering, configuration, and
-printing remain in progress.
+or Escape, and stores learned choices under the XDG user-data directory. Its
+explicit Kana Input mode converts printable desktop romaji to recovered JWP
+hiragana and katakana while preserving portable document history. Automatic
+WNN conversion attempts, lookup tools, custom layout/rendering, configuration,
+and printing remain in progress.
 
 JWPce/JWPxp copyright and licensing notices remain in `_cpright.txt`,
 `_readme.txt`, and `gnugpl.txt`.

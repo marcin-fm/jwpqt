@@ -75,10 +75,14 @@ legacy file structures.
 25. `15d485e` replaces selected JWP kana with WNN candidates, tracks
     variable-length selections and caret direction, groups all cycling into one
     undo entry, and rolls back safely on controller failure.
-26. The native Qt window loads explicit WNN resources, converts same-paragraph
-    JWP selections, cycles candidates with Space or Shift+Space, accepts the
-    displayed candidate with Enter or Escape, and atomically persists learned
-    preferences under an explicit or XDG user-data path.
+26. `967dd64` makes the native Qt window load explicit WNN resources, convert
+    same-paragraph JWP selections, cycle candidates with Space or Shift+Space,
+    accept the displayed candidate with Enter or Escape, and atomically persist
+    learned preferences under an explicit or XDG user-data path.
+27. The native JWP editor exposes an explicit Kana Input mode that sends
+    printable desktop romaji through the portable composer, inserts recovered
+    hiragana and katakana tokens through synchronized document history, and
+    resolves or discards pending composition at command and document boundaries.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -87,8 +91,7 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Connect the portable romaji composer to native Qt input and automatic WNN
-   conversion attempts.
+1. Connect Kana Input output to automatic WNN prefix conversion attempts.
 2. Replace `QPlainTextEdit` scaffolding with a custom Qt editor surface once the
    paragraph model can drive wrapping, selection, conversion spans, and kanji
    coloring.

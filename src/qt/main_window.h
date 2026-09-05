@@ -16,6 +16,7 @@
 #include "jwpqt/core/jwp_document_history.h"
 #include "jwpqt/core/jwp_document_model.h"
 #include "jwpqt/core/jwp_search.h"
+#include "jwpqt/core/kana_input.h"
 #include "jwpqt/core/legacy_code_page.h"
 #include "jwpqt/core/text_file.h"
 #include "jwpqt/core/wnn_dictionary.h"
@@ -24,6 +25,7 @@
 class QAction;
 class QActionGroup;
 class QCloseEvent;
+class QEvent;
 class QLabel;
 class QMenu;
 class QPlainTextEdit;
@@ -74,6 +76,7 @@ class MainWindow : public QMainWindow {
   bool cycle_conversion(bool previous = false);
   bool accept_conversion();
   bool conversion_active() const noexcept;
+  bool kana_input_enabled() const noexcept;
   core::TextEncoding text_encoding() const noexcept;
   bool is_jwp_document() const noexcept;
   core::LegacyCodePage jwp_code_page() const noexcept;
@@ -86,6 +89,7 @@ class MainWindow : public QMainWindow {
 
  protected:
   void closeEvent(QCloseEvent* event) override;
+  bool eventFilter(QObject* watched, QEvent* event) override;
   virtual std::optional<core::TextEncoding> prompt_for_encoding(
       const std::vector<core::TextEncoding>& candidates,
       const QString& explanation);
@@ -103,6 +107,12 @@ class MainWindow : public QMainWindow {
   void restore_jwp_history_state(core::JwpPosition caret);
   void update_undo_actions();
   void update_conversion_actions();
+  void update_kana_input_state();
+  void set_kana_input_enabled(bool enabled);
+  void apply_kana_input_events(
+      const std::vector<core::KanaInputEvent>& events);
+  void finish_kana_input();
+  void reset_kana_input(bool disable_mode);
   void restore_jwp_conversion_state();
   void rollback_conversion_noexcept() noexcept;
   void save_wnn_preferences();
@@ -138,6 +148,8 @@ class MainWindow : public QMainWindow {
   QAction* previous_candidate_action_ = nullptr;
   QAction* next_candidate_action_ = nullptr;
   QAction* accept_candidate_action_ = nullptr;
+  QAction* kana_input_action_ = nullptr;
+  QLabel* input_mode_label_;
   QActionGroup* encoding_actions_;
   QMenu* jwp_code_page_menu_;
   std::vector<QAction*> jwp_code_page_actions_;
@@ -155,6 +167,8 @@ class MainWindow : public QMainWindow {
   std::unique_ptr<WnnResources> wnn_resources_;
   std::unique_ptr<core::JwpConversionTransaction> jwp_conversion_;
   std::optional<core::WnnPreferences> conversion_preferences_before_;
+  core::KanaInputComposer kana_input_;
+  bool kana_input_enabled_ = false;
   QString search_text_;
   QString replacement_text_;
   core::JwpSearchOptions search_options_;

@@ -16,12 +16,14 @@
 #include <QCloseEvent>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QEvent>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QFontDatabase>
 #include <QHBoxLayout>
 #include <QInputDialog>
+#include <QKeyEvent>
 #include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
@@ -32,6 +34,7 @@
 #include <QPushButton>
 #include <QRadioButton>
 #include <QScopedValueRollback>
+#include <QSignalBlocker>
 #include <QStatusBar>
 #include <QTextCursor>
 #include <QTextDocument>
@@ -162,15 +165,19 @@ MainWindow::MainWindow(QWidget* parent)
       encoding_label_(new QLabel(this)),
       undo_action_(nullptr),
       redo_action_(nullptr),
+      input_mode_label_(new QLabel(this)),
       encoding_actions_(new QActionGroup(this)),
       jwp_code_page_menu_(nullptr) {
   setCentralWidget(editor_);
+  editor_->installEventFilter(this);
   editor_->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
   editor_->setLineWrapMode(QPlainTextEdit::WidgetWidth);
 
   create_actions();
   encoding_label_->setObjectName(QStringLiteral("documentEncoding"));
+  input_mode_label_->setObjectName(QStringLiteral("inputMode"));
   statusBar()->addPermanentWidget(encoding_label_);
+  statusBar()->addPermanentWidget(input_mode_label_);
   update_encoding_display();
   resize(900, 680);
 
@@ -208,6 +215,7 @@ MainWindow::MainWindow(QWidget* parent)
           [this] { update_conversion_actions(); });
   update_undo_actions();
   update_conversion_actions();
+  update_kana_input_state();
   update_title();
 }
 
@@ -271,26 +279,37 @@ void MainWindow::create_actions() {
   QAction* cut_action = edit_menu->addAction(tr("Cu&t"));
   cut_action->setShortcut(QKeySequence::Cut);
   cut_action->setEnabled(false);
-  connect(cut_action, &QAction::triggered, editor_, &QPlainTextEdit::cut);
+  connect(cut_action, &QAction::triggered, this, [this] {
+    finish_kana_input();
+    editor_->cut();
+  });
   connect(editor_, &QPlainTextEdit::copyAvailable, cut_action,
           &QAction::setEnabled);
 
   QAction* copy_action = edit_menu->addAction(tr("&Copy"));
   copy_action->setShortcut(QKeySequence::Copy);
   copy_action->setEnabled(false);
-  connect(copy_action, &QAction::triggered, editor_, &QPlainTextEdit::copy);
+  connect(copy_action, &QAction::triggered, this, [this] {
+    finish_kana_input();
+    editor_->copy();
+  });
   connect(editor_, &QPlainTextEdit::copyAvailable, copy_action,
           &QAction::setEnabled);
 
   QAction* paste_action = edit_menu->addAction(tr("&Paste"));
   paste_action->setShortcut(QKeySequence::Paste);
-  connect(paste_action, &QAction::triggered, editor_, &QPlainTextEdit::paste);
+  connect(paste_action, &QAction::triggered, this, [this] {
+    finish_kana_input();
+    editor_->paste();
+  });
 
   edit_menu->addSeparator();
   QAction* select_all_action = edit_menu->addAction(tr("Select &All"));
   select_all_action->setShortcut(QKeySequence::SelectAll);
-  connect(select_all_action, &QAction::triggered, editor_,
-          &QPlainTextEdit::selectAll);
+  connect(select_all_action, &QAction::triggered, this, [this] {
+    finish_kana_input();
+    editor_->selectAll();
+  });
 
   // The standard QPlainTextEdit menu would bypass portable JWP history.
   editor_->setContextMenuPolicy(Qt::ActionsContextMenu);
@@ -360,6 +379,15 @@ void MainWindow::create_actions() {
   connect(accept_candidate_action_, &QAction::triggered, this,
           [this] { accept_conversion(); });
 
+  convert_menu->addSeparator();
+  kana_input_action_ = convert_menu->addAction(tr("&Kana Input"));
+  kana_input_action_->setObjectName(QStringLiteral("kanaInputAction"));
+  kana_input_action_->setCheckable(true);
+  kana_input_action_->setShortcut(
+      QKeySequence(QStringLiteral("Ctrl+Shift+K")));
+  connect(kana_input_action_, &QAction::toggled, this,
+          [this](bool enabled) { set_kana_input_enabled(enabled); });
+
   QMenu* encoding_menu = menuBar()->addMenu(tr("E&ncoding"));
   encoding_actions_->setExclusive(true);
   for (const core::TextEncoding encoding : kTextEncodings) {
@@ -388,6 +416,7 @@ void MainWindow::create_actions() {
 }
 
 void MainWindow::undo_document() {
+  finish_kana_input();
   if (!jwp_document_.has_value()) {
     editor_->undo();
     return;
@@ -409,6 +438,7 @@ void MainWindow::undo_document() {
 }
 
 void MainWindow::redo_document() {
+  finish_kana_input();
   if (!jwp_document_.has_value()) {
     editor_->redo();
     return;
@@ -496,6 +526,118 @@ void MainWindow::update_conversion_actions() {
   previous_candidate_action_->setEnabled(active);
   next_candidate_action_->setEnabled(active);
   accept_candidate_action_->setEnabled(active);
+  update_kana_input_state();
+}
+
+bool MainWindow::kana_input_enabled() const noexcept {
+  return kana_input_enabled_;
+}
+
+void MainWindow::set_kana_input_enabled(bool enabled) {
+  if (enabled && !jwp_document_.has_value()) {
+    enabled = false;
+  }
+  if (kana_input_enabled_ != enabled) {
+    kana_input_.discard();
+    kana_input_enabled_ = enabled;
+  }
+  if (kana_input_action_ != nullptr &&
+      kana_input_action_->isChecked() != kana_input_enabled_) {
+    const QSignalBlocker blocker(kana_input_action_);
+    kana_input_action_->setChecked(kana_input_enabled_);
+  }
+  update_kana_input_state();
+}
+
+void MainWindow::update_kana_input_state() {
+  if (kana_input_action_ == nullptr || input_mode_label_ == nullptr) {
+    return;
+  }
+  kana_input_action_->setEnabled(jwp_document_.has_value() &&
+                                 !conversion_active());
+  input_mode_label_->setText(kana_input_enabled_ ? tr("Kana") : tr("Direct"));
+}
+
+void MainWindow::apply_kana_input_events(
+    const std::vector<core::KanaInputEvent>& events) {
+  core::JwpText text;
+  for (const core::KanaInputEvent& event : events) {
+    text.insert(text.end(), event.text.begin(), event.text.end());
+  }
+  if (!text.empty()) {
+    editor_->insertPlainText(
+        to_qstring(core::decode_jwp_text(text, jwp_code_page_)));
+  }
+}
+
+void MainWindow::finish_kana_input() {
+  if (!kana_input_.pending()) {
+    return;
+  }
+  try {
+    apply_kana_input_events(kana_input_.flush());
+  } catch (const core::KanaInputError&) {
+    kana_input_.discard();
+  }
+}
+
+void MainWindow::reset_kana_input(bool disable_mode) {
+  kana_input_.discard();
+  if (disable_mode) {
+    kana_input_enabled_ = false;
+    if (kana_input_action_ != nullptr) {
+      const QSignalBlocker blocker(kana_input_action_);
+      kana_input_action_->setChecked(false);
+    }
+  }
+  update_kana_input_state();
+}
+
+bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
+  if (watched != editor_ || event->type() != QEvent::KeyPress ||
+      !kana_input_enabled_ || !jwp_document_.has_value() ||
+      conversion_active()) {
+    return QMainWindow::eventFilter(watched, event);
+  }
+
+  auto* key_event = static_cast<QKeyEvent*>(event);
+  if (kana_input_.pending() &&
+      (key_event->key() == Qt::Key_Backspace ||
+       key_event->key() == Qt::Key_Delete ||
+       key_event->key() == Qt::Key_Escape)) {
+    kana_input_.discard();
+    statusBar()->showMessage(tr("Discarded pending kana input"), 1500);
+    return true;
+  }
+
+  const Qt::KeyboardModifiers command_modifiers =
+      key_event->modifiers() &
+      (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier);
+  const QString text = key_event->text();
+  if (command_modifiers == Qt::NoModifier && text.size() == 1) {
+    const ushort value = text.at(0).unicode();
+    if (value >= 0x20U && value <= 0x7eU) {
+      try {
+        apply_kana_input_events(
+            kana_input_.push_ascii(static_cast<char>(value)));
+      } catch (const std::exception& error) {
+        kana_input_.discard();
+        statusBar()->showMessage(
+            tr("Could not compose kana: %1")
+                .arg(QString::fromUtf8(error.what())),
+            5000);
+      }
+      return true;
+    }
+  }
+
+  if (kana_input_.pending() && key_event->key() != Qt::Key_Shift &&
+      key_event->key() != Qt::Key_Control && key_event->key() != Qt::Key_Alt &&
+      key_event->key() != Qt::Key_Meta &&
+      key_event->key() != Qt::Key_CapsLock) {
+    finish_kana_input();
+  }
+  return QMainWindow::eventFilter(watched, event);
 }
 
 bool MainWindow::load_wnn_resources(const QString& index_path,
@@ -546,6 +688,7 @@ bool MainWindow::convert_selection() {
     statusBar()->showMessage(tr("WNN conversion is not available"), 3000);
     return false;
   }
+  finish_kana_input();
 
   try {
     const QTextCursor cursor = editor_->textCursor();
@@ -714,6 +857,7 @@ void MainWindow::new_document() {
   if (!maybe_save()) {
     return;
   }
+  reset_kana_input(true);
   jwp_document_.reset();
   saved_jwp_document_.reset();
   pristine_jwp_document_.reset();
@@ -730,6 +874,7 @@ void MainWindow::new_document() {
   set_text_encoding(core::TextEncoding::kUtf8, false);
   update_encoding_display();
   update_undo_actions();
+  update_conversion_actions();
   update_title();
 }
 
@@ -858,6 +1003,7 @@ bool MainWindow::open_path_detected(const QString& path, OpenMode mode) {
 
 void MainWindow::load_document(const QString& path,
                                const core::TextFile& file) {
+  reset_kana_input(true);
   jwp_document_.reset();
   saved_jwp_document_.reset();
   pristine_jwp_document_.reset();
@@ -874,12 +1020,14 @@ void MainWindow::load_document(const QString& path,
   has_byte_order_mark_ = file.has_byte_order_mark;
   update_encoding_display();
   update_undo_actions();
+  update_conversion_actions();
   update_title();
 }
 
 void MainWindow::load_jwp_document(const QString& path,
                                     core::JwpDocument document,
                                     core::LegacyCodePage code_page) {
+  reset_kana_input(false);
   std::optional<core::JwpDocument> pristine_document;
   if (document.paragraphs.empty()) {
     pristine_document = document;
@@ -903,6 +1051,7 @@ void MainWindow::load_jwp_document(const QString& path,
   editor_->document()->setModified(false);
   update_encoding_display();
   update_undo_actions();
+  update_conversion_actions();
   update_title();
 }
 
@@ -945,6 +1094,7 @@ bool MainWindow::save_path(const QString& path) {
   if (conversion_active() && !accept_conversion()) {
     return false;
   }
+  finish_kana_input();
   try {
     if (jwp_document_.has_value()) {
       const bool unedited_pristine =
@@ -1161,6 +1311,7 @@ void MainWindow::set_text_encoding(core::TextEncoding encoding,
 }
 
 void MainWindow::set_jwp_code_page(core::LegacyCodePage code_page) {
+  finish_kana_input();
   if (conversion_active() && !accept_conversion()) {
     return;
   }
@@ -1224,6 +1375,7 @@ void MainWindow::replace_document() {
 
 bool MainWindow::find_text(const QString& text,
                            core::JwpSearchOptions options) {
+  finish_kana_input();
   if (conversion_active()) {
     statusBar()->showMessage(tr("Accept the current conversion before finding"),
                              3000);
@@ -1324,6 +1476,7 @@ bool MainWindow::find_plain_text(const QString& text,
 bool MainWindow::replace_next(const QString& text,
                               const QString& replacement,
                               core::JwpSearchOptions options) {
+  finish_kana_input();
   if (conversion_active()) {
     statusBar()->showMessage(
         tr("Accept the current conversion before replacing"), 3000);
@@ -1380,6 +1533,7 @@ bool MainWindow::replace_next(const QString& text,
 std::size_t MainWindow::replace_all(const QString& text,
                                     const QString& replacement,
                                     core::JwpSearchOptions options) {
+  finish_kana_input();
   if (conversion_active()) {
     statusBar()->showMessage(
         tr("Accept the current conversion before replacing"), 3000);
@@ -1641,6 +1795,7 @@ bool MainWindow::maybe_save() {
   if (conversion_active() && !accept_conversion()) {
     return false;
   }
+  finish_kana_input();
   if (!editor_->document()->isModified()) {
     return true;
   }
