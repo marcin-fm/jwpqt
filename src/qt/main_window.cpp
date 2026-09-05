@@ -64,6 +64,7 @@
 #include "kanji_lookup_dialog.h"
 #include "kanji_reading_lookup_dialog.h"
 #include "kanji_color_settings.h"
+#include "page_layout_dialog.h"
 #include "jwpqt/core/jis_table.h"
 #include "jwpqt/core/jwp_plain_text.h"
 #include "jwpqt/core/jwp_text_codec.h"
@@ -939,6 +940,11 @@ void MainWindow::create_actions() {
   connect(format_paragraph_action_, &QAction::triggered, this,
           [this] { format_document_paragraphs(); });
 
+  page_layout_action_ = format_menu->addAction(tr("Page &Layout..."));
+  page_layout_action_->setObjectName(QStringLiteral("pageLayoutAction"));
+  connect(page_layout_action_, &QAction::triggered, this,
+          [this] { format_page_layout(); });
+
   insert_page_break_action_ =
       format_menu->addAction(tr("Insert Page &Break"));
   insert_page_break_action_->setObjectName(
@@ -1294,6 +1300,7 @@ void MainWindow::update_conversion_actions() {
   accept_candidate_action_->setEnabled(active);
   user_dictionary_action_->setEnabled(!active && wnn_resources_ != nullptr);
   format_paragraph_action_->setEnabled(!active && jwp_document_.has_value());
+  page_layout_action_->setEnabled(!active && jwp_document_.has_value());
   insert_page_break_action_->setEnabled(!active && jwp_document_.has_value());
   update_kanji_color_actions();
   update_edict_actions();
@@ -3098,6 +3105,14 @@ MainWindow::prompt_for_paragraph_format(
       static_cast<int>(spacing->value() * 100.0 + 0.5)};
 }
 
+std::optional<core::JwpDocument> MainWindow::prompt_for_page_layout(
+    const core::JwpDocument& initial) {
+  PageLayoutDialog dialog(initial, jwp_code_page_, this);
+  if (dialog.exec() != QDialog::Accepted)
+    return std::nullopt;
+  return dialog.document();
+}
+
 std::optional<core::KanjiColorPolicy>
 MainWindow::prompt_for_kanji_color_policy(
     const core::KanjiColorPolicy& initial) {
@@ -3306,6 +3321,46 @@ void MainWindow::format_document_paragraphs() {
   } catch (const std::exception& error) {
     statusBar()->showMessage(
         tr("Could not format paragraphs: %1")
+            .arg(QString::fromUtf8(error.what())),
+        5000);
+  }
+}
+
+void MainWindow::format_page_layout() {
+  finish_kana_input();
+  if (conversion_active() || !jwp_document_.has_value())
+    return;
+  try {
+    const std::optional<core::JwpDocument> requested =
+        prompt_for_page_layout(jwp_document_->document());
+    if (!requested.has_value() || *requested == jwp_document_->document())
+      return;
+
+    const QTextCursor cursor = editor_->textCursor();
+    const core::JwpPosition caret = core::jwp_plain_text_position(
+        *jwp_document_,
+        utf32_offset_for_utf16(editor_->toPlainText(), cursor.position()));
+    core::JwpDocumentModel candidate(*requested);
+    core::JwpDocumentHistory history = jwp_history_;
+    history.begin(*jwp_document_, caret);
+    if (!history.commit(candidate, caret))
+      return;
+
+    apply_jwp_presentation(candidate.document(), jwp_code_page_);
+    jwp_document_ = std::move(candidate);
+    jwp_history_ = std::move(history);
+    jwp_caret_ = caret;
+    expected_jwp_caret_.reset();
+    editor_->setTextCursor(cursor);
+    editor_->document()->setModified(
+        !saved_jwp_document_.has_value() ||
+        jwp_document_->document() != *saved_jwp_document_);
+    update_undo_actions();
+    update_title();
+    statusBar()->showMessage(tr("Page layout applied"), 2000);
+  } catch (const std::exception& error) {
+    statusBar()->showMessage(
+        tr("Could not apply page layout: %1")
             .arg(QString::fromUtf8(error.what())),
         5000);
   }

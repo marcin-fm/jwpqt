@@ -180,6 +180,8 @@ class MainWindow : public QMainWindow {
       const ReplaceRequest& initial);
   virtual std::optional<core::JwpParagraphFormat>
   prompt_for_paragraph_format(const core::JwpParagraphFormat& initial);
+  virtual std::optional<core::JwpDocument> prompt_for_page_layout(
+      const core::JwpDocument& initial);
   virtual std::optional<core::KanjiColorPolicy>
   prompt_for_kanji_color_policy(const core::KanjiColorPolicy& initial);
   virtual std::optional<KanjiColorListEditRequest>
@@ -247,6 +249,7 @@ class MainWindow : public QMainWindow {
   void find_again(core::JwpSearchDirection direction);
   void replace_document();
   void format_document_paragraphs();
+  void format_page_layout();
   void configure_kanji_colors();
   void edit_kanji_color_list();
   bool find_jwp_text(const QString& text, core::JwpSearchOptions options);
@@ -283,6 +286,7 @@ class MainWindow : public QMainWindow {
   QAction* kanji_reading_lookup_action_ = nullptr;
   QAction* kanji_lookup_action_ = nullptr;
   QAction* format_paragraph_action_ = nullptr;
+  QAction* page_layout_action_ = nullptr;
   QAction* insert_page_break_action_ = nullptr;
   QAction* kanji_color_options_action_ = nullptr;
   QAction* make_kanji_color_list_action_ = nullptr;

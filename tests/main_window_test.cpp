@@ -150,6 +150,8 @@ class PromptingWindow : public jwpqt::qt::MainWindow {
   std::optional<jwpqt::qt::ReplaceRequest> next_replace;
   std::optional<jwpqt::core::JwpParagraphFormat> next_paragraph_format;
   std::optional<jwpqt::core::JwpParagraphFormat> offered_paragraph_format;
+  std::optional<jwpqt::core::JwpDocument> next_page_layout;
+  std::optional<jwpqt::core::JwpDocument> offered_page_layout;
   std::optional<jwpqt::core::KanjiColorPolicy> next_kanji_color_policy;
   std::optional<jwpqt::core::KanjiColorPolicy> offered_kanji_color_policy;
   std::optional<jwpqt::qt::KanjiColorListEditRequest>
@@ -159,6 +161,7 @@ class PromptingWindow : public jwpqt::qt::MainWindow {
   int search_prompt_count = 0;
   int replace_prompt_count = 0;
   int paragraph_format_prompt_count = 0;
+  int page_layout_prompt_count = 0;
   int kanji_color_prompt_count = 0;
   int kanji_color_list_prompt_count = 0;
 
@@ -189,6 +192,13 @@ class PromptingWindow : public jwpqt::qt::MainWindow {
     ++paragraph_format_prompt_count;
     offered_paragraph_format = initial;
     return next_paragraph_format;
+  }
+
+  std::optional<jwpqt::core::JwpDocument> prompt_for_page_layout(
+      const jwpqt::core::JwpDocument& initial) override {
+    ++page_layout_prompt_count;
+    offered_page_layout = initial;
+    return next_page_layout;
   }
 
   std::optional<jwpqt::core::KanjiColorPolicy>
@@ -2659,6 +2669,54 @@ void test_kanji_color_list_commands(const QString& directory) {
           "Failed list persistence changed the prior overlay");
 }
 
+void test_jwp_page_layout(const QString& directory) {
+  const jwpqt::core::JwpDocument source = sample_jwp_document();
+  const QString source_path = directory + QStringLiteral("/page-layout.jwp");
+  jwpqt::qt::write_jwp_file(source_path, source);
+
+  PromptingWindow window;
+  require(window.open_jwp_path(source_path),
+          "Could not open page-layout fixture");
+  QAction* action = find_action(window, "pageLayoutAction");
+  require(action != nullptr && action->isEnabled(),
+          "Page Layout action was not enabled for a JWP document");
+
+  jwpqt::core::JwpDocument changed = source;
+  changed.margins = {0.5F, 0.75F, 1.25F, 1.5F};
+  changed.landscape = false;
+  changed.vertical = true;
+  changed.suppress_first_page_headers = true;
+  changed.separate_left_right_headers = true;
+  changed.headers[1][2] = jwpqt::core::encode_jwp_text(U"Even right");
+  changed.summary[3] = jwpqt::core::encode_jwp_text(U"Revision note");
+  window.next_page_layout = changed;
+  action->trigger();
+  require(window.page_layout_prompt_count == 1 &&
+              window.offered_page_layout == source &&
+              *window.current_jwp_document() == changed &&
+              find_action(window, "undoAction")->isEnabled(),
+          "Page Layout action did not publish one complete metadata change");
+
+  find_action(window, "undoAction")->trigger();
+  require(*window.current_jwp_document() == source,
+          "Undo did not restore the original page layout");
+  find_action(window, "redoAction")->trigger();
+  require(*window.current_jwp_document() == changed,
+          "Redo did not restore the edited page layout");
+
+  const QString saved_path = directory + QStringLiteral("/page-layout-saved.jwp");
+  require(window.save_path(saved_path) &&
+              jwpqt::qt::read_jwp_file(saved_path) == changed,
+          "Edited page layout did not survive a JWP save round trip");
+
+  const QString text_path = directory + QStringLiteral("/page-layout.txt");
+  jwpqt::qt::write_text_file(
+      text_path, {U"plain", jwpqt::core::TextEncoding::kUtf8, false});
+  require(window.open_path(text_path, jwpqt::core::TextEncoding::kUtf8) &&
+              !action->isEnabled(),
+          "Page Layout action stayed enabled for plain text");
+}
+
 void test_jis_table_integration(const QString& directory) {
   jwpqt::core::JwpDocument source;
   source.paragraphs = {paragraph(U"\u3042")};
@@ -2744,6 +2802,7 @@ int main(int argc, char* argv[]) {
     test_kanji_color_configuration(directory.path());
     test_kanji_color_options(directory.path());
     test_kanji_color_list_commands(directory.path());
+    test_jwp_page_layout(directory.path());
     test_jis_table_integration(directory.path());
     std::cout << "All main window tests passed\n";
     return 0;
