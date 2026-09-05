@@ -23,6 +23,7 @@
 #include "jwpqt/core/text_file.h"
 #include "jwpqt/core/wnn_dictionary.h"
 #include "jwpqt/core/wnn_preferences.h"
+#include "jwpqt/core/wnn_user_dictionary.h"
 
 class QAction;
 class QActionGroup;
@@ -81,6 +82,12 @@ class MainWindow : public QMainWindow {
                           const QString& data_path,
                           const QString& preferences_path,
                           OpenMode mode = OpenMode::kInteractive);
+  bool load_wnn_resources(const QString& index_path,
+                          const QString& data_path,
+                          const QString& preferences_path,
+                          const QString& user_dictionary_path,
+                          OpenMode mode = OpenMode::kInteractive);
+  const core::WnnUserDictionary* wnn_user_dictionary() const noexcept;
   bool convert_selection();
   bool cycle_conversion(bool previous = false);
   bool accept_conversion();

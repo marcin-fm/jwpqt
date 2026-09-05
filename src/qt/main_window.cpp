@@ -157,15 +157,21 @@ std::optional<core::TextEncoding> encoding_from_filter(const QString& filter) {
 struct MainWindow::WnnResources {
   WnnResources(core::WnnDictionary dictionary_value,
                core::WnnPreferences preferences_value,
-               QString preferences_path_value)
+               core::WnnUserDictionary user_dictionary_value,
+               QString preferences_path_value,
+               QString user_dictionary_path_value)
       : dictionary(std::move(dictionary_value)),
         preferences(std::move(preferences_value)),
         preferences_path(std::move(preferences_path_value)),
-        session(dictionary, preferences) {}
+        user_dictionary(std::move(user_dictionary_value)),
+        user_dictionary_path(std::move(user_dictionary_path_value)),
+        session(dictionary, preferences, user_dictionary.lookup_records()) {}
 
   core::WnnDictionary dictionary;
   core::WnnPreferences preferences;
   QString preferences_path;
+  core::WnnUserDictionary user_dictionary;
+  QString user_dictionary_path;
   core::WnnConversionSession session;
 };
 
@@ -1175,6 +1181,14 @@ bool MainWindow::load_wnn_resources(const QString& index_path,
                                     const QString& data_path,
                                     const QString& preferences_path,
                                     OpenMode mode) {
+  return load_wnn_resources(index_path, data_path, preferences_path, {}, mode);
+}
+
+bool MainWindow::load_wnn_resources(const QString& index_path,
+                                    const QString& data_path,
+                                    const QString& preferences_path,
+                                    const QString& user_dictionary_path,
+                                    OpenMode mode) {
   if (conversion_active()) {
     if (mode == OpenMode::kInteractive) {
       statusBar()->showMessage(
@@ -1191,10 +1205,19 @@ bool MainWindow::load_wnn_resources(const QString& index_path,
         read_wnn_preferences_file(preferences_path);
     core::WnnPreferences preferences =
         loaded_preferences ? std::move(*loaded_preferences)
-                           : core::WnnPreferences{};
+                            : core::WnnPreferences{};
+    std::optional<core::WnnUserDictionary> loaded_user_dictionary;
+    if (!user_dictionary_path.isEmpty()) {
+      loaded_user_dictionary =
+          read_wnn_user_dictionary_file(user_dictionary_path);
+    }
+    core::WnnUserDictionary user_dictionary =
+        loaded_user_dictionary ? std::move(*loaded_user_dictionary)
+                               : core::WnnUserDictionary{};
 
     auto resources = std::make_unique<WnnResources>(
-        std::move(dictionary), std::move(preferences), preferences_path);
+        std::move(dictionary), std::move(preferences),
+        std::move(user_dictionary), preferences_path, user_dictionary_path);
     wnn_resources_ = std::move(resources);
     update_conversion_actions();
     statusBar()->showMessage(tr("Loaded WNN conversion dictionaries"), 3000);
@@ -1206,6 +1229,12 @@ bool MainWindow::load_wnn_resources(const QString& index_path,
     }
     return false;
   }
+}
+
+const core::WnnUserDictionary* MainWindow::wnn_user_dictionary()
+    const noexcept {
+  return wnn_resources_ == nullptr ? nullptr
+                                   : &wnn_resources_->user_dictionary;
 }
 
 bool MainWindow::conversion_active() const noexcept {

@@ -1339,6 +1339,66 @@ void test_jwp_wnn_conversion_boundaries(const QString& directory) {
           "Cross-paragraph WNN selection was not rejected");
 }
 
+void test_jwp_wnn_user_dictionary(const QString& directory) {
+  const WnnFixture fixture = write_wnn_fixture(directory);
+  QFile::remove(fixture.preferences_path);
+  const QString user_dictionary_path =
+      directory + QStringLiteral("/native-user.cnv");
+  const jwpqt::core::WnnUserDictionary user_dictionary =
+      jwpqt::core::WnnUserDictionary::from_entries(
+          {{{0x2422}, '*', {{0x3023}}}});
+  jwpqt::qt::write_wnn_user_dictionary_file(user_dictionary_path,
+                                            user_dictionary);
+
+  jwpqt::core::JwpDocument source;
+  source.paragraphs = {jwpqt::core::JwpParagraph{}};
+  source.paragraphs[0].text = {0x2422};
+  const QString source_path = directory + QStringLiteral("/user-convert.jwp");
+  jwpqt::qt::write_jwp_file(source_path, source);
+
+  jwpqt::qt::MainWindow window;
+  require(window.load_wnn_resources(
+              fixture.index_path, fixture.data_path, fixture.preferences_path,
+              user_dictionary_path, jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.wnn_user_dictionary() != nullptr &&
+              window.wnn_user_dictionary()->entries() ==
+                  user_dictionary.entries() &&
+              window.open_jwp_path(source_path),
+          "Could not load native WNN user dictionary fixture");
+  QTextEdit* editor = window.findChild<QTextEdit*>();
+  require(editor != nullptr, "Native WNN user dictionary has no editor");
+  editor->selectAll();
+  require(window.convert_selection() && window.cycle_conversion() &&
+              window.cycle_conversion() &&
+              window.current_jwp_document()->paragraphs[0].text ==
+                  jwpqt::core::JwpText{0x3023} &&
+              window.accept_conversion(),
+          "Native WNN conversion did not use the user dictionary candidate");
+
+  QFile malformed(user_dictionary_path);
+  require(malformed.open(QIODevice::WriteOnly | QIODevice::Truncate) &&
+              malformed.write("bad", 3) == 3,
+          "Could not corrupt native WNN user dictionary fixture");
+  malformed.close();
+  require(!window.load_wnn_resources(
+              fixture.index_path, fixture.data_path, fixture.preferences_path,
+              user_dictionary_path, jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.wnn_user_dictionary() != nullptr &&
+              window.wnn_user_dictionary()->entries() ==
+                  user_dictionary.entries(),
+          "Malformed WNN user dictionary reload replaced working resources");
+
+  jwpqt::qt::MainWindow missing;
+  require(missing.load_wnn_resources(
+              fixture.index_path, fixture.data_path,
+              directory + QStringLiteral("/missing-user.sel"),
+              directory + QStringLiteral("/missing-user.cnv"),
+              jwpqt::qt::OpenMode::kNonInteractive) &&
+              missing.wnn_user_dictionary() != nullptr &&
+              missing.wnn_user_dictionary()->entries().empty(),
+          "Missing WNN user dictionary did not load as empty");
+}
+
 void test_jwp_wnn_preference_write_failure(const QString& directory) {
   const WnnFixture fixture = write_wnn_fixture(directory);
   const QString blocked_path = directory + QStringLiteral("/blocked-user.sel");
@@ -2092,6 +2152,7 @@ int main(int argc, char* argv[]) {
     test_jwp_page_break_insertion(directory.path());
     test_jwp_wnn_conversion(directory.path());
     test_jwp_wnn_conversion_boundaries(directory.path());
+    test_jwp_wnn_user_dictionary(directory.path());
     test_jwp_wnn_preference_write_failure(directory.path());
     test_jwp_kana_input_mode(directory.path());
     test_jwp_automatic_wnn_conversion(directory.path());

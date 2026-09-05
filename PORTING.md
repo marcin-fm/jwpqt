@@ -161,6 +161,10 @@ legacy file structures.
     dictionary, distinguishes other open failures from absence, validates
     existing bytes through the portable codec, and serializes the complete
     canonical payload before atomically replacing the destination.
+46. Native WNN resource loading owns the editable user dictionary and gives
+    each conversion session its lookup snapshot. The application loads
+    `user.cnv` beside `user.sel` in its XDG data directory; malformed reloads
+    leave the previous dictionary, preferences, and session working together.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -171,8 +175,8 @@ requires a separate fixture-backed change rather than silent substitution.
 
 1. Port paged printing and clipboard color policy over the rich JWP document
    layout.
-2. Add editable WNN dictionary startup state and native management UI, then
-   port lookup tools as separate vertical slices.
+2. Add native editable WNN dictionary management UI, then port lookup tools as
+   separate vertical slices.
 3. Port configuration, remaining import/export paths, and help.
 
 Each slice is committed independently after focused tests and the complete

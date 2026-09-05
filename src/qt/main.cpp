@@ -91,6 +91,7 @@ int main(int argc, char* argv[]) {
             data_directory.filePath(QStringLiteral("wnn.dix")),
             data_directory.filePath(QStringLiteral("wnn.dat")),
             QDir(user_data).filePath(QStringLiteral("user.sel")),
+            QDir(user_data).filePath(QStringLiteral("user.cnv")),
             interaction_mode)) {
       QTextStream(stderr) << "Could not load WNN conversion resources.\n";
       return 1;

@@ -41,7 +41,8 @@ dictionary parsing, ordered candidate lookup, a portable user-selection cache,
 atomic preference file I/O, candidate-session state, and one-undo document
 conversion transactions. With `--wnn-data-dir`, the native JWP editor converts
 selected kana, cycles candidates with Space or Shift+Space, accepts with Enter
-or Escape, and stores learned choices under the XDG user-data directory. Its
+or Escape, and loads editable `user.cnv` entries beside learned choices in the
+XDG user-data directory. Its
 explicit Kana Input mode converts printable desktop romaji to recovered JWP
 hiragana and katakana while preserving portable document history. Kana Input
 tracks automatic conversion spans, waits for extendable WNN keys, applies
@@ -54,7 +55,7 @@ color policy and `colkanji.lst` are loaded strictly from the XDG configuration
 directory and applied to raw JWP tokens without mutating document formatting;
 Kanji Color Options updates the screen policy atomically while preserving
 active WNN highlights. Make, Append, Add/Remove, View, and Clear manage the
-global color list with atomic persistence. User dictionary management, lookup
+global color list with atomic persistence. User dictionary editing, lookup
 tools, remaining configuration, and printing remain in progress.
 
 JWPce/JWPxp copyright and licensing notices remain in `_cpright.txt`,
