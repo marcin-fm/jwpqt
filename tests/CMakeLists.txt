@@ -467,6 +467,14 @@ set_tests_properties(qt_main_window PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
   TIMEOUT 10
 )
+set_tests_properties(
+  qt_edict_lookup_dialog
+  qt_edict_results_window
+  qt_edict_user_dictionary_dialog
+  PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  TIMEOUT 10
+)
 set_tests_properties(qt_wnn_user_dictionary_dialog PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
   TIMEOUT 10
