@@ -189,6 +189,12 @@ legacy file structures.
     File writes the exact legacy display row into a JWP selection as one
     portable-history transaction. Plain text and active conversion reject
     insertion without mutation.
+52. EDICT record parsing owns the exact source bytes and exposes bounded
+    Unicode records with byte spans, multiple readings, and slash definitions.
+    It handles the four recovered newline forms, UTF-8 BOMs, strict UTF-8 and
+    EUC-JP, and the exact 77-sequence JIS X 0212 subset converted by JWPxp.
+    Parsing uses the first formal space-slash delimiter so malformed glosses
+    cannot be reinterpreted as headword text or bypass definition budgets.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -197,10 +203,10 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Port paged printing and clipboard color policy over the rich JWP document
+1. Port EDICT and kanji lookup tools as separate index, search, resource, and
+   native result-view slices over the completed record codec.
+2. Port paged printing and clipboard color policy over the rich JWP document
    layout.
-2. Port EDICT and kanji lookup tools as separate codec, index, search, resource,
-   and native result-view slices.
 3. Port configuration, remaining import/export paths, and help.
 
 Each slice is committed independently after focused tests and the complete

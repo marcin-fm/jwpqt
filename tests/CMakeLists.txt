@@ -11,6 +11,13 @@ add_executable(jwpqt_byte_io_tests
 target_link_libraries(jwpqt_byte_io_tests PRIVATE jwpqt_core)
 target_compile_options(jwpqt_byte_io_tests PRIVATE -Wall -Wextra -Wpedantic)
 
+add_executable(jwpqt_edict_dictionary_tests
+  edict_dictionary_test.cpp
+)
+target_link_libraries(jwpqt_edict_dictionary_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_edict_dictionary_tests
+  PRIVATE -Wall -Wextra -Wpedantic)
+
 add_executable(jwpqt_qt_io_tests
   qt_file_io_test.cpp
 )
@@ -149,6 +156,7 @@ target_compile_options(jwpqt_text_detection_tests PRIVATE -Wall -Wextra -Wpedant
 
 add_test(NAME core_utf8 COMMAND jwpqt_core_tests)
 add_test(NAME core_byte_io COMMAND jwpqt_byte_io_tests)
+add_test(NAME core_edict_dictionary COMMAND jwpqt_edict_dictionary_tests)
 add_test(NAME core_jis_encoding COMMAND jwpqt_jis_encoding_tests)
 add_test(NAME core_jis_unicode COMMAND jwpqt_jis_unicode_tests)
 add_test(NAME core_jis_text COMMAND jwpqt_jis_text_tests)
