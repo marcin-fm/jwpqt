@@ -434,6 +434,227 @@ void test_pattern_search_uses_japanese_boundaries_and_index_code_page() {
           "Pattern EDICT search ignored its index-owned UTF code page");
 }
 
+void test_contingent_kanji_search_and_name_filtering() {
+  const std::string word =
+      jwpqt::core::encode_utf8(U"\u65e5\u672c");
+  const std::string term =
+      jwpqt::core::encode_utf8(U"\u4e9c\u65e5\u672c\u8a9e");
+  const std::string first = term + " /(s) name/\n";
+  const std::string second = term + " /word/\n";
+  const std::string source = first + second;
+  const std::size_t first_anchor = offset_of(source, word);
+  const std::size_t second_anchor = offset_of(source, word, first_anchor + 1);
+  const Fixture fixture(source, {first_anchor, second_anchor});
+
+  jwpqt::core::EdictSearchOptions options;
+  options.contingent.enabled = true;
+  options.direct.require_beginning = true;
+  options.direct.require_end = true;
+  const jwpqt::core::EdictSearchReport report = jwpqt::core::search_edict(
+      fixture.dictionary, fixture.index, query(U"\u65e5\u672c"), options);
+  require(report.results.size() == 1 && report.queries == 2 &&
+              report.candidate_matches == 4 && report.rejected == 1 &&
+              report.results[0].stage ==
+                  jwpqt::core::EdictSearchStage::kContingent &&
+              report.results[0].record.definitions ==
+                  std::vector<std::u32string>{U"word"},
+          "Contingent kanji search did not expand/filter its retry");
+
+  options.contingent.names_mode = true;
+  const jwpqt::core::EdictSearchReport names = jwpqt::core::search_edict(
+      fixture.dictionary, fixture.index, query(U"\u65e5\u672c"), options);
+  require(names.results.empty() && names.queries == 1,
+          "Contingent search ran in explicit names mode");
+
+  options.contingent.names_mode = false;
+  options.queries = 1;
+  require_throws(
+      [&] {
+        search_edict(fixture.dictionary, fixture.index,
+                     query(U"\u65e5\u672c"),
+                     options);
+      },
+      "Contingent search escaped the shared query limit");
+}
+
+void test_contingent_kana_limits_and_forced_mode() {
+  const std::string key =
+      jwpqt::core::encode_utf8(U"\u3042\u3044\u3046");
+  const std::string leading =
+      jwpqt::core::encode_utf8(U"\u3042\u3044\u3046\u3048");
+  const std::string embedded =
+      jwpqt::core::encode_utf8(U"\u304b\u3042\u3044\u3046\u3048");
+  const std::string source = leading + " /leading/\n" + embedded +
+                             " /embedded/\n";
+  const std::size_t first_anchor = offset_of(source, key);
+  const std::size_t second_anchor = offset_of(source, key, first_anchor + 1);
+  const Fixture fixture(source, {first_anchor, second_anchor});
+
+  jwpqt::core::EdictSearchOptions options;
+  options.contingent.enabled = true;
+  options.direct.require_beginning = true;
+  options.direct.require_end = true;
+  const jwpqt::core::EdictSearchReport limited = jwpqt::core::search_edict(
+      fixture.dictionary, fixture.index,
+      query(U"\u3042\u3044\u3046"), options);
+  require(limited.results.size() == 1 &&
+              limited.results[0].record.definitions ==
+                  std::vector<std::u32string>{U"leading"},
+          "Automatic three-kana contingent search did not retain Beginning");
+
+  options.contingent.forced = true;
+  const jwpqt::core::EdictSearchReport forced = jwpqt::core::search_edict(
+      fixture.dictionary, fixture.index,
+      query(U"\u3042\u3044\u3046"), options);
+  require(forced.results.size() == 2 &&
+              forced.results[1].record.definitions ==
+                  std::vector<std::u32string>{U"embedded"},
+          "Forced contingent search did not clear heuristic boundaries");
+}
+
+void test_contingent_honorific_retry() {
+  const std::string suffix =
+      jwpqt::core::encode_utf8(U"\u65e5\u672c");
+  const std::string source = suffix + " /country/\n";
+  const Fixture fixture(source, {0});
+  jwpqt::core::EdictSearchOptions options;
+  options.contingent.enabled = true;
+  options.direct.require_beginning = true;
+  options.direct.require_end = true;
+  const jwpqt::core::EdictSearchReport report = jwpqt::core::search_edict(
+      fixture.dictionary, fixture.index,
+      query(U"\u304a\u65e5\u672c"), options);
+  require(report.results.size() == 1 && report.queries == 2 &&
+              report.results[0].query == query(U"\u65e5\u672c").key &&
+              report.results[0].stage ==
+                  jwpqt::core::EdictSearchStage::kContingent,
+          "Contingent search did not stop after its honorific suffix retry");
+}
+
+void test_contingent_filtered_honorific_falls_through() {
+  const std::string suffix =
+      jwpqt::core::encode_utf8(U"\u65e5\u672c");
+  const std::string honorific =
+      jwpqt::core::encode_utf8(U"\u304a\u65e5\u672c\u8a9e");
+  const std::string first = suffix + " /(s) name/\n";
+  const std::string second = honorific + " /word/\n";
+  const std::string source = first + second;
+  const std::size_t honorific_start = first.size();
+  const std::size_t suffix_in_honorific = offset_of(source, suffix, first.size());
+  const Fixture fixture(source,
+                        {honorific_start, 0, suffix_in_honorific});
+  jwpqt::core::EdictSearchOptions options;
+  options.contingent.enabled = true;
+  options.direct.require_beginning = true;
+  options.direct.require_end = true;
+  const jwpqt::core::EdictQuery lookup =
+      query(U"\u304a\u65e5\u672c");
+  const jwpqt::core::EdictSearchReport report = jwpqt::core::search_edict(
+      fixture.dictionary, fixture.index, lookup, options);
+  require(report.results.size() == 1 && report.queries == 3 &&
+              report.results[0].record.definitions ==
+                  std::vector<std::u32string>{U"word"} &&
+              report.results[0].stage ==
+                  jwpqt::core::EdictSearchStage::kContingent,
+          "Filtered honorific retry did not fall through to contingent search");
+
+  options.queries = 2;
+  require_throws(
+      [&] { search_edict(fixture.dictionary, fixture.index, lookup, options); },
+      "Honorific and contingent retries escaped the shared query limit");
+}
+
+void test_contingent_adaptive_selectivity_and_structural_minima() {
+  const std::string source = "dog /animal/\n";
+  const Fixture fixture(source, {0});
+  jwpqt::core::EdictSearchOptions options = adaptive_options();
+  options.adaptive_always = true;
+  const jwpqt::core::EdictSearchReport baseline = jwpqt::core::search_edict(
+      fixture.dictionary, fixture.index,
+      query(U"\u3042\u3044\u305f"), options);
+
+  options.contingent.enabled = true;
+  const jwpqt::core::EdictSearchReport automatic =
+      jwpqt::core::search_edict(fixture.dictionary, fixture.index,
+                                query(U"\u3042\u3044\u305f"), options);
+  require(automatic.queries == baseline.queries,
+          "Likely conjugated three-kana query ran automatic contingent search");
+
+  options.contingent.forced = true;
+  const jwpqt::core::EdictSearchReport forced = jwpqt::core::search_edict(
+      fixture.dictionary, fixture.index,
+      query(U"\u3042\u3044\u305f"), options);
+  require(forced.queries == baseline.queries + 1,
+          "Forced contingent search did not override adaptive selectivity");
+
+  options.adaptive = false;
+  const jwpqt::core::EdictSearchReport too_short = jwpqt::core::search_edict(
+      fixture.dictionary, fixture.index, query(U"\u65e5"), options);
+  require(too_short.queries == 1,
+          "Forced contingent search bypassed structural kanji minima");
+}
+
+void test_contingent_long_query_fallback_and_truncation() {
+  const std::u32string long_word(99, U'\u4e9c');
+  const std::string encoded = jwpqt::core::encode_utf8(long_word);
+  const std::string source = jwpqt::core::encode_utf8(U"\u65e5") + encoded +
+                             jwpqt::core::encode_utf8(U"\u672c") +
+                             " /embedded/\n";
+  const Fixture fixture(source, {offset_of(source, encoded)});
+  jwpqt::core::EdictSearchOptions options;
+  options.contingent.enabled = true;
+  options.direct.require_beginning = true;
+  options.direct.require_end = true;
+  const jwpqt::core::EdictSearchReport report = jwpqt::core::search_edict(
+      fixture.dictionary, fixture.index, query(long_word), options);
+  require(report.results.size() == 1 && report.queries == 2 &&
+              report.results[0].stage ==
+                  jwpqt::core::EdictSearchStage::kContingent,
+          "Long kanji contingent search did not use its direct fallback");
+
+  jwpqt::core::JwpText oversized(101, 0x3021);
+  const jwpqt::core::EdictQuery truncated =
+      jwpqt::core::prepare_edict_query(oversized);
+  require(truncated.truncated, "Contingent truncation fixture was not truncated");
+  const jwpqt::core::EdictSearchReport skipped = jwpqt::core::search_edict(
+      fixture.dictionary, fixture.index, truncated, options);
+  require(skipped.results.empty() && skipped.queries == 1,
+          "Contingent search ignored the caller's truncated-query state");
+
+  jwpqt::core::JwpText limited_key = {0x3021, 0x2422};
+  limited_key.insert(limited_key.end(), 97, 0x2122);
+  const std::u32string limited_text =
+      jwpqt::core::decode_jwp_text(limited_key);
+  const std::string limited_source =
+      jwpqt::core::encode_utf8(limited_text + U"\u672c") + " /limited/\n";
+  const Fixture limited_fixture(limited_source, {0});
+  const jwpqt::core::EdictSearchReport limited = jwpqt::core::search_edict(
+      limited_fixture.dictionary, limited_fixture.index,
+      jwpqt::core::prepare_edict_query(limited_key), options);
+  require(limited.results.size() == 1 && limited.queries == 2,
+          "Long limited contingent search did not relax only End");
+}
+
+void test_contingent_does_not_count_jis_punctuation_as_kana() {
+  const jwpqt::core::JwpText punctuation = {0x2122, 0x2123, 0x2124};
+  const std::u32string decoded =
+      jwpqt::core::decode_jwp_text(punctuation) + U"\u65e5";
+  const std::string source = jwpqt::core::encode_utf8(decoded) + " /marks/\n";
+  const std::string encoded = jwpqt::core::encode_utf8(
+      jwpqt::core::decode_jwp_text(punctuation));
+  const Fixture fixture(source, {offset_of(source, encoded)});
+  jwpqt::core::EdictSearchOptions options;
+  options.contingent.enabled = true;
+  options.contingent.forced = true;
+  options.direct.require_beginning = true;
+  options.direct.require_end = true;
+  const jwpqt::core::EdictSearchReport report = jwpqt::core::search_edict(
+      fixture.dictionary, fixture.index,
+      jwpqt::core::prepare_edict_query(punctuation), options);
+  require(report.results.empty() && report.queries == 1,
+          "JIS punctuation bypassed contingent kana minima");
+}
+
 }  // namespace
 
 int main() {
@@ -449,5 +670,12 @@ int main() {
   test_pattern_search_applies_expanded_ascii_boundaries();
   test_pattern_search_limits_and_occurrence_identity();
   test_pattern_search_uses_japanese_boundaries_and_index_code_page();
+  test_contingent_kanji_search_and_name_filtering();
+  test_contingent_kana_limits_and_forced_mode();
+  test_contingent_honorific_retry();
+  test_contingent_filtered_honorific_falls_through();
+  test_contingent_adaptive_selectivity_and_structural_minima();
+  test_contingent_long_query_fallback_and_truncation();
+  test_contingent_does_not_count_jis_punctuation_as_kana();
   return 0;
 }

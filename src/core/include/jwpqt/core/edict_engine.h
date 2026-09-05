@@ -18,6 +18,7 @@ enum class EdictSearchStage {
   kDirect,
   kAdaptive,
   kPattern,
+  kContingent,
 };
 
 struct EdictSearchResult {
@@ -29,6 +30,11 @@ struct EdictSearchResult {
 };
 
 struct EdictSearchOptions {
+  struct Contingent {
+    bool enabled = false;
+    bool forced = false;
+    bool names_mode = false;
+  };
   EdictDirectSearchOptions direct;
   EdictNameFilterOptions name_filter;
   EdictDeinflectionOptions deinflection;
@@ -40,6 +46,7 @@ struct EdictSearchOptions {
   std::size_t candidate_matches = 1'000'000;
   std::size_t results = 1'000'000;
   std::size_t lookup_steps = 64U * 1024U * 1024U;
+  Contingent contingent;
 };
 
 struct EdictSearchReport {

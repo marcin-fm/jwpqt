@@ -253,6 +253,12 @@ legacy file structures.
     `[<query>*`. It reproduces the first-kanji anchor split while rejecting
     truncated, oversized, non-Japanese, kanji-free, and pattern-bearing inputs
     before wildcard execution.
+62. EDICT contingent orchestration reproduces source eligibility, forced mode,
+    adaptive likely-ending selectivity, honorific-prefix exact retry, kanji
+    wildcard expansion, long-key and kana boundary-relaxed retries, and forced
+    personal/place rejection. Direct, contingent, and following adaptive stages
+    share query, raw-candidate, accepted-result, and actual index/matcher work
+    budgets; continuation depends on accepted filtered results.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -261,8 +267,7 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Port EDICT contingent search, then add ordered dictionary resources and
-   native result-view slices.
+1. Add ordered EDICT dictionary resources and native result-view slices.
 2. Port paged printing and clipboard color policy over the rich JWP document
    layout.
 3. Port configuration, remaining import/export paths, and help.
