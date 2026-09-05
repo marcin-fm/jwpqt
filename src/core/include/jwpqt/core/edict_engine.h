@@ -27,6 +27,12 @@ struct EdictSearchResult {
   JwpText query;
   EdictSearchStage stage = EdictSearchStage::kDirect;
   std::size_t adaptive_pass = 0;
+  std::size_t source_index = 0;
+};
+
+struct EdictSearchSource {
+  const EdictDictionary* dictionary = nullptr;
+  const EdictIndex* index = nullptr;
 };
 
 struct EdictSearchOptions {
@@ -73,6 +79,15 @@ EdictSearchReport search_edict_linear(
 
 EdictSearchReport search_edict_pattern_linear(
     const EdictDictionary& dictionary, const EdictSearchPlan& plan,
+    const EdictSearchOptions& options = EdictSearchOptions{});
+
+EdictSearchReport search_edict_sources(
+    const std::vector<EdictSearchSource>& sources, const EdictQuery& query,
+    const EdictSearchOptions& options = EdictSearchOptions{});
+
+EdictSearchReport search_edict_pattern_sources(
+    const std::vector<EdictSearchSource>& sources,
+    const EdictSearchPlan& plan,
     const EdictSearchOptions& options = EdictSearchOptions{});
 
 }  // namespace jwpqt::core

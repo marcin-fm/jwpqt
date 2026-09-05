@@ -709,6 +709,30 @@ void test_linear_backend_runs_every_search_stage() {
           "Linear contingent orchestration did not use wildcard expansion");
 }
 
+void test_multi_source_direct_phase_precedes_adaptive() {
+  const jwpqt::core::EdictDictionary adaptive_dictionary =
+      jwpqt::core::EdictDictionary::parse(
+          jwpqt::core::encode_utf8(U"\u3042\u304f") + " /adaptive/\n",
+          jwpqt::core::EdictEncoding::kUtf8);
+  const jwpqt::core::EdictDictionary direct_dictionary =
+      jwpqt::core::EdictDictionary::parse(
+          jwpqt::core::encode_utf8(U"\u3042\u3044") + " /direct/\n",
+          jwpqt::core::EdictEncoding::kUtf8);
+  const std::vector<jwpqt::core::EdictSearchSource> sources{
+      {&adaptive_dictionary, nullptr}, {&direct_dictionary, nullptr}};
+  jwpqt::core::EdictSearchOptions options = adaptive_options();
+  const jwpqt::core::EdictSearchReport report =
+      jwpqt::core::search_edict_sources(sources, query(U"\u3042\u3044"),
+                                        options);
+  require(report.results.size() == 1 && report.queries == 2 &&
+              report.results[0].source_index == 1 &&
+              report.results[0].stage ==
+                  jwpqt::core::EdictSearchStage::kDirect &&
+              report.results[0].record.definitions ==
+                  std::vector<std::u32string>{U"direct"},
+          "Multi-source search ran adaptive work before every direct source");
+}
+
 }  // namespace
 
 int main() {
@@ -732,5 +756,6 @@ int main() {
   test_contingent_long_query_fallback_and_truncation();
   test_contingent_does_not_count_jis_punctuation_as_kana();
   test_linear_backend_runs_every_search_stage();
+  test_multi_source_direct_phase_precedes_adaptive();
   return 0;
 }

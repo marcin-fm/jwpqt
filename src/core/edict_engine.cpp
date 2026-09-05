@@ -105,17 +105,56 @@ class SearchCollector {
  public:
   SearchCollector(const EdictDictionary& dictionary, const EdictIndex& index,
                    const EdictSearchOptions& options)
-      : dictionary_(dictionary), index_(&index), options_(options) {}
+      : sources_{{&dictionary, &index}}, options_(options) {}
 
   SearchCollector(const EdictDictionary& dictionary,
                   const EdictSearchOptions& options)
-      : dictionary_(dictionary), index_(nullptr), options_(options) {}
+      : sources_{{&dictionary, nullptr}}, options_(options) {}
+
+  SearchCollector(std::vector<EdictSearchSource> sources,
+                  const EdictSearchOptions& options)
+      : sources_(std::move(sources)), options_(options) {
+    for (const EdictSearchSource& source : sources_) {
+      if (source.dictionary == nullptr) {
+        throw EdictSearchError("EDICT search source has no dictionary");
+      }
+    }
+  }
 
   void run(const EdictQuery& query, EdictSearchStage stage,
            std::size_t adaptive_pass,
-           std::optional<EdictDirectSearchOptions> direct_override =
-               std::nullopt,
-           bool reject_names = false) {
+            std::optional<EdictDirectSearchOptions> direct_override =
+                std::nullopt,
+            bool reject_names = false) {
+    for (std::size_t source_index = 0; source_index < sources_.size();
+         ++source_index) {
+      run_one(sources_[source_index], source_index, query, stage,
+              adaptive_pass, direct_override, reject_names);
+    }
+  }
+
+  void run_pattern(
+      const EdictSearchPlan& plan,
+      std::optional<EdictDirectSearchOptions> direct_override = std::nullopt,
+      EdictSearchStage stage = EdictSearchStage::kPattern,
+      bool reject_names = false) {
+    validate_edict_pattern_plan(plan);
+    for (std::size_t source_index = 0; source_index < sources_.size();
+         ++source_index) {
+      run_pattern_one(sources_[source_index], source_index, plan,
+                      direct_override, stage, reject_names);
+    }
+  }
+
+  const EdictSearchReport& report() const noexcept { return report_; }
+  EdictSearchReport finish() { return std::move(report_); }
+
+ private:
+  void run_one(const EdictSearchSource& source, std::size_t source_index,
+               const EdictQuery& query, EdictSearchStage stage,
+               std::size_t adaptive_pass,
+               std::optional<EdictDirectSearchOptions> direct_override,
+               bool reject_names) {
     consume_query();
 
     EdictDirectSearchOptions direct =
@@ -129,37 +168,37 @@ class SearchCollector {
         std::min(direct.lookup_steps,
                  options_.lookup_steps - report_.lookup_steps);
     EdictDirectSearchReport found;
-    if (index_ != nullptr) {
+    if (source.index != nullptr) {
       found = stage == EdictSearchStage::kAdaptive
-                  ? search_edict_adaptive_report(dictionary_, *index_, query,
-                                                 direct)
-                  : search_edict_direct_report(dictionary_, *index_, query,
-                                               direct);
+                  ? search_edict_adaptive_report(*source.dictionary,
+                                                 *source.index, query, direct)
+                  : search_edict_direct_report(*source.dictionary,
+                                               *source.index, query, direct);
     } else {
       found = stage == EdictSearchStage::kAdaptive
-                  ? search_edict_adaptive_linear_report(dictionary_, query,
-                                                        direct)
-                  : search_edict_direct_linear_report(dictionary_, query,
-                                                      direct);
+                  ? search_edict_adaptive_linear_report(*source.dictionary,
+                                                        query, direct)
+                  : search_edict_direct_linear_report(*source.dictionary,
+                                                      query, direct);
     }
     report_.lookup_steps += found.lookup_steps;
     report_.candidate_matches += found.candidate_matches;
 
     std::size_t accepted = 0;
     for (const EdictIndexMatch& match : found.matches) {
-      accepted += append(match, query.key, stage, adaptive_pass, accepted,
-                          accepted_limit, reject_names)
+      accepted += append(*source.dictionary, source_index, match, query.key,
+                          stage, adaptive_pass, accepted, accepted_limit,
+                          reject_names)
                        ? 1U
                        : 0U;
     }
   }
 
-  void run_pattern(
+  void run_pattern_one(
+      const EdictSearchSource& source, std::size_t source_index,
       const EdictSearchPlan& plan,
-      std::optional<EdictDirectSearchOptions> direct_override = std::nullopt,
-      EdictSearchStage stage = EdictSearchStage::kPattern,
-      bool reject_names = false) {
-    validate_edict_pattern_plan(plan);
+      std::optional<EdictDirectSearchOptions> direct_override,
+      EdictSearchStage stage, bool reject_names) {
     consume_query();
 
     EdictDirectSearchOptions direct =
@@ -176,10 +215,10 @@ class SearchCollector {
         std::min(direct.lookup_steps,
                  options_.lookup_steps - report_.lookup_steps);
     EdictDirectSearchReport anchors =
-        index_ != nullptr
-            ? search_edict_direct_report(dictionary_, *index_, plan.anchor,
-                                         direct)
-            : search_edict_direct_linear_report(dictionary_, plan.anchor,
+        source.index != nullptr
+            ? search_edict_direct_report(*source.dictionary, *source.index,
+                                         plan.anchor, direct)
+            : search_edict_direct_linear_report(*source.dictionary, plan.anchor,
                                                 direct);
     report_.candidate_matches += anchors.candidate_matches;
     report_.lookup_steps += anchors.lookup_steps;
@@ -196,10 +235,10 @@ class SearchCollector {
           std::min(pattern.work_steps,
                    options_.lookup_steps - report_.lookup_steps);
       pattern.utf8_code_page =
-          index_ != nullptr ? index_->utf8_code_page()
-                            : dictionary_.mixed_code_page();
+          source.index != nullptr ? source.index->utf8_code_page()
+                                  : source.dictionary->mixed_code_page();
       const EdictPatternMatchReport expanded = match_edict_pattern_report(
-          dictionary_, anchor, plan, pattern);
+          *source.dictionary, anchor, plan, pattern);
       report_.lookup_steps += expanded.work_steps;
       if (!expanded.match.has_value()) {
         reject();
@@ -209,7 +248,7 @@ class SearchCollector {
       const EdictIndexMatch match{expanded.match->byte_offset,
                                   expanded.match->byte_length,
                                   expanded.match->record_index};
-      if (!edict_match_boundaries(dictionary_, match, boundary_kind,
+      if (!edict_match_boundaries(*source.dictionary, match, boundary_kind,
                                   boundaries)) {
         reject();
         continue;
@@ -220,17 +259,12 @@ class SearchCollector {
                       plan.anchor.key.end());
         query->insert(query->end(), plan.postfix.begin(), plan.postfix.end());
       }
-      accepted += append(match, *query, stage, 0, accepted, accepted_limit,
-                          reject_names)
+      accepted += append(*source.dictionary, source_index, match, *query,
+                          stage, 0, accepted, accepted_limit, reject_names)
                        ? 1U
                        : 0U;
     }
   }
-
-  const EdictSearchReport& report() const noexcept { return report_; }
-  EdictSearchReport finish() { return std::move(report_); }
-
- private:
   void consume_query() {
     if (report_.queries >= options_.queries) {
       throw EdictSearchError("EDICT search exceeds its query limit");
@@ -245,11 +279,12 @@ class SearchCollector {
     ++report_.rejected;
   }
 
-  bool append(const EdictIndexMatch& match, const JwpText& query,
+  bool append(const EdictDictionary& dictionary, std::size_t source_index,
+              const EdictIndexMatch& match, const JwpText& query,
                EdictSearchStage stage, std::size_t adaptive_pass,
                std::size_t accepted, std::size_t accepted_limit,
                bool reject_names) {
-    const std::vector<EdictRecord>& records = dictionary_.records();
+    const std::vector<EdictRecord>& records = dictionary.records();
     if (match.record_index >= records.size()) {
       throw EdictSearchError("EDICT search result record is invalid");
     }
@@ -269,12 +304,11 @@ class SearchCollector {
       throw EdictSearchError("EDICT search exceeds its result limit");
     }
     report_.results.push_back(
-        {std::move(*record), match, query, stage, adaptive_pass});
+        {std::move(*record), match, query, stage, adaptive_pass, source_index});
     return true;
   }
 
-  const EdictDictionary& dictionary_;
-  const EdictIndex* index_;
+  std::vector<EdictSearchSource> sources_;
   const EdictSearchOptions& options_;
   EdictSearchReport report_;
 };
@@ -309,15 +343,11 @@ void run_contingent(SearchCollector& collector, const EdictQuery& query,
   collector.run(query, EdictSearchStage::kContingent, 0, boundaries, true);
 }
 
-}  // namespace
-
-EdictSearchReport search_edict(const EdictDictionary& dictionary,
-                               const EdictIndex& index,
-                               const EdictQuery& query,
-                               const EdictSearchOptions& options) {
+EdictSearchReport run_search(SearchCollector collector,
+                             const EdictQuery& query,
+                             const EdictSearchOptions& options) {
   EdictQuery validated = prepare_edict_query(query.key);
   validated.truncated = validated.truncated || query.truncated;
-  SearchCollector collector(dictionary, index, options);
   collector.run(validated, EdictSearchStage::kDirect, 0);
 
   if (collector.report().results.empty()) {
@@ -348,14 +378,23 @@ EdictSearchReport search_edict(const EdictDictionary& dictionary,
 
     const std::size_t pass = steps[cursor].pass;
     do {
-      const EdictQuery candidate =
-          prepare_edict_adaptive_query(steps[cursor].key);
-      collector.run(candidate, EdictSearchStage::kAdaptive, pass);
+      collector.run(prepare_edict_adaptive_query(steps[cursor].key),
+                    EdictSearchStage::kAdaptive, pass);
       ++cursor;
     } while (cursor < steps.size() && steps[cursor].pass == pass);
     first_pass = false;
   }
   return collector.finish();
+}
+
+}  // namespace
+
+EdictSearchReport search_edict(const EdictDictionary& dictionary,
+                               const EdictIndex& index,
+                               const EdictQuery& query,
+                               const EdictSearchOptions& options) {
+  return run_search(SearchCollector(dictionary, index, options), query,
+                    options);
 }
 
 EdictSearchReport search_edict_pattern(const EdictDictionary& dictionary,
@@ -370,51 +409,27 @@ EdictSearchReport search_edict_pattern(const EdictDictionary& dictionary,
 EdictSearchReport search_edict_linear(const EdictDictionary& dictionary,
                                       const EdictQuery& query,
                                       const EdictSearchOptions& options) {
-  EdictQuery validated = prepare_edict_query(query.key);
-  validated.truncated = validated.truncated || query.truncated;
-  SearchCollector collector(dictionary, options);
-  collector.run(validated, EdictSearchStage::kDirect, 0);
-
-  if (collector.report().results.empty()) {
-    const std::optional<ContingentDecision> contingent =
-        contingent_decision(validated, options);
-    if (contingent.has_value()) {
-      run_contingent(collector, validated, options, *contingent);
-    }
-  }
-
-  if (!options.adaptive || validated.kind == EdictQueryKind::kAscii ||
-      (!collector.report().results.empty() && !options.adaptive_always)) {
-    return collector.finish();
-  }
-
-  const std::vector<EdictDeinflectionQuery> steps =
-      generate_edict_deinflection_steps(validated, options.deinflection);
-  std::size_t cursor = 0;
-  bool first_pass = true;
-  while (cursor < steps.size()) {
-    const bool keep_searching =
-        collector.report().results.empty() ||
-        (first_pass && options.adaptive_always) ||
-        (options.adaptive_show_all && options.direct.require_end);
-    if (!keep_searching) {
-      break;
-    }
-    const std::size_t pass = steps[cursor].pass;
-    do {
-      collector.run(prepare_edict_adaptive_query(steps[cursor].key),
-                    EdictSearchStage::kAdaptive, pass);
-      ++cursor;
-    } while (cursor < steps.size() && steps[cursor].pass == pass);
-    first_pass = false;
-  }
-  return collector.finish();
+  return run_search(SearchCollector(dictionary, options), query, options);
 }
 
 EdictSearchReport search_edict_pattern_linear(
     const EdictDictionary& dictionary, const EdictSearchPlan& plan,
     const EdictSearchOptions& options) {
   SearchCollector collector(dictionary, options);
+  collector.run_pattern(plan);
+  return collector.finish();
+}
+
+EdictSearchReport search_edict_sources(
+    const std::vector<EdictSearchSource>& sources, const EdictQuery& query,
+    const EdictSearchOptions& options) {
+  return run_search(SearchCollector(sources, options), query, options);
+}
+
+EdictSearchReport search_edict_pattern_sources(
+    const std::vector<EdictSearchSource>& sources,
+    const EdictSearchPlan& plan, const EdictSearchOptions& options) {
+  SearchCollector collector(sources, options);
   collector.run_pattern(plan);
   return collector.finish();
 }

@@ -294,7 +294,10 @@ legacy file structures.
 68. Direct, adaptive, wildcard, and contingent orchestration now runs over
     either source-bound JDX lookup or the physical unindexed scan through the
     same filtering, boundary, continuation, result, candidate, query, and work
-    limits. Linear wildcard expansion uses the dictionary-owned extension page.
+    limits. A multi-source collector runs each query across all configured
+    backends before advancing to contingent or adaptive work, preserving global
+    phase order. Linear wildcard expansion uses the dictionary-owned extension
+    page.
 69. Ordered resource dispatch searches normal dictionaries in configured order,
     routes indexed and unindexed resources through their matching backend, and
     optionally appends personal-name and place-name passes from the first names
