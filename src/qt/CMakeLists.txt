@@ -40,6 +40,8 @@ add_library(jwpqt_qt_ui STATIC
   edict_user_dictionary_dialog.h
   jwp_editor.cpp
   jwp_editor.h
+  kanji_code_lookup_dialog.cpp
+  kanji_code_lookup_dialog.h
   kanji_info_dialog.cpp
   kanji_info_dialog.h
   kanji_lookup_dialog.cpp
