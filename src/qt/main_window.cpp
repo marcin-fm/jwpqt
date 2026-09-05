@@ -948,6 +948,13 @@ void MainWindow::create_actions() {
           [this] { replace_document(); });
 
   QMenu* format_menu = menuBar()->addMenu(tr("F&ormat"));
+  format_file_action_ = format_menu->addAction(tr("Format &File..."));
+  format_file_action_->setObjectName(QStringLiteral("formatFileAction"));
+  format_file_action_->setShortcut(
+      QKeySequence(QStringLiteral("Alt+Ctrl+F")));
+  connect(format_file_action_, &QAction::triggered, this,
+          [this] { format_file_paragraphs(); });
+
   format_paragraph_action_ =
       format_menu->addAction(tr("&Paragraph..."));
   format_paragraph_action_->setObjectName(
@@ -959,6 +966,7 @@ void MainWindow::create_actions() {
 
   page_layout_action_ = format_menu->addAction(tr("Page &Layout..."));
   page_layout_action_->setObjectName(QStringLiteral("pageLayoutAction"));
+  page_layout_action_->setShortcut(QKeySequence(QStringLiteral("Alt+L")));
   connect(page_layout_action_, &QAction::triggered, this,
           [this] { format_page_layout(); });
 
@@ -1318,7 +1326,10 @@ void MainWindow::update_conversion_actions() {
   print_action_->setEnabled(!active);
   printer_setup_action_->setEnabled(!active);
   user_dictionary_action_->setEnabled(!active && wnn_resources_ != nullptr);
-  format_paragraph_action_->setEnabled(!active && jwp_document_.has_value());
+  const bool has_paragraphs = jwp_document_.has_value() &&
+                              jwp_document_->paragraph_count() != 0;
+  format_file_action_->setEnabled(!active && has_paragraphs);
+  format_paragraph_action_->setEnabled(!active && has_paragraphs);
   page_layout_action_->setEnabled(!active && jwp_document_.has_value());
   insert_page_break_action_->setEnabled(!active && jwp_document_.has_value());
   update_kanji_color_actions();
@@ -3357,6 +3368,32 @@ void MainWindow::format_document_paragraphs() {
   }
 }
 
+void MainWindow::format_file_paragraphs() {
+  finish_kana_input();
+  if (conversion_active() || !jwp_document_.has_value() ||
+      jwp_document_->paragraph_count() == 0) {
+    return;
+  }
+  try {
+    const QString text = editor_->toPlainText();
+    const QTextCursor cursor = editor_->textCursor();
+    const core::JwpPosition caret = core::jwp_plain_text_position(
+        *jwp_document_, utf32_offset_for_utf16(text, cursor.position()));
+    const std::optional<core::JwpParagraphFormat> format =
+        prompt_for_paragraph_format(
+            jwp_document_->paragraph_format(caret.paragraph));
+    if (format.has_value() &&
+        apply_paragraph_format(0, jwp_document_->paragraph_count() - 1,
+                               *format, cursor, caret)) {
+      statusBar()->showMessage(tr("File format applied"), 2000);
+    }
+  } catch (const std::exception& error) {
+    statusBar()->showMessage(
+        tr("Could not format file: %1").arg(QString::fromUtf8(error.what())),
+        5000);
+  }
+}
+
 void MainWindow::format_page_layout() {
   finish_kana_input();
   if (conversion_active() || !jwp_document_.has_value())
@@ -3787,36 +3824,9 @@ bool MainWindow::format_paragraphs(
         *jwp_document_,
         utf32_offset_for_utf16(text, cursor.selectionEnd()));
 
-    core::JwpDocumentModel candidate = *jwp_document_;
-    core::JwpDocumentHistory history = jwp_history_;
-    history.begin(candidate, caret);
-    candidate.format_paragraphs(selection_begin.paragraph,
-                                selection_end.paragraph, format);
-    if (!history.commit(candidate, caret)) {
-      return true;
-    }
-    const int page_width = editor_->character_page_width();
-    if (page_width > 0 &&
-        (format.left_indent + format.right_indent >= page_width ||
-         format.left_indent + format.right_indent + format.first_indent >=
-             page_width)) {
-      throw core::JwpDocumentEditError(
-          "paragraph indents leave no usable line width");
-    }
-
-    apply_jwp_presentation(candidate.document(), jwp_code_page_);
-    jwp_document_ = std::move(candidate);
-    jwp_history_ = std::move(history);
-    jwp_caret_ = caret;
-    expected_jwp_caret_.reset();
-    editor_->setTextCursor(cursor);
-    const bool modified = !saved_jwp_document_.has_value() ||
-                          jwp_document_->document() != *saved_jwp_document_;
-    editor_->document()->setModified(modified);
-    update_undo_actions();
-    update_title();
-    statusBar()->showMessage(tr("Paragraph format applied"), 2000);
-    return true;
+    return apply_paragraph_format(selection_begin.paragraph,
+                                  selection_end.paragraph, format, cursor,
+                                  caret);
   } catch (const std::exception& error) {
     statusBar()->showMessage(
         tr("Could not format paragraphs: %1")
@@ -3824,6 +3834,41 @@ bool MainWindow::format_paragraphs(
         5000);
     return false;
   }
+}
+
+bool MainWindow::apply_paragraph_format(
+    std::size_t first_paragraph, std::size_t last_paragraph,
+    const core::JwpParagraphFormat& format, const QTextCursor& cursor,
+    core::JwpPosition caret) {
+  core::JwpDocumentModel candidate = *jwp_document_;
+  core::JwpDocumentHistory history = jwp_history_;
+  history.begin(candidate, caret);
+  candidate.format_paragraphs(first_paragraph, last_paragraph, format);
+  if (!history.commit(candidate, caret))
+    return true;
+
+  const int page_width = editor_->character_page_width();
+  if (page_width > 0 &&
+      (format.left_indent + format.right_indent >= page_width ||
+       format.left_indent + format.right_indent + format.first_indent >=
+           page_width)) {
+    throw core::JwpDocumentEditError(
+        "paragraph indents leave no usable line width");
+  }
+
+  apply_jwp_presentation(candidate.document(), jwp_code_page_);
+  jwp_document_ = std::move(candidate);
+  jwp_history_ = std::move(history);
+  jwp_caret_ = caret;
+  expected_jwp_caret_.reset();
+  editor_->setTextCursor(cursor);
+  const bool modified = !saved_jwp_document_.has_value() ||
+                        jwp_document_->document() != *saved_jwp_document_;
+  editor_->document()->setModified(modified);
+  update_undo_actions();
+  update_title();
+  statusBar()->showMessage(tr("Paragraph format applied"), 2000);
+  return true;
 }
 
 bool MainWindow::insert_page_break() {

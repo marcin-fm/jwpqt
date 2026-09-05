@@ -36,6 +36,7 @@ class QEvent;
 class QLabel;
 class QMenu;
 class QPrinter;
+class QTextCursor;
 class QTextEdit;
 
 namespace jwpqt::qt {
@@ -252,6 +253,12 @@ class MainWindow : public QMainWindow {
   void find_again(core::JwpSearchDirection direction);
   void replace_document();
   void format_document_paragraphs();
+  void format_file_paragraphs();
+  bool apply_paragraph_format(std::size_t first_paragraph,
+                              std::size_t last_paragraph,
+                              const core::JwpParagraphFormat& format,
+                              const QTextCursor& cursor,
+                              core::JwpPosition caret);
   void format_page_layout();
   bool apply_page_layout(const core::JwpDocument& requested);
   void print_current_document();
@@ -294,6 +301,7 @@ class MainWindow : public QMainWindow {
   QAction* stroke_bushu_lookup_action_ = nullptr;
   QAction* kanji_reading_lookup_action_ = nullptr;
   QAction* kanji_lookup_action_ = nullptr;
+  QAction* format_file_action_ = nullptr;
   QAction* format_paragraph_action_ = nullptr;
   QAction* page_layout_action_ = nullptr;
   QAction* insert_page_break_action_ = nullptr;

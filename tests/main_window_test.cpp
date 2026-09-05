@@ -1033,10 +1033,19 @@ void test_jwp_paragraph_formatting(const QString& directory) {
   QApplication::processEvents();
   QTextEdit* editor = window.findChild<QTextEdit*>();
   QAction* format = find_action(window, "formatParagraphAction");
+  QAction* format_file = find_action(window, "formatFileAction");
+  QAction* page_layout = find_action(window, "pageLayoutAction");
   QAction* undo = find_action(window, "undoAction");
   QAction* redo = find_action(window, "redoAction");
-  require(editor != nullptr && format != nullptr && undo != nullptr &&
-              redo != nullptr && format->isEnabled(),
+  require(editor != nullptr && format != nullptr && format_file != nullptr &&
+              page_layout != nullptr && undo != nullptr && redo != nullptr &&
+              format->isEnabled() && format_file->isEnabled() &&
+              format->shortcut() ==
+                  QKeySequence(QStringLiteral("Alt+Shift+F")) &&
+              format_file->shortcut() ==
+                  QKeySequence(QStringLiteral("Alt+Ctrl+F")) &&
+              page_layout->shortcut() ==
+                  QKeySequence(QStringLiteral("Alt+L")),
           "JWP paragraph-format controls were not enabled");
 
   QTextCursor selection = editor->textCursor();
@@ -1097,10 +1106,46 @@ void test_jwp_paragraph_formatting(const QString& directory) {
   require(window.save_path(saved_path) &&
               jwpqt::qt::read_jwp_file(saved_path) == formatted,
           "Paragraph formatting did not survive a JWP save");
+
+  const jwpqt::core::JwpParagraphFormat file_format{7, 8, -4, 220};
+  window.resize(900, 680);
+  QApplication::processEvents();
+  selection.setPosition(0);
+  selection.setPosition(2, QTextCursor::KeepAnchor);
+  editor->setTextCursor(selection);
+  window.next_paragraph_format = file_format;
+  format_file->trigger();
+  const jwpqt::core::JwpDocument formatted_file =
+      *window.current_jwp_document();
+  require(window.paragraph_format_prompt_count == 3 &&
+              formatted_file.paragraphs.size() == source.paragraphs.size(),
+          "Format File did not prompt or preserve paragraph count");
+  for (std::size_t index = 0; index < formatted_file.paragraphs.size(); ++index) {
+    const auto& actual = formatted_file.paragraphs[index];
+    const auto& original = source.paragraphs[index];
+    require(actual.left_indent == file_format.left_indent &&
+                actual.right_indent == file_format.right_indent &&
+                actual.first_indent == file_format.first_indent &&
+                actual.line_spacing == file_format.line_spacing &&
+                actual.text == original.text &&
+                actual.page_break == original.page_break,
+            "Format File did not apply one format without changing content");
+  }
+  require(editor->textCursor().selectionStart() == 0 &&
+              editor->textCursor().selectionEnd() == 2,
+          "Format File did not preserve the editor selection");
+  undo->trigger();
+  require(*window.current_jwp_document() == formatted,
+          "Format File did not undo as one transaction");
+  redo->trigger();
+  require(*window.current_jwp_document() == formatted_file,
+          "Format File redo did not restore every paragraph");
+
   const QString text_path = directory + QStringLiteral("/paragraph-format.txt");
   write_bytes(text_path, QByteArray("plain"));
   require(window.open_path(text_path, jwpqt::core::TextEncoding::kUtf8) &&
-              !format->isEnabled() && !window.format_paragraphs(applied),
+              !format->isEnabled() && !format_file->isEnabled() &&
+              !window.format_paragraphs(applied),
           "Plain text did not disable JWP paragraph formatting");
 
   PromptingWindow mismatched;
