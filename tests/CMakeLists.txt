@@ -142,6 +142,12 @@ add_executable(jwpqt_kanji_color_tests
 target_link_libraries(jwpqt_kanji_color_tests PRIVATE jwpqt_core)
 target_compile_options(jwpqt_kanji_color_tests PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME core_kanji_color COMMAND jwpqt_kanji_color_tests)
+add_executable(jwpqt_kanji_color_list_tests
+  kanji_color_list_test.cpp
+)
+target_link_libraries(jwpqt_kanji_color_list_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_kanji_color_list_tests PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME core_kanji_color_list COMMAND jwpqt_kanji_color_list_tests)
 add_test(NAME core_kana_input COMMAND jwpqt_kana_input_tests)
 add_test(NAME core_wnn_dictionary COMMAND jwpqt_wnn_dictionary_tests)
 add_test(NAME core_wnn_lookup COMMAND jwpqt_wnn_lookup_tests)

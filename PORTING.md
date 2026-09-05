@@ -118,6 +118,10 @@ legacy file structures.
     list-member/non-member precedence over uncommon coloring, the historical
     fixed-list index arithmetic, and Windows `COLORREF` byte/fallback decoding
     without coupling those decisions to Qt or persisted list storage.
+36. A portable fixed-capacity kanji-color list parses ordered or unordered
+    canonical EUC pairs, deduplicates membership, writes sorted canonical
+    `colkanji.lst` bytes, and can append raw kanji tokens from a JWP document.
+    Truncated, non-EUC, and out-of-capacity records fail loudly.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
