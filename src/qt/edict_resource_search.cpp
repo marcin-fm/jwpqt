@@ -129,27 +129,48 @@ void merge_report(EdictResourceSearchReport& destination,
   }
 }
 
-void run_resource(const EdictResourceSet& resources,
-                  std::size_t registry_index,
-                  const QString& config_directory,
-                  const core::EdictSearchPlan& plan,
-                  const EdictResourceSearchOptions& options,
-                  const std::optional<core::EdictNameFilterOptions>& filter,
-                  bool names_mode, EdictResourceSearchReport& report) {
-  AcquiredResource acquired = acquire_resource(
-      resources, registry_index, config_directory, options.reload,
-      report.failures);
-  const EdictLoadedResource* resource = acquired.get();
-  if (resource == nullptr) {
+void merge_multi_report(
+    EdictResourceSearchReport& destination, core::EdictSearchReport source,
+    const std::vector<const EdictLoadedResource*>& resources) {
+  checked_add(destination.rejected, source.rejected,
+              "EDICT rejected-result count overflows");
+  checked_add(destination.candidate_matches, source.candidate_matches,
+              "EDICT candidate count overflows");
+  checked_add(destination.queries, source.queries,
+              "EDICT query count overflows");
+  checked_add(destination.lookup_steps, source.lookup_steps,
+              "EDICT lookup work overflows");
+  for (core::EdictSearchResult& result : source.results) {
+    if (result.source_index >= resources.size()) {
+      throw core::EdictSearchError("EDICT result source is invalid");
+    }
+    const EdictLoadedResource& resource = *resources[result.source_index];
+    destination.results.push_back(
+        {resource.registry_index, resource.label, std::move(result)});
+  }
+}
+
+void run_loaded_resources(
+    const std::vector<const EdictLoadedResource*>& resources,
+    const core::EdictSearchPlan& plan,
+    const EdictResourceSearchOptions& options,
+    EdictResourceSearchReport& report) {
+  if (resources.empty()) {
     return;
   }
-  core::EdictSearchOptions search = remaining_options(options, report);
-  if (filter.has_value()) {
-    search.name_filter = *filter;
-    search.adaptive = false;
+  std::vector<core::EdictSearchSource> sources;
+  sources.reserve(resources.size());
+  for (const EdictLoadedResource* resource : resources) {
+    sources.push_back(
+        {&resource->dictionary,
+         resource->index.has_value() ? &*resource->index : nullptr});
   }
-  search.contingent.names_mode = names_mode;
-  merge_report(report, search_one(*resource, plan, search), *resource);
+  const core::EdictSearchOptions search = remaining_options(options, report);
+  core::EdictSearchReport found =
+      plan.kind == core::EdictSearchPlanKind::kPattern
+          ? core::search_edict_pattern_sources(sources, plan, search)
+          : core::search_edict_sources(sources, plan.anchor, search);
+  merge_multi_report(report, std::move(found), resources);
 }
 
 void run_loaded_resource(
@@ -184,9 +205,13 @@ EdictResourceSearchReport search_edict_resources(
   }
   if (plan.adaptive_disabled) {
     effective.search.adaptive = false;
+    effective.search.contingent.enabled = false;
+    effective.search.contingent.forced = false;
   }
 
   EdictResourceSearchReport report;
+  std::vector<AcquiredResource> acquired_resources;
+  acquired_resources.reserve(resources.registry.entries.size());
   for (std::size_t index = 0; index < resources.registry.entries.size();
        ++index) {
     const core::EdictRegistryEntry& entry = resources.registry.entries[index];
@@ -196,9 +221,18 @@ EdictResourceSearchReport search_edict_resources(
          !effective.classical)) {
       continue;
     }
-    run_resource(resources, index, config_directory, plan, effective,
-                 std::nullopt, false, report);
+    AcquiredResource acquired = acquire_resource(
+        resources, index, config_directory, effective.reload, report.failures);
+    if (acquired.get() != nullptr) {
+      acquired_resources.push_back(std::move(acquired));
+    }
   }
+  std::vector<const EdictLoadedResource*> normal_resources;
+  normal_resources.reserve(acquired_resources.size());
+  for (const AcquiredResource& acquired : acquired_resources) {
+    normal_resources.push_back(acquired.get());
+  }
+  run_loaded_resources(normal_resources, plan, effective, report);
 
   if (!effective.personal_names && !effective.place_names) {
     return report;
@@ -206,7 +240,9 @@ EdictResourceSearchReport search_edict_resources(
   for (std::size_t index = 0; index < resources.registry.entries.size();
        ++index) {
     const core::EdictRegistryEntry& entry = resources.registry.entries[index];
-    if (!entry.searched || entry.names == core::EdictRegistryNames::kNone) {
+    if (!entry.searched || entry.names == core::EdictRegistryNames::kNone ||
+        (entry.special == core::EdictRegistrySpecial::kClassical &&
+         !effective.classical)) {
       continue;
     }
     AcquiredResource acquired = acquire_resource(

@@ -301,10 +301,12 @@ legacy file structures.
 69. Ordered resource dispatch searches normal dictionaries in configured order,
     routes indexed and unindexed resources through their matching backend, and
     optionally appends personal-name and place-name passes from the first names
-    dictionary. One remaining-budget ledger spans every pass; non-keep files are
-    reloaded for each search and failures retain their quiet diagnostic state.
-    Classical resources require explicit opt-in, and failed names resources
-    fall through in registry order to the first usable names dictionary.
+    dictionary. Every direct query spans all normal resources before contingent
+    or adaptive phases advance. One remaining-budget ledger spans every pass;
+    non-keep files are reloaded for each search and failures retain their quiet
+    diagnostic state. Classical normal and names resources require explicit
+    opt-in, failed names resources fall through in registry order, and a
+    trailing-star plan disables contingent as well as adaptive retries.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and

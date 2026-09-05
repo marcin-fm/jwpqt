@@ -153,6 +153,29 @@ void test_global_budgets_span_resources(const QString& directory) {
       "Query budget did not span resources");
 }
 
+void test_direct_phase_spans_resources(const QString& directory) {
+  write_file(directory + "/adaptive-first",
+             jwpqt::core::encode_utf8(U"\u3042\u304f /adaptive/\n"));
+  write_file(directory + "/direct-second",
+             jwpqt::core::encode_utf8(U"\u3042\u304b /direct/\n"));
+  jwpqt::core::EdictRegistry registry;
+  registry.entries = {entry(u"Adaptive", u"adaptive-first", false, false),
+                      entry(u"Direct", u"direct-second", false, false)};
+  const jwpqt::qt::EdictResourceSet resources =
+      jwpqt::qt::load_edict_resources(registry, directory);
+  jwpqt::qt::EdictResourceSearchOptions options;
+  options.search.adaptive = true;
+  options.search.adaptive_always = false;
+
+  const auto report = jwpqt::qt::search_edict_resources(
+      resources, directory, query(U"\u3042\u304b"), options);
+  require(report.results.size() == 1 && report.queries == 2 &&
+              report.results[0].registry_index == 1 &&
+              report.results[0].result.record.definitions ==
+                  std::vector<std::u32string>{U"direct"},
+          "Earlier resource adaptive work ran before later direct search");
+}
+
 void test_classical_opt_in(const QString& directory) {
   write_file(directory + "/modern", "cat /modern/\n");
   write_file(directory + "/classical", "cat /classical/\n");
@@ -197,6 +220,37 @@ void test_names_fall_through_failed_resource(const QString& directory) {
           "Failed names resource suppressed a later usable resource");
 }
 
+void test_classical_names_require_opt_in(const QString& directory) {
+  write_file(directory + "/classical-names", "alice /(s) classical/\n");
+  write_file(directory + "/modern-names", "alice /(s) modern/\n");
+  jwpqt::core::EdictRegistry registry;
+  registry.entries = {entry(u"Classical", u"classical-names", true),
+                      entry(u"Modern", u"modern-names", true)};
+  registry.entries[0].special =
+      jwpqt::core::EdictRegistrySpecial::kClassical;
+  const jwpqt::qt::EdictResourceSet resources =
+      jwpqt::qt::load_edict_resources(registry, directory);
+  jwpqt::qt::EdictResourceSearchOptions options;
+  options.personal_names = true;
+
+  const auto modern = jwpqt::qt::search_edict_resources(
+      resources, directory, query(U"alice"), options);
+  require(modern.results.size() == 1 &&
+              modern.results[0].registry_index == 1 &&
+              modern.results[0].result.record.definitions ==
+                  std::vector<std::u32string>{U"(s) modern"},
+          "Classical names resource was used without explicit opt-in");
+
+  options.classical = true;
+  const auto classical = jwpqt::qt::search_edict_resources(
+      resources, directory, query(U"alice"), options);
+  require(classical.results.size() == 1 &&
+              classical.results[0].registry_index == 0 &&
+              classical.results[0].result.record.definitions ==
+                  std::vector<std::u32string>{U"(s) classical"},
+          "Classical names opt-in did not select the first usable resource");
+}
+
 void test_search_plan_flags_span_resources(const QString& directory) {
   const std::string open = jwpqt::core::encode_utf8(U"\u3042\u3044\u3046") +
                            " /open/\n";
@@ -211,6 +265,8 @@ void test_search_plan_flags_span_resources(const QString& directory) {
   jwpqt::qt::EdictResourceSearchOptions options;
   options.search.adaptive = true;
   options.search.adaptive_always = false;
+  options.search.contingent.enabled = true;
+  options.search.contingent.forced = true;
   options.search.direct.require_end = true;
   const jwpqt::qt::EdictResourceSearchReport opened =
       jwpqt::qt::search_edict_resources(
@@ -231,8 +287,10 @@ int main() {
   test_names_only_pseudo_passes(temporary.path());
   test_non_keep_reload_and_failure(temporary.path());
   test_global_budgets_span_resources(temporary.path());
+  test_direct_phase_spans_resources(temporary.path());
   test_classical_opt_in(temporary.path());
   test_names_fall_through_failed_resource(temporary.path());
+  test_classical_names_require_opt_in(temporary.path());
   test_search_plan_flags_span_resources(temporary.path());
   return EXIT_SUCCESS;
 }
