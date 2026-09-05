@@ -479,6 +479,17 @@ target_compile_options(jwpqt_page_layout_dialog_tests
 add_test(NAME qt_page_layout_dialog COMMAND jwpqt_page_layout_dialog_tests)
 set_tests_properties(qt_page_layout_dialog PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+add_executable(jwpqt_print_document_tests
+  print_document_test.cpp
+)
+target_link_libraries(jwpqt_print_document_tests
+  PRIVATE jwpqt_qt_ui)
+target_compile_options(jwpqt_print_document_tests
+  PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME qt_print_document COMMAND jwpqt_print_document_tests)
+set_tests_properties(qt_print_document PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 add_executable(jwpqt_kanji_reading_lookup_dialog_tests
   kanji_reading_lookup_dialog_test.cpp
 )

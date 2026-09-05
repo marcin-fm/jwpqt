@@ -1,4 +1,4 @@
-find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS PrintSupport Widgets)
 
 add_library(jwpqt_qt_support STATIC
   edict_resource_search.cpp
@@ -56,6 +56,8 @@ add_library(jwpqt_qt_ui STATIC
   main_window.h
   page_layout_dialog.cpp
   page_layout_dialog.h
+  print_document.cpp
+  print_document.h
   wnn_user_dictionary_dialog.cpp
   wnn_user_dictionary_dialog.h
 )
@@ -63,6 +65,7 @@ add_library(jwpqt_qt_ui STATIC
 target_link_libraries(jwpqt_qt_ui
   PUBLIC
     jwpqt_qt_support
+    Qt6::PrintSupport
     Qt6::Widgets
 )
 
