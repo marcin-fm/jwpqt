@@ -314,6 +314,18 @@ legacy file structures.
     results and nonquiet resource failures. Selected result rows insert as one
     paragraph-aware JWP transaction with portable undo; malformed reloads retain
     the prior working resource set and plain-text documents reject insertion.
+71. Successful native EDICT searches also append to one separate modeless
+    results window. Reports retain resource order and labels, cumulative
+    rejected/nonquiet-failure status, visual-order multi-selection copy and
+    insertion, explicit clearing, and callback-failure containment. Failed
+    searches do not create an empty accumulated-results window.
+72. A portable editable EDICT dictionary models optional raw-JWP headwords,
+    required raw-JWP readings, and configured CP1250-CP1258 meanings. It parses
+    mixed `user.dct` records with an optional internal-search LF, paired or final
+    line endings, imported empty meanings, printable ASCII or JIS cells, and
+    embedded meaning slashes; canonical output is LF-terminated without the
+    internal prefix. New entries separately require a non-space reading and
+    nonempty single-line meaning, while all paths enforce aggregate budgets.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
