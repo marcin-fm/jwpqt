@@ -78,6 +78,11 @@ int main(int argc, char* argv[]) {
     QTextStream(stderr) << "Could not load the kanji color configuration.\n";
     return 1;
   }
+  if (!window.load_edict_configuration(
+          config.filePath(QStringLiteral("dict.cfg")), interaction_mode)) {
+    QTextStream(stderr) << "Could not load the dictionary configuration.\n";
+    return 1;
+  }
   if (parser.isSet(wnn_data_directory_option)) {
     const QDir data_directory(parser.value(wnn_data_directory_option));
     const QString user_data =

@@ -307,6 +307,13 @@ legacy file structures.
     diagnostic state. Classical normal and names resources require explicit
     opt-in, failed names resources fall through in registry order, and a
     trailing-star plan disables contingent as well as adaptive retries.
+70. The native application loads optional `dict.cfg` plus its ordered resources
+    from the XDG configuration directory before opening a document. Ctrl+D/F6
+    opens one modeless lookup window seeded from the editor selection or caret
+    word, routes options through the ordered dispatcher, and presents attributed
+    results and nonquiet resource failures. Selected result rows insert as one
+    paragraph-aware JWP transaction with portable undo; malformed reloads retain
+    the prior working resource set and plain-text documents reject insertion.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -315,10 +322,11 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Add native EDICT search and result-view slices over the ordered dispatcher.
-2. Port paged printing and clipboard color policy over the rich JWP document
+1. Add editable `user.dct` lifecycle to the native EDICT lookup tool.
+2. Port kanji information, radical, stroke, SKIP, and four-corner lookup tools.
+3. Port paged printing and clipboard color policy over the rich JWP document
    layout.
-3. Port configuration, remaining import/export paths, and help.
+4. Port configuration, remaining import/export paths, and help.
 
 Each slice is committed independently after focused tests and the complete
 CTest suite pass.

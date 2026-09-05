@@ -15,6 +15,7 @@
 #include <QFontMetricsF>
 #include <QLabel>
 #include <QKeyEvent>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QSettings>
 #include <QSignalBlocker>
@@ -25,6 +26,8 @@
 #include <QTextBlockFormat>
 
 #include "file_io.h"
+#include "edict_lookup_dialog.h"
+#include "edict_resources.h"
 #include "jwp_editor.h"
 #include "jwpqt/core/jis_unicode.h"
 #include "jwpqt/core/jwp_text_codec.h"
@@ -1630,6 +1633,103 @@ void test_jwp_wnn_user_dictionary_dialog(const QString& directory) {
           "Insert to File unexpectedly mutated a plain-text document");
 }
 
+void test_edict_lookup_integration(const QString& directory) {
+  const QString dictionary_path = directory + QStringLiteral("/edict-main");
+  const QString registry_path = directory + QStringLiteral("/dict.cfg");
+  write_bytes(dictionary_path, QByteArray("cat /feline/\n"));
+  jwpqt::core::EdictRegistry registry;
+  jwpqt::core::EdictRegistryEntry resource;
+  resource.label = u"Main";
+  resource.path = u"edict-main";
+  resource.encoding = jwpqt::core::EdictRegistryEncoding::kUtf8;
+  resource.searched = true;
+  resource.keep = true;
+  registry.entries.push_back(resource);
+  jwpqt::qt::write_edict_registry_file(registry_path, registry);
+  const QByteArray valid_registry = read_bytes(registry_path);
+
+  jwpqt::core::JwpDocument source;
+  source.paragraphs = {paragraph(U"cat")};
+  const QString document_path = directory + QStringLiteral("/lookup.jwp");
+  jwpqt::qt::write_jwp_file(document_path, source);
+
+  jwpqt::qt::MainWindow window;
+  require(window.load_edict_configuration(
+              registry_path, jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.edict_resources() != nullptr &&
+              window.edict_resources()->resources.size() == 1 &&
+              window.open_jwp_path(document_path),
+          "Could not prepare native EDICT lookup integration");
+  QTextEdit* editor = window.findChild<QTextEdit*>();
+  QAction* lookup = find_action(window, "edictLookupAction");
+  require(editor != nullptr && lookup != nullptr && lookup->isEnabled() &&
+              lookup->shortcuts().contains(
+                  QKeySequence(QStringLiteral("Ctrl+D"))) &&
+              lookup->shortcuts().contains(QKeySequence(Qt::Key_F6)),
+          "Native EDICT lookup action is missing or has wrong shortcuts");
+  editor->selectAll();
+  lookup->trigger();
+  QApplication::processEvents();
+  auto* dialog = dynamic_cast<jwpqt::qt::EdictLookupDialog*>(
+      window.findChild<QDialog*>(QStringLiteral("edictLookupDialog")));
+  auto* query_edit = dialog == nullptr
+                         ? nullptr
+                         : dialog->findChild<QLineEdit*>(
+                               QStringLiteral("edictQuery"));
+  require(dialog != nullptr && query_edit != nullptr &&
+              query_edit->text() == QStringLiteral("cat") && dialog->search(),
+          "Native EDICT dialog was not seeded from the JWP selection");
+  QListWidget* results =
+      dialog->findChild<QListWidget*>(QStringLiteral("edictResults"));
+  require(results != nullptr && results->count() == 1,
+          "Native EDICT lookup did not expose the configured result");
+  results->setCurrentRow(0);
+  require(dialog->insert_selected(),
+          "Native EDICT result could not be inserted into JWP");
+  const jwpqt::core::JwpText expected =
+      jwpqt::core::encode_jwp_text(U"cat /feline/");
+  require(window.current_jwp_document()->paragraphs[0].text == expected &&
+              editor->toPlainText() == QStringLiteral("cat /feline/"),
+          "Native EDICT insertion did not replace the selected JWP text");
+  QAction* undo = find_action(window, "undoAction");
+  require(undo != nullptr && undo->isEnabled(),
+          "Native EDICT insertion did not create portable history");
+  undo->trigger();
+  require(*window.current_jwp_document() == source,
+          "Native EDICT insertion undo did not restore the source");
+
+  lookup->trigger();
+  QApplication::processEvents();
+  require(window.findChildren<QDialog*>(QStringLiteral("edictLookupDialog"))
+                  .size() == 1,
+          "Native EDICT action created duplicate modeless dialogs");
+  write_bytes(registry_path, QByteArray("bad"));
+  require(!window.load_edict_configuration(
+              registry_path, jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.edict_resources()->resources.size() == 1 &&
+              window.findChild<QDialog*>(QStringLiteral("edictLookupDialog")) ==
+                  dialog,
+          "Malformed EDICT reload discarded the prior working state");
+  write_bytes(registry_path, valid_registry);
+  require(window.load_edict_configuration(
+              registry_path, jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.findChild<QDialog*>(QStringLiteral("edictLookupDialog")) ==
+                  nullptr,
+          "Successful EDICT reload retained a stale lookup dialog");
+
+  jwpqt::qt::MainWindow plain;
+  const QString plain_path = directory + QStringLiteral("/lookup.txt");
+  jwpqt::qt::write_text_file(
+      plain_path,
+      jwpqt::core::TextFile{U"plain", jwpqt::core::TextEncoding::kUtf8,
+                           false});
+  require(plain.open_path(plain_path, jwpqt::core::TextEncoding::kUtf8) &&
+              !plain.insert_edict_text(U"dictionary") &&
+              plain.findChild<QTextEdit*>()->toPlainText() ==
+                  QStringLiteral("plain"),
+          "Dictionary insertion unexpectedly mutated plain text");
+}
+
 void test_jwp_wnn_preference_write_failure(const QString& directory) {
   const WnnFixture fixture = write_wnn_fixture(directory);
   const QString blocked_path = directory + QStringLiteral("/blocked-user.sel");
@@ -2385,6 +2485,7 @@ int main(int argc, char* argv[]) {
     test_jwp_wnn_conversion_boundaries(directory.path());
     test_jwp_wnn_user_dictionary(directory.path());
     test_jwp_wnn_user_dictionary_dialog(directory.path());
+    test_edict_lookup_integration(directory.path());
     test_jwp_wnn_preference_write_failure(directory.path());
     test_jwp_kana_input_mode(directory.path());
     test_jwp_automatic_wnn_conversion(directory.path());

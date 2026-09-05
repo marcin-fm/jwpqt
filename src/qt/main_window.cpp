@@ -48,6 +48,9 @@
 #include <QTextEdit>
 #include <QVBoxLayout>
 
+#include "edict_lookup_dialog.h"
+#include "edict_resource_search.h"
+#include "edict_resources.h"
 #include "file_io.h"
 #include "jwp_editor.h"
 #include "kanji_color_settings.h"
@@ -242,6 +245,38 @@ MainWindow::MainWindow(QWidget* parent)
 }
 
 MainWindow::~MainWindow() = default;
+
+bool MainWindow::load_edict_configuration(const QString& registry_path,
+                                          OpenMode mode) {
+  try {
+    const std::optional<core::EdictRegistry> loaded =
+        read_edict_registry_file(registry_path);
+    core::EdictRegistry registry = loaded.value_or(core::EdictRegistry{});
+    const QString directory = QFileInfo(registry_path).absolutePath();
+    auto candidate = std::make_unique<EdictResourceSet>(
+        load_edict_resources(registry, directory));
+
+    delete edict_lookup_dialog_;
+    edict_lookup_dialog_ = nullptr;
+    edict_resources_ = std::move(candidate);
+    edict_config_directory_ = directory;
+    update_edict_actions();
+    statusBar()->showMessage(
+        tr("Loaded %1 dictionary resources")
+            .arg(static_cast<qulonglong>(edict_resources_->resources.size())),
+        3000);
+    return true;
+  } catch (const std::exception& error) {
+    if (mode == OpenMode::kInteractive) {
+      show_error(tr("Could not load dictionary configuration"), error);
+    }
+    return false;
+  }
+}
+
+const EdictResourceSet* MainWindow::edict_resources() const noexcept {
+  return edict_resources_.get();
+}
 
 bool MainWindow::load_kanji_color_configuration(const QString& settings_path,
                                                 const QString& list_path,
@@ -600,6 +635,15 @@ void MainWindow::create_actions() {
           [this] { insert_page_break(); });
 
   QMenu* tools_menu = menuBar()->addMenu(tr("&Tools"));
+  edict_lookup_action_ =
+      tools_menu->addAction(tr("&Dictionary Lookup..."));
+  edict_lookup_action_->setObjectName(QStringLiteral("edictLookupAction"));
+  edict_lookup_action_->setShortcuts(
+      {QKeySequence(QStringLiteral("Ctrl+D")), QKeySequence(Qt::Key_F6)});
+  connect(edict_lookup_action_, &QAction::triggered, this,
+          [this] { show_edict_lookup_dialog(); });
+
+  tools_menu->addSeparator();
   kanji_color_options_action_ =
       tools_menu->addAction(tr("Kanji Color &Options..."));
   kanji_color_options_action_->setObjectName(
@@ -847,7 +891,25 @@ void MainWindow::update_conversion_actions() {
   format_paragraph_action_->setEnabled(!active && jwp_document_.has_value());
   insert_page_break_action_->setEnabled(!active && jwp_document_.has_value());
   update_kanji_color_actions();
+  update_edict_actions();
   update_kana_input_state();
+}
+
+void MainWindow::update_edict_actions() {
+  if (edict_lookup_action_ == nullptr) {
+    return;
+  }
+  bool available = false;
+  if (edict_resources_ != nullptr) {
+    for (const core::EdictRegistryEntry& entry :
+         edict_resources_->registry.entries) {
+      if (entry.searched) {
+        available = true;
+        break;
+      }
+    }
+  }
+  edict_lookup_action_->setEnabled(available);
 }
 
 void MainWindow::update_kanji_color_actions() {
@@ -1401,6 +1463,141 @@ bool MainWindow::insert_wnn_user_entry(const core::WnnUserEntry& entry) {
     updating_editor_ = false;
     statusBar()->showMessage(
         tr("Could not insert user conversion: %1")
+            .arg(QString::fromUtf8(error.what())),
+        5000);
+    return false;
+  }
+}
+
+void MainWindow::show_edict_lookup_dialog() {
+  if (edict_resources_ == nullptr) {
+    statusBar()->showMessage(tr("Dictionary resources are not available"),
+                             3000);
+    return;
+  }
+  finish_kana_input();
+  const std::u32string seed = edict_query_seed();
+  if (edict_lookup_dialog_ != nullptr) {
+    if (!seed.empty()) {
+      edict_lookup_dialog_->set_query(seed);
+    }
+    edict_lookup_dialog_->show();
+    edict_lookup_dialog_->raise();
+    edict_lookup_dialog_->activateWindow();
+    return;
+  }
+
+  auto* dialog = new EdictLookupDialog(
+      [this](const core::JwpText& query, const EdictLookupOptions& options) {
+        if (edict_resources_ == nullptr) {
+          throw std::runtime_error("Dictionary resources are not available");
+        }
+        EdictResourceSearchOptions search;
+        search.personal_names = options.personal_names;
+        search.place_names = options.place_names;
+        search.classical = options.classical;
+        return search_edict_resources(*edict_resources_,
+                                      edict_config_directory_, query, search);
+      },
+      [this](const std::u32string& text) { return insert_edict_text(text); },
+      this);
+  if (!seed.empty()) {
+    dialog->set_query(seed);
+  }
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  connect(dialog, &QObject::destroyed, this,
+          [this] { edict_lookup_dialog_ = nullptr; });
+  edict_lookup_dialog_ = dialog;
+  dialog->show();
+}
+
+std::u32string MainWindow::edict_query_seed() const {
+  QTextCursor cursor = editor_->textCursor();
+  if (!cursor.hasSelection()) {
+    cursor.select(QTextCursor::WordUnderCursor);
+    if (!cursor.hasSelection()) {
+      const int position = cursor.position();
+      const int length = editor_->document()->characterCount() - 1;
+      if (position < length) {
+        cursor.setPosition(position + 1, QTextCursor::KeepAnchor);
+      } else if (position > 0) {
+        cursor.setPosition(position - 1);
+        cursor.setPosition(position, QTextCursor::KeepAnchor);
+      }
+    }
+  }
+  QString selected = cursor.selectedText();
+  selected.replace(QChar::ParagraphSeparator, QLatin1Char('\n'));
+  return from_qstring(selected);
+}
+
+bool MainWindow::insert_edict_text(std::u32string_view text) {
+  if (text.empty() || conversion_active() || !jwp_document_.has_value()) {
+    return false;
+  }
+  finish_kana_input();
+  if (conversion_active() || !jwp_document_.has_value()) {
+    return false;
+  }
+
+  try {
+    const QString original_text = editor_->toPlainText();
+    const QTextCursor original_cursor = editor_->textCursor();
+    const bool original_modified = editor_->document()->isModified();
+    const std::size_t caret_offset = utf32_offset_for_utf16(
+        original_text, original_cursor.position());
+    const std::size_t selection_begin = utf32_offset_for_utf16(
+        original_text, original_cursor.selectionStart());
+    const std::size_t selection_end = utf32_offset_for_utf16(
+        original_text, original_cursor.selectionEnd());
+    const core::JwpPosition caret =
+        core::jwp_plain_text_position(*jwp_document_, caret_offset);
+
+    core::JwpDocumentModel candidate = *jwp_document_;
+    core::JwpDocumentHistory history = jwp_history_;
+    history.begin(candidate, caret);
+    const core::JwpPosition following = core::replace_jwp_plain_text(
+        candidate, selection_begin, selection_end - selection_begin, text,
+        jwp_code_page_);
+    if (!history.commit(candidate, following)) {
+      return false;
+    }
+
+    std::u32string rendered =
+        core::decode_jwp_plain_text(candidate, jwp_code_page_);
+    const int qt_caret = utf16_offset_for_utf32(
+        rendered, core::jwp_plain_text_offset(candidate, following));
+    QScopedValueRollback<bool> update_guard(updating_editor_, true);
+    try {
+      editor_->setPlainText(to_qstring(rendered));
+      apply_jwp_presentation(candidate.document(), jwp_code_page_);
+      QTextCursor cursor(editor_->document());
+      cursor.setPosition(qt_caret);
+      editor_->setTextCursor(cursor);
+    } catch (...) {
+      editor_->setPlainText(original_text);
+      apply_jwp_presentation(jwp_document_->document(), jwp_code_page_);
+      editor_->setTextCursor(original_cursor);
+      editor_->document()->setModified(original_modified);
+      throw;
+    }
+
+    jwp_document_ = std::move(candidate);
+    jwp_history_ = std::move(history);
+    jwp_caret_ = following;
+    expected_jwp_caret_.reset();
+    rendered_jwp_text_ = std::move(rendered);
+    editor_->document()->setModified(
+        !saved_jwp_document_.has_value() ||
+        jwp_document_->document() != *saved_jwp_document_);
+    update_undo_actions();
+    update_conversion_actions();
+    update_title();
+    statusBar()->showMessage(tr("Inserted dictionary result"), 2000);
+    return true;
+  } catch (const std::exception& error) {
+    statusBar()->showMessage(
+        tr("Could not insert dictionary result: %1")
             .arg(QString::fromUtf8(error.what())),
         5000);
     return false;

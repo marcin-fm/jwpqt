@@ -55,8 +55,11 @@ color policy and `colkanji.lst` are loaded strictly from the XDG configuration
 directory and applied to raw JWP tokens without mutating document formatting;
 Kanji Color Options updates the screen policy atomically while preserving
 active WNN highlights. Make, Append, Add/Remove, View, and Clear manage the
-global color list with atomic persistence. User dictionary editing, lookup
-tools, remaining configuration, and printing remain in progress.
+global color list with atomic persistence. The native modeless EDICT tool loads
+ordered indexed or unindexed resources from `dict.cfg`, searches with the
+portable direct, adaptive, wildcard, contingent, and name filters, and inserts
+selected rows into JWP with portable undo. Editable EDICT `user.dct`, kanji
+lookup tools, remaining configuration, and printing remain in progress.
 
 JWPce/JWPxp copyright and licensing notices remain in `_cpright.txt`,
 `_readme.txt`, and `gnugpl.txt`.
