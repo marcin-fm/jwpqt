@@ -195,6 +195,14 @@ legacy file structures.
     EUC-JP, and the exact 77-sequence JIS X 0212 subset converted by JWPxp.
     Parsing uses the first formal space-slash delimiter so malformed glosses
     cannot be reinterpreted as headword text or bypass definition budgets.
+53. The portable JDX reader binds an index to its exact dictionary size,
+    decodes every post-header word as an explicit one-based little-endian
+    offset, validates character and record boundaries, and preserves the wire
+    representation exactly. Lookup reproduces JINDEX ASCII and katakana
+    folding plus UTF extension-page selection through a bounded linear scan;
+    correctness never depends on trusting attacker-controlled physical sort
+    order. Both the recovered source-size header and official size-plus-15
+    header variant are accepted, and a four-byte header-only index is valid.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -203,8 +211,9 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Port EDICT and kanji lookup tools as separate index, search, resource, and
-   native result-view slices over the completed record codec.
+1. Port EDICT query boundary/filter/deinflection semantics over the completed
+   record and JDX codecs, then add separate resource and native result-view
+   slices.
 2. Port paged printing and clipboard color policy over the rich JWP document
    layout.
 3. Port configuration, remaining import/export paths, and help.
