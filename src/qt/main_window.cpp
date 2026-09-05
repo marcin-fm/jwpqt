@@ -793,14 +793,14 @@ bool MainWindow::attempt_automatic_conversion(bool force) {
 void MainWindow::clear_automatic_conversion_range() {
   automatic_conversion_range_.reset();
   if (!conversion_active()) {
-    editor_->setExtraSelections({});
+    editor_->set_transient_extra_selections({});
   }
 }
 
 void MainWindow::show_automatic_conversion_range() {
   if (!automatic_conversion_range_.has_value() ||
       !jwp_document_.has_value()) {
-    editor_->setExtraSelections({});
+    editor_->set_transient_extra_selections({});
     return;
   }
   const std::u32string text =
@@ -818,7 +818,7 @@ void MainWindow::show_automatic_conversion_range() {
   QColor highlight = editor_->palette().color(QPalette::Highlight);
   highlight.setAlpha(80);
   selection.format.setBackground(highlight);
-  editor_->setExtraSelections({selection});
+  editor_->set_transient_extra_selections({selection});
 }
 
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
@@ -997,7 +997,7 @@ bool MainWindow::accept_conversion() {
     jwp_conversion_->accept();
     jwp_conversion_.reset();
     conversion_preferences_before_.reset();
-    editor_->setExtraSelections({});
+    editor_->set_transient_extra_selections({});
     editor_->setReadOnly(false);
     restore_jwp_history_state(caret);
     try {
@@ -1038,7 +1038,7 @@ void MainWindow::restore_jwp_conversion_state() {
   editor_->setPlainText(to_qstring(text));
   editor_->apply_jwp_layout(jwp_document_->document());
   QTextCursor cursor = editor_->textCursor();
-  editor_->setExtraSelections({});
+  editor_->set_transient_extra_selections({});
   if (caret == range.begin) {
     cursor.setPosition(end);
     cursor.setPosition(begin, QTextCursor::KeepAnchor);
@@ -1058,7 +1058,7 @@ void MainWindow::restore_jwp_conversion_state() {
         editor_->palette().brush(QPalette::Highlight));
     selection.format.setForeground(
         editor_->palette().brush(QPalette::HighlightedText));
-    editor_->setExtraSelections({selection});
+    editor_->set_transient_extra_selections({selection});
   }
   editor_->setTextCursor(cursor);
   updating_editor_ = false;
@@ -1095,7 +1095,7 @@ void MainWindow::rollback_conversion_noexcept() noexcept {
     conversion_preferences_before_.reset();
   }
   editor_->setReadOnly(false);
-  editor_->setExtraSelections({});
+  editor_->set_transient_extra_selections({});
   if (caret.has_value() && jwp_document_.has_value()) {
     try {
       restore_jwp_history_state(*caret);

@@ -4,10 +4,14 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <limits>
+#include <optional>
 #include <stdexcept>
 #include <utility>
 
 #include <QAbstractTextDocumentLayout>
+#include <QColor>
 #include <QFontMetricsF>
 #include <QPaintEvent>
 #include <QPainter>
@@ -17,6 +21,8 @@
 #include <QTextBlockFormat>
 #include <QTextCursor>
 #include <QTextDocument>
+
+#include "jwpqt/core/jwp_text_codec.h"
 
 namespace jwpqt::qt {
 namespace {
@@ -50,6 +56,24 @@ template <typename Update>
 void preserve_document_state(QTextDocument* document, Update&& update) {
   const DocumentStateGuard guard(document);
   std::forward<Update>(update)();
+}
+
+QString to_qstring(std::u32string_view text) {
+  QString result;
+  for (const char32_t code_point : text) {
+    if (code_point > 0x10ffffU ||
+        (code_point >= 0xd800U && code_point <= 0xdfffU)) {
+      throw std::invalid_argument("JWP text contains an invalid Unicode scalar");
+    }
+    if (code_point <= 0xffffU) {
+      result.append(QChar(static_cast<char16_t>(code_point)));
+      continue;
+    }
+    const std::uint32_t value = static_cast<std::uint32_t>(code_point) - 0x10000U;
+    result.append(QChar(static_cast<char16_t>(0xd800U + (value >> 10U))));
+    result.append(QChar(static_cast<char16_t>(0xdc00U + (value & 0x3ffU))));
+  }
+  return result;
 }
 
 }  // namespace
@@ -114,6 +138,97 @@ void JwpEditor::clear_jwp_layout() {
     }
   });
   viewport()->update();
+}
+
+void JwpEditor::apply_kanji_colors(
+    const core::JwpDocument& jwp_document,
+    const core::KanjiColorList& color_list,
+    const core::KanjiColorPolicy& policy, core::LegacyCodePage code_page) {
+  if (jwp_document.paragraphs.empty()) {
+    clear_kanji_colors();
+    return;
+  }
+  if (jwp_document.paragraphs.size() >
+      static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+    throw std::length_error("JWP paragraph count exceeds Qt limits");
+  }
+  if (document()->blockCount() !=
+      static_cast<int>(jwp_document.paragraphs.size())) {
+    throw std::invalid_argument(
+        "JWP paragraph count does not match the editor document");
+  }
+
+  QList<QTextEdit::ExtraSelection> selections;
+  QTextBlock block = document()->begin();
+  for (const core::JwpParagraph& paragraph : jwp_document.paragraphs) {
+    const std::u32string decoded =
+        core::decode_jwp_text(paragraph.text, code_page);
+    const QString expected = to_qstring(decoded);
+    if (block.text() != expected) {
+      throw std::invalid_argument(
+          "JWP paragraph text does not match the editor document");
+    }
+    if (expected.size() >
+        static_cast<qsizetype>(std::numeric_limits<int>::max() -
+                               block.position())) {
+      throw std::length_error("JWP paragraph exceeds Qt position limits");
+    }
+
+    int offset = 0;
+    std::optional<core::RgbColor> active_color;
+    int active_begin = 0;
+    for (std::size_t index = 0; index < paragraph.text.size(); ++index) {
+      const std::optional<core::RgbColor> color = core::kanji_foreground_color(
+          paragraph.text[index], color_list.contains(paragraph.text[index]),
+          policy);
+      if (color != active_color) {
+        if (active_color.has_value()) {
+          QTextEdit::ExtraSelection selection;
+          selection.cursor = QTextCursor(document());
+          selection.cursor.setPosition(block.position() + active_begin);
+          selection.cursor.setPosition(block.position() + offset,
+                                       QTextCursor::KeepAnchor);
+          selection.format.setForeground(QColor(
+              active_color->red, active_color->green, active_color->blue));
+          selections.push_back(std::move(selection));
+        }
+        active_color = color;
+        active_begin = offset;
+      }
+      offset += decoded[index] <= 0xffffU ? 1 : 2;
+    }
+    if (active_color.has_value()) {
+      QTextEdit::ExtraSelection selection;
+      selection.cursor = QTextCursor(document());
+      selection.cursor.setPosition(block.position() + active_begin);
+      selection.cursor.setPosition(block.position() + offset,
+                                   QTextCursor::KeepAnchor);
+      selection.format.setForeground(QColor(
+          active_color->red, active_color->green, active_color->blue));
+      selections.push_back(std::move(selection));
+    }
+    block = block.next();
+  }
+
+  kanji_color_selections_ = std::move(selections);
+  update_extra_selections();
+}
+
+void JwpEditor::clear_kanji_colors() {
+  kanji_color_selections_.clear();
+  update_extra_selections();
+}
+
+void JwpEditor::set_transient_extra_selections(
+    const QList<QTextEdit::ExtraSelection>& selections) {
+  transient_extra_selections_ = selections;
+  update_extra_selections();
+}
+
+void JwpEditor::update_extra_selections() {
+  QList<QTextEdit::ExtraSelection> combined = kanji_color_selections_;
+  combined.append(transient_extra_selections_);
+  QTextEdit::setExtraSelections(combined);
 }
 
 void JwpEditor::paintEvent(QPaintEvent* event) {

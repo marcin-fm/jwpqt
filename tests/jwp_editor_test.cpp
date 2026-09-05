@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
@@ -17,8 +18,12 @@
 #include <QSizeF>
 #include <QTextBlock>
 #include <QTextBlockFormat>
+#include <QTextCharFormat>
+#include <QTextCursor>
 #include <QTextDocument>
 #include <QTextLayout>
+
+#include "jwpqt/core/jwp_text_codec.h"
 
 namespace {
 
@@ -190,6 +195,142 @@ void test_page_break_marker_painting() {
           "Scrolled JWP page-break marker was not painted");
 }
 
+std::optional<QColor> foreground_at(const jwpqt::qt::JwpEditor& editor,
+                                    int position) {
+  for (const QTextEdit::ExtraSelection& selection : editor.extraSelections()) {
+    if (selection.cursor.selectionStart() <= position &&
+        position < selection.cursor.selectionEnd() &&
+        selection.format.foreground().style() != Qt::NoBrush) {
+      return selection.format.foreground().color();
+    }
+  }
+  return std::nullopt;
+}
+
+void test_kanji_colors_follow_raw_tokens() {
+  jwpqt::core::JwpDocument document;
+  document.paragraphs.resize(2);
+  document.paragraphs[0].text = {'A', 0x2422, 0x3021, 0x5021, 0x3022};
+  document.paragraphs[0].left_indent = 2;
+  document.paragraphs[1].text = {0x5022};
+
+  jwpqt::qt::JwpEditor editor;
+  const std::u32string first =
+      jwpqt::core::decode_jwp_text(document.paragraphs[0].text);
+  const std::u32string second =
+      jwpqt::core::decode_jwp_text(document.paragraphs[1].text);
+  editor.setPlainText(QString::fromUcs4(first.data(),
+                                        static_cast<qsizetype>(first.size())) +
+                      QLatin1Char('\n') +
+                      QString::fromUcs4(second.data(),
+                                        static_cast<qsizetype>(second.size())));
+  editor.apply_jwp_layout(document);
+  editor.document()->setModified(true);
+  QTextCursor undo_cursor(editor.document());
+  undo_cursor.movePosition(QTextCursor::End);
+  undo_cursor.insertText(QStringLiteral("x"));
+  undo_cursor.deletePreviousChar();
+  require(editor.document()->isUndoAvailable(),
+          "Kanji-color fixture did not create Qt undo history");
+  QTextCursor selected(editor.document());
+  selected.setPosition(2);
+  selected.setPosition(5, QTextCursor::KeepAnchor);
+  editor.setTextCursor(selected);
+
+  jwpqt::core::KanjiColorList list;
+  list.add(0x3021);
+  list.add(0x5021);
+  jwpqt::core::KanjiColorPolicy policy;
+  policy.list_mode = jwpqt::core::KanjiListColorMode::kMatch;
+  policy.list_color = {200, 10, 20};
+  policy.colorize_uncommon = true;
+  policy.uncommon_color = {10, 150, 30};
+  editor.apply_kanji_colors(document, list, policy);
+
+  require(editor.document()->isModified(),
+          "Applying kanji colors changed the modified state");
+  require(editor.textCursor().selectionStart() == 2 &&
+              editor.textCursor().selectionEnd() == 5,
+          "Applying kanji colors changed the editor selection");
+  require(!foreground_at(editor, 0).has_value() &&
+              !foreground_at(editor, 1).has_value(),
+          "ASCII or kana received list coloring");
+  require(foreground_at(editor, 2) == QColor(200, 10, 20) &&
+              foreground_at(editor, 3) == QColor(200, 10, 20),
+          "Listed common/uncommon kanji did not use list color");
+  require(!foreground_at(editor, 4).has_value(),
+          "Unlisted common kanji was colored in match mode");
+  require(foreground_at(editor, 6) == QColor(10, 150, 30),
+          "Unlisted uncommon kanji did not use uncommon color");
+  require(editor.document()->begin().blockFormat().leftMargin() > 0.0,
+          "Applying kanji colors damaged paragraph layout");
+  require(editor.document()->isUndoAvailable(),
+          "Applying kanji colors discarded Qt undo history");
+
+  policy.list_mode = jwpqt::core::KanjiListColorMode::kNoMatch;
+  editor.apply_kanji_colors(document, list, policy);
+  require(!foreground_at(editor, 2).has_value() &&
+              foreground_at(editor, 4) == QColor(200, 10, 20) &&
+              foreground_at(editor, 6) == QColor(200, 10, 20),
+          "Non-match mode did not update foreground precedence");
+
+  QTextEdit::ExtraSelection transient;
+  transient.cursor = QTextCursor(editor.document());
+  transient.cursor.setPosition(2);
+  transient.cursor.setPosition(3, QTextCursor::KeepAnchor);
+  transient.format.setBackground(Qt::yellow);
+  editor.set_transient_extra_selections({transient});
+  require(editor.extraSelections().size() == 4,
+          "Transient selection did not coexist with kanji color spans");
+
+  editor.clear_kanji_colors();
+  require(!foreground_at(editor, 2).has_value() &&
+              !foreground_at(editor, 4).has_value() &&
+              editor.extraSelections().size() == 1 &&
+              editor.document()->isModified(),
+          "Clearing kanji colors changed state, lost overlays, or left color");
+  editor.set_transient_extra_selections({});
+  require(editor.extraSelections().isEmpty(),
+          "Clearing transient selections left an overlay");
+}
+
+void test_kanji_color_validation_is_atomic() {
+  jwpqt::qt::JwpEditor editor;
+  editor.setPlainText(QStringLiteral("plain"));
+  QTextCursor cursor(editor.document());
+  cursor.setPosition(0);
+  cursor.setPosition(1, QTextCursor::KeepAnchor);
+  QTextEdit::ExtraSelection original;
+  original.cursor = cursor;
+  original.format.setForeground(QColor(40, 50, 60));
+  editor.set_transient_extra_selections({original});
+
+  jwpqt::core::JwpDocument mismatch;
+  mismatch.paragraphs.resize(1);
+  mismatch.paragraphs[0].text = {0x3021};
+  try {
+    editor.apply_kanji_colors(mismatch, {}, {});
+    require(false, "Mismatched JWP text was accepted for coloring");
+  } catch (const std::invalid_argument&) {
+  }
+  require(foreground_at(editor, 0) == QColor(40, 50, 60) &&
+              editor.extraSelections().size() == 1,
+          "Failed color validation partially changed the document");
+
+  mismatch.paragraphs.push_back({});
+  try {
+    editor.apply_kanji_colors(mismatch, {}, {});
+    require(false, "Mismatched JWP block count was accepted for coloring");
+  } catch (const std::invalid_argument&) {
+  }
+
+  jwpqt::core::JwpDocument empty;
+  editor.apply_kanji_colors(empty, {}, {});
+  require(foreground_at(editor, 0) == QColor(40, 50, 60) &&
+              editor.extraSelections().size() == 1,
+          "Empty JWP document cleared unrelated transient coloring");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -198,6 +339,8 @@ int main(int argc, char** argv) {
     test_paragraph_layout();
     test_clear_and_validation();
     test_page_break_marker_painting();
+    test_kanji_colors_follow_raw_tokens();
+    test_kanji_color_validation_is_atomic();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return EXIT_FAILURE;

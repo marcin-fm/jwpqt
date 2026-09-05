@@ -122,6 +122,10 @@ legacy file structures.
     canonical EUC pairs, deduplicates membership, writes sorted canonical
     `colkanji.lst` bytes, and can append raw kanji tokens from a JWP document.
     Truncated, non-EUC, and out-of-capacity records fail loudly.
+37. The rich Qt editor renders kanji colors as a non-document
+    `ExtraSelection` layer, preserving text, block formats, selection,
+    modified state, and undo history. A separate later transient layer keeps
+    WNN candidate highlighting from erasing persistent kanji colors.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
