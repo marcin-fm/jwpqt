@@ -96,6 +96,16 @@ void write_jwp_file(const QString& path, const core::JwpDocument& document) {
   write_file_bytes(path, bytes);
 }
 
+core::JwpProject read_jwp_project_file(const QString& path) {
+  return core::parse_jwp_project(read_file_bytes(path));
+}
+
+void write_jwp_project_file(const QString& path,
+                            const core::JwpProject& project) {
+  const std::string bytes = core::serialize_jwp_project(project);
+  write_file_bytes(path, bytes);
+}
+
 std::optional<core::KanjiColorList> read_kanji_color_list_file(
     const QString& path) {
   QFile input(path);

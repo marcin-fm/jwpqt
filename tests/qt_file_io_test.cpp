@@ -114,6 +114,36 @@ void test_jwp_encoding_failure_preserves_file(const QString& directory) {
           "Failed JWP save changed the existing file");
 }
 
+void test_jwp_project_file_round_trip(const QString& directory) {
+  const QString path = directory + QStringLiteral("/session.jpr");
+  const jwpqt::core::JwpProject expected{
+      "Page_Width = 80\r\n", "/documents", {"one.jwp", "two.jfc"}};
+  jwpqt::qt::write_jwp_project_file(path, expected);
+  require(jwpqt::qt::read_jwp_project_file(path) == expected,
+          "JWP project did not round-trip through the Qt file boundary");
+
+  const QByteArray original = read_bytes(path);
+  jwpqt::core::JwpProject invalid = expected;
+  invalid.paths = {std::string("bad\0path", 8)};
+  bool rejected = false;
+  try {
+    jwpqt::qt::write_jwp_project_file(path, invalid);
+  } catch (const jwpqt::core::JwpProjectError&) {
+    rejected = true;
+  }
+  require(rejected && read_bytes(path) == original,
+          "Failed JWP project save changed the existing file");
+
+  bool missing_rejected = false;
+  try {
+    (void)jwpqt::qt::read_jwp_project_file(
+        directory + QStringLiteral("/missing.jpr"));
+  } catch (const std::runtime_error&) {
+    missing_rejected = true;
+  }
+  require(missing_rejected, "Missing JWP project did not fail explicitly");
+}
+
 void test_kanji_info_file_loading(const QString& directory) {
   const QString path = directory + QStringLiteral("/kanjinfo.dat");
   require(!jwpqt::qt::read_kanji_info_file(path).has_value(),
@@ -631,6 +661,7 @@ int main(int argc, char* argv[]) {
     test_encoding_failure_preserves_file(directory.path());
     test_jwp_file_round_trip(directory.path());
     test_jwp_encoding_failure_preserves_file(directory.path());
+    test_jwp_project_file_round_trip(directory.path());
     test_kanji_info_file_loading(directory.path());
     test_kanji_lookup_list_loading(directory.path());
     test_kanji_color_list_file_round_trip(directory.path());

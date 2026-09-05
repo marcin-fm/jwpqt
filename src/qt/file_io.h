@@ -12,6 +12,7 @@
 #include "jwpqt/core/edict_registry.h"
 #include "jwpqt/core/edict_user_dictionary.h"
 #include "jwpqt/core/jwp_document.h"
+#include "jwpqt/core/jwp_project.h"
 #include "jwpqt/core/kanji_color_list.h"
 #include "jwpqt/core/kanji_info.h"
 #include "jwpqt/core/kanji_lookup_lists.h"
@@ -27,6 +28,9 @@ core::TextFile read_text_file(const QString& path,
 void write_text_file(const QString& path, const core::TextFile& file);
 core::JwpDocument read_jwp_file(const QString& path);
 void write_jwp_file(const QString& path, const core::JwpDocument& document);
+core::JwpProject read_jwp_project_file(const QString& path);
+void write_jwp_project_file(const QString& path,
+                            const core::JwpProject& project);
 std::optional<core::KanjiColorList> read_kanji_color_list_file(
     const QString& path);
 void write_kanji_color_list_file(const QString& path,
