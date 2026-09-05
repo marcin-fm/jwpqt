@@ -338,6 +338,16 @@ legacy file structures.
     an explicit comparison-work budget rather than trusting its stateful
     comparator to a standard sorting algorithm. Raw JWP reading and whole-row
     keys are precomputed once and preserve the configured meaning code page.
+75. The modeless native `user.dct` dialog owns a working copy for Add, Edit,
+    Delete, Move, Sort, and Import. Save and Insert cross explicit callback
+    boundaries; failures, including non-standard exceptions, remain contained
+    without publishing the working copy or closing the dialog.
+76. MainWindow locates the configured user dictionary or synthesizes the
+    recovered mixed, unindexed `user.dct` defaults. Configuration and updates
+    are candidate-first; canonical bytes are atomically persisted before only
+    the user search resource is replaced. Disabled entries remain unsearchable,
+    failed saves preserve disk and live state, and display-row insertion is one
+    portable-history JWP edit.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -346,11 +356,10 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Add editable `user.dct` lifecycle to the native EDICT lookup tool.
-2. Port kanji information, radical, stroke, SKIP, and four-corner lookup tools.
-3. Port paged printing and clipboard color policy over the rich JWP document
-   layout.
-4. Port configuration, remaining import/export paths, and help.
+1. Port kanji information, radical, stroke, SKIP, and four-corner lookup tools.
+2. Port paged printing and clipboard color policy over the rich JWP document
+    layout.
+3. Port configuration, remaining import/export paths, and help.
 
 Each slice is committed independently after focused tests and the complete
 CTest suite pass.
