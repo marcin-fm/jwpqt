@@ -244,7 +244,10 @@ MainWindow::MainWindow(QWidget* parent)
   update_title();
 }
 
-MainWindow::~MainWindow() = default;
+MainWindow::~MainWindow() {
+  delete wnn_user_dictionary_dialog_;
+  delete edict_lookup_dialog_;
+}
 
 bool MainWindow::load_edict_configuration(const QString& registry_path,
                                           OpenMode mode) {

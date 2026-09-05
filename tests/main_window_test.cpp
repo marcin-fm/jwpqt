@@ -1728,6 +1728,21 @@ void test_edict_lookup_integration(const QString& directory) {
               plain.findChild<QTextEdit*>()->toPlainText() ==
                   QStringLiteral("plain"),
           "Dictionary insertion unexpectedly mutated plain text");
+
+  auto owner = std::make_unique<jwpqt::qt::MainWindow>();
+  require(owner->load_edict_configuration(
+              registry_path, jwpqt::qt::OpenMode::kNonInteractive),
+          "Could not prepare EDICT dialog owner-destruction fixture");
+  QAction* owner_lookup = find_action(*owner, "edictLookupAction");
+  require(owner_lookup != nullptr && owner_lookup->isEnabled(),
+          "EDICT lookup was unavailable for owner-destruction fixture");
+  owner_lookup->trigger();
+  QApplication::processEvents();
+  require(owner->findChild<QDialog*>(QStringLiteral("edictLookupDialog")) !=
+              nullptr,
+          "EDICT owner-destruction fixture did not create the child dialog");
+  owner.reset();
+  QApplication::processEvents();
 }
 
 void test_jwp_wnn_preference_write_failure(const QString& directory) {
