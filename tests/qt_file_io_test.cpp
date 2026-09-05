@@ -13,6 +13,7 @@
 
 #include "file_io.h"
 #include "jwpqt/core/jwp_document.h"
+#include "jwpqt/core/kanji_color_list.h"
 #include "jwpqt/core/utf8.h"
 #include "jwpqt/core/wnn_preferences.h"
 
@@ -108,6 +109,64 @@ void test_jwp_encoding_failure_preserves_file(const QString& directory) {
   }
   require(read_bytes(path) == original,
           "Failed JWP save changed the existing file");
+}
+
+void test_kanji_color_list_file_round_trip(const QString& directory) {
+  const QString path = directory + QStringLiteral("/colkanji.lst");
+  require(!jwpqt::qt::read_kanji_color_list_file(path).has_value(),
+          "Missing kanji color list did not remain optional");
+
+  jwpqt::core::KanjiColorList list;
+  require(list.add(0x5021) && list.add(0x3021),
+          "Could not seed kanji color list");
+  jwpqt::qt::write_kanji_color_list_file(path, list);
+  const auto loaded = jwpqt::qt::read_kanji_color_list_file(path);
+  require(loaded.has_value() && loaded->codes() == list.codes(),
+          "Kanji color list file did not round-trip");
+  require(read_bytes(path) == QByteArray::fromHex("b0a1d0a1"),
+          "Kanji color list file was not written canonically");
+}
+
+void test_kanji_color_list_file_errors(const QString& directory) {
+  const QString malformed = directory + QStringLiteral("/malformed.lst");
+  QFile malformed_output(malformed);
+  require(malformed_output.open(QIODevice::WriteOnly) &&
+              malformed_output.write("\xb0", 1) == 1,
+          "Could not seed malformed kanji color list");
+  malformed_output.close();
+  bool malformed_rejected = false;
+  try {
+    static_cast<void>(jwpqt::qt::read_kanji_color_list_file(malformed));
+  } catch (const jwpqt::core::KanjiColorListError&) {
+    malformed_rejected = true;
+  }
+  require(malformed_rejected,
+          "Malformed kanji color list was accepted by file I/O");
+
+  const QString target = directory + QStringLiteral("/absent-color-list");
+  const QString link = directory + QStringLiteral("/dangling-color-list");
+  require(QFile::link(target, link),
+          "Could not create dangling kanji color list symlink");
+  bool dangling_link_rejected = false;
+  try {
+    static_cast<void>(jwpqt::qt::read_kanji_color_list_file(link));
+  } catch (const std::runtime_error&) {
+    dangling_link_rejected = true;
+  }
+  require(dangling_link_rejected,
+          "Dangling kanji color list symlink was treated as missing");
+
+  jwpqt::core::KanjiColorList list;
+  list.add(0x3021);
+  bool missing_parent_rejected = false;
+  try {
+    jwpqt::qt::write_kanji_color_list_file(
+        directory + QStringLiteral("/missing/colkanji.lst"), list);
+  } catch (const std::runtime_error&) {
+    missing_parent_rejected = true;
+  }
+  require(missing_parent_rejected,
+          "Kanji color list was written without a parent directory");
 }
 
 void test_wnn_preference_file_round_trip(const QString& directory) {
@@ -209,6 +268,8 @@ int main(int argc, char* argv[]) {
     test_encoding_failure_preserves_file(directory.path());
     test_jwp_file_round_trip(directory.path());
     test_jwp_encoding_failure_preserves_file(directory.path());
+    test_kanji_color_list_file_round_trip(directory.path());
+    test_kanji_color_list_file_errors(directory.path());
     test_wnn_preference_file_round_trip(directory.path());
     test_partial_wnn_preference_file(directory.path());
     test_wnn_preference_open_errors(directory.path());

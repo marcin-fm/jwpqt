@@ -10,6 +10,7 @@
 #include <QString>
 
 #include "jwpqt/core/jwp_document.h"
+#include "jwpqt/core/kanji_color_list.h"
 #include "jwpqt/core/text_file.h"
 #include "jwpqt/core/wnn_preferences.h"
 
@@ -21,6 +22,10 @@ core::TextFile read_text_file(const QString& path,
 void write_text_file(const QString& path, const core::TextFile& file);
 core::JwpDocument read_jwp_file(const QString& path);
 void write_jwp_file(const QString& path, const core::JwpDocument& document);
+std::optional<core::KanjiColorList> read_kanji_color_list_file(
+    const QString& path);
+void write_kanji_color_list_file(const QString& path,
+                                 const core::KanjiColorList& color_list);
 std::optional<core::WnnPreferences> read_wnn_preferences_file(
     const QString& path,
     std::size_t capacity = core::kWnnDefaultPreferenceCapacity);

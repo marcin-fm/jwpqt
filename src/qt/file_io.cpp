@@ -83,6 +83,25 @@ void write_jwp_file(const QString& path, const core::JwpDocument& document) {
   write_file_bytes(path, bytes);
 }
 
+std::optional<core::KanjiColorList> read_kanji_color_list_file(
+    const QString& path) {
+  QFile input(path);
+  if (!input.open(QIODevice::ReadOnly)) {
+    const QFileInfo info(path);
+    if (!info.exists() && !info.isSymbolicLink()) {
+      return std::nullopt;
+    }
+    throw io_error("Could not open", path, input.errorString());
+  }
+  return core::KanjiColorList::parse(read_open_file_bytes(input, path));
+}
+
+void write_kanji_color_list_file(const QString& path,
+                                 const core::KanjiColorList& color_list) {
+  const std::string bytes = color_list.serialize();
+  write_file_bytes(path, bytes);
+}
+
 std::optional<core::WnnPreferences> read_wnn_preferences_file(
     const QString& path, std::size_t capacity) {
   QFile input(path);

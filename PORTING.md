@@ -126,6 +126,9 @@ legacy file structures.
     `ExtraSelection` layer, preserving text, block formats, selection,
     modified state, and undo history. A separate later transient layer keeps
     WNN candidate highlighting from erasing persistent kanji colors.
+38. Qt file I/O treats a genuinely absent `colkanji.lst` as an optional empty
+    list, rejects malformed files and dangling links, and serializes the full
+    canonical list before atomically replacing the destination.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
