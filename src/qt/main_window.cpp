@@ -36,6 +36,7 @@
 #include <QPushButton>
 #include <QRadioButton>
 #include <QScopedValueRollback>
+#include <QSettings>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStatusBar>
@@ -46,6 +47,7 @@
 
 #include "file_io.h"
 #include "jwp_editor.h"
+#include "kanji_color_settings.h"
 #include "jwpqt/core/jwp_plain_text.h"
 #include "jwpqt/core/jwp_text_codec.h"
 #include "jwpqt/core/plain_text_change.h"
@@ -230,6 +232,47 @@ MainWindow::MainWindow(QWidget* parent)
 }
 
 MainWindow::~MainWindow() = default;
+
+bool MainWindow::load_kanji_color_configuration(const QString& settings_path,
+                                                const QString& list_path,
+                                                OpenMode mode) {
+  try {
+    QSettings settings(settings_path, QSettings::IniFormat);
+    const core::KanjiColorPolicy policy = read_kanji_color_policy(settings);
+    const std::optional<core::KanjiColorList> loaded_list =
+        read_kanji_color_list_file(list_path);
+    const core::KanjiColorList list =
+        loaded_list.value_or(core::KanjiColorList{});
+    QString retained_settings_path = settings_path;
+    QString retained_list_path = list_path;
+
+    if (jwp_document_.has_value()) {
+      editor_->apply_kanji_colors(jwp_document_->document(), list, policy,
+                                  jwp_code_page_);
+    } else {
+      editor_->clear_kanji_colors();
+    }
+    kanji_color_policy_ = policy;
+    kanji_color_list_ = list;
+    kanji_color_settings_path_.swap(retained_settings_path);
+    kanji_color_list_path_.swap(retained_list_path);
+    statusBar()->showMessage(tr("Loaded kanji color configuration"), 3000);
+    return true;
+  } catch (const std::exception& error) {
+    if (mode == OpenMode::kInteractive) {
+      show_error(tr("Could not load kanji color configuration"), error);
+    }
+    return false;
+  }
+}
+
+const core::KanjiColorPolicy& MainWindow::kanji_color_policy() const noexcept {
+  return kanji_color_policy_;
+}
+
+const core::KanjiColorList& MainWindow::kanji_color_list() const noexcept {
+  return kanji_color_list_;
+}
 
 void MainWindow::create_actions() {
   QMenu* file_menu = menuBar()->addMenu(tr("&File"));
@@ -499,7 +542,7 @@ void MainWindow::restore_jwp_history_state(core::JwpPosition caret) {
 
   updating_editor_ = true;
   editor_->setPlainText(qt_text);
-  editor_->apply_jwp_layout(jwp_document_->document());
+  apply_jwp_presentation(jwp_document_->document(), jwp_code_page_);
   QTextCursor cursor = editor_->textCursor();
   cursor.setPosition(qt_offset);
   editor_->setTextCursor(cursor);
@@ -513,6 +556,18 @@ void MainWindow::restore_jwp_history_state(core::JwpPosition caret) {
   editor_->document()->setModified(modified);
   update_undo_actions();
   update_title();
+}
+
+void MainWindow::apply_jwp_presentation(const core::JwpDocument& document,
+                                        core::LegacyCodePage code_page) {
+  editor_->apply_jwp_layout(document);
+  editor_->apply_kanji_colors(document, kanji_color_list_,
+                              kanji_color_policy_, code_page);
+}
+
+void MainWindow::clear_jwp_presentation() {
+  editor_->clear_jwp_layout();
+  editor_->clear_kanji_colors();
 }
 
 void MainWindow::update_undo_actions() {
@@ -1036,7 +1091,7 @@ void MainWindow::restore_jwp_conversion_state() {
 
   updating_editor_ = true;
   editor_->setPlainText(to_qstring(text));
-  editor_->apply_jwp_layout(jwp_document_->document());
+  apply_jwp_presentation(jwp_document_->document(), jwp_code_page_);
   QTextCursor cursor = editor_->textCursor();
   editor_->set_transient_extra_selections({});
   if (caret == range.begin) {
@@ -1127,7 +1182,7 @@ void MainWindow::new_document() {
   rendered_jwp_text_.clear();
   updating_editor_ = true;
   editor_->clear();
-  editor_->clear_jwp_layout();
+  clear_jwp_presentation();
   updating_editor_ = false;
   editor_->document()->setModified(false);
   current_path_.clear();
@@ -1274,7 +1329,7 @@ void MainWindow::load_document(const QString& path,
   rendered_jwp_text_.clear();
   updating_editor_ = true;
   editor_->setPlainText(to_qstring(file.text));
-  editor_->clear_jwp_layout();
+  clear_jwp_presentation();
   updating_editor_ = false;
   editor_->document()->setModified(false);
   current_path_ = path;
@@ -1299,7 +1354,7 @@ void MainWindow::load_jwp_document(const QString& path,
 
   updating_editor_ = true;
   editor_->setPlainText(to_qstring(text));
-  editor_->apply_jwp_layout(model.document());
+  apply_jwp_presentation(model.document(), code_page);
   updating_editor_ = false;
   jwp_document_ = std::move(model);
   saved_jwp_document_ = jwp_document_->document();
@@ -1642,7 +1697,7 @@ void MainWindow::set_jwp_code_page(core::LegacyCodePage code_page) {
                           jwp_document_->document() != *saved_jwp_document_;
     updating_editor_ = true;
     editor_->setPlainText(to_qstring(text));
-    editor_->apply_jwp_layout(jwp_document_->document());
+    apply_jwp_presentation(jwp_document_->document(), code_page);
     updating_editor_ = false;
     rendered_jwp_text_ = std::move(text);
     jwp_code_page_ = code_page;
@@ -1960,7 +2015,7 @@ std::size_t MainWindow::replace_all(const QString& text,
       if (candidate_jwp.has_value() &&
           editor_->toPlainText() != to_qstring(expected_jwp_text)) {
         editor_->setPlainText(original_text);
-        editor_->apply_jwp_layout(jwp_document_->document());
+        apply_jwp_presentation(jwp_document_->document(), jwp_code_page_);
         editor_->setTextCursor(original_cursor);
         editor_->document()->setModified(original_modified);
         throw core::JwpPlainTextError(
@@ -1978,6 +2033,9 @@ std::size_t MainWindow::replace_all(const QString& text,
     if (candidate_jwp.has_value()) {
       const bool modified = saved_jwp_document_.has_value() &&
                             candidate_jwp->document() != *saved_jwp_document_;
+      editor_->apply_kanji_colors(candidate_jwp->document(),
+                                  kanji_color_list_, kanji_color_policy_,
+                                  jwp_code_page_);
       jwp_document_.emplace(std::move(*candidate_jwp));
       jwp_history_ = std::move(*candidate_history);
       jwp_caret_ = candidate_caret;
@@ -2037,7 +2095,7 @@ bool MainWindow::format_paragraphs(
           "paragraph indents leave no usable line width");
     }
 
-    editor_->apply_jwp_layout(candidate.document());
+    apply_jwp_presentation(candidate.document(), jwp_code_page_);
     jwp_document_ = std::move(candidate);
     jwp_history_ = std::move(history);
     jwp_caret_ = caret;
@@ -2102,13 +2160,13 @@ bool MainWindow::insert_page_break() {
     updating_editor_ = true;
     try {
       editor_->setPlainText(qt_text);
-      editor_->apply_jwp_layout(candidate.document());
+      apply_jwp_presentation(candidate.document(), jwp_code_page_);
       QTextCursor cursor(editor_->document());
       cursor.setPosition(qt_caret);
       editor_->setTextCursor(cursor);
     } catch (...) {
       editor_->setPlainText(original_text);
-      editor_->apply_jwp_layout(jwp_document_->document());
+      apply_jwp_presentation(jwp_document_->document(), jwp_code_page_);
       editor_->setTextCursor(original_cursor);
       editor_->document()->setModified(original_modified);
       updating_editor_ = false;
@@ -2198,6 +2256,8 @@ void MainWindow::synchronize_jwp_document(int position, int chars_removed,
     history.commit(updated, after_caret, kind);
     const bool modified = !saved_jwp_document_.has_value() ||
                           updated.document() != *saved_jwp_document_;
+    editor_->apply_kanji_colors(updated.document(), kanji_color_list_,
+                                kanji_color_policy_, jwp_code_page_);
     jwp_document_ = std::move(updated);
     jwp_history_ = std::move(history);
     jwp_caret_ = after_caret;
@@ -2222,11 +2282,14 @@ void MainWindow::restore_jwp_editor_text(int cursor_position,
   editor_->undo();
   if (from_qstring(editor_->toPlainText()) != rendered_jwp_text_) {
     editor_->setPlainText(to_qstring(rendered_jwp_text_));
-    editor_->apply_jwp_layout(jwp_document_->document());
+    apply_jwp_presentation(jwp_document_->document(), jwp_code_page_);
     QTextCursor cursor = editor_->textCursor();
     cursor.setPosition(
         std::min(cursor_position, editor_->document()->characterCount() - 1));
     editor_->setTextCursor(cursor);
+  } else {
+    editor_->apply_kanji_colors(jwp_document_->document(), kanji_color_list_,
+                                kanji_color_policy_, jwp_code_page_);
   }
   if (selection_start >= 0 && selection_end >= selection_start) {
     QTextCursor cursor = editor_->textCursor();

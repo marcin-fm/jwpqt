@@ -14,6 +14,7 @@
 #include <QFontMetricsF>
 #include <QLabel>
 #include <QKeyEvent>
+#include <QSettings>
 #include <QSignalBlocker>
 #include <QTextEdit>
 #include <QTemporaryDir>
@@ -24,6 +25,7 @@
 #include "file_io.h"
 #include "jwp_editor.h"
 #include "jwpqt/core/jwp_text_codec.h"
+#include "kanji_color_settings.h"
 #include "main_window.h"
 
 namespace {
@@ -1499,6 +1501,125 @@ void test_jwp_automatic_wnn_conversion(const QString& directory) {
           "Saving after an external edit converted a stale WNN range");
 }
 
+void test_kanji_color_configuration(const QString& directory) {
+  const QString settings_path =
+      directory + QStringLiteral("/kanji-colors.ini");
+  const QString list_path = directory + QStringLiteral("/colkanji.lst");
+  jwpqt::core::KanjiColorPolicy policy;
+  policy.list_mode = jwpqt::core::KanjiListColorMode::kMatch;
+  policy.list_color = {1, 2, 3};
+  policy.colorize_uncommon = true;
+  policy.uncommon_color = {4, 5, 6};
+  {
+    QSettings settings(settings_path, QSettings::IniFormat);
+    jwpqt::qt::write_kanji_color_policy(settings, policy);
+  }
+  jwpqt::core::KanjiColorList list;
+  require(list.add(0x3021), "Could not prepare kanji color list fixture");
+  jwpqt::qt::write_kanji_color_list_file(list_path, list);
+
+  jwpqt::qt::MainWindow window;
+  require(window.load_kanji_color_configuration(
+              settings_path, list_path,
+              jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.kanji_color_policy().list_mode ==
+                  jwpqt::core::KanjiListColorMode::kMatch &&
+              window.kanji_color_policy().list_color ==
+                  jwpqt::core::RgbColor{1, 2, 3} &&
+              window.kanji_color_list().contains(0x3021),
+          "Kanji color configuration did not load atomically");
+
+  jwpqt::core::JwpDocument source;
+  source.paragraphs = {jwpqt::core::JwpParagraph{}};
+  source.paragraphs[0].text = {0x3021};
+  const QString jwp_path = directory + QStringLiteral("/kanji-color.jwp");
+  jwpqt::qt::write_jwp_file(jwp_path, source);
+  require(window.open_jwp_path(jwp_path),
+          "Could not open kanji color configuration fixture");
+  auto* editor =
+      dynamic_cast<jwpqt::qt::JwpEditor*>(window.findChild<QTextEdit*>());
+  require(editor != nullptr && editor->extraSelections().size() == 1 &&
+              editor->extraSelections().front().cursor.selectionStart() == 0 &&
+              editor->extraSelections().front().cursor.selectionEnd() == 1 &&
+              editor->extraSelections().front().format.foreground().color() ==
+                  QColor(1, 2, 3),
+          "Loaded kanji color policy was not applied to the JWP document");
+
+  QTextCursor rejected = editor->textCursor();
+  rejected.setPosition(0);
+  rejected.setPosition(1, QTextCursor::KeepAnchor);
+  rejected.insertText(QString::fromUcs4(U"\U0001f600"));
+  require(editor->toPlainText() != QString::fromUcs4(U"\U0001f600") &&
+              editor->extraSelections().size() == 1 &&
+              editor->extraSelections().front().cursor.selectionStart() == 0 &&
+              editor->extraSelections().front().cursor.selectionEnd() == 1,
+          "Rejected JWP edit did not restore the kanji color overlay");
+
+  QTextCursor removal = editor->textCursor();
+  removal.setPosition(0);
+  removal.setPosition(1, QTextCursor::KeepAnchor);
+  removal.removeSelectedText();
+  require(editor->extraSelections().empty(),
+          "Kanji color overlay was stale after a native edit");
+  QAction* undo = find_action(window, "undoAction");
+  require(undo != nullptr && undo->isEnabled(),
+          "Kanji color edit did not create a portable undo entry");
+  undo->trigger();
+  require(editor->extraSelections().size() == 1,
+          "Undo did not restore the kanji color overlay");
+
+  const QString malformed_settings =
+      directory + QStringLiteral("/malformed-kanji-colors.ini");
+  {
+    QSettings settings(malformed_settings, QSettings::IniFormat);
+    settings.setValue(QStringLiteral("kanjiColor/policy"),
+                      QStringLiteral("v1;invalid;010203;1;040506"));
+    settings.sync();
+  }
+  require(!window.load_kanji_color_configuration(
+              malformed_settings, list_path,
+              jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.kanji_color_policy().list_mode ==
+                  jwpqt::core::KanjiListColorMode::kMatch &&
+              window.kanji_color_list().contains(0x3021) &&
+              editor->extraSelections().size() == 1,
+          "Failed kanji color reload replaced the working configuration");
+
+  const QString malformed_list =
+      directory + QStringLiteral("/malformed-colkanji.lst");
+  QFile malformed_list_file(malformed_list);
+  require(malformed_list_file.open(QIODevice::WriteOnly) &&
+              malformed_list_file.write("\xb0", 1) == 1,
+          "Could not create malformed kanji color list fixture");
+  malformed_list_file.close();
+  require(!window.load_kanji_color_configuration(
+              settings_path, malformed_list,
+              jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.kanji_color_policy().list_mode ==
+                  jwpqt::core::KanjiListColorMode::kMatch &&
+              window.kanji_color_list().contains(0x3021) &&
+              editor->extraSelections().size() == 1,
+          "Failed kanji color list reload replaced the working configuration");
+
+  const QString text_path = directory + QStringLiteral("/plain-after-color.txt");
+  jwpqt::qt::write_text_file(
+      text_path, jwpqt::core::TextFile{U"plain", jwpqt::core::TextEncoding::kUtf8,
+                                      false});
+  require(window.open_path(text_path, jwpqt::core::TextEncoding::kUtf8) &&
+              editor->extraSelections().empty(),
+          "Plain-text load retained JWP kanji color overlays");
+
+  jwpqt::qt::MainWindow defaults;
+  require(defaults.load_kanji_color_configuration(
+              directory + QStringLiteral("/missing-settings.ini"),
+              directory + QStringLiteral("/missing-colkanji.lst"),
+              jwpqt::qt::OpenMode::kNonInteractive) &&
+              defaults.kanji_color_policy().list_mode ==
+                  jwpqt::core::KanjiListColorMode::kOff &&
+              defaults.kanji_color_list().empty(),
+          "Missing kanji color files did not load as defaults");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -1531,6 +1652,7 @@ int main(int argc, char* argv[]) {
     test_jwp_wnn_preference_write_failure(directory.path());
     test_jwp_kana_input_mode(directory.path());
     test_jwp_automatic_wnn_conversion(directory.path());
+    test_kanji_color_configuration(directory.path());
     std::cout << "All main window tests passed\n";
     return 0;
   } catch (const std::exception& error) {

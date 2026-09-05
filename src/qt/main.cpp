@@ -60,6 +60,24 @@ int main(int argc, char* argv[]) {
   }
 
   jwpqt::qt::MainWindow window;
+  const jwpqt::qt::OpenMode interaction_mode =
+      parser.isSet(smoke_test) ? jwpqt::qt::OpenMode::kNonInteractive
+                               : jwpqt::qt::OpenMode::kInteractive;
+  const QString config_directory =
+      QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+  if (config_directory.isEmpty() || !QDir().mkpath(config_directory)) {
+    QTextStream(stderr)
+        << "Could not create the jwpqt configuration directory.\n";
+    return 1;
+  }
+  const QDir config(config_directory);
+  if (!window.load_kanji_color_configuration(
+          config.filePath(QStringLiteral("settings.ini")),
+          config.filePath(QStringLiteral("colkanji.lst")),
+          interaction_mode)) {
+    QTextStream(stderr) << "Could not load the kanji color configuration.\n";
+    return 1;
+  }
   if (parser.isSet(wnn_data_directory_option)) {
     const QDir data_directory(parser.value(wnn_data_directory_option));
     const QString user_data =
@@ -69,30 +87,24 @@ int main(int argc, char* argv[]) {
           << "Could not create the jwpqt user data directory.\n";
       return 1;
     }
-    const jwpqt::qt::OpenMode resource_mode =
-        parser.isSet(smoke_test) ? jwpqt::qt::OpenMode::kNonInteractive
-                                 : jwpqt::qt::OpenMode::kInteractive;
     if (!window.load_wnn_resources(
             data_directory.filePath(QStringLiteral("wnn.dix")),
             data_directory.filePath(QStringLiteral("wnn.dat")),
             QDir(user_data).filePath(QStringLiteral("user.sel")),
-            resource_mode)) {
+            interaction_mode)) {
       QTextStream(stderr) << "Could not load WNN conversion resources.\n";
       return 1;
     }
   }
   if (!positional_arguments.isEmpty()) {
-    const jwpqt::qt::OpenMode open_mode =
-        parser.isSet(smoke_test) ? jwpqt::qt::OpenMode::kNonInteractive
-                                 : jwpqt::qt::OpenMode::kInteractive;
     const bool opened =
         encoding.has_value()
             ? window.open_path(positional_arguments.constFirst(), *encoding,
-                               open_mode)
+                               interaction_mode)
             : window.open_path_detected(positional_arguments.constFirst(),
-                                        open_mode);
+                                        interaction_mode);
     if (!opened) {
-      if (open_mode == jwpqt::qt::OpenMode::kNonInteractive) {
+      if (interaction_mode == jwpqt::qt::OpenMode::kNonInteractive) {
         if (encoding.has_value()) {
           QTextStream(stderr)
               << "Could not open the file using the requested encoding.\n";

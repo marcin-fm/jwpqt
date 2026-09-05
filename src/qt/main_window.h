@@ -16,6 +16,8 @@
 #include "jwpqt/core/jwp_document_history.h"
 #include "jwpqt/core/jwp_document_model.h"
 #include "jwpqt/core/jwp_search.h"
+#include "jwpqt/core/kanji_color.h"
+#include "jwpqt/core/kanji_color_list.h"
 #include "jwpqt/core/kana_input.h"
 #include "jwpqt/core/legacy_code_page.h"
 #include "jwpqt/core/text_file.h"
@@ -90,6 +92,11 @@ class MainWindow : public QMainWindow {
                           core::JwpSearchOptions options = {});
   bool format_paragraphs(const core::JwpParagraphFormat& format);
   bool insert_page_break();
+  bool load_kanji_color_configuration(
+      const QString& settings_path, const QString& list_path,
+      OpenMode mode = OpenMode::kInteractive);
+  const core::KanjiColorPolicy& kanji_color_policy() const noexcept;
+  const core::KanjiColorList& kanji_color_list() const noexcept;
 
  protected:
   void closeEvent(QCloseEvent* event) override;
@@ -136,6 +143,9 @@ class MainWindow : public QMainWindow {
                          core::LegacyCodePage code_page);
   void set_text_encoding(core::TextEncoding encoding, bool mark_modified);
   void set_jwp_code_page(core::LegacyCodePage code_page);
+  void apply_jwp_presentation(const core::JwpDocument& document,
+                              core::LegacyCodePage code_page);
+  void clear_jwp_presentation();
   void find_document();
   void find_again(core::JwpSearchDirection direction);
   void replace_document();
@@ -170,6 +180,10 @@ class MainWindow : public QMainWindow {
   bool has_byte_order_mark_ = false;
   std::optional<core::JwpDocumentModel> jwp_document_;
   core::JwpDocumentHistory jwp_history_;
+  core::KanjiColorPolicy kanji_color_policy_;
+  core::KanjiColorList kanji_color_list_;
+  QString kanji_color_settings_path_;
+  QString kanji_color_list_path_;
   std::optional<core::JwpPosition> jwp_caret_;
   std::optional<core::JwpPosition> expected_jwp_caret_;
   std::optional<core::JwpDocument> saved_jwp_document_;

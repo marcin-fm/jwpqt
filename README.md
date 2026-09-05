@@ -49,8 +49,11 @@ terminal or longest-prefix candidates, and leaves unmatched suffixes at the
 caret. JWP paragraph indents, proportional spacing, and hard page breaks now
 drive a rich Qt document layout; Format Paragraph edits those values across the
 caret paragraph or selected paragraphs with portable undo, and Ctrl+Enter
-inserts structural hard page breaks as one undoable command. User dictionary
-management, lookup tools, configuration, and printing remain in progress.
+inserts structural hard page breaks as one undoable command. Global kanji
+color policy and `colkanji.lst` are loaded strictly from the XDG configuration
+directory and applied to raw JWP tokens without mutating document formatting.
+User dictionary management, lookup tools, remaining configuration, and printing
+remain in progress.
 
 JWPce/JWPxp copyright and licensing notices remain in `_cpright.txt`,
 `_readme.txt`, and `gnugpl.txt`.

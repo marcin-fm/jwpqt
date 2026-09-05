@@ -132,6 +132,12 @@ legacy file structures.
 39. Kanji display policy persists as one versioned Qt settings record with
     strict canonical mode, color, and toggle fields. Corrupt records fail as a
     unit instead of silently coercing or mixing individual options.
+40. The native application loads kanji display policy and optional
+    `colkanji.lst` from its XDG configuration directory into candidate state
+    before publication. JWP rendering refreshes colors after edits, history,
+    conversion, formatting, code-page changes, and rejected-edit restoration;
+    plain documents clear the overlay. Malformed reloads retain the prior
+    working state, and malformed startup configuration fails noninteractively.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and

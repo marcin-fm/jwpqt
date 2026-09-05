@@ -289,6 +289,12 @@ add_test(NAME application_noninteractive_detection
           "-DEUC_FILE=${CMAKE_CURRENT_BINARY_DIR}/sample-euc-jp.txt"
           -P "${CMAKE_CURRENT_SOURCE_DIR}/check_noninteractive_detection.cmake"
 )
+add_test(NAME application_invalid_kanji_configuration
+  COMMAND "${CMAKE_COMMAND}"
+          "-DJWPQT_EXECUTABLE=$<TARGET_FILE:jwpqt>"
+          "-DTEST_DIRECTORY=${CMAKE_CURRENT_BINARY_DIR}"
+          -P "${CMAKE_CURRENT_SOURCE_DIR}/check_invalid_kanji_configuration.cmake"
+)
 set_tests_properties(
   application_startup
   application_open_utf8
@@ -302,8 +308,9 @@ set_tests_properties(
   application_detect_new_jis
   application_invalid_encoding
   application_noninteractive_detection
+  application_invalid_kanji_configuration
   PROPERTIES
-  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/xdg-config"
   TIMEOUT 10
 )
 set_tests_properties(qt_main_window PROPERTIES
