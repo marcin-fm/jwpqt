@@ -56,6 +56,7 @@
 #include "edict_user_dictionary_dialog.h"
 #include "file_io.h"
 #include "jwp_editor.h"
+#include "kanji_info_dialog.h"
 #include "kanji_color_settings.h"
 #include "jwpqt/core/jwp_plain_text.h"
 #include "jwpqt/core/jwp_text_codec.h"
@@ -307,6 +308,7 @@ MainWindow::MainWindow(QWidget* parent)
       expected_jwp_caret_.reset();
       jwp_history_.break_coalescing();
     }
+    update_kanji_info_action();
   });
   connect(editor_, &QTextEdit::selectionChanged, this,
           [this] { update_conversion_actions(); });
@@ -321,6 +323,40 @@ MainWindow::~MainWindow() {
   delete edict_lookup_dialog_;
   delete edict_results_window_;
   delete edict_user_dictionary_dialog_;
+  delete kanji_info_dialog_;
+}
+
+bool MainWindow::load_kanji_info(const QString& path, OpenMode mode) {
+  try {
+    std::optional<core::KanjiInfoDatabase> loaded =
+        read_kanji_info_file(path);
+    std::unique_ptr<core::KanjiInfoDatabase> candidate;
+    if (loaded.has_value()) {
+      candidate = std::make_unique<core::KanjiInfoDatabase>(std::move(*loaded));
+    }
+    delete kanji_info_dialog_;
+    kanji_info_dialog_ = nullptr;
+    kanji_info_database_ = std::move(candidate);
+    kanji_info_path_ = path;
+    update_kanji_info_action();
+    statusBar()->showMessage(
+        kanji_info_database_ != nullptr
+            ? tr("Loaded kanji information for %1 characters")
+                  .arg(kanji_info_database_->count())
+            : tr("Kanji information database is not installed"),
+        3000);
+    return true;
+  } catch (const std::exception& error) {
+    if (mode == OpenMode::kInteractive) {
+      show_error(tr("Could not load kanji information"), error);
+    }
+    return false;
+  }
+}
+
+const core::KanjiInfoDatabase* MainWindow::kanji_info_database()
+    const noexcept {
+  return kanji_info_database_.get();
 }
 
 bool MainWindow::load_edict_configuration(const QString& registry_path,
@@ -859,6 +895,12 @@ void MainWindow::create_actions() {
   connect(edict_user_dictionary_action_, &QAction::triggered, this,
           [this] { show_edict_user_dictionary_dialog(); });
 
+  kanji_info_action_ = tools_menu->addAction(tr("Kanji &Information"));
+  kanji_info_action_->setObjectName(QStringLiteral("kanjiInfoAction"));
+  kanji_info_action_->setShortcut(QKeySequence(QStringLiteral("Ctrl+I")));
+  connect(kanji_info_action_, &QAction::triggered, this,
+          [this] { show_kanji_info_dialog(); });
+
   tools_menu->addSeparator();
   kanji_color_options_action_ =
       tools_menu->addAction(tr("Kanji Color &Options..."));
@@ -1108,6 +1150,7 @@ void MainWindow::update_conversion_actions() {
   insert_page_break_action_->setEnabled(!active && jwp_document_.has_value());
   update_kanji_color_actions();
   update_edict_actions();
+  update_kanji_info_action();
   update_kana_input_state();
 }
 
@@ -1134,6 +1177,12 @@ void MainWindow::update_edict_actions() {
   if (edict_user_dictionary_action_ != nullptr) {
     edict_user_dictionary_action_->setEnabled(
         edict_user_resources_ != nullptr && !conversion_active());
+  }
+}
+
+void MainWindow::update_kanji_info_action() {
+  if (kanji_info_action_ != nullptr) {
+    kanji_info_action_->setEnabled(kanji_info_target().has_value());
   }
 }
 
@@ -1647,6 +1696,62 @@ void MainWindow::show_edict_user_dictionary_dialog() {
           [this] { edict_user_dictionary_dialog_ = nullptr; });
   edict_user_dictionary_dialog_ = dialog;
   dialog->show();
+}
+
+void MainWindow::show_kanji_info_dialog() {
+  const std::optional<core::JisCode> target = kanji_info_target();
+  if (!target.has_value() || kanji_info_database_ == nullptr) {
+    statusBar()->showMessage(tr("No kanji information is available here"),
+                             3000);
+    return;
+  }
+  if (kanji_info_dialog_ != nullptr) {
+    if (!kanji_info_dialog_->set_code(*target)) return;
+    kanji_info_dialog_->show();
+    kanji_info_dialog_->raise();
+    kanji_info_dialog_->activateWindow();
+    return;
+  }
+  auto* dialog = new KanjiInfoDialog(*kanji_info_database_, this);
+  if (!dialog->set_code(*target)) {
+    delete dialog;
+    return;
+  }
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  connect(dialog, &QObject::destroyed, this,
+          [this] { kanji_info_dialog_ = nullptr; });
+  kanji_info_dialog_ = dialog;
+  dialog->show();
+}
+
+std::optional<core::JisCode> MainWindow::kanji_info_target() const {
+  if (kanji_info_database_ == nullptr || !jwp_document_.has_value()) {
+    return std::nullopt;
+  }
+  try {
+    const QTextCursor cursor = editor_->textCursor();
+    const int qt_offset = cursor.hasSelection() ? cursor.selectionStart()
+                                                : cursor.position();
+    const core::JwpPosition position = core::jwp_plain_text_position(
+        *jwp_document_,
+        utf32_offset_for_utf16(editor_->toPlainText(), qt_offset));
+    if (position.paragraph >= jwp_document_->paragraph_count()) {
+      return std::nullopt;
+    }
+    const core::JwpText& text =
+        jwp_document_->document().paragraphs[position.paragraph].text;
+    std::size_t offset = position.offset;
+    if (offset >= text.size()) {
+      if (offset == 0) return std::nullopt;
+      --offset;
+    }
+    const core::JisCode code = text[offset];
+    return kanji_info_database_->contains(code)
+               ? std::optional<core::JisCode>(code)
+               : std::nullopt;
+  } catch (const std::exception&) {
+    return std::nullopt;
+  }
 }
 
 bool MainWindow::insert_edict_user_entry(const core::EdictUserEntry& entry) {
