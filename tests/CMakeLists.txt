@@ -370,6 +370,13 @@ add_executable(jwpqt_jwp_editor_tests
 target_link_libraries(jwpqt_jwp_editor_tests PRIVATE jwpqt_qt_ui)
 target_compile_options(jwpqt_jwp_editor_tests PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME qt_jwp_editor COMMAND jwpqt_jwp_editor_tests)
+add_executable(jwpqt_kanji_info_dialog_tests
+  kanji_info_dialog_test.cpp
+)
+target_link_libraries(jwpqt_kanji_info_dialog_tests PRIVATE jwpqt_qt_ui)
+target_compile_options(jwpqt_kanji_info_dialog_tests
+  PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME qt_kanji_info_dialog COMMAND jwpqt_kanji_info_dialog_tests)
 add_test(NAME application_startup COMMAND jwpqt --smoke-test)
 add_test(NAME application_open_utf8
   COMMAND jwpqt --smoke-test
@@ -480,6 +487,10 @@ set_tests_properties(qt_wnn_user_dictionary_dialog PROPERTIES
   TIMEOUT 10
 )
 set_tests_properties(qt_jwp_editor PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  TIMEOUT 10
+)
+set_tests_properties(qt_kanji_info_dialog PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
   TIMEOUT 10
 )
