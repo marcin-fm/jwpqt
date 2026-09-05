@@ -380,4 +380,74 @@ std::vector<EdictIndexEntry> EdictIndex::find(const JwpText& key) const {
   return entries;
 }
 
+EdictIndexLookup find_edict_linear_matches(
+    const EdictDictionary& dictionary, const JwpText& key,
+    std::size_t work_steps, std::size_t matches_limit) {
+  if (work_steps == 0) {
+    throw EdictIndexError("Linear EDICT lookup work limit must be positive");
+  }
+  if (matches_limit == 0) {
+    throw EdictIndexError("Linear EDICT lookup result limit must be positive");
+  }
+
+  const JwpText normalized_key = normalize_key(key);
+  const std::string_view source = dictionary.source_bytes();
+  EdictIndexLookup lookup;
+  for (std::size_t record_index = 0;
+       record_index < dictionary.records().size(); ++record_index) {
+    const EdictRecord& record = dictionary.records()[record_index];
+    const std::size_t record_end = record.byte_offset + record.byte_length;
+    for (std::size_t offset = record.byte_offset; offset < record_end;) {
+      std::size_t first_width = 0;
+      const std::uint16_t first = normalize_token(source_token(
+          source, dictionary.encoding(), dictionary.mixed_code_page(), offset,
+          first_width));
+      if (first_width > record_end - offset) {
+        throw EdictIndexError(
+            "EDICT record ends inside an encoded character");
+      }
+      if (lookup.work_steps >= work_steps) {
+        throw EdictIndexError("Linear EDICT lookup exceeds its work limit");
+      }
+      ++lookup.work_steps;
+
+      if (first == normalized_key.front()) {
+        std::size_t source_offset = offset + first_width;
+        bool matched = true;
+        for (std::size_t i = 1; i < normalized_key.size(); ++i) {
+          if (lookup.work_steps >= work_steps) {
+            throw EdictIndexError(
+                "Linear EDICT lookup exceeds its work limit");
+          }
+          ++lookup.work_steps;
+          if (source_offset >= record_end) {
+            matched = false;
+            break;
+          }
+          std::size_t width = 0;
+          const std::uint16_t actual = normalize_token(source_token(
+              source, dictionary.encoding(), dictionary.mixed_code_page(),
+              source_offset, width));
+          if (width > record_end - source_offset ||
+              actual != normalized_key[i]) {
+            matched = false;
+            break;
+          }
+          source_offset += width;
+        }
+        if (matched) {
+          if (lookup.matches.size() >= matches_limit) {
+            throw EdictIndexError(
+                "Linear EDICT lookup exceeds its result limit");
+          }
+          lookup.matches.push_back(
+              {offset, source_offset - offset, record_index});
+        }
+      }
+      offset += first_width;
+    }
+  }
+  return lookup;
+}
+
 }  // namespace jwpqt::core

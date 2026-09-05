@@ -89,4 +89,9 @@ class EdictIndex {
   std::vector<std::size_t> record_ends_;
 };
 
+EdictIndexLookup find_edict_linear_matches(
+    const EdictDictionary& dictionary, const JwpText& key,
+    std::size_t work_steps = 16U * 1024U * 1024U,
+    std::size_t matches = 1'000'000);
+
 }  // namespace jwpqt::core

@@ -283,6 +283,12 @@ legacy file structures.
     quiet state is retained in diagnostics, blocking special files are rejected,
     and aggregate byte, structure, text, entry, attempt, and diagnostic budgets
     span both successful and malformed resources.
+67. Unindexed EDICT resources use a bounded physical source-order anchor scan
+    rather than a synthesized JDX. Every validated character-start occurrence
+    remains distinct, matching stops at record boundaries, EUC-JP, UTF-8,
+    recovered JIS X 0212, mixed high-byte pairs, and extension pages retain
+    their established token semantics, and exact attempted comparison work is
+    reported under explicit result and work limits with constant extra memory.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and

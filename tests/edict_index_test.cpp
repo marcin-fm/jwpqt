@@ -313,6 +313,110 @@ void test_lookup_stops_at_record_boundaries() {
       "Mixed JDX lookup crossed a record boundary");
 }
 
+void test_linear_lookup_preserves_source_order_and_occurrences() {
+  using namespace jwpqt::core;
+  const std::string source =
+      "alpha alpha /first/\nbeta alpha /second/\n";
+  const EdictDictionary dictionary =
+      EdictDictionary::parse(source, EdictEncoding::kEucJp);
+  const EdictIndexLookup lookup =
+      find_edict_linear_matches(dictionary, {'A', 'L', 'P', 'H', 'A'});
+  const std::size_t second = source.find("alpha", 1);
+  const std::size_t third = source.find("alpha", second + 1);
+  require(lookup.matches ==
+              std::vector<EdictIndexMatch>{{0, 5, 0},
+                                           {second, 5, 0},
+                                           {third, 5, 1}},
+          "Linear lookup did not preserve physical occurrence order");
+
+  const EdictIndexLookup no_cross =
+      find_edict_linear_matches(dictionary, {'t', '/', '\n', 'b'});
+  require(no_cross.matches.empty(),
+          "Linear lookup crossed an EDICT record boundary");
+}
+
+void test_linear_lookup_encodings() {
+  using namespace jwpqt::core;
+  const std::string euc = "\xa4\xab\xa5\xca\x8f\xa2\xed /entry/\n";
+  const EdictDictionary euc_dictionary =
+      EdictDictionary::parse(euc, EdictEncoding::kEucJp);
+  require(find_edict_linear_matches(euc_dictionary,
+                                    {0x242b, 0x244a, 0xa9})
+                  .matches ==
+              std::vector<EdictIndexMatch>{{0, 7, 0}},
+          "Linear EUC lookup did not fold katakana or decode JIS X 0212");
+
+  const std::string utf8 = "\xd0\x81 word /entry/\n";
+  const EdictDictionary utf8_dictionary = EdictDictionary::parse(
+      utf8, EdictEncoding::kUtf8, EdictParseLimits{},
+      LegacyCodePage::k1251);
+  const auto cyrillic = unicode_to_jis_x0208(U'\u0401');
+  require(cyrillic.has_value() &&
+              find_edict_linear_matches(utf8_dictionary, {*cyrillic})
+                      .matches ==
+                  std::vector<EdictIndexMatch>{{0, 2, 0}},
+          "Linear UTF-8 lookup ignored the dictionary extension page");
+
+  const std::string mixed = "head /\xc0\xc1 \x8f\xa1/\n";
+  const EdictDictionary mixed_dictionary = EdictDictionary::parse(
+      mixed, EdictEncoding::kMixed, EdictParseLimits{},
+      LegacyCodePage::k1251);
+  require(find_edict_linear_matches(mixed_dictionary, {0x4041}).matches ==
+                  std::vector<EdictIndexMatch>{{6, 2, 0}} &&
+              find_edict_linear_matches(mixed_dictionary, {0x0f21}).matches ==
+                  std::vector<EdictIndexMatch>{{9, 2, 0}},
+          "Linear mixed lookup did not preserve paired high-byte stepping");
+}
+
+void test_linear_lookup_limits_and_validation() {
+  using namespace jwpqt::core;
+  const std::string source = "word word /entry/\n";
+  const EdictDictionary dictionary =
+      EdictDictionary::parse(source, EdictEncoding::kEucJp);
+  const EdictIndexLookup one =
+      find_edict_linear_matches(dictionary, {'w', 'o', 'r', 'd'}, 100, 2);
+  require(one.matches.size() == 2 && one.work_steps > source.size(),
+          "Linear lookup did not report attempted comparison work");
+  require_throws(
+      [&] {
+        (void)find_edict_linear_matches(dictionary, {'w', 'o', 'r', 'd'},
+                                        one.work_steps - 1, 2);
+      },
+      "Linear lookup work limit was not enforced");
+  require_throws(
+      [&] { (void)find_edict_linear_matches(dictionary, {'w'}, 100, 1); },
+      "Linear lookup result limit was not enforced");
+  require_throws(
+      [&] { (void)find_edict_linear_matches(dictionary, {}, 100, 1); },
+      "Linear lookup accepted an empty key");
+  require_throws(
+      [&] { (void)find_edict_linear_matches(dictionary, {'w'}, 0, 1); },
+      "Linear lookup accepted a zero work limit");
+  require_throws(
+      [&] { (void)find_edict_linear_matches(dictionary, {'w'}, 100, 0); },
+      "Linear lookup accepted a zero result limit");
+}
+
+void test_linear_lookup_repeating_prefix_work() {
+  using namespace jwpqt::core;
+  const std::u32string repeated(100, U'\u3042');
+  const std::string source =
+      encode_legacy_text(repeated, LegacyEncoding::kEucJp) + " /entry/\n";
+  const EdictDictionary dictionary =
+      EdictDictionary::parse(source, EdictEncoding::kEucJp);
+  const JwpText key(100, 0x2422);
+  const EdictIndexLookup lookup =
+      find_edict_linear_matches(dictionary, key, 5'157, 1);
+  require(lookup.matches == std::vector<EdictIndexMatch>{{0, 200, 0}} &&
+              lookup.work_steps == 5'157,
+          "Linear repeating-prefix lookup work accounting is wrong");
+  require_throws(
+      [&] {
+        (void)find_edict_linear_matches(dictionary, key, 5'156, 1);
+      },
+      "Linear repeating-prefix lookup exceeded its work budget silently");
+}
+
 }  // namespace
 
 int main() {
@@ -323,5 +427,9 @@ int main() {
   test_malformed_indexes();
   test_euc_jis_x0212_match_span();
   test_lookup_stops_at_record_boundaries();
+  test_linear_lookup_preserves_source_order_and_occurrences();
+  test_linear_lookup_encodings();
+  test_linear_lookup_limits_and_validation();
+  test_linear_lookup_repeating_prefix_work();
   return 0;
 }
