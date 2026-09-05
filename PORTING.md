@@ -114,6 +114,10 @@ legacy file structures.
     break as one portable history transaction, restores the following caret and
     rich layout, and remains unavailable during active WNN conversion or in
     plain-text documents.
+35. A portable kanji-color policy reproduces the raw JWP token thresholds, the
+    list-member/non-member precedence over uncommon coloring, the historical
+    fixed-list index arithmetic, and Windows `COLORREF` byte/fallback decoding
+    without coupling those decisions to Qt or persisted list storage.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and

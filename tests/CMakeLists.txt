@@ -136,6 +136,12 @@ add_test(NAME core_byte_io COMMAND jwpqt_byte_io_tests)
 add_test(NAME core_jis_encoding COMMAND jwpqt_jis_encoding_tests)
 add_test(NAME core_jis_unicode COMMAND jwpqt_jis_unicode_tests)
 add_test(NAME core_jis_text COMMAND jwpqt_jis_text_tests)
+add_executable(jwpqt_kanji_color_tests
+  kanji_color_test.cpp
+)
+target_link_libraries(jwpqt_kanji_color_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_kanji_color_tests PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME core_kanji_color COMMAND jwpqt_kanji_color_tests)
 add_test(NAME core_kana_input COMMAND jwpqt_kana_input_tests)
 add_test(NAME core_wnn_dictionary COMMAND jwpqt_wnn_dictionary_tests)
 add_test(NAME core_wnn_lookup COMMAND jwpqt_wnn_lookup_tests)
