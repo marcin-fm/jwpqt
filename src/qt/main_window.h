@@ -95,6 +95,9 @@ class MainWindow : public QMainWindow {
   bool load_kanji_color_configuration(
       const QString& settings_path, const QString& list_path,
       OpenMode mode = OpenMode::kInteractive);
+  bool set_kanji_color_policy(
+      const core::KanjiColorPolicy& policy,
+      OpenMode mode = OpenMode::kInteractive);
   const core::KanjiColorPolicy& kanji_color_policy() const noexcept;
   const core::KanjiColorList& kanji_color_list() const noexcept;
 
@@ -110,6 +113,8 @@ class MainWindow : public QMainWindow {
       const ReplaceRequest& initial);
   virtual std::optional<core::JwpParagraphFormat>
   prompt_for_paragraph_format(const core::JwpParagraphFormat& initial);
+  virtual std::optional<core::KanjiColorPolicy>
+  prompt_for_kanji_color_policy(const core::KanjiColorPolicy& initial);
 
  private:
   struct WnnResources;
@@ -150,6 +155,7 @@ class MainWindow : public QMainWindow {
   void find_again(core::JwpSearchDirection direction);
   void replace_document();
   void format_document_paragraphs();
+  void configure_kanji_colors();
   bool find_jwp_text(const QString& text, core::JwpSearchOptions options);
   bool find_plain_text(const QString& text, core::JwpSearchOptions options);
   void synchronize_jwp_document(int position, int chars_removed,
@@ -171,6 +177,7 @@ class MainWindow : public QMainWindow {
   QAction* kana_input_action_ = nullptr;
   QAction* format_paragraph_action_ = nullptr;
   QAction* insert_page_break_action_ = nullptr;
+  QAction* kanji_color_options_action_ = nullptr;
   QLabel* input_mode_label_;
   QActionGroup* encoding_actions_;
   QMenu* jwp_code_page_menu_;

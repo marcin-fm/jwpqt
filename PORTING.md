@@ -138,6 +138,11 @@ legacy file structures.
     conversion, formatting, code-page changes, and rejected-edit restoration;
     plain documents clear the overlay. Malformed reloads retain the prior
     working state, and malformed startup configuration fails noninteractively.
+41. Native Kanji Color Options edits screen list mode, list color, and uncommon
+    coloring as one validated policy update. The complete strict settings
+    record is persisted before publication; failed persistence restores the
+    prior policy and both persistent/transient editor overlays without ending
+    an active WNN conversion.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -146,8 +151,8 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Port document-backed kanji coloring and paged printing over the rich JWP
-   document layout.
+1. Complete kanji color-list management, then port paged printing over the
+   rich JWP document layout.
 2. Port editable WNN user dictionaries and lookup tools as separate vertical
    slices.
 3. Port configuration, remaining import/export paths, and help.

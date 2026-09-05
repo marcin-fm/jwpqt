@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <exception>
 #include <optional>
 #include <string>
@@ -14,6 +15,8 @@
 #include <QActionGroup>
 #include <QCheckBox>
 #include <QCloseEvent>
+#include <QColorDialog>
+#include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
@@ -274,6 +277,48 @@ const core::KanjiColorList& MainWindow::kanji_color_list() const noexcept {
   return kanji_color_list_;
 }
 
+bool MainWindow::set_kanji_color_policy(const core::KanjiColorPolicy& policy,
+                                        OpenMode mode) {
+  try {
+    switch (policy.list_mode) {
+      case core::KanjiListColorMode::kOff:
+      case core::KanjiListColorMode::kMatch:
+      case core::KanjiListColorMode::kNoMatch:
+        break;
+      default:
+        throw std::invalid_argument("Invalid kanji list color mode");
+    }
+    if (kanji_color_settings_path_.isEmpty()) {
+      throw std::runtime_error("Kanji color settings path is not configured");
+    }
+
+    if (jwp_document_.has_value()) {
+      editor_->apply_kanji_colors(jwp_document_->document(),
+                                  kanji_color_list_, policy, jwp_code_page_);
+    }
+    try {
+      QSettings settings(kanji_color_settings_path_, QSettings::IniFormat);
+      write_kanji_color_policy(settings, policy);
+    } catch (...) {
+      if (jwp_document_.has_value()) {
+        editor_->apply_kanji_colors(jwp_document_->document(),
+                                    kanji_color_list_, kanji_color_policy_,
+                                    jwp_code_page_);
+      }
+      throw;
+    }
+
+    kanji_color_policy_ = policy;
+    statusBar()->showMessage(tr("Updated kanji color options"), 3000);
+    return true;
+  } catch (const std::exception& error) {
+    if (mode == OpenMode::kInteractive) {
+      show_error(tr("Could not update kanji color options"), error);
+    }
+    return false;
+  }
+}
+
 void MainWindow::create_actions() {
   QMenu* file_menu = menuBar()->addMenu(tr("&File"));
 
@@ -419,6 +464,14 @@ void MainWindow::create_actions() {
        QKeySequence(Qt::CTRL | Qt::Key_Enter)});
   connect(insert_page_break_action_, &QAction::triggered, this,
           [this] { insert_page_break(); });
+
+  QMenu* tools_menu = menuBar()->addMenu(tr("&Tools"));
+  kanji_color_options_action_ =
+      tools_menu->addAction(tr("Kanji Color &Options..."));
+  kanji_color_options_action_->setObjectName(
+      QStringLiteral("kanjiColorOptionsAction"));
+  connect(kanji_color_options_action_, &QAction::triggered, this,
+          [this] { configure_kanji_colors(); });
 
   QMenu* convert_menu = menuBar()->addMenu(tr("&Convert"));
   convert_action_ = convert_menu->addAction(tr("Convert &Selection"));
@@ -1662,6 +1715,86 @@ MainWindow::prompt_for_paragraph_format(
       static_cast<int>(spacing->value() * 100.0 + 0.5)};
 }
 
+std::optional<core::KanjiColorPolicy>
+MainWindow::prompt_for_kanji_color_policy(
+    const core::KanjiColorPolicy& initial) {
+  QDialog dialog(this);
+  dialog.setWindowTitle(tr("Kanji Color Options"));
+
+  auto* layout = new QVBoxLayout(&dialog);
+  auto* form = new QFormLayout();
+  auto* mode = new QComboBox(&dialog);
+  mode->setObjectName(QStringLiteral("kanjiColorMode"));
+  mode->addItem(tr("Off"),
+                static_cast<int>(core::KanjiListColorMode::kOff));
+  mode->addItem(tr("Color kanji in the list"),
+                static_cast<int>(core::KanjiListColorMode::kMatch));
+  mode->addItem(tr("Color kanji not in the list"),
+                static_cast<int>(core::KanjiListColorMode::kNoMatch));
+  const int initial_mode = mode->findData(static_cast<int>(initial.list_mode));
+  if (initial_mode < 0) {
+    throw std::invalid_argument("Invalid kanji list color mode");
+  }
+  mode->setCurrentIndex(initial_mode);
+  form->addRow(tr("List coloring:"), mode);
+
+  QColor list_color(initial.list_color.red, initial.list_color.green,
+                    initial.list_color.blue);
+  auto* list_color_button = new QPushButton(list_color.name(), &dialog);
+  list_color_button->setObjectName(QStringLiteral("kanjiListColor"));
+  connect(list_color_button, &QPushButton::clicked, &dialog, [&] {
+    const QColor selected = QColorDialog::getColor(
+        list_color, &dialog, tr("Select Kanji List Color"));
+    if (selected.isValid()) {
+      list_color = selected;
+      list_color_button->setText(list_color.name());
+    }
+  });
+  form->addRow(tr("List color:"), list_color_button);
+
+  auto* uncommon = new QCheckBox(tr("Color uncommon kanji"), &dialog);
+  uncommon->setObjectName(QStringLiteral("kanjiUncommonEnabled"));
+  uncommon->setChecked(initial.colorize_uncommon);
+  form->addRow(QString(), uncommon);
+
+  QColor uncommon_color(initial.uncommon_color.red,
+                        initial.uncommon_color.green,
+                        initial.uncommon_color.blue);
+  auto* uncommon_color_button =
+      new QPushButton(uncommon_color.name(), &dialog);
+  uncommon_color_button->setObjectName(
+      QStringLiteral("kanjiUncommonColor"));
+  connect(uncommon_color_button, &QPushButton::clicked, &dialog, [&] {
+    const QColor selected = QColorDialog::getColor(
+        uncommon_color, &dialog, tr("Select Uncommon Kanji Color"));
+    if (selected.isValid()) {
+      uncommon_color = selected;
+      uncommon_color_button->setText(uncommon_color.name());
+    }
+  });
+  form->addRow(tr("Uncommon color:"), uncommon_color_button);
+  layout->addLayout(form);
+
+  auto* buttons = new QDialogButtonBox(
+      QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+  connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+  connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+  layout->addWidget(buttons);
+
+  if (dialog.exec() != QDialog::Accepted) {
+    return std::nullopt;
+  }
+  return core::KanjiColorPolicy{
+      static_cast<core::KanjiListColorMode>(mode->currentData().toInt()),
+      {static_cast<std::uint8_t>(list_color.red()),
+       static_cast<std::uint8_t>(list_color.green()),
+       static_cast<std::uint8_t>(list_color.blue())},
+      uncommon->isChecked(),
+      {static_cast<std::uint8_t>(uncommon_color.red()),
+       static_cast<std::uint8_t>(uncommon_color.green()),
+       static_cast<std::uint8_t>(uncommon_color.blue())}};
+}
+
 void MainWindow::set_text_encoding(core::TextEncoding encoding,
                                    bool mark_modified) {
   if (jwp_document_.has_value() || encoding_ == encoding) {
@@ -1761,6 +1894,21 @@ void MainWindow::format_document_paragraphs() {
   } catch (const std::exception& error) {
     statusBar()->showMessage(
         tr("Could not format paragraphs: %1")
+            .arg(QString::fromUtf8(error.what())),
+        5000);
+  }
+}
+
+void MainWindow::configure_kanji_colors() {
+  try {
+    const std::optional<core::KanjiColorPolicy> policy =
+        prompt_for_kanji_color_policy(kanji_color_policy_);
+    if (policy.has_value()) {
+      set_kanji_color_policy(*policy);
+    }
+  } catch (const std::exception& error) {
+    statusBar()->showMessage(
+        tr("Could not configure kanji colors: %1")
             .arg(QString::fromUtf8(error.what())),
         5000);
   }
