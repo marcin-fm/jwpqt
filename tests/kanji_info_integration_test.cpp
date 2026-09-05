@@ -14,6 +14,7 @@
 #include "file_io.h"
 #include "jwpqt/core/kanji_info.h"
 #include "kanji_code_lookup_dialog.h"
+#include "kanji_count_dialog.h"
 #include "kanji_info_dialog.h"
 #include "kanji_lookup_dialog.h"
 #include "kanji_reading_lookup_dialog.h"
@@ -150,6 +151,8 @@ void test_integration(const QString& directory) {
       window.findChild<QAction*>(QStringLiteral("spahnLookupAction"));
   QAction* reading_action = window.findChild<QAction*>(
       QStringLiteral("kanjiReadingLookupAction"));
+  QAction* count_action =
+      window.findChild<QAction*>(QStringLiteral("kanjiCountAction"));
   require(skip_action != nullptr && skip_action->isEnabled() &&
               skip_action->shortcut() ==
                   QKeySequence(QStringLiteral("Ctrl+Shift+S")) &&
@@ -165,8 +168,11 @@ void test_integration(const QString& directory) {
                   QKeySequence(QStringLiteral("Ctrl+H")) &&
                reading_action != nullptr && reading_action->isEnabled() &&
                reading_action->shortcut() ==
-                   QKeySequence(QStringLiteral("Ctrl+Shift+R")),
-          "Kanji lookup actions are unavailable");
+                   QKeySequence(QStringLiteral("Ctrl+Shift+R")) &&
+               count_action != nullptr && count_action->isEnabled() &&
+               count_action->shortcut() ==
+                   QKeySequence(QStringLiteral("Ctrl+Shift+K")),
+           "Kanji lookup actions are unavailable");
   skip_action->trigger();
   QApplication::processEvents();
   auto* code_dialog = dynamic_cast<jwpqt::qt::KanjiCodeLookupDialog*>(
@@ -249,6 +255,35 @@ void test_integration(const QString& directory) {
   require(window.current_jwp_document()->paragraphs[0].text.size() == 3,
           "Reading lookup insertion did not mutate the JWP document");
 
+  count_action->trigger();
+  QApplication::processEvents();
+  auto* count_dialog = dynamic_cast<jwpqt::qt::KanjiCountDialog*>(
+      window.findChild<QDialog*>(QStringLiteral("kanjiCountDialog")));
+  jwpqt::qt::KanjiCountDisplayOptions count_options;
+  count_options.frequency = false;
+  if (count_dialog != nullptr)
+    count_dialog->set_display_options(count_options);
+  require(count_dialog != nullptr && count_dialog->count() &&
+              count_dialog->results().size() == 1 &&
+              count_dialog->results()[0].code == 0x3021U &&
+              count_dialog->results()[0].count == 3,
+          "Count Kanji action did not report the current document");
+  auto* count_results = count_dialog->findChild<QListWidget*>(
+      QStringLiteral("kanjiCountResults"));
+  require(count_results != nullptr && count_results->count() == 1,
+          "Integrated Count Kanji has no result list");
+  count_results->item(0)->setSelected(true);
+  count_dialog->findChild<QPushButton*>(QStringLiteral("kanjiCountInsert"))
+      ->click();
+  require(window.current_jwp_document()->paragraphs[0].text.size() == 4,
+          "Count Kanji insertion did not mutate the JWP document");
+  QAction* undo = window.findChild<QAction*>(QStringLiteral("undoAction"));
+  require(undo != nullptr && undo->isEnabled(),
+          "Count Kanji insertion did not create a history entry");
+  undo->trigger();
+  require(window.current_jwp_document()->paragraphs[0].text.size() == 3,
+          "Count Kanji insertion could not be undone");
+
   QAction* radical_action =
       window.findChild<QAction*>(QStringLiteral("radicalLookupAction"));
   require(radical_action != nullptr && radical_action->isEnabled() &&
@@ -291,10 +326,12 @@ void test_integration(const QString& directory) {
                   dialog &&
               window.findChild<QDialog*>(
                   QStringLiteral("kanjiCodeLookupDialog")) == code_dialog &&
-              window.findChild<QDialog*>(
-                  QStringLiteral("kanjiReadingLookupDialog")) ==
-                  reading_dialog,
-          "Malformed kanji information reload discarded working state");
+               window.findChild<QDialog*>(
+                   QStringLiteral("kanjiReadingLookupDialog")) ==
+                   reading_dialog &&
+               window.findChild<QDialog*>(QStringLiteral("kanjiCountDialog")) ==
+                   count_dialog,
+           "Malformed kanji information reload discarded working state");
   require(QFile::remove(info_path), "Could not remove database fixture");
   require(window.load_kanji_info(
               info_path, jwpqt::qt::OpenMode::kNonInteractive) &&
@@ -303,14 +340,16 @@ void test_integration(const QString& directory) {
                !skip_action->isEnabled() &&
                !four_corner_action->isEnabled() &&
                !bushu_action->isEnabled() && !spahn_action->isEnabled() &&
-               !reading_action->isEnabled() &&
+               !reading_action->isEnabled() && count_action->isEnabled() &&
               window.findChild<QDialog*>(QStringLiteral("kanjiInfoDialog")) ==
                   nullptr &&
               window.findChild<QDialog*>(
                   QStringLiteral("kanjiCodeLookupDialog")) == nullptr &&
-              window.findChild<QDialog*>(
-                  QStringLiteral("kanjiReadingLookupDialog")) == nullptr,
-          "Absent database reload retained stale kanji information state");
+               window.findChild<QDialog*>(
+                   QStringLiteral("kanjiReadingLookupDialog")) == nullptr &&
+               window.findChild<QDialog*>(QStringLiteral("kanjiCountDialog")) ==
+                   nullptr,
+           "Absent database reload retained stale kanji information state");
 }
 
 }  // namespace

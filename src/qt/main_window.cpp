@@ -58,6 +58,7 @@
 #include "file_io.h"
 #include "jwp_editor.h"
 #include "kanji_code_lookup_dialog.h"
+#include "kanji_count_dialog.h"
 #include "kanji_info_dialog.h"
 #include "kanji_lookup_dialog.h"
 #include "kanji_reading_lookup_dialog.h"
@@ -328,6 +329,7 @@ MainWindow::~MainWindow() {
   delete edict_results_window_;
   delete edict_user_dictionary_dialog_;
   delete kanji_info_dialog_;
+  delete kanji_count_dialog_;
   delete kanji_code_lookup_dialog_;
   delete kanji_reading_lookup_dialog_;
   delete kanji_lookup_dialog_;
@@ -347,11 +349,14 @@ bool MainWindow::load_kanji_info(const QString& path, OpenMode mode) {
     kanji_reading_lookup_dialog_ = nullptr;
     delete kanji_lookup_dialog_;
     kanji_lookup_dialog_ = nullptr;
+    delete kanji_count_dialog_;
+    kanji_count_dialog_ = nullptr;
     delete kanji_info_dialog_;
     kanji_info_dialog_ = nullptr;
     kanji_info_database_ = std::move(candidate);
     kanji_info_path_ = path;
     update_kanji_info_action();
+    update_kanji_count_action();
     update_kanji_code_lookup_actions();
     update_kanji_reading_lookup_action();
     update_kanji_lookup_action();
@@ -1010,6 +1015,13 @@ void MainWindow::create_actions() {
   connect(kanji_reading_lookup_action_, &QAction::triggered, this,
           [this] { show_kanji_reading_lookup_dialog(); });
 
+  kanji_count_action_ = tools_menu->addAction(tr("&Count Kanji"));
+  kanji_count_action_->setObjectName(QStringLiteral("kanjiCountAction"));
+  kanji_count_action_->setShortcut(
+      QKeySequence(QStringLiteral("Ctrl+Shift+K")));
+  connect(kanji_count_action_, &QAction::triggered, this,
+          [this] { show_kanji_count_dialog(); });
+
   kanji_lookup_action_ = tools_menu->addAction(tr("&Radical Lookup"));
   kanji_lookup_action_->setObjectName(QStringLiteral("radicalLookupAction"));
   kanji_lookup_action_->setShortcut(QKeySequence(Qt::Key_F5));
@@ -1266,6 +1278,7 @@ void MainWindow::update_conversion_actions() {
   update_kanji_color_actions();
   update_edict_actions();
   update_kanji_info_action();
+  update_kanji_count_action();
   update_kanji_code_lookup_actions();
   update_kanji_reading_lookup_action();
   update_kanji_lookup_action();
@@ -1301,6 +1314,13 @@ void MainWindow::update_edict_actions() {
 void MainWindow::update_kanji_info_action() {
   if (kanji_info_action_ != nullptr) {
     kanji_info_action_->setEnabled(kanji_info_target().has_value());
+  }
+}
+
+void MainWindow::update_kanji_count_action() {
+  if (kanji_count_action_ != nullptr) {
+    kanji_count_action_->setEnabled(jwp_document_.has_value() &&
+                                    !conversion_active());
   }
 }
 
@@ -1878,6 +1898,36 @@ void MainWindow::show_kanji_info_code(core::JisCode code) {
           [this] { kanji_info_dialog_ = nullptr; });
   kanji_info_dialog_ = dialog;
   dialog->show();
+}
+
+void MainWindow::show_kanji_count_dialog() {
+  if (!jwp_document_.has_value() || conversion_active()) {
+    statusBar()->showMessage(tr("Count Kanji is not available"), 3000);
+    return;
+  }
+  finish_kana_input();
+  if (!jwp_document_.has_value() || conversion_active())
+    return;
+  if (kanji_count_dialog_ != nullptr) {
+    kanji_count_dialog_->show();
+    kanji_count_dialog_->raise();
+    kanji_count_dialog_->activateWindow();
+    return;
+  }
+  try {
+    auto* dialog = new KanjiCountDialog(
+        {&jwp_document_->document()}, kanji_color_list_,
+        kanji_info_database_ != nullptr ? kanji_info_database_.get() : nullptr,
+        [this](std::u32string text) { insert_edict_text(std::move(text)); },
+        [this](core::JisCode code) { show_kanji_info_code(code); }, this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    connect(dialog, &QObject::destroyed, this,
+            [this] { kanji_count_dialog_ = nullptr; });
+    kanji_count_dialog_ = dialog;
+    dialog->show();
+  } catch (const std::exception& error) {
+    show_error(tr("Could not open Count Kanji"), error);
+  }
 }
 
 void MainWindow::show_kanji_code_lookup_dialog(KanjiCodeLookupMode mode) {
