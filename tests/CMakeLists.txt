@@ -218,6 +218,14 @@ target_compile_options(jwpqt_edict_index_tests
   PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME core_edict_index COMMAND jwpqt_edict_index_tests)
 
+add_executable(jwpqt_edict_pattern_tests
+  edict_pattern_test.cpp
+)
+target_link_libraries(jwpqt_edict_pattern_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_edict_pattern_tests
+  PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME core_edict_pattern COMMAND jwpqt_edict_pattern_tests)
+
 add_executable(jwpqt_edict_search_tests
   edict_search_test.cpp
 )

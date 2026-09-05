@@ -5,6 +5,7 @@ add_library(jwpqt_core STATIC
   edict_engine.cpp
   edict_filter.cpp
   edict_index.cpp
+  edict_pattern.cpp
   edict_search.cpp
   jis_encoding.cpp
   jis_text.cpp

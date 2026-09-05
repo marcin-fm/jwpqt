@@ -229,6 +229,12 @@ legacy file structures.
     accepted results, and actual index-comparison work. The public direct API
     retains its 100-token boundary; only the private adaptive path may use a
     generated 101-token temporary key.
+58. Portable EDICT pattern preprocessing reproduces the recovered 100-token
+    input bound, ASCII/kana/fullwidth normalization, exact version-entry
+    markers, fixed `to ` prefix, first-kanji anchor split, closing-bracket
+    truncation, kana trailing-star shortcut, and explicit ASCII-boundary and
+    adaptive-disable state. Malformed or anchorless wildcard plans fail before
+    dictionary lookup.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
