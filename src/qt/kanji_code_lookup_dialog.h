@@ -31,10 +31,16 @@ class KanjiCodeLookupDialog : public QDialog {
 
   void set_skip_query(const core::KanjiSkipQuery& query);
   void set_four_corner_query(const core::KanjiFourCornerQuery& query);
+  void set_bushu_query(const core::KanjiBushuQuery& query);
+  void set_spahn_query(const core::KanjiSpahnQuery& query);
   void select_skip_mode();
   void select_four_corner_mode();
+  void select_bushu_mode();
+  void select_spahn_mode();
   bool search_skip();
   bool search_four_corner();
+  bool search_bushu();
+  bool search_spahn();
   std::vector<core::KanjiCodeMatch> results() const;
 
  private:
@@ -54,6 +60,14 @@ class KanjiCodeLookupDialog : public QDialog {
   QSpinBox* skip_second_;
   QCheckBox* skip_misclassifications_;
   std::vector<QSpinBox*> corner_digits_;
+  QSpinBox* bushu_radical_;
+  QSpinBox* bushu_strokes_;
+  QCheckBox* bushu_nelson_;
+  QCheckBox* bushu_classical_;
+  QSpinBox* spahn_radical_strokes_;
+  QSpinBox* spahn_radical_;
+  QSpinBox* spahn_other_strokes_;
+  QSpinBox* spahn_index_;
   QListWidget* results_;
   QLabel* status_;
   QPushButton* copy_button_;

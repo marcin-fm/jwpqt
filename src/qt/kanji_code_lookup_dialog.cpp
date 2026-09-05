@@ -39,6 +39,26 @@ core::KanjiCodeMatch item_match(const QListWidgetItem& item) {
           item.data(Qt::UserRole + 1).toBool()};
 }
 
+bool exact_or_any(const core::KanjiNumericRange& range,
+                  std::uint8_t maximum) {
+  return range.minimum <= range.maximum && range.maximum <= maximum &&
+         (range.minimum == range.maximum ||
+          (range.minimum == 0 && range.maximum == maximum));
+}
+
+int spin_value(const core::KanjiNumericRange& range) {
+  return range.minimum == range.maximum ? static_cast<int>(range.minimum) : -1;
+}
+
+core::KanjiNumericRange spin_range(const QSpinBox& spin,
+                                   std::uint8_t maximum) {
+  return spin.value() < 0
+             ? core::KanjiNumericRange{0, maximum}
+             : core::KanjiNumericRange{
+                   static_cast<std::uint8_t>(spin.value()),
+                   static_cast<std::uint8_t>(spin.value())};
+}
+
 }  // namespace
 
 KanjiCodeLookupDialog::KanjiCodeLookupDialog(
@@ -53,13 +73,23 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
       skip_first_(wildcard_spin(20, QStringLiteral("skipFirst"), this)),
       skip_second_(wildcard_spin(24, QStringLiteral("skipSecond"), this)),
       skip_misclassifications_(new QCheckBox(tr("Include &miscodes"), this)),
+      bushu_radical_(wildcard_spin(255, QStringLiteral("bushuRadical"), this)),
+      bushu_strokes_(wildcard_spin(30, QStringLiteral("bushuStrokes"), this)),
+      bushu_nelson_(new QCheckBox(tr("&Nelson radical"), this)),
+      bushu_classical_(new QCheckBox(tr("&Classical radical"), this)),
+      spahn_radical_strokes_(wildcard_spin(
+          11, QStringLiteral("spahnRadicalStrokes"), this)),
+      spahn_radical_(wildcard_spin(19, QStringLiteral("spahnRadical"), this)),
+      spahn_other_strokes_(wildcard_spin(
+          26, QStringLiteral("spahnOtherStrokes"), this)),
+      spahn_index_(wildcard_spin(47, QStringLiteral("spahnIndex"), this)),
       results_(new QListWidget(this)),
       status_(new QLabel(this)),
       copy_button_(new QPushButton(tr("&Copy"), this)),
       insert_button_(new QPushButton(tr("&Insert"), this)),
       info_button_(new QPushButton(tr("&Information"), this)) {
   setObjectName(QStringLiteral("kanjiCodeLookupDialog"));
-  setWindowTitle(tr("SKIP and Four-Corner Lookup"));
+  setWindowTitle(tr("Kanji Code Lookup"));
   setModal(false);
   resize(580, 520);
 
@@ -83,6 +113,26 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
     corner_layout->addRow(tr("Digit %1").arg(index + 1), spin);
   }
   tabs_->addTab(corner_page, tr("Four corner"));
+
+  auto* bushu_page = new QWidget(tabs_);
+  auto* bushu_layout = new QFormLayout(bushu_page);
+  bushu_layout->addRow(tr("Radical number"), bushu_radical_);
+  bushu_layout->addRow(tr("Stroke count"), bushu_strokes_);
+  bushu_nelson_->setObjectName(QStringLiteral("bushuNelson"));
+  bushu_classical_->setObjectName(QStringLiteral("bushuClassical"));
+  bushu_nelson_->setChecked(true);
+  bushu_classical_->setChecked(true);
+  bushu_layout->addRow(bushu_nelson_);
+  bushu_layout->addRow(bushu_classical_);
+  tabs_->addTab(bushu_page, tr("Bushu"));
+
+  auto* spahn_page = new QWidget(tabs_);
+  auto* spahn_layout = new QFormLayout(spahn_page);
+  spahn_layout->addRow(tr("Radical strokes"), spahn_radical_strokes_);
+  spahn_layout->addRow(tr("Radical"), spahn_radical_);
+  spahn_layout->addRow(tr("Other strokes"), spahn_other_strokes_);
+  spahn_layout->addRow(tr("Kanji index"), spahn_index_);
+  tabs_->addTab(spahn_page, tr("Spahn-Hadamitzky"));
   outer->addWidget(tabs_);
 
   auto* search_button = new QPushButton(tr("&Search"), this);
@@ -104,8 +154,28 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
   outer->addWidget(buttons);
 
   connect(search_button, &QPushButton::clicked, this, [this] {
-    (void)(tabs_->currentIndex() == 0 ? search_skip()
-                                      : search_four_corner());
+    switch (tabs_->currentIndex()) {
+      case 0:
+        (void)search_skip();
+        break;
+      case 1:
+        (void)search_four_corner();
+        break;
+      case 2:
+        (void)search_bushu();
+        break;
+      default:
+        (void)search_spahn();
+        break;
+    }
+  });
+  connect(bushu_nelson_, &QCheckBox::toggled, this, [this](bool checked) {
+    if (!checked && !bushu_classical_->isChecked())
+      bushu_classical_->setChecked(true);
+  });
+  connect(bushu_classical_, &QCheckBox::toggled, this, [this](bool checked) {
+    if (!checked && !bushu_nelson_->isChecked())
+      bushu_nelson_->setChecked(true);
   });
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
   connect(results_, &QListWidget::itemSelectionChanged, this,
@@ -122,26 +192,47 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
 }
 
 void KanjiCodeLookupDialog::set_skip_query(const core::KanjiSkipQuery& query) {
-  const auto valid = [](const core::KanjiNumericRange& range,
-                        std::uint8_t maximum) {
-    return range.minimum <= range.maximum && range.maximum <= maximum &&
-           (range.minimum == range.maximum ||
-            (range.minimum == 0 && range.maximum == maximum));
-  };
-  if (!valid(query.type, 4) || !valid(query.first, 20) ||
-      !valid(query.second, 24)) {
+  if (!exact_or_any(query.type, 4) || !exact_or_any(query.first, 20) ||
+      !exact_or_any(query.second, 24)) {
     throw core::KanjiInfoError(
         "Native SKIP query must be exact or completely wildcarded");
   }
-  const auto value = [](const core::KanjiNumericRange& range) {
-    return range.minimum == range.maximum ? static_cast<int>(range.minimum)
-                                          : -1;
-  };
-  skip_type_->setValue(value(query.type));
-  skip_first_->setValue(value(query.first));
-  skip_second_->setValue(value(query.second));
+  skip_type_->setValue(spin_value(query.type));
+  skip_first_->setValue(spin_value(query.first));
+  skip_second_->setValue(spin_value(query.second));
   skip_misclassifications_->setChecked(query.include_misclassifications);
   tabs_->setCurrentIndex(0);
+}
+
+void KanjiCodeLookupDialog::set_bushu_query(
+    const core::KanjiBushuQuery& query) {
+  if (!exact_or_any(query.radical, 255) ||
+      !exact_or_any(query.strokes, 30) ||
+      (!query.nelson && !query.classical)) {
+    throw core::KanjiInfoError(
+        "Native Bushu query is invalid or is not exact/wildcarded");
+  }
+  bushu_radical_->setValue(spin_value(query.radical));
+  bushu_strokes_->setValue(spin_value(query.strokes));
+  bushu_nelson_->setChecked(query.nelson);
+  bushu_classical_->setChecked(query.classical);
+  tabs_->setCurrentIndex(2);
+}
+
+void KanjiCodeLookupDialog::set_spahn_query(
+    const core::KanjiSpahnQuery& query) {
+  if (!exact_or_any(query.radical_strokes, 11) ||
+      !exact_or_any(query.radical, 19) ||
+      !exact_or_any(query.other_strokes, 26) ||
+      !exact_or_any(query.index, 47)) {
+    throw core::KanjiInfoError(
+        "Native Spahn query must be exact or completely wildcarded");
+  }
+  spahn_radical_strokes_->setValue(spin_value(query.radical_strokes));
+  spahn_radical_->setValue(spin_value(query.radical));
+  spahn_other_strokes_->setValue(spin_value(query.other_strokes));
+  spahn_index_->setValue(spin_value(query.index));
+  tabs_->setCurrentIndex(3);
 }
 
 void KanjiCodeLookupDialog::set_four_corner_query(
@@ -161,16 +252,15 @@ void KanjiCodeLookupDialog::select_four_corner_mode() {
   tabs_->setCurrentIndex(1);
 }
 
+void KanjiCodeLookupDialog::select_bushu_mode() { tabs_->setCurrentIndex(2); }
+
+void KanjiCodeLookupDialog::select_spahn_mode() { tabs_->setCurrentIndex(3); }
+
 bool KanjiCodeLookupDialog::search_skip() {
   core::KanjiSkipQuery query;
-  const auto range = [](int value, std::uint8_t maximum) {
-    return value < 0 ? core::KanjiNumericRange{0, maximum}
-                     : core::KanjiNumericRange{static_cast<std::uint8_t>(value),
-                                               static_cast<std::uint8_t>(value)};
-  };
-  query.type = range(skip_type_->value(), 4);
-  query.first = range(skip_first_->value(), 20);
-  query.second = range(skip_second_->value(), 24);
+  query.type = spin_range(*skip_type_, 4);
+  query.first = spin_range(*skip_first_, 20);
+  query.second = spin_range(*skip_second_, 24);
   query.include_misclassifications = skip_misclassifications_->isChecked();
   try {
     return publish(core::search_kanji_skip(information_, query));
@@ -178,6 +268,38 @@ bool KanjiCodeLookupDialog::search_skip() {
     status_->setText(QString::fromUtf8(error.what()));
   } catch (...) {
     status_->setText(tr("SKIP lookup failed"));
+  }
+  return false;
+}
+
+bool KanjiCodeLookupDialog::search_bushu() {
+  core::KanjiBushuQuery query;
+  query.radical = spin_range(*bushu_radical_, 255);
+  query.strokes = spin_range(*bushu_strokes_, 30);
+  query.nelson = bushu_nelson_->isChecked();
+  query.classical = bushu_classical_->isChecked();
+  try {
+    return publish(core::search_kanji_bushu(information_, query));
+  } catch (const std::exception& error) {
+    status_->setText(QString::fromUtf8(error.what()));
+  } catch (...) {
+    status_->setText(tr("Bushu lookup failed"));
+  }
+  return false;
+}
+
+bool KanjiCodeLookupDialog::search_spahn() {
+  core::KanjiSpahnQuery query;
+  query.radical_strokes = spin_range(*spahn_radical_strokes_, 11);
+  query.radical = spin_range(*spahn_radical_, 19);
+  query.other_strokes = spin_range(*spahn_other_strokes_, 26);
+  query.index = spin_range(*spahn_index_, 47);
+  try {
+    return publish(core::search_kanji_spahn(information_, query));
+  } catch (const std::exception& error) {
+    status_->setText(QString::fromUtf8(error.what()));
+  } catch (...) {
+    status_->setText(tr("Spahn-Hadamitzky lookup failed"));
   }
   return false;
 }

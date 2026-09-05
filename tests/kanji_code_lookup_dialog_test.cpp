@@ -5,6 +5,7 @@
 #include <string>
 
 #include <QApplication>
+#include <QCheckBox>
 #include <QListWidget>
 #include <QPushButton>
 
@@ -48,14 +49,15 @@ jwpqt::core::KanjiInfoDatabase database() {
   append_u16(bytes, 1U);
   append_u16(bytes, 0x3021U);
   bytes.resize(variable, '\0');
-  put_u16(bytes, 12, 3U << 8U);
+  put_u16(bytes, 12, 23U | (3U << 8U));
   put_u16(bytes, 14, (1U << 8U) | (2U << 11U));
   put_u16(bytes, 16, 3U);
   put_u16(bytes, 18, 1U);
   put_u32(bytes, 24, static_cast<std::uint32_t>(variable) << 8U);
   append_u16(bytes, 0U);
-  append_u32(bytes, 0U);
-  append_u32(bytes, 1234U << 6U | 5U << 20U);
+  append_u32(bytes,
+             (2U << 17U) | (4U << 22U) | (5U << 27U));
+  append_u32(bytes, 7U | 1234U << 6U | 5U << 20U);
   bytes.push_back('\0');
   return jwpqt::core::KanjiInfoDatabase::parse(bytes);
 }
@@ -89,6 +91,33 @@ void test_dialog() {
   dialog.set_four_corner_query(corner);
   require(dialog.search_four_corner() && dialog.results().size() == 1,
           "Native four-corner dialog returned wrong results");
+
+  jwpqt::core::KanjiBushuQuery bushu;
+  bushu.radical = {22, 22};
+  bushu.strokes = {3, 3};
+  bushu.classical = false;
+  dialog.set_bushu_query(bushu);
+  require(dialog.search_bushu() && dialog.results().size() == 1,
+          "Native Bushu dialog returned wrong results");
+  auto* nelson =
+      dialog.findChild<QCheckBox*>(QStringLiteral("bushuNelson"));
+  auto* classical =
+      dialog.findChild<QCheckBox*>(QStringLiteral("bushuClassical"));
+  require(nelson != nullptr && classical != nullptr,
+          "Native Bushu controls were not created");
+  nelson->setChecked(false);
+  require(classical->isChecked(),
+          "Native Bushu dialog allowed both radical systems to be disabled");
+
+  jwpqt::core::KanjiSpahnQuery spahn;
+  spahn.radical_strokes = {2, 2};
+  spahn.radical = {4, 4};
+  spahn.other_strokes = {5, 5};
+  spahn.index = {7, 7};
+  dialog.set_spahn_query(spahn);
+  dialog.findChild<QPushButton*>(QStringLiteral("kanjiCodeSearch"))->click();
+  require(dialog.results().size() == 1,
+          "Native Spahn-Hadamitzky dialog returned wrong results");
 }
 
 }  // namespace
