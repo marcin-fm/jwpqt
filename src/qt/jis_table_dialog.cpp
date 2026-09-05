@@ -13,6 +13,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QScopedValueRollback>
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QTableWidget>
@@ -153,7 +154,7 @@ JisTableDialog::JisTableDialog(InsertHandler insert_handler,
 }
 
 void JisTableDialog::populate_page(std::uint8_t page) {
-  synchronizing_ = true;
+  const QScopedValueRollback<bool> synchronizing(synchronizing_, true);
   table_->clearContents();
   for (const core::JisTableEntry& entry : core::jis_table_page(page)) {
     const int offset = static_cast<int>((entry.jis & 0xffU) - 0x21U);
@@ -164,7 +165,6 @@ void JisTableDialog::populate_page(std::uint8_t page) {
     item->setData(Qt::UserRole, entry.jis);
     table_->setItem(row, column, item);
   }
-  synchronizing_ = false;
 }
 
 bool JisTableDialog::set_jis(core::JisCode code) {
@@ -186,7 +186,7 @@ std::optional<core::JisTableEntry> JisTableDialog::current() const noexcept {
 }
 
 void JisTableDialog::select_entry(const core::JisTableEntry& entry) {
-  synchronizing_ = true;
+  const QScopedValueRollback<bool> synchronizing(synchronizing_, true);
   const std::uint8_t page = static_cast<std::uint8_t>(entry.jis >> 8U);
   if (page_->value() != page) {
     const QSignalBlocker blocker(page_);
@@ -206,7 +206,6 @@ void JisTableDialog::select_entry(const core::JisTableEntry& entry) {
   unicode_->setText(hex_value(static_cast<std::uint32_t>(entry.unicode), 4));
   current_ = entry;
   status_->setText(character_text(entry.unicode));
-  synchronizing_ = false;
   update_actions();
 }
 
