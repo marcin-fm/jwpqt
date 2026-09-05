@@ -235,6 +235,13 @@ legacy file structures.
     truncation, kana trailing-star shortcut, and explicit ASCII-boundary and
     adaptive-disable state. Malformed or anchorless wildcard plans fail before
     dictionary lookup.
+59. Record-local EDICT wildcard matching validates an indexed anchor against its
+    parsed dictionary record, expands exact source-byte spans through prefix and
+    postfix patterns, preserves the recovered EUC-versus-UTF literal behavior,
+    and treats recovered JIS X 0212 sequences as one character. One explicit
+    budget covers record decoding, boundary and anchor validation, assertions,
+    and greedy-star backtracking; forged plans cannot exceed the source input
+    bound or escape the selected record.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
