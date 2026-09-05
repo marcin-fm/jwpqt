@@ -18,6 +18,7 @@ struct EdictResourceSearchOptions {
   core::EdictSearchOptions search;
   core::EdictPatternOptions pattern;
   EdictResourceLoadOptions reload;
+  bool classical = false;
   bool personal_names = false;
   bool place_names = false;
 };

@@ -2,7 +2,6 @@
 
 #include "edict_resource_search.h"
 
-#include <algorithm>
 #include <limits>
 #include <optional>
 #include <stdexcept>
@@ -153,6 +152,18 @@ void run_resource(const EdictResourceSet& resources,
   merge_report(report, search_one(*resource, plan, search), *resource);
 }
 
+void run_loaded_resource(
+    const EdictLoadedResource& resource, const core::EdictSearchPlan& plan,
+    const EdictResourceSearchOptions& options,
+    const core::EdictNameFilterOptions& filter,
+    EdictResourceSearchReport& report) {
+  core::EdictSearchOptions search = remaining_options(options, report);
+  search.name_filter = filter;
+  search.adaptive = false;
+  search.contingent.names_mode = true;
+  merge_report(report, search_one(resource, plan, search), resource);
+}
+
 }  // namespace
 
 EdictResourceSearchReport search_edict_resources(
@@ -180,7 +191,9 @@ EdictResourceSearchReport search_edict_resources(
        ++index) {
     const core::EdictRegistryEntry& entry = resources.registry.entries[index];
     if (!entry.searched ||
-        entry.names == core::EdictRegistryNames::kNamesOnly) {
+        entry.names == core::EdictRegistryNames::kNamesOnly ||
+        (entry.special == core::EdictRegistrySpecial::kClassical &&
+         !effective.classical)) {
       continue;
     }
     run_resource(resources, index, config_directory, plan, effective,
@@ -190,28 +203,29 @@ EdictResourceSearchReport search_edict_resources(
   if (!effective.personal_names && !effective.place_names) {
     return report;
   }
-  const auto names = std::find_if(
-      resources.registry.entries.begin(), resources.registry.entries.end(),
-      [](const core::EdictRegistryEntry& entry) {
-        return entry.searched &&
-               entry.names != core::EdictRegistryNames::kNone;
-      });
-  if (names == resources.registry.entries.end()) {
-    return report;
-  }
-  const std::size_t index = static_cast<std::size_t>(
-      std::distance(resources.registry.entries.begin(), names));
-  if (effective.personal_names) {
-    core::EdictNameFilterOptions filter;
-    filter.reject_place_names = true;
-    run_resource(resources, index, config_directory, plan, effective, filter,
-                 true, report);
-  }
-  if (effective.place_names) {
-    core::EdictNameFilterOptions filter;
-    filter.reject_personal_names = true;
-    run_resource(resources, index, config_directory, plan, effective, filter,
-                 true, report);
+  for (std::size_t index = 0; index < resources.registry.entries.size();
+       ++index) {
+    const core::EdictRegistryEntry& entry = resources.registry.entries[index];
+    if (!entry.searched || entry.names == core::EdictRegistryNames::kNone) {
+      continue;
+    }
+    AcquiredResource acquired = acquire_resource(
+        resources, index, config_directory, effective.reload, report.failures);
+    const EdictLoadedResource* resource = acquired.get();
+    if (resource == nullptr) {
+      continue;
+    }
+    if (effective.personal_names) {
+      core::EdictNameFilterOptions filter;
+      filter.reject_place_names = true;
+      run_loaded_resource(*resource, plan, effective, filter, report);
+    }
+    if (effective.place_names) {
+      core::EdictNameFilterOptions filter;
+      filter.reject_personal_names = true;
+      run_loaded_resource(*resource, plan, effective, filter, report);
+    }
+    break;
   }
   return report;
 }

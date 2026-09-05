@@ -300,6 +300,8 @@ legacy file structures.
     optionally appends personal-name and place-name passes from the first names
     dictionary. One remaining-budget ledger spans every pass; non-keep files are
     reloaded for each search and failures retain their quiet diagnostic state.
+    Classical resources require explicit opt-in, and failed names resources
+    fall through in registry order to the first usable names dictionary.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and

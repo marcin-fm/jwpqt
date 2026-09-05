@@ -153,6 +153,50 @@ void test_global_budgets_span_resources(const QString& directory) {
       "Query budget did not span resources");
 }
 
+void test_classical_opt_in(const QString& directory) {
+  write_file(directory + "/modern", "cat /modern/\n");
+  write_file(directory + "/classical", "cat /classical/\n");
+  jwpqt::core::EdictRegistry registry;
+  registry.entries = {entry(u"Modern", u"modern"),
+                      entry(u"Classical", u"classical")};
+  registry.entries[1].special =
+      jwpqt::core::EdictRegistrySpecial::kClassical;
+  const jwpqt::qt::EdictResourceSet resources =
+      jwpqt::qt::load_edict_resources(registry, directory);
+  jwpqt::qt::EdictResourceSearchOptions options;
+  const auto modern = jwpqt::qt::search_edict_resources(
+      resources, directory, query(U"cat"), options);
+  require(modern.results.size() == 1 &&
+              modern.results[0].label == QStringLiteral("Modern"),
+          "Classical resource was searched without explicit opt-in");
+  options.classical = true;
+  const auto both = jwpqt::qt::search_edict_resources(
+      resources, directory, query(U"cat"), options);
+  require(both.results.size() == 2 &&
+              both.results[0].label == QStringLiteral("Modern") &&
+              both.results[1].label == QStringLiteral("Classical"),
+          "Classical opt-in did not preserve registry order");
+}
+
+void test_names_fall_through_failed_resource(const QString& directory) {
+  write_file(directory + "/later-names", "alice /(s) person/\n");
+  jwpqt::core::EdictRegistry registry;
+  registry.entries = {entry(u"Missing", u"missing-names", true, false),
+                      entry(u"Later", u"later-names", true)};
+  registry.entries[0].quiet = true;
+  const jwpqt::qt::EdictResourceSet resources =
+      jwpqt::qt::load_edict_resources(registry, directory);
+  jwpqt::qt::EdictResourceSearchOptions options;
+  options.personal_names = true;
+  const auto report = jwpqt::qt::search_edict_resources(
+      resources, directory, query(U"alice"), options);
+  require(report.results.size() == 1 &&
+              report.results[0].registry_index == 1 &&
+              report.results[0].label == QStringLiteral("Later") &&
+              report.failures.size() == 1 && report.failures[0].quiet,
+          "Failed names resource suppressed a later usable resource");
+}
+
 void test_search_plan_flags_span_resources(const QString& directory) {
   const std::string open = jwpqt::core::encode_utf8(U"\u3042\u3044\u3046") +
                            " /open/\n";
@@ -187,6 +231,8 @@ int main() {
   test_names_only_pseudo_passes(temporary.path());
   test_non_keep_reload_and_failure(temporary.path());
   test_global_budgets_span_resources(temporary.path());
+  test_classical_opt_in(temporary.path());
+  test_names_fall_through_failed_resource(temporary.path());
   test_search_plan_flags_span_resources(temporary.path());
   return EXIT_SUCCESS;
 }
