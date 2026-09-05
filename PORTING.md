@@ -165,6 +165,10 @@ legacy file structures.
     each conversion session its lookup snapshot. The application loads
     `user.cnv` beside `user.sel` in its XDG data directory; malformed reloads
     leave the previous dictionary, preferences, and session working together.
+47. Whole-dictionary replacement resolves pending kana conversion, constructs a
+    complete replacement resource/session bundle, atomically writes `user.cnv`,
+    and swaps only after success. Active conversion and failed persistence
+    retain the previous live lookup snapshot and persisted dictionary.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and

@@ -209,6 +209,9 @@ QAction* find_action(jwpqt::qt::MainWindow& window, const char* name) {
   return window.findChild<QAction*>(QString::fromLatin1(name));
 }
 
+void send_text_key(QTextEdit* editor, int key, const QString& text,
+                   Qt::KeyboardModifiers modifiers = Qt::NoModifier);
+
 jwpqt::core::JwpParagraph paragraph(std::u32string_view text,
                                     std::int16_t line_spacing = 100) {
   jwpqt::core::JwpParagraph result;
@@ -1342,8 +1345,12 @@ void test_jwp_wnn_conversion_boundaries(const QString& directory) {
 void test_jwp_wnn_user_dictionary(const QString& directory) {
   const WnnFixture fixture = write_wnn_fixture(directory);
   QFile::remove(fixture.preferences_path);
+  const QString user_dictionary_directory =
+      directory + QStringLiteral("/native-user");
+  require(QDir().mkpath(user_dictionary_directory),
+          "Could not create native user dictionary directory");
   const QString user_dictionary_path =
-      directory + QStringLiteral("/native-user.cnv");
+      user_dictionary_directory + QStringLiteral("/user.cnv");
   const jwpqt::core::WnnUserDictionary user_dictionary =
       jwpqt::core::WnnUserDictionary::from_entries(
           {{{0x2422}, '*', {{0x3023}}}});
@@ -1388,6 +1395,109 @@ void test_jwp_wnn_user_dictionary(const QString& directory) {
                   user_dictionary.entries(),
           "Malformed WNN user dictionary reload replaced working resources");
 
+  const jwpqt::core::WnnUserDictionary replacement =
+      jwpqt::core::WnnUserDictionary::from_entries(
+          {{{0x2422}, '*', {{0x3024}}},
+           {{0x242b}, '*', {{0x3025}}},
+           {{0x242b, 0x2424}, '*', {{0x3026}}}});
+  require(window.set_wnn_user_dictionary(
+              replacement, jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.wnn_user_dictionary()->entries() ==
+                  replacement.entries(),
+          "Could not replace the native WNN user dictionary");
+  const std::optional<jwpqt::core::WnnUserDictionary> persisted =
+      jwpqt::qt::read_wnn_user_dictionary_file(user_dictionary_path);
+  require(persisted.has_value() &&
+              persisted->entries() == replacement.entries(),
+          "Replacing the native WNN user dictionary did not persist it");
+
+  require(window.open_jwp_path(source_path),
+          "Could not reopen the user conversion source after replacement");
+  editor = window.findChild<QTextEdit*>();
+  editor->selectAll();
+  require(window.convert_selection(),
+          "Could not begin conversion after replacing user entries");
+  const jwpqt::core::WnnUserDictionary blocked_replacement =
+      jwpqt::core::WnnUserDictionary::from_entries(
+          {{{0x2422}, '*', {{0x3027}}}});
+  bool found_replacement_candidate = false;
+  for (int index = 0; index < 5; ++index) {
+    if (window.current_jwp_document()->paragraphs[0].text ==
+        jwpqt::core::JwpText{0x3024}) {
+      found_replacement_candidate = true;
+      break;
+    }
+    require(window.cycle_conversion(),
+            "Could not cycle replacement user candidates");
+  }
+  require(found_replacement_candidate,
+          "Replacement user entries did not reach the live WNN session");
+  require(!window.set_wnn_user_dictionary(
+              blocked_replacement,
+              jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.conversion_active() &&
+              window.wnn_user_dictionary()->entries() ==
+                  replacement.entries(),
+          "Active conversion allowed user dictionary replacement");
+  require(window.accept_conversion(),
+          "Could not accept conversion after blocked dictionary replacement");
+
+  jwpqt::core::JwpDocument empty_source;
+  empty_source.paragraphs = {jwpqt::core::JwpParagraph{}};
+  const QString empty_source_path =
+      directory + QStringLiteral("/empty-user-convert.jwp");
+  jwpqt::qt::write_jwp_file(empty_source_path, empty_source);
+  require(window.open_jwp_path(empty_source_path),
+          "Could not open pending user conversion source");
+  editor = window.findChild<QTextEdit*>();
+  QAction* kana = find_action(window, "kanaInputAction");
+  require(editor != nullptr && kana != nullptr,
+          "Pending user conversion fixture has no kana controls");
+  kana->trigger();
+  window.show();
+  editor->setFocus();
+  QApplication::processEvents();
+  send_text_key(editor, Qt::Key_K, QStringLiteral("K"), Qt::ShiftModifier);
+  send_text_key(editor, Qt::Key_A, QStringLiteral("a"));
+  require(!window.conversion_active() &&
+              window.current_jwp_document()->paragraphs[0].text ==
+                  jwpqt::core::JwpText{0x242b},
+          "Extendable user conversion did not remain pending");
+  require(window.set_wnn_user_dictionary(
+              blocked_replacement,
+              jwpqt::qt::OpenMode::kNonInteractive) &&
+              !window.conversion_active() &&
+              window.current_jwp_document()->paragraphs[0].text ==
+                  jwpqt::core::JwpText{0x3025} &&
+              window.wnn_user_dictionary()->entries() ==
+                  blocked_replacement.entries(),
+          "Replacing user entries discarded pending automatic conversion");
+
+  const QString retained_directory =
+      directory + QStringLiteral("/native-user-retained");
+  require(QDir().rename(user_dictionary_directory, retained_directory),
+          "Could not retain the persisted user dictionary directory");
+  QFile path_blocker(user_dictionary_directory);
+  require(path_blocker.open(QIODevice::WriteOnly) &&
+              path_blocker.write("blocked", 7) == 7,
+          "Could not block the native user dictionary output parent");
+  path_blocker.close();
+  const jwpqt::core::WnnUserDictionary failed_replacement =
+      jwpqt::core::WnnUserDictionary::from_entries(
+          {{{0x2422}, '*', {{0x3028}}}});
+  require(!window.set_wnn_user_dictionary(
+              failed_replacement,
+              jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.wnn_user_dictionary()->entries() ==
+                  blocked_replacement.entries(),
+          "Failed user dictionary persistence replaced working resources");
+  const std::optional<jwpqt::core::WnnUserDictionary> retained =
+      jwpqt::qt::read_wnn_user_dictionary_file(
+          retained_directory + QStringLiteral("/user.cnv"));
+  require(retained.has_value() &&
+              retained->entries() == blocked_replacement.entries(),
+          "Failed user dictionary replacement changed persisted bytes");
+
   jwpqt::qt::MainWindow missing;
   require(missing.load_wnn_resources(
               fixture.index_path, fixture.data_path,
@@ -1431,7 +1541,7 @@ void test_jwp_wnn_preference_write_failure(const QString& directory) {
 }
 
 void send_text_key(QTextEdit* editor, int key, const QString& text,
-                   Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+                   Qt::KeyboardModifiers modifiers) {
   QKeyEvent event(QEvent::KeyPress, key, modifiers, text);
   QApplication::sendEvent(editor, &event);
 }

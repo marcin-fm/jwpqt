@@ -87,6 +87,9 @@ class MainWindow : public QMainWindow {
                           const QString& preferences_path,
                           const QString& user_dictionary_path,
                           OpenMode mode = OpenMode::kInteractive);
+  bool set_wnn_user_dictionary(
+      core::WnnUserDictionary user_dictionary,
+      OpenMode mode = OpenMode::kInteractive);
   const core::WnnUserDictionary* wnn_user_dictionary() const noexcept;
   bool convert_selection();
   bool cycle_conversion(bool previous = false);

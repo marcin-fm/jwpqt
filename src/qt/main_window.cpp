@@ -1237,6 +1237,45 @@ const core::WnnUserDictionary* MainWindow::wnn_user_dictionary()
                                    : &wnn_resources_->user_dictionary;
 }
 
+bool MainWindow::set_wnn_user_dictionary(
+    core::WnnUserDictionary user_dictionary, OpenMode mode) {
+  if (conversion_active()) {
+    if (mode == OpenMode::kInteractive) {
+      statusBar()->showMessage(
+          tr("Accept the current conversion before changing user entries"),
+          5000);
+    }
+    return false;
+  }
+  finish_kana_input();
+  if (conversion_active()) {
+    return false;
+  }
+  try {
+    if (wnn_resources_ == nullptr ||
+        wnn_resources_->user_dictionary_path.isEmpty()) {
+      throw std::runtime_error("WNN user dictionary path is not configured");
+    }
+
+    auto candidate = std::make_unique<WnnResources>(
+        wnn_resources_->dictionary, wnn_resources_->preferences,
+        std::move(user_dictionary), wnn_resources_->preferences_path,
+        wnn_resources_->user_dictionary_path);
+    write_wnn_user_dictionary_file(candidate->user_dictionary_path,
+                                   candidate->user_dictionary);
+    wnn_resources_ = std::move(candidate);
+    clear_automatic_conversion_range();
+    update_conversion_actions();
+    statusBar()->showMessage(tr("Updated user conversion dictionary"), 3000);
+    return true;
+  } catch (const std::exception& error) {
+    if (mode == OpenMode::kInteractive) {
+      show_error(tr("Could not update user conversion dictionary"), error);
+    }
+    return false;
+  }
+}
+
 bool MainWindow::conversion_active() const noexcept {
   return jwp_conversion_ != nullptr && jwp_conversion_->active();
 }
