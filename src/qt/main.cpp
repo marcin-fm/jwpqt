@@ -4,6 +4,8 @@
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QCoreApplication>
+#include <QDir>
+#include <QStandardPaths>
 #include <QTextStream>
 #include <QTimer>
 
@@ -31,6 +33,11 @@ int main(int argc, char* argv[]) {
                       "new-jis, old-jis, or nec-jis."),
       QStringLiteral("encoding"));
   parser.addOption(encoding_option);
+  const QCommandLineOption wnn_data_directory_option(
+      QStringLiteral("wnn-data-dir"),
+      QStringLiteral("Directory containing wnn.dix and wnn.dat."),
+      QStringLiteral("directory"));
+  parser.addOption(wnn_data_directory_option);
   parser.addPositionalArgument(QStringLiteral("file"),
                                QStringLiteral("Text file to open."),
                                QStringLiteral("[file]"));
@@ -53,6 +60,27 @@ int main(int argc, char* argv[]) {
   }
 
   jwpqt::qt::MainWindow window;
+  if (parser.isSet(wnn_data_directory_option)) {
+    const QDir data_directory(parser.value(wnn_data_directory_option));
+    const QString user_data =
+        QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (user_data.isEmpty() || !QDir().mkpath(user_data)) {
+      QTextStream(stderr)
+          << "Could not create the jwpqt user data directory.\n";
+      return 1;
+    }
+    const jwpqt::qt::OpenMode resource_mode =
+        parser.isSet(smoke_test) ? jwpqt::qt::OpenMode::kNonInteractive
+                                 : jwpqt::qt::OpenMode::kInteractive;
+    if (!window.load_wnn_resources(
+            data_directory.filePath(QStringLiteral("wnn.dix")),
+            data_directory.filePath(QStringLiteral("wnn.dat")),
+            QDir(user_data).filePath(QStringLiteral("user.sel")),
+            resource_mode)) {
+      QTextStream(stderr) << "Could not load WNN conversion resources.\n";
+      return 1;
+    }
+  }
   if (!positional_arguments.isEmpty()) {
     const jwpqt::qt::OpenMode open_mode =
         parser.isSet(smoke_test) ? jwpqt::qt::OpenMode::kNonInteractive

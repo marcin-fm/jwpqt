@@ -63,18 +63,22 @@ legacy file structures.
 21. `1de61c1` reproduces ordered WNN exact, special-stem, and conjugated
     candidate lookup, suffix attachment, extension checks, and stable duplicate
     removal over the portable dictionary model.
-22. The portable user-selection cache parses and writes the recovered 8-byte
-    `user.sel` records, restores valid candidate offsets, and reproduces the
-    fixed-capacity learning and eviction behavior without native structs.
-23. The Qt file boundary optionally loads `user.sel`, preserves partial legacy
-    files through the portable parser, and atomically replaces changed
-    preferences without clearing dirty state on failure.
-24. The portable WNN conversion session starts from stored preferences, repairs
-    stale offsets, wraps candidate cycling in both directions, learns choices,
-    and terminates explicitly through accept or cancel.
-25. The portable JWP conversion transaction replaces selected kana with WNN
-    candidates, tracks variable-length selections and caret direction, groups
-    all cycling into one undo entry, and rolls back safely on controller failure.
+22. `90e1393` parses and writes the recovered 8-byte `user.sel` records,
+    restores valid candidate offsets, and reproduces the fixed-capacity learning
+    and eviction behavior without native structs.
+23. `3e6ccc4` optionally loads `user.sel`, preserves partial legacy files
+    through the portable parser, and atomically replaces changed preferences
+    without clearing dirty state on failure.
+24. `44de037` starts WNN conversion from stored preferences, repairs stale
+    offsets, wraps candidate cycling in both directions, learns choices, and
+    terminates explicitly through accept or cancel.
+25. `15d485e` replaces selected JWP kana with WNN candidates, tracks
+    variable-length selections and caret direction, groups all cycling into one
+    undo entry, and rolls back safely on controller failure.
+26. The native Qt window loads explicit WNN resources, converts same-paragraph
+    JWP selections, cycles candidates with Space or Shift+Space, accepts the
+    displayed candidate with Enter or Escape, and atomically persists learned
+    preferences under an explicit or XDG user-data path.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -83,8 +87,8 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Connect romaji composition and the portable WNN conversion transaction to
-   native Qt input and atomic preference persistence.
+1. Connect the portable romaji composer to native Qt input and automatic WNN
+   conversion attempts.
 2. Replace `QPlainTextEdit` scaffolding with a custom Qt editor surface once the
    paragraph model can drive wrapping, selection, conversion spans, and kanji
    coloring.

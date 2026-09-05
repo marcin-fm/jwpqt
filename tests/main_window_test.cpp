@@ -10,6 +10,7 @@
 #include <QDir>
 #include <QFile>
 #include <QLabel>
+#include <QKeyEvent>
 #include <QPlainTextEdit>
 #include <QTemporaryDir>
 #include <QTextDocument>
@@ -30,6 +31,46 @@ QByteArray read_bytes(const QString& path) {
   QFile file(path);
   require(file.open(QIODevice::ReadOnly), "Could not open saved test file");
   return file.readAll();
+}
+
+void write_bytes(const QString& path, const QByteArray& bytes) {
+  QFile file(path);
+  require(file.open(QIODevice::WriteOnly | QIODevice::Truncate),
+          "Could not create binary test file");
+  require(file.write(bytes) == bytes.size(),
+          "Could not write complete binary test file");
+}
+
+struct WnnFixture {
+  QString index_path;
+  QString data_path;
+  QString preferences_path;
+};
+
+WnnFixture write_wnn_fixture(const QString& directory) {
+  const WnnFixture fixture{
+      directory + QStringLiteral("/wnn.dix"),
+      directory + QStringLiteral("/wnn.dat"),
+      directory + QStringLiteral("/user.sel"),
+  };
+  QByteArray index;
+  index.append(static_cast<char>(0xa2));
+  index.append(static_cast<char>(0x80));
+  index.append(static_cast<char>(0x80));
+  index.append(static_cast<char>(0x77));
+  index.append(4, '\0');
+  QByteArray data;
+  data.append(static_cast<char>(0xa2));
+  data.append('*');
+  data.append(static_cast<char>(0xb0));
+  data.append(static_cast<char>(0xa1));
+  data.append('/');
+  data.append(static_cast<char>(0xb0));
+  data.append(static_cast<char>(0xa2));
+  data.append('\n');
+  write_bytes(fixture.index_path, index);
+  write_bytes(fixture.data_path, data);
+  return fixture;
 }
 
 class PromptingWindow : public jwpqt::qt::MainWindow {
@@ -780,6 +821,146 @@ void test_jwp_rejects_non_bmp_edit(const QString& directory) {
           "Rejected non-BMP edit corrupted the JWP document");
 }
 
+void test_jwp_wnn_conversion(const QString& directory) {
+  const WnnFixture fixture = write_wnn_fixture(directory);
+  jwpqt::core::JwpDocument source;
+  source.paragraphs = {jwpqt::core::JwpParagraph{}};
+  source.paragraphs[0].text = {0x2422};
+  const QString source_path = directory + QStringLiteral("/convert.jwp");
+  jwpqt::qt::write_jwp_file(source_path, source);
+
+  jwpqt::qt::MainWindow window;
+  require(window.load_wnn_resources(fixture.index_path, fixture.data_path,
+                                    fixture.preferences_path),
+          "Could not load native WNN resources");
+  require(!window.load_wnn_resources(
+              directory + QStringLiteral("/missing.dix"), fixture.data_path,
+              fixture.preferences_path,
+              jwpqt::qt::OpenMode::kNonInteractive),
+          "Missing replacement WNN resources unexpectedly loaded");
+  require(window.open_jwp_path(source_path),
+          "Could not open native WNN conversion fixture");
+  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QAction* convert = find_action(window, "convertSelectionAction");
+  QAction* next = find_action(window, "nextCandidateAction");
+  QAction* accept = find_action(window, "acceptCandidateAction");
+  require(editor != nullptr && convert != nullptr && next != nullptr &&
+              accept != nullptr,
+          "Native WNN conversion actions were not created");
+
+  editor->selectAll();
+  require(convert->isEnabled(),
+          "Native WNN conversion was not enabled for selected kana");
+  convert->trigger();
+  require(window.conversion_active() && editor->isReadOnly() &&
+              window.current_jwp_document()->paragraphs[0].text ==
+                  jwpqt::core::JwpText{0x3021},
+          "Native WNN conversion did not display the preferred candidate");
+  window.show();
+  editor->setFocus();
+  QApplication::processEvents();
+  QKeyEvent next_key(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier);
+  QApplication::sendEvent(editor, &next_key);
+  require(window.current_jwp_document()->paragraphs[0].text ==
+              jwpqt::core::JwpText{0x3022},
+          "Space did not cycle native WNN candidates");
+  QKeyEvent accept_key(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+  QApplication::sendEvent(editor, &accept_key);
+  require(!window.conversion_active() && !editor->isReadOnly() &&
+              QFile::exists(fixture.preferences_path),
+          "Escape did not accept and persist native WNN conversion");
+
+  QAction* undo = find_action(window, "undoAction");
+  QAction* redo = find_action(window, "redoAction");
+  require(undo != nullptr && redo != nullptr && undo->isEnabled(),
+          "Native conversion did not create a portable undo entry");
+  undo->trigger();
+  require(window.current_jwp_document()->paragraphs[0].text ==
+              jwpqt::core::JwpText{0x2422},
+          "Undo did not restore the original conversion input");
+  redo->trigger();
+  require(window.current_jwp_document()->paragraphs[0].text ==
+              jwpqt::core::JwpText{0x3022},
+          "Redo did not restore the accepted conversion candidate");
+
+  jwpqt::qt::MainWindow reopened;
+  require(reopened.load_wnn_resources(fixture.index_path, fixture.data_path,
+                                      fixture.preferences_path) &&
+              reopened.open_jwp_path(source_path),
+          "Could not reopen persisted WNN preference fixture");
+  QPlainTextEdit* reopened_editor = reopened.findChild<QPlainTextEdit*>();
+  require(reopened_editor != nullptr, "Reopened WNN window has no editor");
+  QTextCursor reversed = reopened_editor->textCursor();
+  reversed.setPosition(1);
+  reversed.setPosition(0, QTextCursor::KeepAnchor);
+  reopened_editor->setTextCursor(reversed);
+  require(reopened.convert_selection() &&
+              reopened.current_jwp_document()->paragraphs[0].text ==
+                  jwpqt::core::JwpText{0x3022},
+          "Native WNN conversion did not restore the learned candidate");
+  require(reopened_editor->textCursor().position() ==
+              reopened_editor->textCursor().selectionStart(),
+          "Native conversion did not preserve reversed-caret orientation");
+  require(reopened.accept_conversion(),
+          "Could not accept the restored WNN candidate");
+}
+
+void test_jwp_wnn_conversion_boundaries(const QString& directory) {
+  const WnnFixture fixture = write_wnn_fixture(directory);
+  jwpqt::core::JwpDocument source;
+  source.paragraphs = {jwpqt::core::JwpParagraph{},
+                       jwpqt::core::JwpParagraph{}};
+  source.paragraphs[0].text = {0x2422};
+  source.paragraphs[1].text = {0x2422};
+  const QString source_path = directory + QStringLiteral("/convert-range.jwp");
+  jwpqt::qt::write_jwp_file(source_path, source);
+
+  jwpqt::qt::MainWindow window;
+  require(window.load_wnn_resources(fixture.index_path, fixture.data_path,
+                                    fixture.preferences_path) &&
+              window.open_jwp_path(source_path),
+          "Could not prepare WNN range fixture");
+  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QAction* convert = find_action(window, "convertSelectionAction");
+  require(editor != nullptr && convert != nullptr,
+          "WNN range fixture has no conversion controls");
+  editor->selectAll();
+  require(!convert->isEnabled() && !window.convert_selection() &&
+              *window.current_jwp_document() == source,
+          "Cross-paragraph WNN selection was not rejected");
+}
+
+void test_jwp_wnn_preference_write_failure(const QString& directory) {
+  const WnnFixture fixture = write_wnn_fixture(directory);
+  const QString blocked_path = directory + QStringLiteral("/blocked-user.sel");
+  jwpqt::core::JwpDocument source;
+  source.paragraphs = {jwpqt::core::JwpParagraph{}};
+  source.paragraphs[0].text = {0x2422};
+  const QString source_path = directory + QStringLiteral("/blocked-save.jwp");
+  jwpqt::qt::write_jwp_file(source_path, source);
+
+  jwpqt::qt::MainWindow window;
+  require(window.load_wnn_resources(fixture.index_path, fixture.data_path,
+                                    blocked_path) &&
+              window.open_jwp_path(source_path),
+          "Could not prepare WNN preference failure fixture");
+  require(QDir().mkpath(blocked_path),
+          "Could not block the WNN preference output path");
+  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  require(editor != nullptr, "WNN preference failure window has no editor");
+  editor->selectAll();
+  require(window.convert_selection() && window.cycle_conversion() &&
+              window.accept_conversion(),
+          "Preference write failure prevented candidate acceptance");
+  require(!window.conversion_active() && !editor->isReadOnly() &&
+              window.current_jwp_document()->paragraphs[0].text ==
+                  jwpqt::core::JwpText{0x3022},
+          "Preference write failure rolled back accepted document state");
+  QAction* undo = find_action(window, "undoAction");
+  require(undo != nullptr && undo->isEnabled(),
+          "Preference write failure discarded conversion history");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -805,6 +986,9 @@ int main(int argc, char* argv[]) {
     test_jwp_rejects_lossy_edits(directory.path());
     test_jwp_rejects_non_bmp_edit(directory.path());
     test_jwp_history_actions(directory.path());
+    test_jwp_wnn_conversion(directory.path());
+    test_jwp_wnn_conversion_boundaries(directory.path());
+    test_jwp_wnn_preference_write_failure(directory.path());
     std::cout << "All main window tests passed\n";
     return 0;
   } catch (const std::exception& error) {

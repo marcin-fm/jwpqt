@@ -4,6 +4,7 @@
 #define JWPQT_QT_MAIN_WINDOW_H
 
 #include <exception>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -11,11 +12,14 @@
 #include <QMainWindow>
 #include <QString>
 
+#include "jwpqt/core/jwp_conversion.h"
 #include "jwpqt/core/jwp_document_history.h"
 #include "jwpqt/core/jwp_document_model.h"
 #include "jwpqt/core/jwp_search.h"
 #include "jwpqt/core/legacy_code_page.h"
 #include "jwpqt/core/text_file.h"
+#include "jwpqt/core/wnn_dictionary.h"
+#include "jwpqt/core/wnn_preferences.h"
 
 class QAction;
 class QActionGroup;
@@ -51,6 +55,7 @@ struct ReplaceRequest {
 class MainWindow : public QMainWindow {
  public:
   explicit MainWindow(QWidget* parent = nullptr);
+  ~MainWindow() override;
 
   bool open_path(const QString& path, core::TextEncoding encoding,
                  OpenMode mode = OpenMode::kInteractive);
@@ -61,6 +66,14 @@ class MainWindow : public QMainWindow {
   bool open_path_detected(const QString& path,
                           OpenMode mode = OpenMode::kInteractive);
   bool save_path(const QString& path);
+  bool load_wnn_resources(const QString& index_path,
+                          const QString& data_path,
+                          const QString& preferences_path,
+                          OpenMode mode = OpenMode::kInteractive);
+  bool convert_selection();
+  bool cycle_conversion(bool previous = false);
+  bool accept_conversion();
+  bool conversion_active() const noexcept;
   core::TextEncoding text_encoding() const noexcept;
   bool is_jwp_document() const noexcept;
   core::LegacyCodePage jwp_code_page() const noexcept;
@@ -82,11 +95,17 @@ class MainWindow : public QMainWindow {
       const ReplaceRequest& initial);
 
  private:
+  struct WnnResources;
+
   void create_actions();
   void undo_document();
   void redo_document();
   void restore_jwp_history_state(core::JwpPosition caret);
   void update_undo_actions();
+  void update_conversion_actions();
+  void restore_jwp_conversion_state();
+  void rollback_conversion_noexcept() noexcept;
+  void save_wnn_preferences();
   void new_document();
   void open_document();
   bool save_document();
@@ -115,6 +134,10 @@ class MainWindow : public QMainWindow {
   QLabel* encoding_label_;
   QAction* undo_action_;
   QAction* redo_action_;
+  QAction* convert_action_ = nullptr;
+  QAction* previous_candidate_action_ = nullptr;
+  QAction* next_candidate_action_ = nullptr;
+  QAction* accept_candidate_action_ = nullptr;
   QActionGroup* encoding_actions_;
   QMenu* jwp_code_page_menu_;
   std::vector<QAction*> jwp_code_page_actions_;
@@ -129,6 +152,9 @@ class MainWindow : public QMainWindow {
   std::optional<core::JwpDocument> pristine_jwp_document_;
   std::u32string rendered_jwp_text_;
   core::LegacyCodePage jwp_code_page_ = core::kDefaultLegacyCodePage;
+  std::unique_ptr<WnnResources> wnn_resources_;
+  std::unique_ptr<core::JwpConversionTransaction> jwp_conversion_;
+  std::optional<core::WnnPreferences> conversion_preferences_before_;
   QString search_text_;
   QString replacement_text_;
   core::JwpSearchOptions search_options_;

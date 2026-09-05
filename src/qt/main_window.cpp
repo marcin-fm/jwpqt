@@ -141,6 +141,21 @@ std::optional<core::TextEncoding> encoding_from_filter(const QString& filter) {
 
 }  // namespace
 
+struct MainWindow::WnnResources {
+  WnnResources(core::WnnDictionary dictionary_value,
+               core::WnnPreferences preferences_value,
+               QString preferences_path_value)
+      : dictionary(std::move(dictionary_value)),
+        preferences(std::move(preferences_value)),
+        preferences_path(std::move(preferences_path_value)),
+        session(dictionary, preferences) {}
+
+  core::WnnDictionary dictionary;
+  core::WnnPreferences preferences;
+  QString preferences_path;
+  core::WnnConversionSession session;
+};
+
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
       editor_(new QPlainTextEdit(this)),
@@ -166,7 +181,8 @@ MainWindow::MainWindow(QWidget* parent)
   connect(editor_->document(), &QTextDocument::modificationChanged, this,
           [this] { update_title(); });
   connect(editor_, &QPlainTextEdit::cursorPositionChanged, this, [this] {
-    if (updating_editor_ || !jwp_document_.has_value()) {
+    if (updating_editor_ || conversion_active() ||
+        !jwp_document_.has_value()) {
       return;
     }
     try {
@@ -188,9 +204,14 @@ MainWindow::MainWindow(QWidget* parent)
       jwp_history_.break_coalescing();
     }
   });
+  connect(editor_, &QPlainTextEdit::selectionChanged, this,
+          [this] { update_conversion_actions(); });
   update_undo_actions();
+  update_conversion_actions();
   update_title();
 }
+
+MainWindow::~MainWindow() = default;
 
 void MainWindow::create_actions() {
   QMenu* file_menu = menuBar()->addMenu(tr("&File"));
@@ -307,6 +328,38 @@ void MainWindow::create_actions() {
   connect(replace_action, &QAction::triggered, this,
           [this] { replace_document(); });
 
+  QMenu* convert_menu = menuBar()->addMenu(tr("&Convert"));
+  convert_action_ = convert_menu->addAction(tr("Convert &Selection"));
+  convert_action_->setObjectName(QStringLiteral("convertSelectionAction"));
+  convert_action_->setShortcut(QKeySequence(QStringLiteral("Ctrl+W")));
+  connect(convert_action_, &QAction::triggered, this,
+          [this] { convert_selection(); });
+
+  previous_candidate_action_ =
+      convert_menu->addAction(tr("&Previous Candidate"));
+  previous_candidate_action_->setObjectName(
+      QStringLiteral("previousCandidateAction"));
+  previous_candidate_action_->setShortcut(
+      QKeySequence(Qt::SHIFT | Qt::Key_Space));
+  connect(previous_candidate_action_, &QAction::triggered, this,
+          [this] { cycle_conversion(true); });
+
+  next_candidate_action_ = convert_menu->addAction(tr("&Next Candidate"));
+  next_candidate_action_->setObjectName(QStringLiteral("nextCandidateAction"));
+  next_candidate_action_->setShortcut(QKeySequence(Qt::Key_Space));
+  connect(next_candidate_action_, &QAction::triggered, this,
+          [this] { cycle_conversion(false); });
+
+  accept_candidate_action_ =
+      convert_menu->addAction(tr("&Accept Candidate"));
+  accept_candidate_action_->setObjectName(
+      QStringLiteral("acceptCandidateAction"));
+  accept_candidate_action_->setShortcuts(
+      {QKeySequence(Qt::Key_Return), QKeySequence(Qt::Key_Enter),
+       QKeySequence(Qt::Key_Escape)});
+  connect(accept_candidate_action_, &QAction::triggered, this,
+          [this] { accept_conversion(); });
+
   QMenu* encoding_menu = menuBar()->addMenu(tr("E&ncoding"));
   encoding_actions_->setExclusive(true);
   for (const core::TextEncoding encoding : kTextEncodings) {
@@ -405,11 +458,256 @@ void MainWindow::update_undo_actions() {
   if (undo_action_ == nullptr || redo_action_ == nullptr) {
     return;
   }
+  if (conversion_active()) {
+    undo_action_->setEnabled(false);
+    redo_action_->setEnabled(false);
+    return;
+  }
   const bool jwp = jwp_document_.has_value();
   undo_action_->setEnabled(jwp ? jwp_history_.can_undo()
                                : qt_undo_available_);
   redo_action_->setEnabled(jwp ? jwp_history_.can_redo()
                                : qt_redo_available_);
+}
+
+void MainWindow::update_conversion_actions() {
+  if (convert_action_ == nullptr) {
+    return;
+  }
+  const bool active = conversion_active();
+  bool can_convert = false;
+  if (!active && jwp_document_.has_value() && wnn_resources_ != nullptr) {
+    const QTextCursor cursor = editor_->textCursor();
+    if (cursor.hasSelection()) {
+      try {
+        const QString text = editor_->toPlainText();
+        const core::JwpPosition begin = core::jwp_plain_text_position(
+            *jwp_document_,
+            utf32_offset_for_utf16(text, cursor.selectionStart()));
+        const core::JwpPosition end = core::jwp_plain_text_position(
+            *jwp_document_,
+            utf32_offset_for_utf16(text, cursor.selectionEnd()));
+        can_convert = begin.paragraph == end.paragraph && begin != end;
+      } catch (const std::exception&) {
+      }
+    }
+  }
+  convert_action_->setEnabled(can_convert);
+  previous_candidate_action_->setEnabled(active);
+  next_candidate_action_->setEnabled(active);
+  accept_candidate_action_->setEnabled(active);
+}
+
+bool MainWindow::load_wnn_resources(const QString& index_path,
+                                    const QString& data_path,
+                                    const QString& preferences_path,
+                                    OpenMode mode) {
+  if (conversion_active()) {
+    if (mode == OpenMode::kInteractive) {
+      statusBar()->showMessage(
+          tr("Accept the current conversion before changing dictionaries"),
+          5000);
+    }
+    return false;
+  }
+  try {
+    core::WnnDictionary dictionary = core::WnnDictionary::parse(
+        read_file_bytes(index_path), read_file_bytes(data_path));
+    std::optional<core::WnnPreferences> loaded_preferences =
+        read_wnn_preferences_file(preferences_path);
+    core::WnnPreferences preferences =
+        loaded_preferences ? std::move(*loaded_preferences)
+                           : core::WnnPreferences{};
+
+    auto resources = std::make_unique<WnnResources>(
+        std::move(dictionary), std::move(preferences), preferences_path);
+    wnn_resources_ = std::move(resources);
+    update_conversion_actions();
+    statusBar()->showMessage(tr("Loaded WNN conversion dictionaries"), 3000);
+    return true;
+  } catch (const std::exception& error) {
+    update_conversion_actions();
+    if (mode == OpenMode::kInteractive) {
+      show_error(tr("Could not load WNN dictionaries"), error);
+    }
+    return false;
+  }
+}
+
+bool MainWindow::conversion_active() const noexcept {
+  return jwp_conversion_ != nullptr && jwp_conversion_->active();
+}
+
+bool MainWindow::convert_selection() {
+  if (conversion_active()) {
+    return cycle_conversion();
+  }
+  if (!jwp_document_.has_value() || wnn_resources_ == nullptr) {
+    statusBar()->showMessage(tr("WNN conversion is not available"), 3000);
+    return false;
+  }
+
+  try {
+    const QTextCursor cursor = editor_->textCursor();
+    if (!cursor.hasSelection()) {
+      statusBar()->showMessage(tr("Select kana to convert"), 3000);
+      return false;
+    }
+    const QString text = editor_->toPlainText();
+    const core::JwpPosition begin = core::jwp_plain_text_position(
+        *jwp_document_,
+        utf32_offset_for_utf16(text, cursor.selectionStart()));
+    const core::JwpPosition end = core::jwp_plain_text_position(
+        *jwp_document_, utf32_offset_for_utf16(text, cursor.selectionEnd()));
+    const core::JwpPosition caret = core::jwp_plain_text_position(
+        *jwp_document_, utf32_offset_for_utf16(text, cursor.position()));
+
+    auto transaction = std::make_unique<core::JwpConversionTransaction>(
+        *jwp_document_, jwp_history_, wnn_resources_->session);
+    conversion_preferences_before_ = wnn_resources_->preferences;
+    if (!transaction->begin({begin, end}, caret)) {
+      conversion_preferences_before_.reset();
+      statusBar()->showMessage(tr("No conversion candidates"), 3000);
+      return false;
+    }
+    jwp_conversion_ = std::move(transaction);
+    editor_->setReadOnly(true);
+    restore_jwp_conversion_state();
+    return true;
+  } catch (const std::exception& error) {
+    rollback_conversion_noexcept();
+    statusBar()->showMessage(
+        tr("Could not start conversion: %1")
+            .arg(QString::fromUtf8(error.what())),
+        5000);
+    return false;
+  }
+}
+
+bool MainWindow::cycle_conversion(bool previous) {
+  if (!conversion_active()) {
+    return false;
+  }
+  try {
+    const bool changed = previous ? jwp_conversion_->cycle_previous()
+                                  : jwp_conversion_->cycle_next();
+    restore_jwp_conversion_state();
+    return changed;
+  } catch (const std::exception& error) {
+    rollback_conversion_noexcept();
+    statusBar()->showMessage(
+        tr("Could not change candidate: %1")
+            .arg(QString::fromUtf8(error.what())),
+        5000);
+    return false;
+  }
+}
+
+bool MainWindow::accept_conversion() {
+  if (!conversion_active()) {
+    return false;
+  }
+  try {
+    const core::JwpPosition caret = jwp_conversion_->caret();
+    jwp_conversion_->accept();
+    jwp_conversion_.reset();
+    conversion_preferences_before_.reset();
+    editor_->setReadOnly(false);
+    restore_jwp_history_state(caret);
+    try {
+      save_wnn_preferences();
+      statusBar()->showMessage(tr("Accepted conversion"), 3000);
+    } catch (const std::exception& error) {
+      statusBar()->showMessage(
+          tr("Accepted conversion, but could not save preferences: %1")
+              .arg(QString::fromUtf8(error.what())),
+          5000);
+    }
+    update_conversion_actions();
+    return true;
+  } catch (const std::exception& error) {
+    rollback_conversion_noexcept();
+    statusBar()->showMessage(
+        tr("Could not accept conversion: %1")
+            .arg(QString::fromUtf8(error.what())),
+        5000);
+    return false;
+  }
+}
+
+void MainWindow::restore_jwp_conversion_state() {
+  if (!conversion_active() || !jwp_document_.has_value()) {
+    throw core::JwpConversionError("native conversion is not active");
+  }
+  std::u32string text =
+      core::decode_jwp_plain_text(*jwp_document_, jwp_code_page_);
+  const core::JwpRange range = jwp_conversion_->range();
+  const core::JwpPosition caret = jwp_conversion_->caret();
+  const int begin = utf16_offset_for_utf32(
+      text, core::jwp_plain_text_offset(*jwp_document_, range.begin));
+  const int end = utf16_offset_for_utf32(
+      text, core::jwp_plain_text_offset(*jwp_document_, range.end));
+
+  updating_editor_ = true;
+  editor_->setPlainText(to_qstring(text));
+  QTextCursor cursor = editor_->textCursor();
+  if (caret == range.begin) {
+    cursor.setPosition(end);
+    cursor.setPosition(begin, QTextCursor::KeepAnchor);
+  } else {
+    cursor.setPosition(begin);
+    cursor.setPosition(end, QTextCursor::KeepAnchor);
+  }
+  editor_->setTextCursor(cursor);
+  updating_editor_ = false;
+
+  rendered_jwp_text_ = std::move(text);
+  jwp_caret_ = caret;
+  expected_jwp_caret_.reset();
+  editor_->document()->setModified(
+      !saved_jwp_document_.has_value() ||
+      jwp_document_->document() != *saved_jwp_document_);
+  const std::size_t selected = jwp_conversion_->selected_index() + 1U;
+  const std::size_t total = jwp_conversion_->result().candidates.size();
+  statusBar()->showMessage(
+      tr("Conversion candidate %1 of %2")
+          .arg(static_cast<qulonglong>(selected))
+          .arg(static_cast<qulonglong>(total)));
+  update_undo_actions();
+  update_conversion_actions();
+  update_title();
+}
+
+void MainWindow::rollback_conversion_noexcept() noexcept {
+  std::optional<core::JwpPosition> caret;
+  if (conversion_active()) {
+    try {
+      caret = jwp_conversion_->rollback();
+    } catch (...) {
+    }
+  }
+  jwp_conversion_.reset();
+  if (conversion_preferences_before_.has_value()) {
+    wnn_resources_->preferences =
+        std::move(*conversion_preferences_before_);
+    conversion_preferences_before_.reset();
+  }
+  editor_->setReadOnly(false);
+  if (caret.has_value() && jwp_document_.has_value()) {
+    try {
+      restore_jwp_history_state(*caret);
+    } catch (...) {
+    }
+  }
+  update_undo_actions();
+  update_conversion_actions();
+}
+
+void MainWindow::save_wnn_preferences() {
+  if (wnn_resources_ != nullptr && wnn_resources_->preferences.changed()) {
+    write_wnn_preferences_file(wnn_resources_->preferences_path,
+                               wnn_resources_->preferences);
+  }
 }
 
 void MainWindow::new_document() {
@@ -460,6 +758,9 @@ void MainWindow::open_document() {
 
 bool MainWindow::open_path(const QString& path, core::TextEncoding encoding,
                            OpenMode mode) {
+  if (conversion_active() && !accept_conversion()) {
+    return false;
+  }
   try {
     const core::TextFile file = read_text_file(path, encoding);
     load_document(path, file);
@@ -477,6 +778,9 @@ bool MainWindow::open_path(const QString& path, core::TextEncoding encoding,
 bool MainWindow::open_jwp_path(const QString& path,
                                core::LegacyCodePage code_page,
                                OpenMode mode) {
+  if (conversion_active() && !accept_conversion()) {
+    return false;
+  }
   try {
     load_jwp_document(path, read_jwp_file(path), code_page);
     statusBar()->showMessage(
@@ -492,6 +796,9 @@ bool MainWindow::open_jwp_path(const QString& path,
 }
 
 bool MainWindow::open_path_detected(const QString& path, OpenMode mode) {
+  if (conversion_active() && !accept_conversion()) {
+    return false;
+  }
   try {
     const std::string bytes = read_file_bytes(path);
     if (core::has_jwp_document_magic(bytes)) {
@@ -635,6 +942,9 @@ bool MainWindow::save_document_as() {
 }
 
 bool MainWindow::save_path(const QString& path) {
+  if (conversion_active() && !accept_conversion()) {
+    return false;
+  }
   try {
     if (jwp_document_.has_value()) {
       const bool unedited_pristine =
@@ -851,6 +1161,9 @@ void MainWindow::set_text_encoding(core::TextEncoding encoding,
 }
 
 void MainWindow::set_jwp_code_page(core::LegacyCodePage code_page) {
+  if (conversion_active() && !accept_conversion()) {
+    return;
+  }
   if (jwp_code_page_ == code_page) {
     return;
   }
@@ -911,6 +1224,11 @@ void MainWindow::replace_document() {
 
 bool MainWindow::find_text(const QString& text,
                            core::JwpSearchOptions options) {
+  if (conversion_active()) {
+    statusBar()->showMessage(tr("Accept the current conversion before finding"),
+                             3000);
+    return false;
+  }
   if (text.isEmpty()) {
     statusBar()->showMessage(tr("Enter text to find"), 3000);
     return false;
@@ -1006,6 +1324,11 @@ bool MainWindow::find_plain_text(const QString& text,
 bool MainWindow::replace_next(const QString& text,
                               const QString& replacement,
                               core::JwpSearchOptions options) {
+  if (conversion_active()) {
+    statusBar()->showMessage(
+        tr("Accept the current conversion before replacing"), 3000);
+    return false;
+  }
   replacement_text_ = replacement;
   if (text.isEmpty()) {
     statusBar()->showMessage(tr("Enter text to replace"), 3000);
@@ -1057,6 +1380,11 @@ bool MainWindow::replace_next(const QString& text,
 std::size_t MainWindow::replace_all(const QString& text,
                                     const QString& replacement,
                                     core::JwpSearchOptions options) {
+  if (conversion_active()) {
+    statusBar()->showMessage(
+        tr("Accept the current conversion before replacing"), 3000);
+    return 0;
+  }
   replacement_text_ = replacement;
   if (text.isEmpty()) {
     statusBar()->showMessage(tr("Enter text to replace"), 3000);
@@ -1310,6 +1638,9 @@ const core::JwpDocument* MainWindow::current_jwp_document() const noexcept {
 }
 
 bool MainWindow::maybe_save() {
+  if (conversion_active() && !accept_conversion()) {
+    return false;
+  }
   if (!editor_->document()->isModified()) {
     return true;
   }
