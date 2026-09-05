@@ -174,4 +174,28 @@ void write_edict_registry_file(const QString& path,
   write_file_bytes(path, bytes);
 }
 
+std::optional<core::EdictUserDictionary> read_edict_user_dictionary_file(
+    const QString& path, core::LegacyCodePage code_page,
+    const core::EdictUserDictionaryLimits& limits) {
+  QFile input(path);
+  if (!input.open(QIODevice::ReadOnly)) {
+    if (path_is_missing(path)) {
+      static_cast<void>(
+          core::EdictUserDictionary::parse({}, code_page, limits));
+      return std::nullopt;
+    }
+    throw io_error("Could not open", path, input.errorString());
+  }
+  return core::EdictUserDictionary::parse(read_open_file_bytes(input, path),
+                                           code_page, limits);
+}
+
+void write_edict_user_dictionary_file(
+    const QString& path, const core::EdictUserDictionary& dictionary,
+    core::LegacyCodePage code_page,
+    const core::EdictUserDictionaryLimits& limits) {
+  const std::string bytes = dictionary.serialize(code_page, limits);
+  write_file_bytes(path, bytes);
+}
+
 }  // namespace jwpqt::qt

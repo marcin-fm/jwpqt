@@ -326,6 +326,12 @@ legacy file structures.
     embedded meaning slashes; canonical output is LF-terminated without the
     internal prefix. New entries separately require a non-space reading and
     nonempty single-line meaning, while all paths enforce aggregate budgets.
+73. Qt file I/O treats only a genuinely absent `user.dct` as an optional empty
+    resource, validates configured code pages and limits before returning that
+    absence, and parses every present file through the portable codec. Saving
+    prepares the full canonical payload before `QSaveFile` replacement, so
+    malformed input, unrepresentable meanings, dangling links, and unavailable
+    output parents never publish partial state or damage an existing file.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and

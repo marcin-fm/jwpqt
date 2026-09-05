@@ -428,6 +428,101 @@ void test_edict_registry_file_errors(const QString& directory) {
           "EDICT registry was written without a parent directory");
 }
 
+void test_edict_user_dictionary_file_round_trip(const QString& directory) {
+  using namespace jwpqt::core;
+
+  const QString path = directory + QStringLiteral("/user.dct");
+  require(!jwpqt::qt::read_edict_user_dictionary_file(path).has_value(),
+          "Missing EDICT user dictionary did not remain optional");
+
+  const EdictUserDictionary dictionary = EdictUserDictionary::from_entries({
+      {{0x467c}, {0x242b, 0x244a}, U"caf\u00e9/slash"},
+      {{}, {0x2422}, U""},
+  });
+  jwpqt::qt::write_edict_user_dictionary_file(
+      path, dictionary, LegacyCodePage::k1252);
+  const auto loaded = jwpqt::qt::read_edict_user_dictionary_file(
+      path, LegacyCodePage::k1252);
+  require(loaded.has_value() && loaded->entries() == dictionary.entries(),
+          "EDICT user dictionary file did not round-trip");
+  require(jwpqt::qt::read_file_bytes(path) ==
+              dictionary.serialize(LegacyCodePage::k1252),
+          "EDICT user dictionary file was not written canonically");
+}
+
+void test_edict_user_dictionary_file_errors(const QString& directory) {
+  using namespace jwpqt::core;
+
+  const QString missing = directory + QStringLiteral("/missing-user.dct");
+  bool invalid_page_rejected = false;
+  try {
+    static_cast<void>(jwpqt::qt::read_edict_user_dictionary_file(
+        missing, static_cast<LegacyCodePage>(9999)));
+  } catch (const EdictUserDictionaryError&) {
+    invalid_page_rejected = true;
+  }
+  require(invalid_page_rejected,
+          "Missing EDICT user dictionary bypassed code-page validation");
+
+  const QString malformed = directory + QStringLiteral("/malformed-user.dct");
+  QFile malformed_file(malformed);
+  require(malformed_file.open(QIODevice::WriteOnly) &&
+              malformed_file.write("invalid\n", 8) == 8,
+          "Could not seed malformed EDICT user dictionary");
+  malformed_file.close();
+  bool malformed_rejected = false;
+  try {
+    static_cast<void>(
+        jwpqt::qt::read_edict_user_dictionary_file(malformed));
+  } catch (const EdictUserDictionaryError&) {
+    malformed_rejected = true;
+  }
+  require(malformed_rejected,
+          "Malformed EDICT user dictionary was accepted by file I/O");
+
+  const QString target = directory + QStringLiteral("/absent-user.dct");
+  const QString link = directory + QStringLiteral("/dangling-user.dct");
+  require(QFile::link(target, link),
+          "Could not create dangling EDICT user dictionary symlink");
+  bool dangling_rejected = false;
+  try {
+    static_cast<void>(jwpqt::qt::read_edict_user_dictionary_file(link));
+  } catch (const std::runtime_error&) {
+    dangling_rejected = true;
+  }
+  require(dangling_rejected,
+          "Dangling EDICT user dictionary symlink was treated as missing");
+
+  const QString existing = directory + QStringLiteral("/existing-user.dct");
+  QFile existing_file(existing);
+  require(existing_file.open(QIODevice::WriteOnly) &&
+              existing_file.write("original", 8) == 8,
+          "Could not seed existing EDICT user dictionary");
+  existing_file.close();
+  const EdictUserDictionary unrepresentable =
+      EdictUserDictionary::from_entries({{{}, {0x2422}, U"\u20ac"}});
+  bool encoding_rejected = false;
+  try {
+    jwpqt::qt::write_edict_user_dictionary_file(
+        existing, unrepresentable, LegacyCodePage::k1251);
+  } catch (const EdictUserDictionaryError&) {
+    encoding_rejected = true;
+  }
+  require(encoding_rejected && read_bytes(existing) == QByteArray("original"),
+          "Failed EDICT user serialization changed the existing file");
+
+  bool missing_parent_rejected = false;
+  try {
+    jwpqt::qt::write_edict_user_dictionary_file(
+        directory + QStringLiteral("/missing/user.dct"),
+        EdictUserDictionary::from_entries({}));
+  } catch (const std::runtime_error&) {
+    missing_parent_rejected = true;
+  }
+  require(missing_parent_rejected,
+          "EDICT user dictionary was written without a parent directory");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -455,6 +550,8 @@ int main(int argc, char* argv[]) {
     test_wnn_user_dictionary_file_errors(directory.path());
     test_edict_registry_file_round_trip(directory.path());
     test_edict_registry_file_errors(directory.path());
+    test_edict_user_dictionary_file_round_trip(directory.path());
+    test_edict_user_dictionary_file_errors(directory.path());
     std::cout << "All Qt file I/O tests passed\n";
     return 0;
   } catch (const std::exception& error) {
