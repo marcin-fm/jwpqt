@@ -13,6 +13,7 @@ using jwpqt::core::JwpDocument;
 using jwpqt::core::JwpDocumentEditError;
 using jwpqt::core::JwpDocumentModel;
 using jwpqt::core::JwpParagraph;
+using jwpqt::core::JwpParagraphFormat;
 using jwpqt::core::JwpPosition;
 using jwpqt::core::JwpText;
 
@@ -163,6 +164,72 @@ void test_set_page_break_clears_text() {
          "clearing page break keeps paragraph empty");
 }
 
+void test_format_paragraph_range() {
+  JwpDocument document;
+  document.paragraphs.push_back(paragraph({'A'}, 110));
+  document.paragraphs.push_back(paragraph({}, 120, true));
+  document.paragraphs.push_back(paragraph({'B'}, 130));
+  document.paragraphs.push_back(paragraph({'C'}, 140));
+  JwpDocumentModel model(std::move(document));
+
+  const JwpParagraphFormat format{12, 23, -7, 175};
+  model.format_paragraphs(1, 2, format);
+
+  expect(model.paragraph_format(0) == JwpParagraphFormat{2, 4, -3, 110},
+         "unselected paragraph format");
+  expect(model.paragraph_format(1) == format &&
+             model.paragraph_format(2) == format,
+         "selected paragraph formats");
+  expect(model.paragraph(1).page_break && model.paragraph(1).text.empty(),
+         "formatting preserves hard page break");
+  expect(model.paragraph(2).text == JwpText{'B'},
+         "formatting preserves paragraph text");
+  expect(model.paragraph_format(3) == JwpParagraphFormat{2, 4, -3, 140},
+         "paragraph after range format");
+}
+
+void test_invalid_paragraph_formats_are_atomic() {
+  JwpDocument document;
+  document.paragraphs.push_back(paragraph({'A'}));
+  document.paragraphs.push_back(paragraph({'B'}));
+  JwpDocumentModel model(std::move(document));
+
+  const auto expect_unchanged = [&](const auto& operation,
+                                    std::string_view message) {
+    const JwpDocument before = model.document();
+    expect_error(operation, message);
+    expect(model.document() == before, "failed paragraph format is atomic");
+  };
+
+  expect_unchanged(
+      [&] { model.format_paragraphs(1, 0, JwpParagraphFormat{}); },
+      "reversed paragraph format range");
+  expect_unchanged(
+      [&] { model.format_paragraphs(0, 2, JwpParagraphFormat{}); },
+      "paragraph format index");
+  expect_unchanged(
+      [&] { model.format_paragraphs(0, 1, {-1, 0, 0, 100}); },
+      "negative left indent");
+  expect_unchanged(
+      [&] { model.format_paragraphs(0, 1, {0, 256, 0, 100}); },
+      "oversized right indent");
+  expect_unchanged(
+      [&] { model.format_paragraphs(0, 1, {0, 0, -128, 100}); },
+      "undersized first indent");
+  expect_unchanged(
+      [&] { model.format_paragraphs(0, 1, {0, 0, 128, 100}); },
+      "oversized first indent");
+  expect_unchanged(
+      [&] { model.format_paragraphs(0, 1, {3, 0, -4, 100}); },
+      "first indent beyond left margin");
+  expect_unchanged(
+      [&] { model.format_paragraphs(0, 1, {0, 0, 0, 99}); },
+      "undersized line spacing");
+  expect_unchanged(
+      [&] { model.format_paragraphs(0, 1, {0, 0, 0, 1001}); },
+      "oversized line spacing");
+}
+
 void test_malformed_page_break_split_is_rejected() {
   JwpDocument document;
   document.paragraphs.push_back(paragraph({'A'}, 100, true));
@@ -212,6 +279,8 @@ int main() {
   test_erase_across_paragraphs();
   test_join_matches_legacy_page_break_cases();
   test_set_page_break_clears_text();
+  test_format_paragraph_range();
+  test_invalid_paragraph_formats_are_atomic();
   test_malformed_page_break_split_is_rejected();
   test_invalid_edits_leave_document_unchanged();
   return 0;

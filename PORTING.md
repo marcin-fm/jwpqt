@@ -98,6 +98,10 @@ legacy file structures.
     continuously scrolling editor, and carries those breaks into paged document
     layout for printing. Main-window restoration paths reapply or clear the
     presentation without changing portable JWP history.
+31. Portable paragraph-format mutation validates the legacy persisted field
+    bounds and left-margin relationship before atomically applying left, right,
+    first-line, and proportional-spacing values to an inclusive paragraph
+    range. Page-width-dependent validation remains a native command concern.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and

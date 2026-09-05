@@ -1,5 +1,6 @@
 #include "jwpqt/core/jwp_document_model.h"
 
+#include <cstdint>
 #include <utility>
 
 namespace jwpqt::core {
@@ -32,6 +33,13 @@ const JwpParagraph& JwpDocumentModel::paragraph(std::size_t index) const {
     throw JwpDocumentEditError("paragraph index is out of range");
   }
   return document_.paragraphs[index];
+}
+
+JwpParagraphFormat JwpDocumentModel::paragraph_format(
+    std::size_t index) const {
+  const JwpParagraph& source = paragraph(index);
+  return {source.left_indent, source.right_indent, source.first_indent,
+          source.line_spacing};
 }
 
 bool JwpDocumentModel::valid_position(JwpPosition position) const noexcept {
@@ -160,6 +168,40 @@ void JwpDocumentModel::set_page_break(std::size_t paragraph_index,
   auto& target = document_.paragraphs[paragraph_index];
   target.page_break = page_break;
   target.text.clear();
+}
+
+void JwpDocumentModel::format_paragraphs(
+    std::size_t first_paragraph, std::size_t last_paragraph,
+    const JwpParagraphFormat& format) {
+  if (first_paragraph > last_paragraph) {
+    throw JwpDocumentEditError("paragraph range is reversed");
+  }
+  if (last_paragraph >= paragraph_count()) {
+    throw JwpDocumentEditError("paragraph index is out of range");
+  }
+  if (format.left_indent < 0 || format.left_indent > 255 ||
+      format.right_indent < 0 || format.right_indent > 255) {
+    throw JwpDocumentEditError("paragraph side indent is out of range");
+  }
+  if (format.first_indent < -127 || format.first_indent > 127) {
+    throw JwpDocumentEditError("paragraph first indent is out of range");
+  }
+  if (format.first_indent < -format.left_indent) {
+    throw JwpDocumentEditError(
+        "paragraph first indent extends beyond the left margin");
+  }
+  if (format.line_spacing < 100 || format.line_spacing > 1000) {
+    throw JwpDocumentEditError("paragraph line spacing is out of range");
+  }
+
+  for (std::size_t index = first_paragraph; index <= last_paragraph; ++index) {
+    JwpParagraph& paragraph = document_.paragraphs[index];
+    paragraph.left_indent = static_cast<std::uint8_t>(format.left_indent);
+    paragraph.right_indent = static_cast<std::uint8_t>(format.right_indent);
+    paragraph.first_indent = static_cast<std::int8_t>(format.first_indent);
+    paragraph.line_spacing =
+        static_cast<std::int16_t>(format.line_spacing);
+  }
 }
 
 void JwpDocumentModel::require_position(JwpPosition position) const {
