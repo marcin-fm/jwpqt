@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
+#include <cmath>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -9,13 +11,17 @@
 #include <QApplication>
 #include <QDir>
 #include <QFile>
+#include <QFontMetricsF>
 #include <QLabel>
 #include <QKeyEvent>
-#include <QPlainTextEdit>
+#include <QTextEdit>
 #include <QTemporaryDir>
+#include <QTextBlock>
 #include <QTextDocument>
+#include <QTextBlockFormat>
 
 #include "file_io.h"
+#include "jwp_editor.h"
 #include "jwpqt/core/jwp_text_codec.h"
 #include "main_window.h"
 
@@ -190,6 +196,45 @@ jwpqt::core::JwpDocument sample_jwp_document() {
   return document;
 }
 
+void require_jwp_layout(QTextEdit* editor,
+                        const jwpqt::core::JwpDocument& document) {
+  require(editor != nullptr &&
+              editor->document()->blockCount() ==
+                  static_cast<int>(document.paragraphs.size()),
+          "JWP editor layout has the wrong paragraph count");
+  const QFontMetricsF metrics(editor->font());
+  const qreal ideographic_space = metrics.horizontalAdvance(QChar(0x3000));
+  const qreal unit =
+      ideographic_space > 0.0 ? ideographic_space : metrics.height();
+  QTextBlock block = editor->document()->begin();
+  bool follows_page_break = false;
+  for (const jwpqt::core::JwpParagraph& paragraph : document.paragraphs) {
+    const QTextBlockFormat format = block.blockFormat();
+    require(std::abs(format.leftMargin() - paragraph.left_indent * unit) <
+                    0.01 &&
+                std::abs(format.rightMargin() - paragraph.right_indent * unit) <
+                    0.01 &&
+                std::abs(format.textIndent() - paragraph.first_indent * unit) <
+                    0.01,
+            "JWP editor did not retain paragraph indents");
+    require(format.lineHeightType() ==
+                    QTextBlockFormat::ProportionalHeight &&
+                std::abs(format.lineHeight() -
+                         std::max<std::int16_t>(paragraph.line_spacing, 1)) <
+                    0.01,
+            "JWP editor did not retain paragraph line spacing");
+    require(format.property(jwpqt::qt::JwpEditor::kPageBreakProperty)
+                    .toBool() == paragraph.page_break,
+            "JWP editor did not retain hard-page-break metadata");
+    const bool starts_new_page =
+        (format.pageBreakPolicy() & QTextFormat::PageBreak_AlwaysBefore) != 0;
+    require(starts_new_page == follows_page_break,
+            "JWP editor did not retain hard-page-break layout policy");
+    follows_page_break = paragraph.page_break;
+    block = block.next();
+  }
+}
+
 void test_explicit_open_and_encoding_action(const QString& directory) {
   const QString path = directory + QStringLiteral("/explicit.euc");
   const jwpqt::core::TextFile file{
@@ -203,7 +248,7 @@ void test_explicit_open_and_encoding_action(const QString& directory) {
   require(window.text_encoding() == jwpqt::core::TextEncoding::kEucJp,
           "Window did not retain EUC-JP encoding");
 
-  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QTextEdit* editor = window.findChild<QTextEdit*>();
   require(editor != nullptr, "Window has no editor");
   require(editor->toPlainText() == QStringLiteral("ASCII \u65e5\u672c\u8a9e\n"),
           "Window decoded the EUC-JP text incorrectly");
@@ -279,7 +324,7 @@ void test_detected_open(const QString& directory) {
           "Could not open a certainly detected EUC-JP file");
   require(window.text_encoding() == jwpqt::core::TextEncoding::kEucJp,
           "Detected open did not retain EUC-JP");
-  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QTextEdit* editor = window.findChild<QTextEdit*>();
   require(editor != nullptr &&
               editor->toPlainText() == QStringLiteral("ASCII \u65e5\u672c\u8a9e\n"),
           "Detected open decoded EUC-JP incorrectly");
@@ -316,7 +361,7 @@ void test_detection_prompt_and_cancellation(const QString& directory) {
   PromptingWindow window;
   require(window.open_path(initial_path, jwpqt::core::TextEncoding::kUtf8),
           "Could not open initial prompt-state document");
-  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QTextEdit* editor = window.findChild<QTextEdit*>();
   require(editor != nullptr, "Prompting window has no editor");
   window.next_encoding = std::nullopt;
   require(!window.open_path_detected(ambiguous_path),
@@ -389,7 +434,7 @@ void test_plain_text_find_actions(const QString& directory) {
           "Native find actions were not created");
 
   find->trigger();
-  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QTextEdit* editor = window.findChild<QTextEdit*>();
   require(window.search_prompt_count == 1 && editor != nullptr &&
               editor->textCursor().selectedText() == QStringLiteral("Alpha"),
           "Find dialog action did not select the first plain-text match");
@@ -450,7 +495,7 @@ void test_jwp_find_uses_legacy_comparison(const QString& directory) {
 
   jwpqt::qt::MainWindow window;
   require(window.open_jwp_path(path), "Could not open JWP search fixture");
-  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QTextEdit* editor = window.findChild<QTextEdit*>();
   require(editor != nullptr, "JWP search window has no editor");
 
   require(window.find_text(QStringLiteral("A")),
@@ -519,7 +564,7 @@ void test_plain_text_replace_actions(const QString& directory) {
   require(replace != nullptr, "Native replace action was not created");
   replace->trigger();
 
-  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QTextEdit* editor = window.findChild<QTextEdit*>();
   require(window.replace_prompt_count == 1 && editor != nullptr &&
               editor->toPlainText() == QStringLiteral("xx xx \u00e9 \u00c9"),
           "Replace All action did not use ASCII-only comparison");
@@ -551,7 +596,7 @@ void test_jwp_replace_preserves_structure(const QString& directory) {
 
   jwpqt::qt::MainWindow window;
   require(window.open_jwp_path(path), "Could not open JWP replace fixture");
-  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QTextEdit* editor = window.findChild<QTextEdit*>();
   require(editor != nullptr, "JWP replace window has no editor");
   require(window.replace_all(QStringLiteral("a"), QStringLiteral("B")) == 3,
           "JWP Replace All did not use legacy comparison");
@@ -624,10 +669,11 @@ void test_jwp_open_edit_and_save(const QString& directory) {
               *window.current_jwp_document() == source,
           "JWP open did not retain document metadata");
 
-  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QTextEdit* editor = window.findChild<QTextEdit*>();
   require(editor != nullptr, "JWP window has no editor");
   require(editor->toPlainText() == QStringLiteral("A\u65e5\u672c\n\u00e9"),
           "JWP body was not exposed as Unicode text");
+  require_jwp_layout(editor, source);
   QLabel* label = window.findChild<QLabel*>(QStringLiteral("documentEncoding"));
   require(label != nullptr &&
               label->text() == QStringLiteral("JWP / windows-1252"),
@@ -653,18 +699,36 @@ void test_jwp_open_edit_and_save(const QString& directory) {
           "Saved JWP document did not match the edited model");
   require(!editor->document()->isModified(),
           "Saving JWP did not clear modified state");
+
+  const QString plain_path = directory + QStringLiteral("/after-jwp.txt");
+  jwpqt::qt::write_text_file(
+      plain_path,
+      {U"plain", jwpqt::core::TextEncoding::kUtf8, false});
+  require(window.open_path(plain_path, jwpqt::core::TextEncoding::kUtf8),
+          "Could not switch from JWP to plain text");
+  const QTextBlockFormat plain_format =
+      editor->document()->begin().blockFormat();
+  require(plain_format.leftMargin() == 0.0 &&
+              plain_format.rightMargin() == 0.0 &&
+              plain_format.textIndent() == 0.0 &&
+              !plain_format
+                   .property(jwpqt::qt::JwpEditor::kPageBreakProperty)
+                   .toBool(),
+          "Switching to plain text retained JWP paragraph layout");
 }
 
 void test_jwp_code_page_switch(const QString& directory) {
   jwpqt::core::JwpDocument source;
   source.paragraphs = {jwpqt::core::JwpParagraph{{0xc0}}};
+  source.paragraphs[0].left_indent = 2;
+  source.paragraphs[0].line_spacing = 125;
   const QString source_path = directory + QStringLiteral("/code-page.jwp");
   jwpqt::qt::write_jwp_file(source_path, source);
 
   jwpqt::qt::MainWindow window;
   require(window.open_jwp_path(source_path),
           "Could not open JWP code-page fixture");
-  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QTextEdit* editor = window.findChild<QTextEdit*>();
   require(editor != nullptr &&
               editor->toPlainText() == QStringLiteral("\u00c0"),
           "Default CP1252 interpretation was incorrect");
@@ -676,6 +740,7 @@ void test_jwp_code_page_switch(const QString& directory) {
   require(window.jwp_code_page() == jwpqt::core::LegacyCodePage::k1251 &&
               editor->toPlainText() == QStringLiteral("\u0410"),
           "Changing JWP code page did not reinterpret extended bytes");
+  require_jwp_layout(editor, source);
   require(!editor->document()->isModified(),
           "Changing JWP code page changed the source document");
 
@@ -703,7 +768,7 @@ void test_jwp_code_page_can_be_selected_before_open(const QString& directory) {
   require(window.open_path_detected(source_path,
                                     jwpqt::qt::OpenMode::kNonInteractive),
           "JWP file did not use the preselected code page");
-  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QTextEdit* editor = window.findChild<QTextEdit*>();
   require(editor != nullptr &&
               editor->toPlainText() == QStringLiteral("\u0402"),
           "CP1251-only JWP byte did not decode after preselection");
@@ -724,7 +789,7 @@ void test_zero_paragraph_jwp_save_is_not_normalized(const QString& directory) {
   require(jwpqt::qt::read_jwp_file(saved_path) == source,
           "Unedited zero-paragraph JWP file was normalized on save");
 
-  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QTextEdit* editor = window.findChild<QTextEdit*>();
   require(editor != nullptr, "Editor was not created for zero-paragraph JWP");
   editor->insertPlainText(QStringLiteral("A"));
   require(editor->document()->isModified(),
@@ -754,7 +819,7 @@ void test_jwp_rejects_lossy_edits(const QString& directory) {
   jwpqt::qt::MainWindow window;
   require(window.open_jwp_path(source_path),
           "Could not open page-break fixture");
-  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QTextEdit* editor = window.findChild<QTextEdit*>();
   require(editor != nullptr && editor->toPlainText() == QStringLiteral("A\n\nB"),
           "Page-break fixture was not rendered predictably");
 
@@ -788,6 +853,7 @@ void test_jwp_rejects_lossy_edits(const QString& directory) {
               editor->textCursor().selectionStart() == 0 &&
               editor->textCursor().selectionEnd() == 1,
           "Rejected replacement did not restore the prior selection");
+  require_jwp_layout(editor, *window.current_jwp_document());
   QAction* undo = find_action(window, "undoAction");
   require(undo != nullptr && undo->isEnabled(),
           "Valid JWP edit did not enable portable undo");
@@ -801,6 +867,8 @@ void test_jwp_rejects_lossy_edits(const QString& directory) {
 void test_jwp_history_actions(const QString& directory) {
   jwpqt::core::JwpDocument source;
   source.paragraphs = {paragraph(U"A")};
+  source.paragraphs[0].right_indent = 2;
+  source.paragraphs[0].line_spacing = 125;
   const QString source_path = directory + QStringLiteral("/history.jwp");
   const QString saved_path = directory + QStringLiteral("/history-saved.jwp");
   jwpqt::qt::write_jwp_file(source_path, source);
@@ -808,7 +876,7 @@ void test_jwp_history_actions(const QString& directory) {
   jwpqt::qt::MainWindow window;
   require(window.open_jwp_path(source_path),
           "Could not open portable history fixture");
-  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QTextEdit* editor = window.findChild<QTextEdit*>();
   QAction* undo = find_action(window, "undoAction");
   QAction* redo = find_action(window, "redoAction");
   require(editor != nullptr && undo != nullptr && redo != nullptr &&
@@ -840,6 +908,7 @@ void test_jwp_history_actions(const QString& directory) {
   require(editor->toPlainText() == QStringLiteral("ABC") &&
               undo->isEnabled() && !redo->isEnabled(),
           "Portable JWP redo did not restore typing");
+  require_jwp_layout(editor, *window.current_jwp_document());
 
   require(window.save_path(saved_path), "Could not save history fixture");
   require(undo->isEnabled(), "Saving unexpectedly cleared portable history");
@@ -858,7 +927,7 @@ void test_jwp_rejects_non_bmp_edit(const QString& directory) {
   jwpqt::qt::MainWindow window;
   require(window.open_jwp_path(source_path),
           "Could not open non-BMP rejection fixture");
-  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QTextEdit* editor = window.findChild<QTextEdit*>();
   require(editor != nullptr, "Editor was not created for non-BMP fixture");
   QTextCursor cursor = editor->textCursor();
   cursor.setPosition(1);
@@ -875,6 +944,8 @@ void test_jwp_wnn_conversion(const QString& directory) {
   jwpqt::core::JwpDocument source;
   source.paragraphs = {jwpqt::core::JwpParagraph{}};
   source.paragraphs[0].text = {0x2422};
+  source.paragraphs[0].first_indent = 1;
+  source.paragraphs[0].line_spacing = 125;
   const QString source_path = directory + QStringLiteral("/convert.jwp");
   jwpqt::qt::write_jwp_file(source_path, source);
 
@@ -889,7 +960,7 @@ void test_jwp_wnn_conversion(const QString& directory) {
           "Missing replacement WNN resources unexpectedly loaded");
   require(window.open_jwp_path(source_path),
           "Could not open native WNN conversion fixture");
-  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QTextEdit* editor = window.findChild<QTextEdit*>();
   QAction* convert = find_action(window, "convertSelectionAction");
   QAction* next = find_action(window, "nextCandidateAction");
   QAction* accept = find_action(window, "acceptCandidateAction");
@@ -931,13 +1002,14 @@ void test_jwp_wnn_conversion(const QString& directory) {
   require(window.current_jwp_document()->paragraphs[0].text ==
               jwpqt::core::JwpText{0x3022},
           "Redo did not restore the accepted conversion candidate");
+  require_jwp_layout(editor, *window.current_jwp_document());
 
   jwpqt::qt::MainWindow reopened;
   require(reopened.load_wnn_resources(fixture.index_path, fixture.data_path,
                                       fixture.preferences_path) &&
               reopened.open_jwp_path(source_path),
           "Could not reopen persisted WNN preference fixture");
-  QPlainTextEdit* reopened_editor = reopened.findChild<QPlainTextEdit*>();
+  QTextEdit* reopened_editor = reopened.findChild<QTextEdit*>();
   require(reopened_editor != nullptr, "Reopened WNN window has no editor");
   QTextCursor reversed = reopened_editor->textCursor();
   reversed.setPosition(1);
@@ -969,7 +1041,7 @@ void test_jwp_wnn_conversion_boundaries(const QString& directory) {
                                     fixture.preferences_path) &&
               window.open_jwp_path(source_path),
           "Could not prepare WNN range fixture");
-  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QTextEdit* editor = window.findChild<QTextEdit*>();
   QAction* convert = find_action(window, "convertSelectionAction");
   require(editor != nullptr && convert != nullptr,
           "WNN range fixture has no conversion controls");
@@ -995,7 +1067,7 @@ void test_jwp_wnn_preference_write_failure(const QString& directory) {
           "Could not prepare WNN preference failure fixture");
   require(QDir().mkpath(blocked_path),
           "Could not block the WNN preference output path");
-  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QTextEdit* editor = window.findChild<QTextEdit*>();
   require(editor != nullptr, "WNN preference failure window has no editor");
   editor->selectAll();
   require(window.convert_selection() && window.cycle_conversion() &&
@@ -1010,7 +1082,7 @@ void test_jwp_wnn_preference_write_failure(const QString& directory) {
           "Preference write failure discarded conversion history");
 }
 
-void send_text_key(QPlainTextEdit* editor, int key, const QString& text,
+void send_text_key(QTextEdit* editor, int key, const QString& text,
                    Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
   QKeyEvent event(QEvent::KeyPress, key, modifiers, text);
   QApplication::sendEvent(editor, &event);
@@ -1025,7 +1097,7 @@ void test_jwp_kana_input_mode(const QString& directory) {
   jwpqt::qt::MainWindow window;
   require(window.open_jwp_path(source_path),
           "Could not open kana-input fixture");
-  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QTextEdit* editor = window.findChild<QTextEdit*>();
   QAction* kana = find_action(window, "kanaInputAction");
   QLabel* input_mode = window.findChild<QLabel*>(QStringLiteral("inputMode"));
   require(editor != nullptr && kana != nullptr && input_mode != nullptr &&
@@ -1104,7 +1176,7 @@ void test_jwp_automatic_wnn_conversion(const QString& directory) {
                                     fixture.preferences_path) &&
               window.open_jwp_path(source_path),
           "Could not prepare automatic WNN fixture");
-  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QTextEdit* editor = window.findChild<QTextEdit*>();
   QAction* kana = find_action(window, "kanaInputAction");
   QAction* undo = find_action(window, "undoAction");
   require(editor != nullptr && kana != nullptr && undo != nullptr,
@@ -1143,8 +1215,8 @@ void test_jwp_automatic_wnn_conversion(const QString& directory) {
               directory + QStringLiteral("/automatic-backoff.sel")) &&
               backed_off.open_jwp_path(source_path),
           "Could not prepare automatic WNN backoff fixture");
-  QPlainTextEdit* backoff_editor =
-      backed_off.findChild<QPlainTextEdit*>();
+  QTextEdit* backoff_editor =
+      backed_off.findChild<QTextEdit*>();
   QAction* backoff_kana = find_action(backed_off, "kanaInputAction");
   QAction* backoff_undo = find_action(backed_off, "undoAction");
   require(backoff_editor != nullptr && backoff_kana != nullptr &&
@@ -1186,8 +1258,8 @@ void test_jwp_automatic_wnn_conversion(const QString& directory) {
                   fixture.preferences_path,
                   jwpqt::qt::OpenMode::kNonInteractive),
           "Could not prepare external-edit automatic WNN test");
-  QPlainTextEdit* external_editor =
-      externally_edited.findChild<QPlainTextEdit*>();
+  QTextEdit* external_editor =
+      externally_edited.findChild<QTextEdit*>();
   QAction* external_kana =
       externally_edited.findChild<QAction*>(QStringLiteral("kanaInputAction"));
   require(external_editor != nullptr && external_kana != nullptr,

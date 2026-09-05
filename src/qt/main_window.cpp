@@ -31,7 +31,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPalette>
-#include <QPlainTextEdit>
+#include <QTextEdit>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QScopedValueRollback>
@@ -43,6 +43,7 @@
 #include <QVBoxLayout>
 
 #include "file_io.h"
+#include "jwp_editor.h"
 #include "jwpqt/core/jwp_plain_text.h"
 #include "jwpqt/core/jwp_text_codec.h"
 #include "jwpqt/core/plain_text_change.h"
@@ -163,7 +164,7 @@ struct MainWindow::WnnResources {
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
-      editor_(new QPlainTextEdit(this)),
+      editor_(new JwpEditor(this)),
       encoding_label_(new QLabel(this)),
       undo_action_(nullptr),
       redo_action_(nullptr),
@@ -173,7 +174,7 @@ MainWindow::MainWindow(QWidget* parent)
   setCentralWidget(editor_);
   editor_->installEventFilter(this);
   editor_->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
-  editor_->setLineWrapMode(QPlainTextEdit::WidgetWidth);
+  editor_->setLineWrapMode(QTextEdit::WidgetWidth);
 
   create_actions();
   encoding_label_->setObjectName(QStringLiteral("documentEncoding"));
@@ -189,7 +190,7 @@ MainWindow::MainWindow(QWidget* parent)
           });
   connect(editor_->document(), &QTextDocument::modificationChanged, this,
           [this] { update_title(); });
-  connect(editor_, &QPlainTextEdit::cursorPositionChanged, this, [this] {
+  connect(editor_, &QTextEdit::cursorPositionChanged, this, [this] {
     if (updating_editor_ || conversion_active() ||
         !jwp_document_.has_value()) {
       return;
@@ -218,7 +219,7 @@ MainWindow::MainWindow(QWidget* parent)
       jwp_history_.break_coalescing();
     }
   });
-  connect(editor_, &QPlainTextEdit::selectionChanged, this,
+  connect(editor_, &QTextEdit::selectionChanged, this,
           [this] { update_conversion_actions(); });
   update_undo_actions();
   update_conversion_actions();
@@ -264,7 +265,7 @@ void MainWindow::create_actions() {
   undo_action_->setEnabled(false);
   connect(undo_action_, &QAction::triggered, this,
           [this] { undo_document(); });
-  connect(editor_, &QPlainTextEdit::undoAvailable, this,
+  connect(editor_, &QTextEdit::undoAvailable, this,
           [this](bool available) {
             qt_undo_available_ = available;
             update_undo_actions();
@@ -276,7 +277,7 @@ void MainWindow::create_actions() {
   redo_action_->setEnabled(false);
   connect(redo_action_, &QAction::triggered, this,
           [this] { redo_document(); });
-  connect(editor_, &QPlainTextEdit::redoAvailable, this,
+  connect(editor_, &QTextEdit::redoAvailable, this,
           [this](bool available) {
             qt_redo_available_ = available;
             update_undo_actions();
@@ -290,7 +291,7 @@ void MainWindow::create_actions() {
     finish_kana_input();
     editor_->cut();
   });
-  connect(editor_, &QPlainTextEdit::copyAvailable, cut_action,
+  connect(editor_, &QTextEdit::copyAvailable, cut_action,
           &QAction::setEnabled);
 
   QAction* copy_action = edit_menu->addAction(tr("&Copy"));
@@ -300,7 +301,7 @@ void MainWindow::create_actions() {
     finish_kana_input();
     editor_->copy();
   });
-  connect(editor_, &QPlainTextEdit::copyAvailable, copy_action,
+  connect(editor_, &QTextEdit::copyAvailable, copy_action,
           &QAction::setEnabled);
 
   QAction* paste_action = edit_menu->addAction(tr("&Paste"));
@@ -318,7 +319,7 @@ void MainWindow::create_actions() {
     editor_->selectAll();
   });
 
-  // The standard QPlainTextEdit menu would bypass portable JWP history.
+  // The standard QTextEdit menu would bypass portable JWP history.
   editor_->setContextMenuPolicy(Qt::ActionsContextMenu);
   editor_->addAction(undo_action_);
   editor_->addAction(redo_action_);
@@ -476,6 +477,7 @@ void MainWindow::restore_jwp_history_state(core::JwpPosition caret) {
 
   updating_editor_ = true;
   editor_->setPlainText(qt_text);
+  editor_->apply_jwp_layout(jwp_document_->document());
   QTextCursor cursor = editor_->textCursor();
   cursor.setPosition(qt_offset);
   editor_->setTextCursor(cursor);
@@ -1010,6 +1012,7 @@ void MainWindow::restore_jwp_conversion_state() {
 
   updating_editor_ = true;
   editor_->setPlainText(to_qstring(text));
+  editor_->apply_jwp_layout(jwp_document_->document());
   QTextCursor cursor = editor_->textCursor();
   editor_->setExtraSelections({});
   if (caret == range.begin) {
@@ -1100,6 +1103,7 @@ void MainWindow::new_document() {
   rendered_jwp_text_.clear();
   updating_editor_ = true;
   editor_->clear();
+  editor_->clear_jwp_layout();
   updating_editor_ = false;
   editor_->document()->setModified(false);
   current_path_.clear();
@@ -1246,6 +1250,7 @@ void MainWindow::load_document(const QString& path,
   rendered_jwp_text_.clear();
   updating_editor_ = true;
   editor_->setPlainText(to_qstring(file.text));
+  editor_->clear_jwp_layout();
   updating_editor_ = false;
   editor_->document()->setModified(false);
   current_path_ = path;
@@ -1270,6 +1275,7 @@ void MainWindow::load_jwp_document(const QString& path,
 
   updating_editor_ = true;
   editor_->setPlainText(to_qstring(text));
+  editor_->apply_jwp_layout(model.document());
   updating_editor_ = false;
   jwp_document_ = std::move(model);
   saved_jwp_document_ = jwp_document_->document();
@@ -1563,6 +1569,7 @@ void MainWindow::set_jwp_code_page(core::LegacyCodePage code_page) {
                           jwp_document_->document() != *saved_jwp_document_;
     updating_editor_ = true;
     editor_->setPlainText(to_qstring(text));
+    editor_->apply_jwp_layout(jwp_document_->document());
     updating_editor_ = false;
     rendered_jwp_text_ = std::move(text);
     jwp_code_page_ = code_page;
@@ -1855,6 +1862,7 @@ std::size_t MainWindow::replace_all(const QString& text,
       if (candidate_jwp.has_value() &&
           editor_->toPlainText() != to_qstring(expected_jwp_text)) {
         editor_->setPlainText(original_text);
+        editor_->apply_jwp_layout(jwp_document_->document());
         editor_->setTextCursor(original_cursor);
         editor_->document()->setModified(original_modified);
         throw core::JwpPlainTextError(
@@ -1977,6 +1985,7 @@ void MainWindow::restore_jwp_editor_text(int cursor_position,
   editor_->undo();
   if (from_qstring(editor_->toPlainText()) != rendered_jwp_text_) {
     editor_->setPlainText(to_qstring(rendered_jwp_text_));
+    editor_->apply_jwp_layout(jwp_document_->document());
     QTextCursor cursor = editor_->textCursor();
     cursor.setPosition(
         std::min(cursor_position, editor_->document()->characterCount() - 1));

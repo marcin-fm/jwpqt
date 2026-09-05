@@ -28,9 +28,11 @@ class QCloseEvent;
 class QEvent;
 class QLabel;
 class QMenu;
-class QPlainTextEdit;
+class QTextEdit;
 
 namespace jwpqt::qt {
+
+class JwpEditor;
 
 enum class OpenMode {
   kInteractive,
@@ -143,7 +145,7 @@ class MainWindow : public QMainWindow {
   void update_title();
   void show_error(const QString& action, const std::exception& error);
 
-  QPlainTextEdit* editor_;
+  JwpEditor* editor_;
   QLabel* encoding_label_;
   QAction* undo_action_;
   QAction* redo_action_;

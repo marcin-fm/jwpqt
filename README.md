@@ -46,8 +46,9 @@ explicit Kana Input mode converts printable desktop romaji to recovered JWP
 hiragana and katakana while preserving portable document history. Kana Input
 tracks automatic conversion spans, waits for extendable WNN keys, applies
 terminal or longest-prefix candidates, and leaves unmatched suffixes at the
-caret. Lookup tools, custom layout/rendering, configuration, and printing remain
-in progress.
+caret. JWP paragraph indents, proportional spacing, and hard page breaks now
+drive a rich Qt document layout. User dictionary management, lookup tools,
+configuration, and printing remain in progress.
 
 JWPce/JWPxp copyright and licensing notices remain in `_cpright.txt`,
 `_readme.txt`, and `gnugpl.txt`.

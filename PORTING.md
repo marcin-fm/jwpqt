@@ -93,6 +93,11 @@ legacy file structures.
     hijacking the real text selection, waits for extendable WNN keys, applies
     terminal or longest-prefix candidates, preserves unmatched suffixes and
     caret placement, and invalidates stale spans on external edits.
+30. A native `JwpEditor` maps portable paragraph indents and proportional line
+    spacing to Qt rich-document layout, displays hard page breaks in the
+    continuously scrolling editor, and carries those breaks into paged document
+    layout for printing. Main-window restoration paths reapply or clear the
+    presentation without changing portable JWP history.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -101,10 +106,11 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Replace `QPlainTextEdit` scaffolding with a custom Qt editor surface once the
-    paragraph model can drive wrapping, selection, conversion spans, and kanji
-    coloring.
-2. Port lookup tools, configuration, and printing as separate vertical slices.
+1. Port paragraph format editing and paged printing over the rich JWP document
+   layout.
+2. Port editable WNN user dictionaries and lookup tools as separate vertical
+   slices.
+3. Port configuration, remaining import/export paths, and help.
 
 Each slice is committed independently after focused tests and the complete
 CTest suite pass.
