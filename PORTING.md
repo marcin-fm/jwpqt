@@ -209,6 +209,12 @@ legacy file structures.
     reproduces normal and Full ASCII plus Japanese beginning/end boundaries,
     handles the recovered three-byte JIS X 0212 subset, preserves repeated
     indexed occurrences, and rejects an index bound to different source bytes.
+55. Portable EDICT name/place filtering reproduces the recovered definition-level
+    behavior for old ENAMDICT tags: `s`, `u`, `g`, `f`, and `m` identify personal
+    names, while `p` identifies places. A sole rejected type removes its whole
+    definition; rejected tags are stripped from mixed recognized groups, and a
+    record is rejected only when no definitions remain. Filtering preserves the
+    record's source span, headword, readings, and original value.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -217,8 +223,8 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Port EDICT name/place tag filtering and adaptive deinflection over the
-   completed direct-search boundary, then add separate resource and native
+1. Port EDICT adaptive deinflection over the completed direct-search and
+   name/place-filter boundaries, then add separate resource and native
    result-view slices.
 2. Port paged printing and clipboard color policy over the rich JWP document
    layout.
