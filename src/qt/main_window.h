@@ -19,6 +19,7 @@
 #include "jwpqt/core/kanji_color.h"
 #include "jwpqt/core/kanji_color_list.h"
 #include "jwpqt/core/kana_input.h"
+#include "jwpqt/core/edict_user_dictionary.h"
 #include "jwpqt/core/legacy_code_page.h"
 #include "jwpqt/core/text_file.h"
 #include "jwpqt/core/wnn_dictionary.h"
@@ -37,6 +38,7 @@ namespace jwpqt::qt {
 
 class EdictLookupDialog;
 class EdictResultsWindow;
+class EdictUserDictionaryDialog;
 struct EdictResourceSet;
 class JwpEditor;
 class WnnUserDictionaryDialog;
@@ -119,6 +121,11 @@ class MainWindow : public QMainWindow {
       const QString& registry_path,
       OpenMode mode = OpenMode::kInteractive);
   const EdictResourceSet* edict_resources() const noexcept;
+  const core::EdictUserDictionary* edict_user_dictionary() const noexcept;
+  bool set_edict_user_dictionary(
+      core::EdictUserDictionary dictionary,
+      OpenMode mode = OpenMode::kInteractive);
+  bool insert_edict_user_entry(const core::EdictUserEntry& entry);
   bool insert_edict_text(std::u32string_view text);
   bool set_kanji_color_policy(
       const core::KanjiColorPolicy& policy,
@@ -155,6 +162,7 @@ class MainWindow : public QMainWindow {
 
  private:
   struct WnnResources;
+  struct EdictUserResources;
 
   void create_actions();
   void undo_document();
@@ -179,6 +187,7 @@ class MainWindow : public QMainWindow {
   void save_wnn_preferences();
   void show_wnn_user_dictionary_dialog();
   void show_edict_lookup_dialog();
+  void show_edict_user_dictionary_dialog();
   std::u32string edict_query_seed() const;
   void new_document();
   void open_document();
@@ -222,6 +231,7 @@ class MainWindow : public QMainWindow {
   QAction* user_dictionary_action_ = nullptr;
   QAction* edict_lookup_action_ = nullptr;
   QAction* edict_results_action_ = nullptr;
+  QAction* edict_user_dictionary_action_ = nullptr;
   QAction* format_paragraph_action_ = nullptr;
   QAction* insert_page_break_action_ = nullptr;
   QAction* kanji_color_options_action_ = nullptr;
@@ -252,9 +262,11 @@ class MainWindow : public QMainWindow {
   std::unique_ptr<WnnResources> wnn_resources_;
   WnnUserDictionaryDialog* wnn_user_dictionary_dialog_ = nullptr;
   std::unique_ptr<EdictResourceSet> edict_resources_;
+  std::unique_ptr<EdictUserResources> edict_user_resources_;
   QString edict_config_directory_;
   EdictLookupDialog* edict_lookup_dialog_ = nullptr;
   EdictResultsWindow* edict_results_window_ = nullptr;
+  EdictUserDictionaryDialog* edict_user_dictionary_dialog_ = nullptr;
   std::unique_ptr<core::JwpConversionTransaction> jwp_conversion_;
   std::optional<core::WnnPreferences> conversion_preferences_before_;
   core::KanaInputComposer kana_input_;

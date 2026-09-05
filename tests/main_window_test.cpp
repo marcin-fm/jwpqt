@@ -29,6 +29,7 @@
 #include "edict_lookup_dialog.h"
 #include "edict_results_window.h"
 #include "edict_resources.h"
+#include "edict_user_dictionary_dialog.h"
 #include "jwp_editor.h"
 #include "jwpqt/core/jis_unicode.h"
 #include "jwpqt/core/jwp_text_codec.h"
@@ -1777,6 +1778,160 @@ void test_edict_lookup_integration(const QString& directory) {
   QApplication::processEvents();
 }
 
+void test_edict_user_dictionary_integration(const QString& directory) {
+  const QString case_directory = directory + QStringLiteral("/edict-user");
+  require(QDir().mkpath(case_directory),
+          "Could not create user dictionary integration directory");
+  const QString registry_path = case_directory + QStringLiteral("/dict.cfg");
+  const QString user_path = case_directory + QStringLiteral("/user.dct");
+
+  jwpqt::core::EdictRegistry registry;
+  jwpqt::core::EdictRegistryEntry main;
+  main.label = u"Main";
+  main.path = u"main";
+  main.encoding = jwpqt::core::EdictRegistryEncoding::kUtf8;
+  main.searched = true;
+  main.keep = true;
+  registry.entries.push_back(main);
+  jwpqt::core::EdictRegistryEntry user;
+  user.label = u"User";
+  user.path = u"user.dct";
+  user.encoding = jwpqt::core::EdictRegistryEncoding::kMixed;
+  user.names = jwpqt::core::EdictRegistryNames::kNames;
+  user.special = jwpqt::core::EdictRegistrySpecial::kUser;
+  user.searched = true;
+  user.keep = true;
+  user.quiet = true;
+  registry.entries.push_back(user);
+  write_bytes(case_directory + QStringLiteral("/main"),
+              QByteArray("cat /main/\n"));
+  jwpqt::qt::write_edict_registry_file(registry_path, registry);
+
+  const jwpqt::core::EdictUserEntry initial =
+      jwpqt::core::make_edict_user_entry(
+          jwpqt::core::encode_jwp_text(U"\u306d\u3053"),
+          jwpqt::core::encode_jwp_text(U"\u732b"), U"cat");
+  jwpqt::qt::write_edict_user_dictionary_file(
+      user_path,
+      jwpqt::core::EdictUserDictionary::from_entries({initial}),
+      jwpqt::core::LegacyCodePage::k1252);
+
+  jwpqt::qt::MainWindow window;
+  require(window.load_edict_configuration(
+              registry_path, jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.edict_user_dictionary() != nullptr &&
+              window.edict_user_dictionary()->entries() ==
+                  std::vector<jwpqt::core::EdictUserEntry>{initial},
+          "Native user dictionary did not load from the registry");
+  QAction* action = find_action(window, "edictUserDictionaryAction");
+  require(action != nullptr && action->isEnabled(),
+          "Native user dictionary action is unavailable");
+  action->trigger();
+  QApplication::processEvents();
+  auto* dialog = dynamic_cast<jwpqt::qt::EdictUserDictionaryDialog*>(
+      window.findChild<QDialog*>(
+          QStringLiteral("edictUserDictionaryDialog")));
+  require(dialog != nullptr && dialog->entries().size() == 1,
+          "Native user dictionary dialog did not open its working copy");
+
+  const jwpqt::core::EdictUserEntry replacement =
+      jwpqt::core::make_edict_user_entry(
+          jwpqt::core::encode_jwp_text(U"\u3044\u306c"),
+          jwpqt::core::encode_jwp_text(U"\u72ac"), U"dog");
+  const auto replacement_dictionary =
+      jwpqt::core::EdictUserDictionary::from_entries({replacement});
+  require(window.set_edict_user_dictionary(
+              replacement_dictionary,
+              jwpqt::qt::OpenMode::kNonInteractive) &&
+              jwpqt::qt::read_edict_user_dictionary_file(
+                  user_path, jwpqt::core::LegacyCodePage::k1252)
+                      ->entries() ==
+                  std::vector<jwpqt::core::EdictUserEntry>{replacement},
+          "Native user dictionary update was not persisted");
+  const auto loaded_user = std::find_if(
+      window.edict_resources()->resources.begin(),
+      window.edict_resources()->resources.end(), [](const auto& resource) {
+        return resource.entry.special ==
+               jwpqt::core::EdictRegistrySpecial::kUser;
+      });
+  require(loaded_user != window.edict_resources()->resources.end() &&
+              loaded_user->dictionary.records().size() == 1 &&
+              loaded_user->dictionary.records()[0].definitions ==
+                  std::vector<std::u32string>{U"dog"},
+          "Updated user dictionary did not replace its search resource");
+
+  jwpqt::core::JwpDocument document;
+  document.paragraphs = {paragraph(U"source")};
+  const QString document_path = case_directory + QStringLiteral("/entry.jwp");
+  jwpqt::qt::write_jwp_file(document_path, document);
+  require(window.open_jwp_path(document_path),
+          "Could not open user dictionary insertion fixture");
+  QTextEdit* editor = window.findChild<QTextEdit*>();
+  require(editor != nullptr, "User dictionary window has no editor");
+  editor->selectAll();
+  require(window.insert_edict_user_entry(replacement) &&
+              editor->toPlainText() ==
+                  QStringLiteral("\u72ac [\u3044\u306c]\tdog"),
+          "User dictionary row was not inserted into JWP");
+  QAction* undo = find_action(window, "undoAction");
+  require(undo != nullptr && undo->isEnabled(),
+          "User dictionary insertion did not create portable history");
+  undo->trigger();
+  require(*window.current_jwp_document() == document,
+          "User dictionary insertion undo did not restore the document");
+
+  require(window.load_edict_configuration(
+              registry_path, jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.findChild<QDialog*>(
+                  QStringLiteral("edictUserDictionaryDialog")) == nullptr,
+          "Configuration reload retained a stale user dictionary dialog");
+
+  const QString absent_registry =
+      case_directory + QStringLiteral("/default/dict.cfg");
+  require(QDir().mkpath(QFileInfo(absent_registry).absolutePath()),
+          "Could not create default user dictionary directory");
+  jwpqt::qt::MainWindow defaults;
+  require(defaults.load_edict_configuration(
+              absent_registry, jwpqt::qt::OpenMode::kNonInteractive) &&
+              defaults.edict_user_dictionary() != nullptr &&
+              defaults.edict_user_dictionary()->entries().empty() &&
+              find_action(defaults, "edictUserDictionaryAction")->isEnabled() &&
+              !find_action(defaults, "edictLookupAction")->isEnabled(),
+          "Absent registry did not synthesize an empty user dictionary");
+
+  const QString blocked_registry =
+      case_directory + QStringLiteral("/missing-parent/dict.cfg");
+  jwpqt::qt::MainWindow blocked;
+  require(blocked.load_edict_configuration(
+              blocked_registry, jwpqt::qt::OpenMode::kNonInteractive) &&
+              !blocked.set_edict_user_dictionary(
+                  replacement_dictionary,
+                  jwpqt::qt::OpenMode::kNonInteractive) &&
+              blocked.edict_user_dictionary()->entries().empty() &&
+              !QFileInfo::exists(case_directory +
+                                 QStringLiteral("/missing-parent/user.dct")),
+          "Failed user dictionary save published candidate state");
+
+  const QString disabled_directory =
+      case_directory + QStringLiteral("/disabled");
+  require(QDir().mkpath(disabled_directory),
+          "Could not create disabled user dictionary directory");
+  registry.entries = {user};
+  registry.entries[0].searched = false;
+  const QString disabled_registry =
+      disabled_directory + QStringLiteral("/dict.cfg");
+  jwpqt::qt::write_edict_registry_file(disabled_registry, registry);
+  jwpqt::qt::MainWindow disabled;
+  require(disabled.load_edict_configuration(
+              disabled_registry, jwpqt::qt::OpenMode::kNonInteractive) &&
+              disabled.set_edict_user_dictionary(
+                  replacement_dictionary,
+                  jwpqt::qt::OpenMode::kNonInteractive) &&
+              disabled.edict_resources()->resources.empty() &&
+              !find_action(disabled, "edictLookupAction")->isEnabled(),
+          "Saving a disabled user dictionary made it searchable");
+}
+
 void test_jwp_wnn_preference_write_failure(const QString& directory) {
   const WnnFixture fixture = write_wnn_fixture(directory);
   const QString blocked_path = directory + QStringLiteral("/blocked-user.sel");
@@ -2533,6 +2688,7 @@ int main(int argc, char* argv[]) {
     test_jwp_wnn_user_dictionary(directory.path());
     test_jwp_wnn_user_dictionary_dialog(directory.path());
     test_edict_lookup_integration(directory.path());
+    test_edict_user_dictionary_integration(directory.path());
     test_jwp_wnn_preference_write_failure(directory.path());
     test_jwp_kana_input_mode(directory.path());
     test_jwp_automatic_wnn_conversion(directory.path());

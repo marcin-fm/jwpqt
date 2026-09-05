@@ -20,6 +20,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
+#include <QDir>
 #include <QEvent>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -52,6 +53,7 @@
 #include "edict_resource_search.h"
 #include "edict_results_window.h"
 #include "edict_resources.h"
+#include "edict_user_dictionary_dialog.h"
 #include "file_io.h"
 #include "jwp_editor.h"
 #include "kanji_color_settings.h"
@@ -119,6 +121,67 @@ QString file_filters() {
 
 QString all_files_filter() { return MainWindow::tr("All files (*)"); }
 
+QString decode_registry_text(const core::EdictRegistry& registry,
+                             std::u16string_view text,
+                             core::LegacyCodePage code_page) {
+  if (registry.wire_encoding ==
+      core::EdictRegistryWireEncoding::kUtf16Le) {
+    return QString::fromStdU16String(std::u16string(text));
+  }
+  std::u32string decoded;
+  decoded.reserve(text.size());
+  for (const char16_t unit : text) {
+    if (unit > 0xffU) {
+      throw std::runtime_error(
+          "ANSI dictionary registry field contains a non-byte code unit");
+    }
+    const auto code_point = core::legacy_byte_to_unicode(
+        static_cast<std::uint8_t>(unit), code_page);
+    if (!code_point.has_value()) {
+      throw std::runtime_error(
+          "ANSI dictionary registry field contains an undefined byte");
+    }
+    decoded.push_back(*code_point);
+  }
+  return to_qstring(decoded);
+}
+
+std::size_t ensure_edict_user_entry(core::EdictRegistry& registry) {
+  for (std::size_t i = 0; i < registry.entries.size(); ++i) {
+    if (registry.entries[i].special == core::EdictRegistrySpecial::kUser) {
+      const core::EdictRegistryEntry& entry = registry.entries[i];
+      if (entry.encoding != core::EdictRegistryEncoding::kMixed ||
+          entry.indexed) {
+        throw std::runtime_error(
+            "Editable user dictionary must be mixed and unindexed");
+      }
+      return i;
+    }
+  }
+
+  core::EdictRegistryEntry entry;
+  entry.label = u"User";
+  entry.path = u"user.dct";
+  entry.encoding = core::EdictRegistryEncoding::kMixed;
+  entry.names = core::EdictRegistryNames::kNames;
+  entry.special = core::EdictRegistrySpecial::kUser;
+  entry.searched = true;
+  entry.keep = true;
+  entry.quiet = true;
+  registry.entries.push_back(std::move(entry));
+  return registry.entries.size() - 1;
+}
+
+QString resolve_registry_path(const QString& path,
+                              const QString& config_directory) {
+  if (path.isEmpty()) {
+    throw std::runtime_error("Dictionary path is empty");
+  }
+  return QDir::isAbsolutePath(path)
+             ? QDir::cleanPath(path)
+             : QDir::cleanPath(QDir(config_directory).absoluteFilePath(path));
+}
+
 std::size_t utf32_offset_for_utf16(const QString& text, int offset) {
   if (offset < 0 || offset > text.size()) {
     throw core::PlainTextChangeError("Qt text change offset is out of bounds");
@@ -178,6 +241,14 @@ struct MainWindow::WnnResources {
   core::WnnUserDictionary user_dictionary;
   QString user_dictionary_path;
   core::WnnConversionSession session;
+};
+
+struct MainWindow::EdictUserResources {
+  core::EdictUserDictionary dictionary;
+  QString path;
+  QString label;
+  std::size_t registry_index = 0;
+  core::LegacyCodePage code_page = core::kDefaultLegacyCodePage;
 };
 
 MainWindow::MainWindow(QWidget* parent)
@@ -249,6 +320,7 @@ MainWindow::~MainWindow() {
   delete wnn_user_dictionary_dialog_;
   delete edict_lookup_dialog_;
   delete edict_results_window_;
+  delete edict_user_dictionary_dialog_;
 }
 
 bool MainWindow::load_edict_configuration(const QString& registry_path,
@@ -258,6 +330,21 @@ bool MainWindow::load_edict_configuration(const QString& registry_path,
         read_edict_registry_file(registry_path);
     core::EdictRegistry registry = loaded.value_or(core::EdictRegistry{});
     const QString directory = QFileInfo(registry_path).absolutePath();
+    const std::size_t user_index = ensure_edict_user_entry(registry);
+    const core::EdictRegistryEntry& user_entry = registry.entries[user_index];
+    const core::LegacyCodePage user_code_page =
+        core::kDefaultLegacyCodePage;
+    const QString user_path = resolve_registry_path(
+        decode_registry_text(registry, user_entry.path, user_code_page),
+        directory);
+    const QString user_label =
+        decode_registry_text(registry, user_entry.label, user_code_page);
+    std::optional<core::EdictUserDictionary> loaded_user =
+        read_edict_user_dictionary_file(user_path, user_code_page);
+    auto candidate_user = std::make_unique<EdictUserResources>(
+        EdictUserResources{loaded_user ? std::move(*loaded_user)
+                                       : core::EdictUserDictionary{},
+                           user_path, user_label, user_index, user_code_page});
     auto candidate = std::make_unique<EdictResourceSet>(
         load_edict_resources(registry, directory));
 
@@ -265,7 +352,10 @@ bool MainWindow::load_edict_configuration(const QString& registry_path,
     edict_lookup_dialog_ = nullptr;
     delete edict_results_window_;
     edict_results_window_ = nullptr;
+    delete edict_user_dictionary_dialog_;
+    edict_user_dictionary_dialog_ = nullptr;
     edict_resources_ = std::move(candidate);
+    edict_user_resources_ = std::move(candidate_user);
     edict_config_directory_ = directory;
     update_edict_actions();
     statusBar()->showMessage(
@@ -283,6 +373,111 @@ bool MainWindow::load_edict_configuration(const QString& registry_path,
 
 const EdictResourceSet* MainWindow::edict_resources() const noexcept {
   return edict_resources_.get();
+}
+
+const core::EdictUserDictionary* MainWindow::edict_user_dictionary()
+    const noexcept {
+  return edict_user_resources_ == nullptr
+             ? nullptr
+             : &edict_user_resources_->dictionary;
+}
+
+bool MainWindow::set_edict_user_dictionary(
+    core::EdictUserDictionary dictionary, OpenMode mode) {
+  if (conversion_active()) {
+    if (mode == OpenMode::kInteractive) {
+      statusBar()->showMessage(
+          tr("Accept the current conversion before changing user entries"),
+          5000);
+    }
+    return false;
+  }
+  finish_kana_input();
+  if (conversion_active()) {
+    return false;
+  }
+
+  try {
+    if (edict_resources_ == nullptr || edict_user_resources_ == nullptr) {
+      throw std::runtime_error("EDICT user dictionary is not configured");
+    }
+    const std::size_t registry_index =
+        edict_user_resources_->registry_index;
+    if (registry_index >= edict_resources_->registry.entries.size()) {
+      throw std::runtime_error("EDICT user dictionary registry is stale");
+    }
+    const core::EdictRegistryEntry& entry =
+        edict_resources_->registry.entries[registry_index];
+    const std::string bytes =
+        dictionary.serialize(edict_user_resources_->code_page);
+    std::optional<EdictLoadedResource> loaded;
+    if (entry.searched) {
+      core::EdictDictionary search_dictionary = core::EdictDictionary::parse(
+          bytes, core::EdictEncoding::kMixed, core::EdictParseLimits{},
+          edict_user_resources_->code_page);
+      loaded.emplace(EdictLoadedResource{
+          registry_index,
+          entry,
+          edict_user_resources_->label,
+          edict_user_resources_->path,
+          std::nullopt,
+          std::move(search_dictionary),
+          std::nullopt,
+      });
+    }
+    auto candidate_user = std::make_unique<EdictUserResources>(
+        EdictUserResources{std::move(dictionary),
+                           edict_user_resources_->path,
+                           edict_user_resources_->label,
+                           registry_index,
+                           edict_user_resources_->code_page});
+
+    auto& resources = edict_resources_->resources;
+    auto existing = std::find_if(
+        resources.begin(), resources.end(), [registry_index](const auto& item) {
+          return item.registry_index == registry_index;
+        });
+    const bool had_existing = existing != resources.end();
+    const std::size_t existing_position =
+        static_cast<std::size_t>(std::distance(resources.begin(), existing));
+    if (!had_existing && loaded.has_value()) {
+      resources.reserve(resources.size() + 1);
+    }
+    write_edict_user_dictionary_file(candidate_user->path,
+                                     candidate_user->dictionary,
+                                     candidate_user->code_page);
+    if (had_existing && loaded.has_value()) {
+      resources[existing_position] = std::move(*loaded);
+    } else if (had_existing) {
+      resources.erase(resources.begin() +
+                      static_cast<std::ptrdiff_t>(existing_position));
+    } else if (loaded.has_value()) {
+      resources.push_back(std::move(*loaded));
+      std::rotate(std::lower_bound(
+                      resources.begin(), resources.end() - 1, registry_index,
+                      [](const EdictLoadedResource& resource,
+                         std::size_t index) {
+                        return resource.registry_index < index;
+                      }),
+                  resources.end() - 1, resources.end());
+    }
+    auto& failures = edict_resources_->failures;
+    failures.erase(
+        std::remove_if(failures.begin(), failures.end(),
+                       [registry_index](const EdictResourceFailure& failure) {
+                         return failure.registry_index == registry_index;
+                       }),
+        failures.end());
+    edict_user_resources_ = std::move(candidate_user);
+    update_edict_actions();
+    statusBar()->showMessage(tr("Updated user dictionary"), 3000);
+    return true;
+  } catch (const std::exception& error) {
+    if (mode == OpenMode::kInteractive) {
+      show_error(tr("Could not update user dictionary"), error);
+    }
+    return false;
+  }
 }
 
 bool MainWindow::load_kanji_color_configuration(const QString& settings_path,
@@ -657,6 +852,13 @@ void MainWindow::create_actions() {
     show_edict_results_window();
   });
 
+  edict_user_dictionary_action_ =
+      tools_menu->addAction(tr("&User Dictionary..."));
+  edict_user_dictionary_action_->setObjectName(
+      QStringLiteral("edictUserDictionaryAction"));
+  connect(edict_user_dictionary_action_, &QAction::triggered, this,
+          [this] { show_edict_user_dictionary_dialog(); });
+
   tools_menu->addSeparator();
   kanji_color_options_action_ =
       tools_menu->addAction(tr("Kanji Color &Options..."));
@@ -913,11 +1115,13 @@ void MainWindow::update_edict_actions() {
   if (edict_lookup_action_ == nullptr) {
     return;
   }
-  bool available = false;
-  if (edict_resources_ != nullptr) {
+  bool available =
+      edict_resources_ != nullptr && !edict_resources_->resources.empty();
+  if (!available && edict_resources_ != nullptr) {
     for (const core::EdictRegistryEntry& entry :
          edict_resources_->registry.entries) {
-      if (entry.searched) {
+      if (entry.searched &&
+          entry.special != core::EdictRegistrySpecial::kUser) {
         available = true;
         break;
       }
@@ -926,6 +1130,10 @@ void MainWindow::update_edict_actions() {
   edict_lookup_action_->setEnabled(available);
   if (edict_results_action_ != nullptr) {
     edict_results_action_->setEnabled(edict_results_window_ != nullptr);
+  }
+  if (edict_user_dictionary_action_ != nullptr) {
+    edict_user_dictionary_action_->setEnabled(
+        edict_user_resources_ != nullptr && !conversion_active());
   }
 }
 
@@ -1402,6 +1610,58 @@ void MainWindow::show_wnn_user_dictionary_dialog() {
           [this] { wnn_user_dictionary_dialog_ = nullptr; });
   wnn_user_dictionary_dialog_ = dialog;
   dialog->show();
+}
+
+void MainWindow::show_edict_user_dictionary_dialog() {
+  if (conversion_active() || edict_user_resources_ == nullptr) {
+    statusBar()->showMessage(tr("EDICT user dictionary is not available"),
+                             3000);
+    return;
+  }
+  finish_kana_input();
+  if (conversion_active() || edict_user_resources_ == nullptr) {
+    return;
+  }
+  if (edict_user_dictionary_dialog_ != nullptr) {
+    edict_user_dictionary_dialog_->show();
+    edict_user_dictionary_dialog_->raise();
+    edict_user_dictionary_dialog_->activateWindow();
+    return;
+  }
+
+  auto* dialog = new EdictUserDictionaryDialog(
+      edict_user_resources_->dictionary, edict_user_resources_->code_page,
+      [this](core::EdictUserDictionary dictionary) {
+        return set_edict_user_dictionary(std::move(dictionary));
+      },
+      [this](const core::EdictUserEntry& entry) {
+        if (!insert_edict_user_entry(entry)) {
+          throw std::runtime_error(
+              "Could not insert the user dictionary entry into the document");
+        }
+      },
+      this);
+  dialog->setObjectName(QStringLiteral("edictUserDictionaryDialog"));
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  connect(dialog, &QObject::destroyed, this,
+          [this] { edict_user_dictionary_dialog_ = nullptr; });
+  edict_user_dictionary_dialog_ = dialog;
+  dialog->show();
+}
+
+bool MainWindow::insert_edict_user_entry(const core::EdictUserEntry& entry) {
+  if (edict_user_resources_ == nullptr) {
+    return false;
+  }
+  try {
+    return insert_edict_text(core::render_edict_user_entry(entry));
+  } catch (const std::exception& error) {
+    statusBar()->showMessage(
+        tr("Could not insert user dictionary entry: %1")
+            .arg(QString::fromUtf8(error.what())),
+        5000);
+    return false;
+  }
 }
 
 bool MainWindow::insert_wnn_user_entry(const core::WnnUserEntry& entry) {
