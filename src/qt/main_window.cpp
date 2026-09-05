@@ -367,6 +367,16 @@ void MainWindow::create_actions() {
   connect(format_paragraph_action_, &QAction::triggered, this,
           [this] { format_document_paragraphs(); });
 
+  insert_page_break_action_ =
+      format_menu->addAction(tr("Insert Page &Break"));
+  insert_page_break_action_->setObjectName(
+      QStringLiteral("insertPageBreakAction"));
+  insert_page_break_action_->setShortcuts(
+      {QKeySequence(Qt::CTRL | Qt::Key_Return),
+       QKeySequence(Qt::CTRL | Qt::Key_Enter)});
+  connect(insert_page_break_action_, &QAction::triggered, this,
+          [this] { insert_page_break(); });
+
   QMenu* convert_menu = menuBar()->addMenu(tr("&Convert"));
   convert_action_ = convert_menu->addAction(tr("Convert &Selection"));
   convert_action_->setObjectName(QStringLiteral("convertSelectionAction"));
@@ -548,6 +558,7 @@ void MainWindow::update_conversion_actions() {
   next_candidate_action_->setEnabled(active);
   accept_candidate_action_->setEnabled(active);
   format_paragraph_action_->setEnabled(!active && jwp_document_.has_value());
+  insert_page_break_action_->setEnabled(!active && jwp_document_.has_value());
   update_kana_input_state();
 }
 
@@ -2042,6 +2053,86 @@ bool MainWindow::format_paragraphs(
   } catch (const std::exception& error) {
     statusBar()->showMessage(
         tr("Could not format paragraphs: %1")
+            .arg(QString::fromUtf8(error.what())),
+        5000);
+    return false;
+  }
+}
+
+bool MainWindow::insert_page_break() {
+  if (conversion_active() || !jwp_document_.has_value()) {
+    return false;
+  }
+  finish_kana_input();
+  if (conversion_active() || !jwp_document_.has_value()) {
+    return false;
+  }
+
+  try {
+    const QString original_text = editor_->toPlainText();
+    const QTextCursor original_cursor = editor_->textCursor();
+    const bool original_modified = editor_->document()->isModified();
+    const core::JwpPosition caret = core::jwp_plain_text_position(
+        *jwp_document_,
+        utf32_offset_for_utf16(original_text, original_cursor.position()));
+    const core::JwpPosition selection_begin = core::jwp_plain_text_position(
+        *jwp_document_, utf32_offset_for_utf16(
+                            original_text, original_cursor.selectionStart()));
+    const core::JwpPosition selection_end = core::jwp_plain_text_position(
+        *jwp_document_, utf32_offset_for_utf16(
+                            original_text, original_cursor.selectionEnd()));
+
+    core::JwpDocumentModel candidate = *jwp_document_;
+    core::JwpDocumentHistory history = jwp_history_;
+    history.begin(candidate, caret);
+    const core::JwpPosition insertion =
+        candidate.erase({selection_begin, selection_end});
+    const core::JwpPosition following = candidate.insert_page_break(insertion);
+    if (!history.commit(candidate, following)) {
+      throw core::JwpDocumentEditError(
+          "page-break insertion did not change the document");
+    }
+
+    std::u32string rendered =
+        core::decode_jwp_plain_text(candidate, jwp_code_page_);
+    const QString qt_text = to_qstring(rendered);
+    const int qt_caret = utf16_offset_for_utf32(
+        rendered, core::jwp_plain_text_offset(candidate, following));
+
+    updating_editor_ = true;
+    try {
+      editor_->setPlainText(qt_text);
+      editor_->apply_jwp_layout(candidate.document());
+      QTextCursor cursor(editor_->document());
+      cursor.setPosition(qt_caret);
+      editor_->setTextCursor(cursor);
+    } catch (...) {
+      editor_->setPlainText(original_text);
+      editor_->apply_jwp_layout(jwp_document_->document());
+      editor_->setTextCursor(original_cursor);
+      editor_->document()->setModified(original_modified);
+      updating_editor_ = false;
+      throw;
+    }
+    updating_editor_ = false;
+
+    jwp_document_ = std::move(candidate);
+    jwp_history_ = std::move(history);
+    jwp_caret_ = following;
+    expected_jwp_caret_.reset();
+    rendered_jwp_text_ = std::move(rendered);
+    const bool modified = !saved_jwp_document_.has_value() ||
+                          jwp_document_->document() != *saved_jwp_document_;
+    editor_->document()->setModified(modified);
+    update_undo_actions();
+    update_conversion_actions();
+    update_title();
+    statusBar()->showMessage(tr("Page break inserted"), 2000);
+    return true;
+  } catch (const std::exception& error) {
+    updating_editor_ = false;
+    statusBar()->showMessage(
+        tr("Could not insert page break: %1")
             .arg(QString::fromUtf8(error.what())),
         5000);
     return false;

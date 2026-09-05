@@ -110,6 +110,10 @@ legacy file structures.
     paragraph-start, paragraph-middle, paragraph-end, and existing-break
     structures with copied formatting, exact following-caret placement, and
     candidate-document publication for strong failure safety.
+34. The native Ctrl+Enter command deletes any selection and inserts a hard page
+    break as one portable history transaction, restores the following caret and
+    rich layout, and remains unavailable during active WNN conversion or in
+    plain-text documents.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and

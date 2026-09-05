@@ -1053,6 +1053,78 @@ void test_jwp_paragraph_formatting(const QString& directory) {
           "Hidden editor geometry rejected a valid paragraph format");
 }
 
+void test_jwp_page_break_insertion(const QString& directory) {
+  jwpqt::core::JwpDocument source;
+  source.paragraphs = {paragraph(U"AB"), paragraph(U"CD")};
+  source.paragraphs[0].left_indent = 3;
+  source.paragraphs[0].right_indent = 4;
+  source.paragraphs[0].first_indent = -2;
+  source.paragraphs[0].line_spacing = 125;
+  const QString source_path = directory + QStringLiteral("/page-break.jwp");
+  const QString saved_path =
+      directory + QStringLiteral("/page-break-saved.jwp");
+  jwpqt::qt::write_jwp_file(source_path, source);
+
+  jwpqt::qt::MainWindow window;
+  require(window.open_jwp_path(source_path),
+          "Could not open page-break fixture");
+  QTextEdit* editor = window.findChild<QTextEdit*>();
+  QAction* insert = find_action(window, "insertPageBreakAction");
+  QAction* undo = find_action(window, "undoAction");
+  QAction* redo = find_action(window, "redoAction");
+  require(editor != nullptr && insert != nullptr && undo != nullptr &&
+              redo != nullptr && insert->isEnabled() &&
+              insert->shortcuts().contains(
+                  QKeySequence(Qt::CTRL | Qt::Key_Return)) &&
+              insert->shortcuts().contains(
+                  QKeySequence(Qt::CTRL | Qt::Key_Enter)),
+          "JWP page-break controls were not enabled");
+
+  QTextCursor selection = editor->textCursor();
+  selection.setPosition(1);
+  selection.setPosition(4, QTextCursor::KeepAnchor);
+  editor->setTextCursor(selection);
+  insert->trigger();
+
+  const jwpqt::core::JwpDocument inserted =
+      *window.current_jwp_document();
+  require(inserted.paragraphs.size() == 3 &&
+              jwpqt::core::decode_jwp_text(inserted.paragraphs[0].text) ==
+                  U"A" &&
+              inserted.paragraphs[1].text.empty() &&
+              inserted.paragraphs[1].page_break &&
+              jwpqt::core::decode_jwp_text(inserted.paragraphs[2].text) ==
+                  U"D" &&
+              inserted.paragraphs[1].left_indent == 3 &&
+              inserted.paragraphs[2].line_spacing == 125,
+          "Selected text was not replaced by one formatted page break");
+  require(editor->toPlainText() == QStringLiteral("A\n\nD") &&
+              !editor->textCursor().hasSelection() &&
+              editor->textCursor().position() == 3 &&
+              editor->document()->isModified() && undo->isEnabled(),
+          "Page-break insertion did not restore the following caret");
+  require_jwp_layout(editor, inserted);
+
+  undo->trigger();
+  require(*window.current_jwp_document() == source &&
+              editor->toPlainText() == QStringLiteral("AB\nCD") &&
+              !editor->document()->isModified() && redo->isEnabled(),
+          "Page-break insertion did not undo as one transaction");
+  redo->trigger();
+  require(*window.current_jwp_document() == inserted &&
+              editor->textCursor().position() == 3,
+          "Page-break insertion redo did not restore structure and caret");
+  require(window.save_path(saved_path) &&
+              jwpqt::qt::read_jwp_file(saved_path) == inserted,
+          "Inserted page break did not survive a JWP save");
+
+  const QString plain_path = directory + QStringLiteral("/page-break.txt");
+  write_bytes(plain_path, QByteArray("plain"));
+  require(window.open_path(plain_path, jwpqt::core::TextEncoding::kUtf8) &&
+              !insert->isEnabled() && !window.insert_page_break(),
+          "Plain text did not disable JWP page-break insertion");
+}
+
 void test_jwp_rejects_non_bmp_edit(const QString& directory) {
   jwpqt::core::JwpDocument source;
   source.paragraphs = {paragraph(U"AB")};
@@ -1099,8 +1171,9 @@ void test_jwp_wnn_conversion(const QString& directory) {
   QAction* convert = find_action(window, "convertSelectionAction");
   QAction* next = find_action(window, "nextCandidateAction");
   QAction* accept = find_action(window, "acceptCandidateAction");
+  QAction* page_break = find_action(window, "insertPageBreakAction");
   require(editor != nullptr && convert != nullptr && next != nullptr &&
-              accept != nullptr,
+              accept != nullptr && page_break != nullptr,
           "Native WNN conversion actions were not created");
 
   editor->selectAll();
@@ -1111,6 +1184,11 @@ void test_jwp_wnn_conversion(const QString& directory) {
               window.current_jwp_document()->paragraphs[0].text ==
                   jwpqt::core::JwpText{0x3021},
           "Native WNN conversion did not display the preferred candidate");
+  require(!page_break->isEnabled() && !window.insert_page_break() &&
+              window.conversion_active() && editor->isReadOnly() &&
+              window.current_jwp_document()->paragraphs[0].text ==
+                  jwpqt::core::JwpText{0x3021},
+          "Page-break insertion accepted an active WNN conversion");
   window.show();
   editor->setFocus();
   QApplication::processEvents();
@@ -1447,6 +1525,7 @@ int main(int argc, char* argv[]) {
     test_jwp_rejects_non_bmp_edit(directory.path());
     test_jwp_history_actions(directory.path());
     test_jwp_paragraph_formatting(directory.path());
+    test_jwp_page_break_insertion(directory.path());
     test_jwp_wnn_conversion(directory.path());
     test_jwp_wnn_conversion_boundaries(directory.path());
     test_jwp_wnn_preference_write_failure(directory.path());

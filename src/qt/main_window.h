@@ -89,6 +89,7 @@ class MainWindow : public QMainWindow {
   std::size_t replace_all(const QString& text, const QString& replacement,
                           core::JwpSearchOptions options = {});
   bool format_paragraphs(const core::JwpParagraphFormat& format);
+  bool insert_page_break();
 
  protected:
   void closeEvent(QCloseEvent* event) override;
@@ -159,6 +160,7 @@ class MainWindow : public QMainWindow {
   QAction* accept_candidate_action_ = nullptr;
   QAction* kana_input_action_ = nullptr;
   QAction* format_paragraph_action_ = nullptr;
+  QAction* insert_page_break_action_ = nullptr;
   QLabel* input_mode_label_;
   QActionGroup* encoding_actions_;
   QMenu* jwp_code_page_menu_;
