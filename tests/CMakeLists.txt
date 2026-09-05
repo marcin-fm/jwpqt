@@ -407,6 +407,16 @@ target_compile_options(jwpqt_edict_user_dictionary_dialog_tests
   PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME qt_edict_user_dictionary_dialog
   COMMAND jwpqt_edict_user_dictionary_dialog_tests)
+
+add_executable(jwpqt_jis_table_dialog_tests
+  jis_table_dialog_test.cpp
+)
+target_link_libraries(jwpqt_jis_table_dialog_tests PRIVATE jwpqt_qt_ui)
+target_compile_options(jwpqt_jis_table_dialog_tests
+  PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME qt_jis_table_dialog COMMAND jwpqt_jis_table_dialog_tests)
+set_tests_properties(qt_jis_table_dialog PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 add_test(NAME qt_kanji_color_settings COMMAND jwpqt_kanji_color_settings_tests)
 add_test(NAME qt_main_window COMMAND jwpqt_main_window_tests)
 add_test(NAME qt_wnn_user_dictionary_dialog
