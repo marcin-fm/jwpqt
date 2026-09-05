@@ -13,6 +13,7 @@ add_library(jwpqt_core STATIC
   jis_encoding.cpp
   jis_text.cpp
   jis_unicode.cpp
+  kanji_info.cpp
   kanji_color.cpp
   kanji_color_list.cpp
   kana_input.cpp
