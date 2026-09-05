@@ -215,6 +215,12 @@ legacy file structures.
     definition; rejected tags are stripped from mixed recognized groups, and a
     record is rejected only when no definitions remain. Filtering preserves the
     record's source span, headword, readings, and original value.
+56. Portable non-pattern adaptive deinflection reproduces the recovered ordered
+    truncation, append, and replacement sequence without owning dictionary or UI
+    state. It preserves naturally repeated queries, canonicalizes high-bit kana,
+    covers every recovered godan ending, permits the 101-token temporary
+    candidate from a 100-token query, and enforces explicit result/work budgets.
+    Pattern queries fail explicitly until the separate pattern engine is ported.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -223,8 +229,8 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Port EDICT adaptive deinflection over the completed direct-search and
-   name/place-filter boundaries, then add separate resource and native
+1. Orchestrate direct and adaptive EDICT searches over the completed query,
+   filter, and deinflection boundaries, then add separate resource and native
    result-view slices.
 2. Port paged printing and clipboard color policy over the rich JWP document
    layout.

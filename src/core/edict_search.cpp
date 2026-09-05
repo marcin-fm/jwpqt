@@ -16,8 +16,9 @@ std::uint16_t normalize_query_token(std::uint16_t token) noexcept {
   if (token >= 'A' && token <= 'Z') {
     return static_cast<std::uint16_t>(token - 'A' + 'a');
   }
-  if ((token & 0xff00U) == 0x2500U) {
-    return static_cast<std::uint16_t>(0x2400U | (token & 0x00ffU));
+  const std::uint16_t row = static_cast<std::uint16_t>(token & 0x7f00U);
+  if (row == 0x2400U || row == 0x2500U) {
+    return static_cast<std::uint16_t>(0x2400U | (token & 0x007fU));
   }
   return token;
 }
