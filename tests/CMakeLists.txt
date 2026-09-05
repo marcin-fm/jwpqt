@@ -170,6 +170,13 @@ target_link_libraries(jwpqt_text_detection_tests PRIVATE jwpqt_core)
 target_compile_options(jwpqt_text_detection_tests PRIVATE -Wall -Wextra -Wpedantic)
 
 add_test(NAME core_utf8 COMMAND jwpqt_core_tests)
+
+add_executable(jwpqt_utf7_tests
+  utf7_test.cpp
+)
+target_link_libraries(jwpqt_utf7_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_utf7_tests PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME core_utf7 COMMAND jwpqt_utf7_tests)
 add_test(NAME core_byte_io COMMAND jwpqt_byte_io_tests)
 add_test(NAME core_edict_dictionary COMMAND jwpqt_edict_dictionary_tests)
 add_test(NAME core_edict_user_dictionary

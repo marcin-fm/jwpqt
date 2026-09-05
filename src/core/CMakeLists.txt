@@ -37,6 +37,7 @@ add_library(jwpqt_core STATIC
   text_detection.cpp
   text_file.cpp
   utf8.cpp
+  utf7.cpp
   wnn_dictionary.cpp
   wnn_lookup.cpp
   wnn_preferences.cpp
