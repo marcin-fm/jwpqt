@@ -1678,8 +1678,16 @@ void test_edict_lookup_integration(const QString& directory) {
                          : dialog->findChild<QLineEdit*>(
                                QStringLiteral("edictQuery"));
   require(dialog != nullptr && query_edit != nullptr &&
-              query_edit->text() == QStringLiteral("cat") && dialog->search(),
+              query_edit->text() == QStringLiteral("cat"),
           "Native EDICT dialog was not seeded from the JWP selection");
+  dialog->set_query(U"ca");
+  require(!dialog->search() &&
+              window.findChild<QWidget*>(
+                  QStringLiteral("edictResultsWindow")) == nullptr,
+          "Failed EDICT search created an empty accumulated-results window");
+  dialog->set_query(U"cat");
+  require(dialog->search(),
+          "Native EDICT dialog could not search the configured resource");
   QListWidget* results =
       dialog->findChild<QListWidget*>(QStringLiteral("edictResults"));
   require(results != nullptr && results->count() == 1,

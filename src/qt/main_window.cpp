@@ -1509,13 +1509,13 @@ void MainWindow::show_edict_lookup_dialog() {
         if (edict_resources_ == nullptr) {
           throw std::runtime_error("Dictionary resources are not available");
         }
-        show_edict_results_window();
         EdictResourceSearchOptions search;
         search.personal_names = options.personal_names;
         search.place_names = options.place_names;
         search.classical = options.classical;
         EdictResourceSearchReport report = search_edict_resources(
             *edict_resources_, edict_config_directory_, query, search);
+        show_edict_results_window();
         if (edict_results_window_ != nullptr) {
           edict_results_window_->append_report(report);
         }
