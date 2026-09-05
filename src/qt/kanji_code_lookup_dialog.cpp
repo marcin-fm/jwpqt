@@ -155,6 +155,12 @@ void KanjiCodeLookupDialog::set_four_corner_query(
   tabs_->setCurrentIndex(1);
 }
 
+void KanjiCodeLookupDialog::select_skip_mode() { tabs_->setCurrentIndex(0); }
+
+void KanjiCodeLookupDialog::select_four_corner_mode() {
+  tabs_->setCurrentIndex(1);
+}
+
 bool KanjiCodeLookupDialog::search_skip() {
   core::KanjiSkipQuery query;
   const auto range = [](int value, std::uint8_t maximum) {

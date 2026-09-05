@@ -31,6 +31,8 @@ class KanjiCodeLookupDialog : public QDialog {
 
   void set_skip_query(const core::KanjiSkipQuery& query);
   void set_four_corner_query(const core::KanjiFourCornerQuery& query);
+  void select_skip_mode();
+  void select_four_corner_mode();
   bool search_skip();
   bool search_four_corner();
   std::vector<core::KanjiCodeMatch> results() const;

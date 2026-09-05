@@ -13,6 +13,7 @@
 
 #include "file_io.h"
 #include "jwpqt/core/kanji_info.h"
+#include "kanji_code_lookup_dialog.h"
 #include "kanji_info_dialog.h"
 #include "kanji_lookup_dialog.h"
 #include "main_window.h"
@@ -36,6 +37,17 @@ void append_u32(QByteArray& bytes, quint32 value) {
     bytes.append(static_cast<char>((value >> shift) & 0xffU));
 }
 
+void put_u16(QByteArray& bytes, qsizetype offset, quint16 value) {
+  bytes[offset] = static_cast<char>(value & 0xffU);
+  bytes[offset + 1] = static_cast<char>((value >> 8U) & 0xffU);
+}
+
+void put_u32(QByteArray& bytes, qsizetype offset, quint32 value) {
+  for (int shift = 0; shift < 32; shift += 8)
+    bytes[offset + shift / 8] =
+        static_cast<char>((value >> shift) & 0xffU);
+}
+
 void write_bytes(const QString& path, const QByteArray& bytes) {
   QFile file(path);
   require(file.open(QIODevice::WriteOnly | QIODevice::Truncate) &&
@@ -46,11 +58,19 @@ void write_bytes(const QString& path, const QByteArray& bytes) {
 void write_database(const QString& path) {
   QByteArray bytes;
   append_u32(bytes, jwpqt::core::kKanjiInfoMagic);
-  append_u32(bytes, 0U);
+  append_u32(bytes, 0x08U);
   append_u16(bytes, 1U);
   append_u16(bytes, 0x3021U);
-  bytes.append(12, '\0');
-  append_u32(bytes, 28U << 8U);
+  bytes.resize(28, '\0');
+  put_u16(bytes, 12, 3U << 8U);
+  put_u16(bytes, 14, (1U << 8U) | (2U << 11U));
+  put_u16(bytes, 16, 3U);
+  put_u16(bytes, 18, 1U);
+  put_u32(bytes, 24, 28U << 8U);
+  append_u16(bytes, 0U);
+  append_u32(bytes, 0U);
+  append_u32(bytes, (1234U << 6U) | (5U << 20U));
+  bytes.append('\0');
   write_bytes(path, bytes);
 }
 
@@ -117,6 +137,53 @@ void test_integration(const QString& directory) {
               .size() == 1,
           "Kanji information action created duplicate dialogs");
 
+  QAction* skip_action =
+      window.findChild<QAction*>(QStringLiteral("skipLookupAction"));
+  QAction* four_corner_action =
+      window.findChild<QAction*>(QStringLiteral("fourCornerLookupAction"));
+  require(skip_action != nullptr && skip_action->isEnabled() &&
+              skip_action->shortcut() ==
+                  QKeySequence(QStringLiteral("Ctrl+Shift+S")) &&
+              four_corner_action != nullptr &&
+              four_corner_action->isEnabled() &&
+              four_corner_action->shortcut() ==
+                  QKeySequence(QStringLiteral("Ctrl+4")),
+          "Kanji code lookup actions are unavailable");
+  skip_action->trigger();
+  QApplication::processEvents();
+  auto* code_dialog = dynamic_cast<jwpqt::qt::KanjiCodeLookupDialog*>(
+      window.findChild<QDialog*>(QStringLiteral("kanjiCodeLookupDialog")));
+  require(code_dialog != nullptr,
+          "SKIP action did not open the code lookup dialog");
+  jwpqt::core::KanjiSkipQuery skip;
+  skip.type = {1, 1};
+  skip.first = {2, 2};
+  skip.second = {3, 3};
+  code_dialog->set_skip_query(skip);
+  require(code_dialog->search_skip() && code_dialog->results().size() == 1 &&
+              code_dialog->results()[0].code == 0x3021U,
+          "Integrated SKIP lookup returned wrong results");
+  auto* code_results = code_dialog->findChild<QListWidget*>(
+      QStringLiteral("kanjiCodeResults"));
+  require(code_results != nullptr && code_results->count() == 1,
+          "Integrated code lookup has no result list");
+  code_results->item(0)->setSelected(true);
+  code_dialog->findChild<QPushButton*>(QStringLiteral("kanjiCodeInsert"))
+      ->click();
+  require(window.current_jwp_document()->paragraphs[0].text.size() == 2,
+          "SKIP lookup insertion did not mutate the JWP document");
+  four_corner_action->trigger();
+  QApplication::processEvents();
+  require(window.findChildren<QDialog*>(QStringLiteral("kanjiCodeLookupDialog"))
+              .size() == 1,
+          "Four-corner action created a duplicate lookup dialog");
+  jwpqt::core::KanjiFourCornerQuery corner;
+  corner.digits = {1, 2, 3, 4, 5};
+  code_dialog->set_four_corner_query(corner);
+  require(code_dialog->search_four_corner() &&
+              code_dialog->results().size() == 1,
+          "Integrated four-corner lookup returned wrong results");
+
   QAction* radical_action =
       window.findChild<QAction*>(QStringLiteral("radicalLookupAction"));
   require(radical_action != nullptr && radical_action->isEnabled() &&
@@ -138,7 +205,7 @@ void test_integration(const QString& directory) {
   radical_results->item(0)->setSelected(true);
   radical_dialog->findChild<QPushButton*>(QStringLiteral("kanjiLookupInsert"))
       ->click();
-  require(window.current_jwp_document()->paragraphs[0].text.size() == 2,
+  require(window.current_jwp_document()->paragraphs[0].text.size() == 3,
           "Radical lookup insertion did not mutate the JWP document");
 
   write_bytes(radical_path, QByteArray("bad"));
@@ -156,15 +223,21 @@ void test_integration(const QString& directory) {
               info_path, jwpqt::qt::OpenMode::kNonInteractive) &&
               window.kanji_info_database() != nullptr &&
               window.findChild<QDialog*>(QStringLiteral("kanjiInfoDialog")) ==
-                  dialog,
+                  dialog &&
+              window.findChild<QDialog*>(
+                  QStringLiteral("kanjiCodeLookupDialog")) == code_dialog,
           "Malformed kanji information reload discarded working state");
   require(QFile::remove(info_path), "Could not remove database fixture");
   require(window.load_kanji_info(
               info_path, jwpqt::qt::OpenMode::kNonInteractive) &&
               window.kanji_info_database() == nullptr && !action->isEnabled() &&
               !radical_action->isEnabled() &&
+              !skip_action->isEnabled() &&
+              !four_corner_action->isEnabled() &&
               window.findChild<QDialog*>(QStringLiteral("kanjiInfoDialog")) ==
-                  nullptr,
+                  nullptr &&
+              window.findChild<QDialog*>(
+                  QStringLiteral("kanjiCodeLookupDialog")) == nullptr,
           "Absent database reload retained stale kanji information state");
 }
 

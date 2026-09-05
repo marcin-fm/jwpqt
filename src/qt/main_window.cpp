@@ -57,6 +57,7 @@
 #include "edict_user_dictionary_dialog.h"
 #include "file_io.h"
 #include "jwp_editor.h"
+#include "kanji_code_lookup_dialog.h"
 #include "kanji_info_dialog.h"
 #include "kanji_lookup_dialog.h"
 #include "kanji_color_settings.h"
@@ -326,6 +327,7 @@ MainWindow::~MainWindow() {
   delete edict_results_window_;
   delete edict_user_dictionary_dialog_;
   delete kanji_info_dialog_;
+  delete kanji_code_lookup_dialog_;
   delete kanji_lookup_dialog_;
 }
 
@@ -337,6 +339,8 @@ bool MainWindow::load_kanji_info(const QString& path, OpenMode mode) {
     if (loaded.has_value()) {
       candidate = std::make_unique<core::KanjiInfoDatabase>(std::move(*loaded));
     }
+    delete kanji_code_lookup_dialog_;
+    kanji_code_lookup_dialog_ = nullptr;
     delete kanji_lookup_dialog_;
     kanji_lookup_dialog_ = nullptr;
     delete kanji_info_dialog_;
@@ -344,6 +348,7 @@ bool MainWindow::load_kanji_info(const QString& path, OpenMode mode) {
     kanji_info_database_ = std::move(candidate);
     kanji_info_path_ = path;
     update_kanji_info_action();
+    update_kanji_code_lookup_actions();
     update_kanji_lookup_action();
     statusBar()->showMessage(
         kanji_info_database_ != nullptr
@@ -959,6 +964,22 @@ void MainWindow::create_actions() {
   connect(kanji_info_action_, &QAction::triggered, this,
           [this] { show_kanji_info_dialog(); });
 
+  skip_lookup_action_ = tools_menu->addAction(tr("&SKIP Lookup"));
+  skip_lookup_action_->setObjectName(QStringLiteral("skipLookupAction"));
+  skip_lookup_action_->setShortcut(
+      QKeySequence(QStringLiteral("Ctrl+Shift+S")));
+  connect(skip_lookup_action_, &QAction::triggered, this,
+          [this] { show_kanji_code_lookup_dialog(false); });
+
+  four_corner_lookup_action_ =
+      tools_menu->addAction(tr("&Four-Corner Lookup"));
+  four_corner_lookup_action_->setObjectName(
+      QStringLiteral("fourCornerLookupAction"));
+  four_corner_lookup_action_->setShortcut(
+      QKeySequence(QStringLiteral("Ctrl+4")));
+  connect(four_corner_lookup_action_, &QAction::triggered, this,
+          [this] { show_kanji_code_lookup_dialog(true); });
+
   kanji_lookup_action_ = tools_menu->addAction(tr("&Radical Lookup"));
   kanji_lookup_action_->setObjectName(QStringLiteral("radicalLookupAction"));
   kanji_lookup_action_->setShortcut(QKeySequence(Qt::Key_F5));
@@ -1215,6 +1236,7 @@ void MainWindow::update_conversion_actions() {
   update_kanji_color_actions();
   update_edict_actions();
   update_kanji_info_action();
+  update_kanji_code_lookup_actions();
   update_kanji_lookup_action();
   update_kana_input_state();
 }
@@ -1249,6 +1271,14 @@ void MainWindow::update_kanji_info_action() {
   if (kanji_info_action_ != nullptr) {
     kanji_info_action_->setEnabled(kanji_info_target().has_value());
   }
+}
+
+void MainWindow::update_kanji_code_lookup_actions() {
+  const bool enabled = kanji_info_database_ != nullptr &&
+                       jwp_document_.has_value() && !conversion_active();
+  if (skip_lookup_action_ != nullptr) skip_lookup_action_->setEnabled(enabled);
+  if (four_corner_lookup_action_ != nullptr)
+    four_corner_lookup_action_->setEnabled(enabled);
 }
 
 void MainWindow::update_kanji_lookup_action() {
@@ -1804,6 +1834,39 @@ void MainWindow::show_kanji_info_code(core::JisCode code) {
   connect(dialog, &QObject::destroyed, this,
           [this] { kanji_info_dialog_ = nullptr; });
   kanji_info_dialog_ = dialog;
+  dialog->show();
+}
+
+void MainWindow::show_kanji_code_lookup_dialog(bool four_corner) {
+  if (kanji_info_database_ == nullptr || !jwp_document_.has_value() ||
+      conversion_active()) {
+    statusBar()->showMessage(tr("Kanji code lookup is not available"), 3000);
+    return;
+  }
+  if (kanji_code_lookup_dialog_ != nullptr) {
+    if (four_corner)
+      kanji_code_lookup_dialog_->select_four_corner_mode();
+    else
+      kanji_code_lookup_dialog_->select_skip_mode();
+    kanji_code_lookup_dialog_->show();
+    kanji_code_lookup_dialog_->raise();
+    kanji_code_lookup_dialog_->activateWindow();
+    return;
+  }
+  auto* dialog = new KanjiCodeLookupDialog(
+      *kanji_info_database_,
+      [this](const std::vector<core::JisCode>& codes) {
+        if (!insert_edict_text(core::decode_jwp_text(codes))) {
+          throw std::runtime_error(
+              "Could not insert code lookup results into the document");
+        }
+      },
+      [this](core::JisCode code) { show_kanji_info_code(code); }, this);
+  if (four_corner) dialog->select_four_corner_mode();
+  dialog->setAttribute(Qt::WA_DeleteOnClose);
+  connect(dialog, &QObject::destroyed, this,
+          [this] { kanji_code_lookup_dialog_ = nullptr; });
+  kanji_code_lookup_dialog_ = dialog;
   dialog->show();
 }
 
