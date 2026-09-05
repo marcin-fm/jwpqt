@@ -14,6 +14,7 @@ add_library(jwpqt_core STATIC
   jis_text.cpp
   jis_unicode.cpp
   kanji_info.cpp
+  kanji_lookup.cpp
   kanji_lookup_lists.cpp
   kanji_color.cpp
   kanji_color_list.cpp

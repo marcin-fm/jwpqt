@@ -182,6 +182,16 @@ bool KanjiInfoDatabase::contains(JisCode code) const noexcept {
   }
 }
 
+std::uint8_t KanjiInfoDatabase::stroke_count(JisCode code) const {
+  if (!contains(code)) {
+    throw KanjiInfoError("Kanji information code is unavailable");
+  }
+  const std::size_t fixed_offset =
+      kHeaderSize + index_for_code(code) * kFixedSize;
+  return static_cast<std::uint8_t>((read_u16(bytes_, fixed_offset) >> 8U) &
+                                   31U);
+}
+
 KanjiInfoRecord KanjiInfoDatabase::record(JisCode code) const {
   if (!contains(code)) {
     throw KanjiInfoError("Kanji information code is unavailable");

@@ -101,6 +101,8 @@ void test_parse_record() {
               database.contains(0xb0a1U) && !database.contains(0x3023U),
           "Kanji information header or normalized lookup is wrong");
   const auto record = database.record(0x3021U);
+  require(database.stroke_count(0x3021U) == 7,
+          "Kanji fixed-table stroke lookup is wrong");
   require(record.fixed.bushu == 1 && record.fixed.strokes == 7 &&
               record.fixed.grade == 2 && record.fixed.skip.type == 3 &&
               record.fixed.skip.first == 4 && record.fixed.skip.second == 5 &&

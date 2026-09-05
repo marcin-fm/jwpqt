@@ -91,6 +91,7 @@ class KanjiInfoDatabase {
   std::uint16_t count() const noexcept;
   JisCode maximum_code() const noexcept;
   bool contains(JisCode code) const noexcept;
+  std::uint8_t stroke_count(JisCode code) const;
   KanjiInfoRecord record(JisCode code) const;
 
  private:
