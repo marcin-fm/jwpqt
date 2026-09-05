@@ -291,6 +291,10 @@ legacy file structures.
     their established token semantics. Raw high-bit query tokens normalize like
     prepared searches, and exact attempted comparison work is reported under
     explicit result and work limits with constant extra memory.
+68. Direct, adaptive, wildcard, and contingent orchestration now runs over
+    either source-bound JDX lookup or the physical unindexed scan through the
+    same filtering, boundary, continuation, result, candidate, query, and work
+    limits. Linear wildcard expansion uses the dictionary-owned extension page.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and

@@ -655,6 +655,60 @@ void test_contingent_does_not_count_jis_punctuation_as_kana() {
           "JIS punctuation bypassed contingent kana minima");
 }
 
+void test_linear_backend_runs_every_search_stage() {
+  const std::string direct_source =
+      "cat /animal/\n"
+      "to swim /verb/\n";
+  const jwpqt::core::EdictDictionary direct_dictionary =
+      jwpqt::core::EdictDictionary::parse(
+          direct_source, jwpqt::core::EdictEncoding::kUtf8);
+  const jwpqt::core::EdictSearchReport direct =
+      jwpqt::core::search_edict_linear(direct_dictionary, query(U"cat"));
+  require(direct.results.size() == 1 && direct.queries == 1 &&
+              direct.results[0].record.definitions ==
+                  std::vector<std::u32string>{U"animal"},
+          "Linear direct orchestration did not return its physical record");
+
+  const jwpqt::core::EdictSearchPlan pattern =
+      jwpqt::core::prepare_edict_search_plan(
+          jwpqt::core::encode_jwp_text(U"to swim"));
+  const jwpqt::core::EdictSearchReport patterned =
+      jwpqt::core::search_edict_pattern_linear(direct_dictionary, pattern);
+  require(patterned.results.size() == 1 && patterned.queries == 1 &&
+              patterned.results[0].stage ==
+                  jwpqt::core::EdictSearchStage::kPattern &&
+              patterned.results[0].match.byte_length == 7,
+          "Linear pattern orchestration did not expand its source span");
+
+  const std::string japanese_source =
+      jwpqt::core::encode_utf8(U"\u3042\u304f") + " /adaptive/\n" +
+      jwpqt::core::encode_utf8(U"\u4e9c\u65e5\u672c\u8a9e") +
+      " /contingent/\n";
+  const jwpqt::core::EdictDictionary japanese_dictionary =
+      jwpqt::core::EdictDictionary::parse(
+          japanese_source, jwpqt::core::EdictEncoding::kUtf8);
+  jwpqt::core::EdictSearchOptions adaptive = adaptive_options();
+  const jwpqt::core::EdictSearchReport adapted =
+      jwpqt::core::search_edict_linear(japanese_dictionary,
+                                       query(U"\u3042\u3044"), adaptive);
+  require(adapted.results.size() == 1 &&
+              adapted.results[0].stage ==
+                  jwpqt::core::EdictSearchStage::kAdaptive,
+          "Linear adaptive orchestration did not use the linear backend");
+
+  jwpqt::core::EdictSearchOptions contingent;
+  contingent.contingent.enabled = true;
+  contingent.direct.require_beginning = true;
+  contingent.direct.require_end = true;
+  const jwpqt::core::EdictSearchReport retried =
+      jwpqt::core::search_edict_linear(japanese_dictionary,
+                                       query(U"\u65e5\u672c"), contingent);
+  require(retried.results.size() == 1 &&
+              retried.results[0].stage ==
+                  jwpqt::core::EdictSearchStage::kContingent,
+          "Linear contingent orchestration did not use wildcard expansion");
+}
+
 }  // namespace
 
 int main() {
@@ -677,5 +731,6 @@ int main() {
   test_contingent_adaptive_selectivity_and_structural_minima();
   test_contingent_long_query_fallback_and_truncation();
   test_contingent_does_not_count_jis_punctuation_as_kana();
+  test_linear_backend_runs_every_search_stage();
   return 0;
 }

@@ -67,6 +67,14 @@ EdictSearchReport search_edict_pattern(
     const EdictSearchPlan& plan,
     const EdictSearchOptions& options = EdictSearchOptions{});
 
+EdictSearchReport search_edict_linear(
+    const EdictDictionary& dictionary, const EdictQuery& query,
+    const EdictSearchOptions& options = EdictSearchOptions{});
+
+EdictSearchReport search_edict_pattern_linear(
+    const EdictDictionary& dictionary, const EdictSearchPlan& plan,
+    const EdictSearchOptions& options = EdictSearchOptions{});
+
 }  // namespace jwpqt::core
 
 #endif

@@ -112,15 +112,21 @@ EdictQuery prepare_query(const JwpText& input, std::size_t maximum_length,
 }
 
 EdictDirectSearchReport search_validated(
-    const EdictDictionary& dictionary, const EdictIndex& index,
+    const EdictDictionary& dictionary, const EdictIndex* index,
     const EdictQuery& validated_query,
     const EdictDirectSearchOptions& options) {
-  if (index.source_bytes() != dictionary.source_bytes()) {
+  if (index != nullptr && index->source_bytes() != dictionary.source_bytes()) {
     throw EdictSearchError("EDICT index belongs to a different dictionary");
   }
 
-  EdictIndexLookup lookup = index.find_matches_bounded(
-      validated_query.key, options.lookup_steps, options.candidate_matches);
+  EdictIndexLookup lookup =
+      index != nullptr
+          ? index->find_matches_bounded(validated_query.key,
+                                        options.lookup_steps,
+                                        options.candidate_matches)
+          : find_edict_linear_matches(dictionary, validated_query.key,
+                                      options.lookup_steps,
+                                      options.candidate_matches);
   std::vector<EdictIndexMatch> results;
   results.reserve(std::min(options.results, lookup.matches.size()));
 
@@ -194,14 +200,28 @@ std::vector<EdictIndexMatch> search_edict_direct(
 EdictDirectSearchReport search_edict_direct_report(
     const EdictDictionary& dictionary, const EdictIndex& index,
     const EdictQuery& query, const EdictDirectSearchOptions& options) {
-  return search_validated(dictionary, index, prepare_edict_query(query.key),
-                          options);
+  return search_validated(dictionary, &index, prepare_edict_query(query.key),
+                           options);
 }
 
 EdictDirectSearchReport search_edict_adaptive_report(
     const EdictDictionary& dictionary, const EdictIndex& index,
     const EdictQuery& query, const EdictDirectSearchOptions& options) {
-  return search_validated(dictionary, index,
+  return search_validated(dictionary, &index,
+                           prepare_edict_adaptive_query(query.key), options);
+}
+
+EdictDirectSearchReport search_edict_direct_linear_report(
+    const EdictDictionary& dictionary, const EdictQuery& query,
+    const EdictDirectSearchOptions& options) {
+  return search_validated(dictionary, nullptr, prepare_edict_query(query.key),
+                          options);
+}
+
+EdictDirectSearchReport search_edict_adaptive_linear_report(
+    const EdictDictionary& dictionary, const EdictQuery& query,
+    const EdictDirectSearchOptions& options) {
+  return search_validated(dictionary, nullptr,
                           prepare_edict_adaptive_query(query.key), options);
 }
 
