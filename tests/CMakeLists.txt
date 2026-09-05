@@ -469,6 +469,16 @@ add_executable(jwpqt_kanji_count_dialog_tests
 target_link_libraries(jwpqt_kanji_count_dialog_tests PRIVATE jwpqt_qt_ui)
 target_compile_options(jwpqt_kanji_count_dialog_tests PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME qt_kanji_count_dialog COMMAND jwpqt_kanji_count_dialog_tests)
+
+add_executable(jwpqt_page_layout_dialog_tests
+  page_layout_dialog_test.cpp
+)
+target_link_libraries(jwpqt_page_layout_dialog_tests PRIVATE jwpqt_qt_ui)
+target_compile_options(jwpqt_page_layout_dialog_tests
+  PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME qt_page_layout_dialog COMMAND jwpqt_page_layout_dialog_tests)
+set_tests_properties(qt_page_layout_dialog PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 add_executable(jwpqt_kanji_reading_lookup_dialog_tests
   kanji_reading_lookup_dialog_test.cpp
 )
