@@ -60,9 +60,12 @@ legacy file structures.
     including direct, compound, symbol, case, pending, and consonant behavior.
 20. `07c0f82` parses and validates the recovered WNN index/data wire formats
     without native-ABI assumptions or bundled dictionary payloads.
-21. The current slice reproduces ordered WNN exact, special-stem, and
-    conjugated candidate lookup, suffix attachment, extension checks, and
-    stable duplicate removal over the portable dictionary model.
+21. `1de61c1` reproduces ordered WNN exact, special-stem, and conjugated
+    candidate lookup, suffix attachment, extension checks, and stable duplicate
+    removal over the portable dictionary model.
+22. The portable user-selection cache parses and writes the recovered 8-byte
+    `user.sel` records, restores valid candidate offsets, and reproduces the
+    fixed-capacity learning and eviction behavior without native structs.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -71,7 +74,7 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Port WNN user-dictionary preference ordering and the native conversion
+1. Add atomic file persistence for WNN preferences and the native conversion
    session that connects romaji composition, candidate selection, and document
    transactions.
 2. Replace `QPlainTextEdit` scaffolding with a custom Qt editor surface once the

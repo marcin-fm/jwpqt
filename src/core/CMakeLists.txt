@@ -18,6 +18,7 @@ add_library(jwpqt_core STATIC
   utf8.cpp
   wnn_dictionary.cpp
   wnn_lookup.cpp
+  wnn_preferences.cpp
 )
 
 target_include_directories(jwpqt_core

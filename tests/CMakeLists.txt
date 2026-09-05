@@ -59,6 +59,12 @@ add_executable(jwpqt_wnn_lookup_tests
 target_link_libraries(jwpqt_wnn_lookup_tests PRIVATE jwpqt_core)
 target_compile_options(jwpqt_wnn_lookup_tests PRIVATE -Wall -Wextra -Wpedantic)
 
+add_executable(jwpqt_wnn_preferences_tests
+  wnn_preferences_test.cpp
+)
+target_link_libraries(jwpqt_wnn_preferences_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_wnn_preferences_tests PRIVATE -Wall -Wextra -Wpedantic)
+
 add_executable(jwpqt_jwp_document_tests
   jwp_document_test.cpp
 )
@@ -133,6 +139,7 @@ add_test(NAME core_jis_text COMMAND jwpqt_jis_text_tests)
 add_test(NAME core_kana_input COMMAND jwpqt_kana_input_tests)
 add_test(NAME core_wnn_dictionary COMMAND jwpqt_wnn_dictionary_tests)
 add_test(NAME core_wnn_lookup COMMAND jwpqt_wnn_lookup_tests)
+add_test(NAME core_wnn_preferences COMMAND jwpqt_wnn_preferences_tests)
 add_test(NAME core_jwp_document COMMAND jwpqt_jwp_document_tests)
 add_test(NAME core_jwp_text_codec COMMAND jwpqt_jwp_text_codec_tests)
 add_test(NAME core_jwp_document_model COMMAND jwpqt_jwp_document_model_tests)
