@@ -58,6 +58,11 @@ struct ReplaceRequest {
   ReplaceMode mode = ReplaceMode::kNext;
 };
 
+struct KanjiColorListEditRequest {
+  QString text;
+  bool add = true;
+};
+
 class MainWindow : public QMainWindow {
  public:
   explicit MainWindow(QWidget* parent = nullptr);
@@ -98,6 +103,16 @@ class MainWindow : public QMainWindow {
   bool set_kanji_color_policy(
       const core::KanjiColorPolicy& policy,
       OpenMode mode = OpenMode::kInteractive);
+  bool set_kanji_color_list(
+      core::KanjiColorList color_list,
+      OpenMode mode = OpenMode::kInteractive);
+  bool make_kanji_color_list(OpenMode mode = OpenMode::kInteractive);
+  bool append_kanji_color_list(OpenMode mode = OpenMode::kInteractive);
+  bool edit_kanji_color_list(
+      const QString& text, bool add,
+      OpenMode mode = OpenMode::kInteractive);
+  bool view_kanji_color_list(OpenMode mode = OpenMode::kInteractive);
+  bool clear_kanji_color_list(OpenMode mode = OpenMode::kInteractive);
   const core::KanjiColorPolicy& kanji_color_policy() const noexcept;
   const core::KanjiColorList& kanji_color_list() const noexcept;
 
@@ -115,6 +130,8 @@ class MainWindow : public QMainWindow {
   prompt_for_paragraph_format(const core::JwpParagraphFormat& initial);
   virtual std::optional<core::KanjiColorPolicy>
   prompt_for_kanji_color_policy(const core::KanjiColorPolicy& initial);
+  virtual std::optional<KanjiColorListEditRequest>
+  prompt_for_kanji_color_list_edit();
 
  private:
   struct WnnResources;
@@ -125,6 +142,7 @@ class MainWindow : public QMainWindow {
   void restore_jwp_history_state(core::JwpPosition caret);
   void update_undo_actions();
   void update_conversion_actions();
+  void update_kanji_color_actions();
   void update_kana_input_state();
   void set_kana_input_enabled(bool enabled);
   void apply_kana_input_events(
@@ -156,6 +174,7 @@ class MainWindow : public QMainWindow {
   void replace_document();
   void format_document_paragraphs();
   void configure_kanji_colors();
+  void edit_kanji_color_list();
   bool find_jwp_text(const QString& text, core::JwpSearchOptions options);
   bool find_plain_text(const QString& text, core::JwpSearchOptions options);
   void synchronize_jwp_document(int position, int chars_removed,
@@ -178,6 +197,11 @@ class MainWindow : public QMainWindow {
   QAction* format_paragraph_action_ = nullptr;
   QAction* insert_page_break_action_ = nullptr;
   QAction* kanji_color_options_action_ = nullptr;
+  QAction* make_kanji_color_list_action_ = nullptr;
+  QAction* append_kanji_color_list_action_ = nullptr;
+  QAction* edit_kanji_color_list_action_ = nullptr;
+  QAction* view_kanji_color_list_action_ = nullptr;
+  QAction* clear_kanji_color_list_action_ = nullptr;
   QLabel* input_mode_label_;
   QActionGroup* encoding_actions_;
   QMenu* jwp_code_page_menu_;

@@ -144,9 +144,17 @@ void JwpEditor::apply_kanji_colors(
     const core::JwpDocument& jwp_document,
     const core::KanjiColorList& color_list,
     const core::KanjiColorPolicy& policy, core::LegacyCodePage code_page) {
+  set_kanji_color_selections(
+      prepare_kanji_colors(jwp_document, color_list, policy, code_page));
+}
+
+QList<QTextEdit::ExtraSelection> JwpEditor::prepare_kanji_colors(
+    const core::JwpDocument& jwp_document,
+    const core::KanjiColorList& color_list,
+    const core::KanjiColorPolicy& policy,
+    core::LegacyCodePage code_page) const {
   if (jwp_document.paragraphs.empty()) {
-    clear_kanji_colors();
-    return;
+    return {};
   }
   if (jwp_document.paragraphs.size() >
       static_cast<std::size_t>(std::numeric_limits<int>::max())) {
@@ -210,6 +218,11 @@ void JwpEditor::apply_kanji_colors(
     block = block.next();
   }
 
+  return selections;
+}
+
+void JwpEditor::set_kanji_color_selections(
+    QList<QTextEdit::ExtraSelection> selections) {
   kanji_color_selections_ = std::move(selections);
   update_extra_selections();
 }

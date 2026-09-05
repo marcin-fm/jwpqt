@@ -259,6 +259,7 @@ bool MainWindow::load_kanji_color_configuration(const QString& settings_path,
     kanji_color_list_ = list;
     kanji_color_settings_path_.swap(retained_settings_path);
     kanji_color_list_path_.swap(retained_list_path);
+    update_kanji_color_actions();
     statusBar()->showMessage(tr("Loaded kanji color configuration"), 3000);
     return true;
   } catch (const std::exception& error) {
@@ -317,6 +318,132 @@ bool MainWindow::set_kanji_color_policy(const core::KanjiColorPolicy& policy,
     }
     return false;
   }
+}
+
+bool MainWindow::set_kanji_color_list(core::KanjiColorList color_list,
+                                      OpenMode mode) {
+  if (conversion_active()) {
+    if (mode == OpenMode::kInteractive) {
+      statusBar()->showMessage(
+          tr("Accept the current conversion before changing the kanji list"),
+          5000);
+    }
+    return false;
+  }
+  try {
+    if (kanji_color_list_path_.isEmpty()) {
+      throw std::runtime_error("Kanji color list path is not configured");
+    }
+
+    QList<QTextEdit::ExtraSelection> prepared_colors;
+    if (jwp_document_.has_value()) {
+      prepared_colors = editor_->prepare_kanji_colors(
+          jwp_document_->document(), color_list, kanji_color_policy_,
+          jwp_code_page_);
+    }
+    write_kanji_color_list_file(kanji_color_list_path_, color_list);
+    kanji_color_list_ = std::move(color_list);
+    if (jwp_document_.has_value()) {
+      editor_->set_kanji_color_selections(std::move(prepared_colors));
+    }
+    update_kanji_color_actions();
+    statusBar()->showMessage(tr("Updated kanji color list"), 3000);
+    return true;
+  } catch (const std::exception& error) {
+    if (mode == OpenMode::kInteractive) {
+      show_error(tr("Could not update kanji color list"), error);
+    }
+    return false;
+  }
+}
+
+bool MainWindow::make_kanji_color_list(OpenMode mode) {
+  if (conversion_active() || !jwp_document_.has_value()) {
+    return false;
+  }
+  finish_kana_input();
+  if (conversion_active() || !jwp_document_.has_value()) {
+    return false;
+  }
+  core::KanjiColorList color_list;
+  color_list.add_document(jwp_document_->document());
+  return set_kanji_color_list(std::move(color_list), mode);
+}
+
+bool MainWindow::append_kanji_color_list(OpenMode mode) {
+  if (conversion_active() || !jwp_document_.has_value()) {
+    return false;
+  }
+  finish_kana_input();
+  if (conversion_active() || !jwp_document_.has_value()) {
+    return false;
+  }
+  core::KanjiColorList color_list = kanji_color_list_;
+  color_list.add_document(jwp_document_->document());
+  return set_kanji_color_list(std::move(color_list), mode);
+}
+
+bool MainWindow::edit_kanji_color_list(const QString& text, bool add,
+                                       OpenMode mode) {
+  if (conversion_active()) {
+    return false;
+  }
+  finish_kana_input();
+  if (conversion_active()) {
+    return false;
+  }
+  try {
+    const core::JwpText encoded =
+        core::encode_jwp_text(from_qstring(text), jwp_code_page_);
+    core::KanjiColorList color_list = kanji_color_list_;
+    for (const core::JisCode code : encoded) {
+      if (add) {
+        color_list.add(code);
+      } else {
+        color_list.remove(code);
+      }
+    }
+    return set_kanji_color_list(std::move(color_list), mode);
+  } catch (const std::exception& error) {
+    if (mode == OpenMode::kInteractive) {
+      show_error(tr("Could not edit kanji color list"), error);
+    }
+    return false;
+  }
+}
+
+bool MainWindow::view_kanji_color_list(OpenMode mode) {
+  if (conversion_active()) {
+    return false;
+  }
+  finish_kana_input();
+  if (conversion_active() || !maybe_save()) {
+    return false;
+  }
+  try {
+    core::JwpDocument document;
+    document.paragraphs.emplace_back();
+    document.paragraphs.front().text = kanji_color_list_.codes();
+    load_jwp_document(QString(), std::move(document), jwp_code_page_);
+    statusBar()->showMessage(tr("Viewing kanji color list"), 3000);
+    return true;
+  } catch (const std::exception& error) {
+    if (mode == OpenMode::kInteractive) {
+      show_error(tr("Could not view kanji color list"), error);
+    }
+    return false;
+  }
+}
+
+bool MainWindow::clear_kanji_color_list(OpenMode mode) {
+  if (conversion_active()) {
+    return false;
+  }
+  finish_kana_input();
+  if (conversion_active()) {
+    return false;
+  }
+  return set_kanji_color_list(core::KanjiColorList{}, mode);
 }
 
 void MainWindow::create_actions() {
@@ -472,6 +599,42 @@ void MainWindow::create_actions() {
       QStringLiteral("kanjiColorOptionsAction"));
   connect(kanji_color_options_action_, &QAction::triggered, this,
           [this] { configure_kanji_colors(); });
+
+  tools_menu->addSeparator();
+  make_kanji_color_list_action_ =
+      tools_menu->addAction(tr("&Make Kanji Color List"));
+  make_kanji_color_list_action_->setObjectName(
+      QStringLiteral("makeKanjiColorListAction"));
+  connect(make_kanji_color_list_action_, &QAction::triggered, this,
+          [this] { make_kanji_color_list(); });
+
+  append_kanji_color_list_action_ =
+      tools_menu->addAction(tr("&Append Document to Kanji Color List"));
+  append_kanji_color_list_action_->setObjectName(
+      QStringLiteral("appendKanjiColorListAction"));
+  connect(append_kanji_color_list_action_, &QAction::triggered, this,
+          [this] { append_kanji_color_list(); });
+
+  edit_kanji_color_list_action_ =
+      tools_menu->addAction(tr("Add or &Remove Kanji..."));
+  edit_kanji_color_list_action_->setObjectName(
+      QStringLiteral("editKanjiColorListAction"));
+  connect(edit_kanji_color_list_action_, &QAction::triggered, this,
+          [this] { edit_kanji_color_list(); });
+
+  view_kanji_color_list_action_ =
+      tools_menu->addAction(tr("&View Kanji Color List"));
+  view_kanji_color_list_action_->setObjectName(
+      QStringLiteral("viewKanjiColorListAction"));
+  connect(view_kanji_color_list_action_, &QAction::triggered, this,
+          [this] { view_kanji_color_list(); });
+
+  clear_kanji_color_list_action_ =
+      tools_menu->addAction(tr("&Clear Kanji Color List"));
+  clear_kanji_color_list_action_->setObjectName(
+      QStringLiteral("clearKanjiColorListAction"));
+  connect(clear_kanji_color_list_action_, &QAction::triggered, this,
+          [this] { clear_kanji_color_list(); });
 
   QMenu* convert_menu = menuBar()->addMenu(tr("&Convert"));
   convert_action_ = convert_menu->addAction(tr("Convert &Selection"));
@@ -667,7 +830,26 @@ void MainWindow::update_conversion_actions() {
   accept_candidate_action_->setEnabled(active);
   format_paragraph_action_->setEnabled(!active && jwp_document_.has_value());
   insert_page_break_action_->setEnabled(!active && jwp_document_.has_value());
+  update_kanji_color_actions();
   update_kana_input_state();
+}
+
+void MainWindow::update_kanji_color_actions() {
+  if (kanji_color_options_action_ == nullptr) {
+    return;
+  }
+  const bool active = conversion_active();
+  const bool configured = !kanji_color_list_path_.isEmpty();
+  const bool jwp = jwp_document_.has_value();
+  kanji_color_options_action_->setEnabled(
+      !kanji_color_settings_path_.isEmpty());
+  make_kanji_color_list_action_->setEnabled(configured && jwp && !active);
+  append_kanji_color_list_action_->setEnabled(configured && jwp && !active);
+  edit_kanji_color_list_action_->setEnabled(configured && !active);
+  view_kanji_color_list_action_->setEnabled(configured && !active &&
+                                             !kanji_color_list_.empty());
+  clear_kanji_color_list_action_->setEnabled(configured && !active &&
+                                              !kanji_color_list_.empty());
 }
 
 bool MainWindow::kana_input_enabled() const noexcept {
@@ -1405,10 +1587,20 @@ void MainWindow::load_jwp_document(const QString& path,
   core::JwpDocumentModel model(std::move(document));
   std::u32string text = core::decode_jwp_plain_text(model, code_page);
 
-  updating_editor_ = true;
-  editor_->setPlainText(to_qstring(text));
-  apply_jwp_presentation(model.document(), code_page);
-  updating_editor_ = false;
+  // Validate every presentation transformation before replacing the live
+  // document. The live calls below then cannot fail on text/model mismatch.
+  JwpEditor staged_editor;
+  staged_editor.setFont(editor_->font());
+  staged_editor.setPlainText(to_qstring(text));
+  staged_editor.apply_jwp_layout(model.document());
+  staged_editor.prepare_kanji_colors(model.document(), kanji_color_list_,
+                                     kanji_color_policy_, code_page);
+
+  {
+    QScopedValueRollback<bool> update_guard(updating_editor_, true);
+    editor_->setPlainText(to_qstring(text));
+    apply_jwp_presentation(model.document(), code_page);
+  }
   jwp_document_ = std::move(model);
   saved_jwp_document_ = jwp_document_->document();
   pristine_jwp_document_ = std::move(pristine_document);
@@ -1795,6 +1987,35 @@ MainWindow::prompt_for_kanji_color_policy(
        static_cast<std::uint8_t>(uncommon_color.blue())}};
 }
 
+std::optional<KanjiColorListEditRequest>
+MainWindow::prompt_for_kanji_color_list_edit() {
+  QDialog dialog(this);
+  dialog.setWindowTitle(tr("Add or Remove Kanji"));
+
+  auto* layout = new QVBoxLayout(&dialog);
+  auto* form = new QFormLayout();
+  auto* operation = new QComboBox(&dialog);
+  operation->setObjectName(QStringLiteral("kanjiColorListOperation"));
+  operation->addItem(tr("Add to list"), true);
+  operation->addItem(tr("Remove from list"), false);
+  form->addRow(tr("Operation:"), operation);
+  auto* text = new QLineEdit(&dialog);
+  text->setObjectName(QStringLiteral("kanjiColorListText"));
+  form->addRow(tr("Kanji:"), text);
+  layout->addLayout(form);
+
+  auto* buttons = new QDialogButtonBox(
+      QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+  connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+  connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+  layout->addWidget(buttons);
+  if (dialog.exec() != QDialog::Accepted) {
+    return std::nullopt;
+  }
+  return KanjiColorListEditRequest{text->text(),
+                                   operation->currentData().toBool()};
+}
+
 void MainWindow::set_text_encoding(core::TextEncoding encoding,
                                    bool mark_modified) {
   if (jwp_document_.has_value() || encoding_ == encoding) {
@@ -1909,6 +2130,21 @@ void MainWindow::configure_kanji_colors() {
   } catch (const std::exception& error) {
     statusBar()->showMessage(
         tr("Could not configure kanji colors: %1")
+            .arg(QString::fromUtf8(error.what())),
+        5000);
+  }
+}
+
+void MainWindow::edit_kanji_color_list() {
+  try {
+    const std::optional<KanjiColorListEditRequest> request =
+        prompt_for_kanji_color_list_edit();
+    if (request.has_value()) {
+      edit_kanji_color_list(request->text, request->add);
+    }
+  } catch (const std::exception& error) {
+    statusBar()->showMessage(
+        tr("Could not edit kanji color list: %1")
             .arg(QString::fromUtf8(error.what())),
         5000);
   }

@@ -29,6 +29,13 @@ class JwpEditor final : public QTextEdit {
       const core::KanjiColorList& color_list,
       const core::KanjiColorPolicy& policy,
       core::LegacyCodePage code_page = core::kDefaultLegacyCodePage);
+  QList<QTextEdit::ExtraSelection> prepare_kanji_colors(
+      const core::JwpDocument& document,
+      const core::KanjiColorList& color_list,
+      const core::KanjiColorPolicy& policy,
+      core::LegacyCodePage code_page = core::kDefaultLegacyCodePage) const;
+  void set_kanji_color_selections(
+      QList<QTextEdit::ExtraSelection> selections);
   void clear_kanji_colors();
   void set_transient_extra_selections(
       const QList<QTextEdit::ExtraSelection>& selections);

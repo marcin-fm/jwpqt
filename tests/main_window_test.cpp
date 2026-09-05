@@ -24,6 +24,7 @@
 
 #include "file_io.h"
 #include "jwp_editor.h"
+#include "jwpqt/core/jis_unicode.h"
 #include "jwpqt/core/jwp_text_codec.h"
 #include "kanji_color_settings.h"
 #include "main_window.h"
@@ -140,12 +141,15 @@ class PromptingWindow : public jwpqt::qt::MainWindow {
   std::optional<jwpqt::core::JwpParagraphFormat> offered_paragraph_format;
   std::optional<jwpqt::core::KanjiColorPolicy> next_kanji_color_policy;
   std::optional<jwpqt::core::KanjiColorPolicy> offered_kanji_color_policy;
+  std::optional<jwpqt::qt::KanjiColorListEditRequest>
+      next_kanji_color_list_edit;
   std::vector<jwpqt::core::TextEncoding> offered_encodings;
   QString explanation;
   int search_prompt_count = 0;
   int replace_prompt_count = 0;
   int paragraph_format_prompt_count = 0;
   int kanji_color_prompt_count = 0;
+  int kanji_color_list_prompt_count = 0;
 
  protected:
   std::optional<jwpqt::core::TextEncoding> prompt_for_encoding(
@@ -182,6 +186,12 @@ class PromptingWindow : public jwpqt::qt::MainWindow {
     ++kanji_color_prompt_count;
     offered_kanji_color_policy = initial;
     return next_kanji_color_policy;
+  }
+
+  std::optional<jwpqt::qt::KanjiColorListEditRequest>
+  prompt_for_kanji_color_list_edit() override {
+    ++kanji_color_list_prompt_count;
+    return next_kanji_color_list_edit;
   }
 };
 
@@ -1197,8 +1207,21 @@ void test_jwp_wnn_conversion(const QString& directory) {
   QAction* next = find_action(window, "nextCandidateAction");
   QAction* accept = find_action(window, "acceptCandidateAction");
   QAction* page_break = find_action(window, "insertPageBreakAction");
+  QAction* make_color_list =
+      find_action(window, "makeKanjiColorListAction");
+  QAction* append_color_list =
+      find_action(window, "appendKanjiColorListAction");
+  QAction* edit_color_list =
+      find_action(window, "editKanjiColorListAction");
+  QAction* view_color_list =
+      find_action(window, "viewKanjiColorListAction");
+  QAction* clear_color_list =
+      find_action(window, "clearKanjiColorListAction");
   require(editor != nullptr && convert != nullptr && next != nullptr &&
-              accept != nullptr && page_break != nullptr,
+              accept != nullptr && page_break != nullptr &&
+              make_color_list != nullptr && append_color_list != nullptr &&
+              edit_color_list != nullptr && view_color_list != nullptr &&
+              clear_color_list != nullptr,
           "Native WNN conversion actions were not created");
 
   editor->selectAll();
@@ -1225,6 +1248,22 @@ void test_jwp_wnn_conversion(const QString& directory) {
               window.current_jwp_document()->paragraphs[0].text ==
                   jwpqt::core::JwpText{0x3021},
           "Page-break insertion accepted an active WNN conversion");
+  require(!make_color_list->isEnabled() && !append_color_list->isEnabled() &&
+              !edit_color_list->isEnabled() && !view_color_list->isEnabled() &&
+              !clear_color_list->isEnabled() &&
+              !window.make_kanji_color_list(
+                  jwpqt::qt::OpenMode::kNonInteractive) &&
+              !window.append_kanji_color_list(
+                  jwpqt::qt::OpenMode::kNonInteractive) &&
+              !window.edit_kanji_color_list(
+                  QStringLiteral("x"), true,
+                  jwpqt::qt::OpenMode::kNonInteractive) &&
+              !window.view_kanji_color_list(
+                  jwpqt::qt::OpenMode::kNonInteractive) &&
+              !window.clear_kanji_color_list(
+                  jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.conversion_active() && editor->isReadOnly(),
+          "Kanji list command accepted an active WNN conversion");
   window.show();
   editor->setFocus();
   QApplication::processEvents();
@@ -1828,6 +1867,202 @@ void test_kanji_color_options(const QString& directory) {
           "Failed kanji color persistence retained the candidate overlay");
 }
 
+void test_kanji_color_list_commands(const QString& directory) {
+  const QString settings_path =
+      directory + QStringLiteral("/kanji-list-commands.ini");
+  const QString list_path =
+      directory + QStringLiteral("/kanji-list-commands.lst");
+  jwpqt::core::KanjiColorPolicy policy;
+  policy.list_mode = jwpqt::core::KanjiListColorMode::kMatch;
+  policy.list_color = {4, 5, 6};
+  {
+    QSettings settings(settings_path, QSettings::IniFormat);
+    jwpqt::qt::write_kanji_color_policy(settings, policy);
+  }
+  jwpqt::core::KanjiColorList initial_list;
+  require(initial_list.add(0x3021),
+          "Could not prepare initial kanji command list");
+  jwpqt::qt::write_kanji_color_list_file(list_path, initial_list);
+
+  jwpqt::core::JwpDocument source;
+  source.paragraphs = {jwpqt::core::JwpParagraph{}};
+  source.paragraphs[0].text = {0x3022, 0x2422, 0x3023};
+  const QString source_path =
+      directory + QStringLiteral("/kanji-list-commands.jwp");
+  jwpqt::qt::write_jwp_file(source_path, source);
+
+  PromptingWindow window;
+  require(window.load_kanji_color_configuration(
+              settings_path, list_path,
+              jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.open_jwp_path(source_path),
+          "Could not prepare kanji list command fixture");
+  QAction* make = find_action(window, "makeKanjiColorListAction");
+  QAction* append = find_action(window, "appendKanjiColorListAction");
+  QAction* edit = find_action(window, "editKanjiColorListAction");
+  QAction* view = find_action(window, "viewKanjiColorListAction");
+  QAction* clear = find_action(window, "clearKanjiColorListAction");
+  auto* editor =
+      dynamic_cast<jwpqt::qt::JwpEditor*>(window.findChild<QTextEdit*>());
+  require(make != nullptr && append != nullptr && edit != nullptr &&
+              view != nullptr && clear != nullptr && editor != nullptr &&
+              make->isEnabled() && append->isEnabled() && edit->isEnabled() &&
+              view->isEnabled() && clear->isEnabled(),
+          "Kanji list commands were not enabled for a JWP document");
+
+  append->trigger();
+  require(window.kanji_color_list().size() == 3 &&
+              window.kanji_color_list().contains(0x3021) &&
+              window.kanji_color_list().contains(0x3022) &&
+              window.kanji_color_list().contains(0x3023),
+          "Append did not merge document kanji into the color list");
+  const std::optional<jwpqt::core::KanjiColorList> appended =
+      jwpqt::qt::read_kanji_color_list_file(list_path);
+  require(appended.has_value() && appended->size() == 3,
+          "Append did not persist the complete kanji color list");
+
+  make->trigger();
+  require(window.kanji_color_list().size() == 2 &&
+              !window.kanji_color_list().contains(0x3021) &&
+              window.kanji_color_list().contains(0x3022) &&
+              window.kanji_color_list().contains(0x3023),
+          "Make did not replace the list with document kanji");
+
+  const std::u32string remove_text =
+      jwpqt::core::decode_jwp_text(jwpqt::core::JwpText{0x3022});
+  window.next_kanji_color_list_edit =
+      jwpqt::qt::KanjiColorListEditRequest{
+          QString::fromUcs4(remove_text.data(),
+                            static_cast<qsizetype>(remove_text.size())),
+          false};
+  edit->trigger();
+  require(window.kanji_color_list_prompt_count == 1 &&
+              window.kanji_color_list().size() == 1 &&
+              !window.kanji_color_list().contains(0x3022) &&
+              window.kanji_color_list().contains(0x3023),
+          "Remove dialog did not remove encoded kanji from the list");
+
+  const std::u32string add_text =
+      jwpqt::core::decode_jwp_text(jwpqt::core::JwpText{0x3021});
+  window.next_kanji_color_list_edit =
+      jwpqt::qt::KanjiColorListEditRequest{
+          QString::fromUcs4(add_text.data(),
+                            static_cast<qsizetype>(add_text.size())),
+          true};
+  edit->trigger();
+  require(window.kanji_color_list_prompt_count == 2 &&
+              window.kanji_color_list().size() == 2 &&
+              window.kanji_color_list().contains(0x3021),
+          "Add dialog did not add encoded kanji to the list");
+  window.next_kanji_color_list_edit.reset();
+  edit->trigger();
+  require(window.kanji_color_list_prompt_count == 3 &&
+              window.kanji_color_list().size() == 2,
+          "Cancelling kanji list editing changed the list");
+  require(!window.edit_kanji_color_list(
+              QString::fromUtf8("\xf0\x9f\x98\x80"), true,
+              jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.kanji_color_list().size() == 2,
+          "Unrepresentable list input changed the working list");
+
+  view->trigger();
+  require(window.is_jwp_document() &&
+              window.current_jwp_document()->paragraphs.size() == 1 &&
+              window.current_jwp_document()->paragraphs[0].text ==
+                  jwpqt::core::JwpText({0x3021, 0x3023}) &&
+              !editor->document()->isModified(),
+          "View did not create an unmodified sorted JWP list document");
+
+  constexpr jwpqt::core::JisCode kUnmappedListCode = 0x745b;
+  require(!jwpqt::core::jis_x0208_to_unicode(kUnmappedListCode).has_value(),
+          "Kanji list view fixture unexpectedly has a Unicode mapping");
+  jwpqt::core::KanjiColorList unmapped_list;
+  require(unmapped_list.add(kUnmappedListCode) &&
+              window.set_kanji_color_list(
+                  unmapped_list,
+                  jwpqt::qt::OpenMode::kNonInteractive),
+          "Could not prepare unmapped kanji list view fixture");
+  const jwpqt::core::JwpDocument before_failed_view =
+      *window.current_jwp_document();
+  QTextCursor before_failed_view_cursor = editor->textCursor();
+  before_failed_view_cursor.setPosition(1);
+  before_failed_view_cursor.setPosition(0, QTextCursor::KeepAnchor);
+  editor->setTextCursor(before_failed_view_cursor);
+  const QString before_failed_view_text = editor->toPlainText();
+  const QString before_failed_view_title = window.windowTitle();
+  const bool before_failed_view_modified = editor->document()->isModified();
+  const bool before_failed_view_undo_enabled =
+      find_action(window, "undoAction")->isEnabled();
+  const auto before_failed_view_selections = editor->extraSelections();
+  require(!window.view_kanji_color_list(
+              jwpqt::qt::OpenMode::kNonInteractive) &&
+              *window.current_jwp_document() == before_failed_view &&
+              editor->toPlainText() == before_failed_view_text &&
+              editor->textCursor().position() ==
+                  before_failed_view_cursor.position() &&
+              editor->textCursor().anchor() ==
+                  before_failed_view_cursor.anchor() &&
+              editor->document()->isModified() ==
+                  before_failed_view_modified &&
+              window.windowTitle() == before_failed_view_title &&
+              window.jwp_code_page() == jwpqt::core::kDefaultLegacyCodePage &&
+              find_action(window, "undoAction")->isEnabled() ==
+                  before_failed_view_undo_enabled &&
+              editor->extraSelections().size() ==
+                  before_failed_view_selections.size(),
+          "Unrenderable kanji list view replaced the current document");
+  require_jwp_layout(editor, before_failed_view);
+
+  clear->trigger();
+  const std::optional<jwpqt::core::KanjiColorList> cleared =
+      jwpqt::qt::read_kanji_color_list_file(list_path);
+  require(window.kanji_color_list().empty() && cleared.has_value() &&
+              cleared->empty() && !view->isEnabled() && !clear->isEnabled(),
+          "Clear did not persist and publish an empty kanji color list");
+
+  const QString blocked_root =
+      directory + QStringLiteral("/blocked-kanji-list-commands");
+  require(QDir().mkpath(blocked_root),
+          "Could not create blocked kanji list command fixture");
+  const QString blocked_settings =
+      blocked_root + QStringLiteral("/settings.ini");
+  const QString blocked_list = blocked_root + QStringLiteral("/colkanji.lst");
+  {
+    QSettings settings(blocked_settings, QSettings::IniFormat);
+    jwpqt::qt::write_kanji_color_policy(settings, policy);
+  }
+  jwpqt::core::KanjiColorList blocked_initial_list;
+  require(blocked_initial_list.add(0x3022),
+          "Could not prepare blocked kanji command list");
+  jwpqt::qt::write_kanji_color_list_file(blocked_list,
+                                         blocked_initial_list);
+  PromptingWindow blocked;
+  require(blocked.load_kanji_color_configuration(
+              blocked_settings, blocked_list,
+              jwpqt::qt::OpenMode::kNonInteractive) &&
+              blocked.open_jwp_path(source_path),
+          "Could not load blocked kanji list command fixture");
+  require(QDir(blocked_root).removeRecursively(),
+          "Could not remove blocked kanji list directory");
+  QFile blocker(blocked_root);
+  require(blocker.open(QIODevice::WriteOnly) && blocker.write("x", 1) == 1,
+          "Could not block kanji list output directory");
+  blocker.close();
+  require(!blocked.append_kanji_color_list(
+              jwpqt::qt::OpenMode::kNonInteractive) &&
+              blocked.kanji_color_list().size() == 1 &&
+              blocked.kanji_color_list().contains(0x3022),
+          "Failed list persistence published the appended candidate");
+  auto* blocked_editor =
+      dynamic_cast<jwpqt::qt::JwpEditor*>(blocked.findChild<QTextEdit*>());
+  require(blocked_editor != nullptr &&
+              blocked_editor->extraSelections().size() == 1 &&
+              blocked_editor->extraSelections()[0]
+                      .format.foreground()
+                      .color() == QColor(4, 5, 6),
+          "Failed list persistence changed the prior overlay");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -1862,6 +2097,7 @@ int main(int argc, char* argv[]) {
     test_jwp_automatic_wnn_conversion(directory.path());
     test_kanji_color_configuration(directory.path());
     test_kanji_color_options(directory.path());
+    test_kanji_color_list_commands(directory.path());
     std::cout << "All main window tests passed\n";
     return 0;
   } catch (const std::exception& error) {

@@ -53,8 +53,9 @@ inserts structural hard page breaks as one undoable command. Global kanji
 color policy and `colkanji.lst` are loaded strictly from the XDG configuration
 directory and applied to raw JWP tokens without mutating document formatting;
 Kanji Color Options updates the screen policy atomically while preserving
-active WNN highlights. Color-list management, user dictionary management,
-lookup tools, remaining configuration, and printing remain in progress.
+active WNN highlights. Make, Append, Add/Remove, View, and Clear manage the
+global color list with atomic persistence. User dictionary management, lookup
+tools, remaining configuration, and printing remain in progress.
 
 JWPce/JWPxp copyright and licensing notices remain in `_cpright.txt`,
 `_readme.txt`, and `gnugpl.txt`.
