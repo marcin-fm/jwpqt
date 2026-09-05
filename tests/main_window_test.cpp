@@ -73,6 +73,55 @@ WnnFixture write_wnn_fixture(const QString& directory) {
   return fixture;
 }
 
+void append_u32_le(QByteArray& bytes, quint32 value) {
+  for (int shift = 0; shift < 32; shift += 8) {
+    bytes.append(static_cast<char>((value >> shift) & 0xffU));
+  }
+}
+
+void append_wnn_index_entry(QByteArray& index, unsigned char first,
+                            unsigned char second, quint32 offset) {
+  index.append(static_cast<char>(first));
+  index.append(static_cast<char>(second));
+  index.append(static_cast<char>(0x80));
+  index.append(static_cast<char>(0x77));
+  append_u32_le(index, offset);
+}
+
+WnnFixture write_automatic_wnn_fixture(const QString& directory) {
+  const WnnFixture fixture{
+      directory + QStringLiteral("/automatic.dix"),
+      directory + QStringLiteral("/automatic.dat"),
+      directory + QStringLiteral("/automatic-user.sel"),
+  };
+  QByteArray data;
+  data.append(static_cast<char>(0xab));
+  data.append('*');
+  data.append(static_cast<char>(0xb0));
+  data.append(static_cast<char>(0xa1));
+  data.append('/');
+  data.append(static_cast<char>(0xb0));
+  data.append(static_cast<char>(0xa2));
+  data.append('\n');
+  const quint32 second_offset = static_cast<quint32>(data.size());
+  data.append(static_cast<char>(0xab));
+  data.append(static_cast<char>(0xad));
+  data.append('*');
+  data.append(static_cast<char>(0xb0));
+  data.append(static_cast<char>(0xa3));
+  data.append('/');
+  data.append(static_cast<char>(0xb0));
+  data.append(static_cast<char>(0xa4));
+  data.append('\n');
+
+  QByteArray index;
+  append_wnn_index_entry(index, 0xab, 0x80, 0);
+  append_wnn_index_entry(index, 0xab, 0xad, second_offset);
+  write_bytes(fixture.index_path, index);
+  write_bytes(fixture.data_path, data);
+  return fixture;
+}
+
 class PromptingWindow : public jwpqt::qt::MainWindow {
  public:
   std::optional<jwpqt::core::TextEncoding> next_encoding;
@@ -1043,6 +1092,128 @@ void test_jwp_kana_input_mode(const QString& directory) {
           "Plain text document did not disable JWP kana input");
 }
 
+void test_jwp_automatic_wnn_conversion(const QString& directory) {
+  const WnnFixture fixture = write_automatic_wnn_fixture(directory);
+  jwpqt::core::JwpDocument source;
+  source.paragraphs = {jwpqt::core::JwpParagraph{}};
+  const QString source_path = directory + QStringLiteral("/automatic.jwp");
+  jwpqt::qt::write_jwp_file(source_path, source);
+
+  jwpqt::qt::MainWindow window;
+  require(window.load_wnn_resources(fixture.index_path, fixture.data_path,
+                                    fixture.preferences_path) &&
+              window.open_jwp_path(source_path),
+          "Could not prepare automatic WNN fixture");
+  QPlainTextEdit* editor = window.findChild<QPlainTextEdit*>();
+  QAction* kana = find_action(window, "kanaInputAction");
+  QAction* undo = find_action(window, "undoAction");
+  require(editor != nullptr && kana != nullptr && undo != nullptr,
+          "Automatic WNN controls were not created");
+  kana->trigger();
+  window.show();
+  editor->setFocus();
+  QApplication::processEvents();
+
+  send_text_key(editor, Qt::Key_K, QStringLiteral("K"), Qt::ShiftModifier);
+  send_text_key(editor, Qt::Key_A, QStringLiteral("a"));
+  require(!window.conversion_active() &&
+              window.current_jwp_document()->paragraphs[0].text ==
+                  jwpqt::core::JwpText{0x242b} &&
+              editor->extraSelections().size() == 1,
+          "Extendable automatic WNN key did not remain pending");
+
+  send_text_key(editor, Qt::Key_K, QStringLiteral("k"));
+  send_text_key(editor, Qt::Key_I, QStringLiteral("i"));
+  require(window.conversion_active() && editor->isReadOnly() &&
+              window.current_jwp_document()->paragraphs[0].text ==
+                  jwpqt::core::JwpText{0x3023},
+          "Terminal automatic WNN key did not display its candidate");
+  send_text_key(editor, Qt::Key_Escape, QString());
+  require(!window.conversion_active() && !editor->isReadOnly() &&
+              editor->extraSelections().empty(),
+          "Escape did not accept automatic WNN conversion");
+  undo->trigger();
+  require(window.current_jwp_document()->paragraphs[0].text ==
+              jwpqt::core::JwpText({0x242b, 0x242d}),
+          "Automatic conversion undo did not restore composed kana");
+
+  jwpqt::qt::MainWindow backed_off;
+  require(backed_off.load_wnn_resources(
+              fixture.index_path, fixture.data_path,
+              directory + QStringLiteral("/automatic-backoff.sel")) &&
+              backed_off.open_jwp_path(source_path),
+          "Could not prepare automatic WNN backoff fixture");
+  QPlainTextEdit* backoff_editor =
+      backed_off.findChild<QPlainTextEdit*>();
+  QAction* backoff_kana = find_action(backed_off, "kanaInputAction");
+  QAction* backoff_undo = find_action(backed_off, "undoAction");
+  require(backoff_editor != nullptr && backoff_kana != nullptr &&
+              backoff_undo != nullptr,
+          "Automatic WNN backoff controls were not created");
+  backoff_kana->trigger();
+  backed_off.show();
+  backoff_editor->setFocus();
+  QApplication::processEvents();
+  send_text_key(backoff_editor, Qt::Key_K, QStringLiteral("K"),
+                Qt::ShiftModifier);
+  send_text_key(backoff_editor, Qt::Key_A, QStringLiteral("a"));
+  send_text_key(backoff_editor, Qt::Key_K, QStringLiteral("k"));
+  send_text_key(backoff_editor, Qt::Key_U, QStringLiteral("u"));
+  require(backed_off.conversion_active() && backoff_editor->isReadOnly() &&
+              !backoff_editor->textCursor().hasSelection() &&
+              backoff_editor->textCursor().position() == 2 &&
+              backoff_editor->extraSelections().size() == 1 &&
+              backed_off.current_jwp_document()->paragraphs[0].text ==
+                  jwpqt::core::JwpText({0x3021, 0x242f}),
+          "Automatic WNN backoff did not preserve its suffix and caret");
+  send_text_key(backoff_editor, Qt::Key_Space, QStringLiteral(" "));
+  require(backed_off.current_jwp_document()->paragraphs[0].text ==
+                  jwpqt::core::JwpText({0x3022, 0x242f}) &&
+              backoff_editor->textCursor().position() == 2,
+          "Automatic WNN cycling did not preserve the unmatched suffix");
+  send_text_key(backoff_editor, Qt::Key_Escape, QString());
+  backoff_undo->trigger();
+  require(backed_off.current_jwp_document()->paragraphs[0].text ==
+                  jwpqt::core::JwpText({0x242b, 0x242f}),
+          "Automatic WNN backoff undo did not restore the full kana input");
+
+  jwpqt::qt::MainWindow externally_edited;
+  require(externally_edited.open_jwp_path(
+              source_path, jwpqt::core::LegacyCodePage::k1252,
+              jwpqt::qt::OpenMode::kNonInteractive) &&
+              externally_edited.load_wnn_resources(
+                  fixture.index_path, fixture.data_path,
+                  fixture.preferences_path,
+                  jwpqt::qt::OpenMode::kNonInteractive),
+          "Could not prepare external-edit automatic WNN test");
+  QPlainTextEdit* external_editor =
+      externally_edited.findChild<QPlainTextEdit*>();
+  QAction* external_kana =
+      externally_edited.findChild<QAction*>(QStringLiteral("kanaInputAction"));
+  require(external_editor != nullptr && external_kana != nullptr,
+          "External-edit automatic WNN controls were not created");
+  externally_edited.show();
+  external_editor->setFocus();
+  QCoreApplication::processEvents();
+  external_kana->trigger();
+  send_text_key(external_editor, Qt::Key_K, QStringLiteral("K"));
+  send_text_key(external_editor, Qt::Key_A, QStringLiteral("a"));
+  require(external_editor->extraSelections().size() == 1,
+          "External-edit test did not create a waiting WNN range");
+
+  external_editor->insertPlainText(QStringLiteral("x"));
+  QCoreApplication::processEvents();
+  require(external_editor->extraSelections().empty() &&
+              !externally_edited.conversion_active() &&
+              externally_edited.current_jwp_document()->paragraphs[0].text ==
+                  jwpqt::core::JwpText({0x242b, 0x0078}),
+          "External document edit did not invalidate waiting WNN conversion");
+  require(externally_edited.save_path(directory + QStringLiteral("/external.jwp")) &&
+              externally_edited.current_jwp_document()->paragraphs[0].text ==
+                  jwpqt::core::JwpText({0x242b, 0x0078}),
+          "Saving after an external edit converted a stale WNN range");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -1072,6 +1243,7 @@ int main(int argc, char* argv[]) {
     test_jwp_wnn_conversion_boundaries(directory.path());
     test_jwp_wnn_preference_write_failure(directory.path());
     test_jwp_kana_input_mode(directory.path());
+    test_jwp_automatic_wnn_conversion(directory.path());
     std::cout << "All main window tests passed\n";
     return 0;
   } catch (const std::exception& error) {

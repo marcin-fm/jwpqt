@@ -43,10 +43,11 @@ conversion transactions. With `--wnn-data-dir`, the native JWP editor converts
 selected kana, cycles candidates with Space or Shift+Space, accepts with Enter
 or Escape, and stores learned choices under the XDG user-data directory. Its
 explicit Kana Input mode converts printable desktop romaji to recovered JWP
-hiragana and katakana while preserving portable document history. The portable
-core can wait for an extendable WNN key or select the longest valid prefix;
-connecting that policy to native Kana Input, lookup tools, custom
-layout/rendering, configuration, and printing remain in progress.
+hiragana and katakana while preserving portable document history. Kana Input
+tracks automatic conversion spans, waits for extendable WNN keys, applies
+terminal or longest-prefix candidates, and leaves unmatched suffixes at the
+caret. Lookup tools, custom layout/rendering, configuration, and printing remain
+in progress.
 
 JWPce/JWPxp copyright and licensing notices remain in `_cpright.txt`,
 `_readme.txt`, and `gnugpl.txt`.

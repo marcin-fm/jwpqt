@@ -79,14 +79,20 @@ legacy file structures.
     same-paragraph JWP selections, cycle candidates with Space or Shift+Space,
     accept the displayed candidate with Enter or Escape, and atomically persist
     learned preferences under an explicit or XDG user-data path.
-27. The native JWP editor exposes an explicit Kana Input mode that sends
+27. `733d955` makes the native JWP editor expose an explicit Kana Input mode
+    that sends
     printable desktop romaji through the portable composer, inserts recovered
     hiragana and katakana tokens through synchronized document history, and
     resolves or discards pending composition at command and document boundaries.
-28. The portable WNN session reproduces automatic conversion policy: wait while
+28. `580ad62` makes the portable WNN session reproduce automatic conversion
+    policy: wait while
     a complete key can grow, convert a terminal complete key, or back off to the
     longest valid prefix. Prepared prefix transactions retain a caret after the
     unconverted suffix while candidate lengths change.
+29. The native Kana Input adapter tracks recoverable conversion spans without
+    hijacking the real text selection, waits for extendable WNN keys, applies
+    terminal or longest-prefix candidates, preserves unmatched suffixes and
+    caret placement, and invalidates stale spans on external edits.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -95,11 +101,10 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Connect the portable automatic WNN policy to native Kana Input spans.
-2. Replace `QPlainTextEdit` scaffolding with a custom Qt editor surface once the
-   paragraph model can drive wrapping, selection, conversion spans, and kanji
-   coloring.
-3. Port lookup tools, configuration, and printing as separate vertical slices.
+1. Replace `QPlainTextEdit` scaffolding with a custom Qt editor surface once the
+    paragraph model can drive wrapping, selection, conversion spans, and kanji
+    coloring.
+2. Port lookup tools, configuration, and printing as separate vertical slices.
 
 Each slice is committed independently after focused tests and the complete
 CTest suite pass.

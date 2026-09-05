@@ -113,6 +113,9 @@ class MainWindow : public QMainWindow {
       const std::vector<core::KanaInputEvent>& events);
   void finish_kana_input();
   void reset_kana_input(bool disable_mode);
+  bool attempt_automatic_conversion(bool force);
+  void clear_automatic_conversion_range();
+  void show_automatic_conversion_range();
   void restore_jwp_conversion_state();
   void rollback_conversion_noexcept() noexcept;
   void save_wnn_preferences();
@@ -168,7 +171,9 @@ class MainWindow : public QMainWindow {
   std::unique_ptr<core::JwpConversionTransaction> jwp_conversion_;
   std::optional<core::WnnPreferences> conversion_preferences_before_;
   core::KanaInputComposer kana_input_;
+  std::optional<core::JwpRange> automatic_conversion_range_;
   bool kana_input_enabled_ = false;
+  bool applying_kana_input_ = false;
   QString search_text_;
   QString replacement_text_;
   core::JwpSearchOptions search_options_;

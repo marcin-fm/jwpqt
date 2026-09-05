@@ -30,6 +30,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QPalette>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QRadioButton>
@@ -38,6 +39,7 @@
 #include <QStatusBar>
 #include <QTextCursor>
 #include <QTextDocument>
+#include <QTextEdit>
 #include <QVBoxLayout>
 
 #include "file_io.h"
@@ -205,6 +207,11 @@ MainWindow::MainWindow(QWidget* parent)
         expected_jwp_caret_.reset();
       }
       jwp_caret_ = caret;
+      if (automatic_conversion_range_.has_value() &&
+          !applying_kana_input_ &&
+          caret != automatic_conversion_range_->end) {
+        clear_automatic_conversion_range();
+      }
     } catch (const std::exception&) {
       jwp_caret_.reset();
       expected_jwp_caret_.reset();
@@ -538,7 +545,10 @@ void MainWindow::set_kana_input_enabled(bool enabled) {
     enabled = false;
   }
   if (kana_input_enabled_ != enabled) {
-    kana_input_.discard();
+    if (!enabled) {
+      finish_kana_input();
+    }
+    reset_kana_input(false);
     kana_input_enabled_ = enabled;
   }
   if (kana_input_action_ != nullptr &&
@@ -560,29 +570,92 @@ void MainWindow::update_kana_input_state() {
 
 void MainWindow::apply_kana_input_events(
     const std::vector<core::KanaInputEvent>& events) {
-  core::JwpText text;
-  for (const core::KanaInputEvent& event : events) {
-    text.insert(text.end(), event.text.begin(), event.text.end());
+  if (events.empty() || !jwp_document_.has_value()) {
+    return;
   }
-  if (!text.empty()) {
+
+  const QScopedValueRollback<bool> applying(applying_kana_input_, true);
+  bool force_after_events = false;
+  for (const core::KanaInputEvent& event : events) {
+    if (event.text.empty()) {
+      continue;
+    }
+
+    if (event.kind == core::KanaInputKind::kKanaStart &&
+        automatic_conversion_range_.has_value()) {
+      if (attempt_automatic_conversion(true)) {
+        accept_conversion();
+      }
+      clear_automatic_conversion_range();
+    }
+
+    QTextCursor cursor = editor_->textCursor();
+    const QString before = editor_->toPlainText();
+    core::JwpPosition insertion_begin = core::jwp_plain_text_position(
+        *jwp_document_,
+        utf32_offset_for_utf16(before, cursor.selectionStart()));
+    bool extends_automatic =
+        automatic_conversion_range_.has_value() && !cursor.hasSelection() &&
+        insertion_begin == automatic_conversion_range_->end;
+    if (automatic_conversion_range_.has_value() && !extends_automatic) {
+      if (attempt_automatic_conversion(true)) {
+        accept_conversion();
+      }
+      clear_automatic_conversion_range();
+      cursor = editor_->textCursor();
+      const QString current = editor_->toPlainText();
+      insertion_begin = core::jwp_plain_text_position(
+          *jwp_document_,
+          utf32_offset_for_utf16(current, cursor.selectionStart()));
+      extends_automatic = false;
+    }
+
     editor_->insertPlainText(
-        to_qstring(core::decode_jwp_text(text, jwp_code_page_)));
+        to_qstring(core::decode_jwp_text(event.text, jwp_code_page_)));
+    if (!jwp_caret_.has_value() ||
+        jwp_caret_->paragraph != insertion_begin.paragraph ||
+        jwp_caret_->offset < insertion_begin.offset) {
+      throw core::JwpConversionError(
+          "kana input did not produce a valid document range");
+    }
+
+    if (event.kind == core::KanaInputKind::kKanaStart) {
+      automatic_conversion_range_ =
+          core::JwpRange{insertion_begin, *jwp_caret_};
+      force_after_events = false;
+    } else if (event.kind == core::KanaInputKind::kKanaContinue &&
+               extends_automatic) {
+      automatic_conversion_range_->end = *jwp_caret_;
+    } else if (event.kind == core::KanaInputKind::kText &&
+               extends_automatic) {
+      force_after_events = true;
+    }
+  }
+
+  if (automatic_conversion_range_.has_value()) {
+    attempt_automatic_conversion(force_after_events);
   }
 }
 
 void MainWindow::finish_kana_input() {
-  if (!kana_input_.pending()) {
-    return;
+  if (kana_input_.pending()) {
+    try {
+      apply_kana_input_events(kana_input_.flush());
+    } catch (const core::KanaInputError&) {
+      kana_input_.discard();
+    }
   }
-  try {
-    apply_kana_input_events(kana_input_.flush());
-  } catch (const core::KanaInputError&) {
-    kana_input_.discard();
+  if (automatic_conversion_range_.has_value()) {
+    attempt_automatic_conversion(true);
+  }
+  if (conversion_active()) {
+    accept_conversion();
   }
 }
 
 void MainWindow::reset_kana_input(bool disable_mode) {
   kana_input_.discard();
+  clear_automatic_conversion_range();
   if (disable_mode) {
     kana_input_enabled_ = false;
     if (kana_input_action_ != nullptr) {
@@ -593,10 +666,145 @@ void MainWindow::reset_kana_input(bool disable_mode) {
   update_kana_input_state();
 }
 
+bool MainWindow::attempt_automatic_conversion(bool force) {
+  if (!automatic_conversion_range_.has_value()) {
+    return false;
+  }
+  if (!jwp_document_.has_value() || wnn_resources_ == nullptr) {
+    clear_automatic_conversion_range();
+    return false;
+  }
+
+  try {
+    const core::JwpRange pending_range = *automatic_conversion_range_;
+    if (pending_range.begin.paragraph != pending_range.end.paragraph ||
+        pending_range.begin.paragraph >=
+            jwp_document_->document().paragraphs.size()) {
+      throw core::JwpConversionError(
+          "automatic conversion range is invalid");
+    }
+    const core::JwpText& paragraph =
+        jwp_document_->document()
+            .paragraphs[pending_range.begin.paragraph]
+            .text;
+    if (pending_range.begin.offset > pending_range.end.offset ||
+        pending_range.end.offset > paragraph.size()) {
+      throw core::JwpConversionError(
+          "automatic conversion range is out of bounds");
+    }
+    const core::JwpText input(
+        paragraph.begin() + pending_range.begin.offset,
+        paragraph.begin() + pending_range.end.offset);
+    core::WnnAutomaticPreparation automatic =
+        wnn_resources_->session.prepare_automatic(input);
+    if (automatic.wait_for_more && !force) {
+      show_automatic_conversion_range();
+      statusBar()->showMessage(tr("Waiting for more kana"));
+      return false;
+    }
+
+    std::size_t matched_length = automatic.matched_length;
+    std::optional<core::WnnPreparedConversion> prepared;
+    if (automatic.conversion.has_value()) {
+      prepared.emplace(std::move(*automatic.conversion));
+    } else if (automatic.wait_for_more && force) {
+      const std::size_t maximum =
+          std::min(input.size(), core::kWnnMaximumKeySize);
+      for (std::size_t length = maximum; length > 0; --length) {
+        core::JwpText prefix(input.begin(), input.begin() + length);
+        prepared = wnn_resources_->session.prepare(prefix);
+        if (prepared.has_value()) {
+          matched_length = length;
+          break;
+        }
+      }
+    }
+    if (!prepared.has_value()) {
+      clear_automatic_conversion_range();
+      return false;
+    }
+    if (matched_length == 0 ||
+        matched_length > pending_range.end.offset - pending_range.begin.offset) {
+      throw core::JwpConversionError(
+          "automatic conversion produced an invalid prefix length");
+    }
+
+    const core::JwpRange conversion_range{
+        pending_range.begin,
+        {pending_range.begin.paragraph,
+         pending_range.begin.offset + matched_length}};
+    core::JwpPosition caret = jwp_caret_.value_or(pending_range.end);
+    if (caret.paragraph != conversion_range.begin.paragraph ||
+        caret.offset < conversion_range.end.offset) {
+      caret = conversion_range.end;
+    }
+
+    auto transaction = std::make_unique<core::JwpConversionTransaction>(
+        *jwp_document_, jwp_history_, wnn_resources_->session);
+    conversion_preferences_before_ = wnn_resources_->preferences;
+    transaction->begin_prepared(conversion_range, caret,
+                                std::move(*prepared));
+    clear_automatic_conversion_range();
+    jwp_conversion_ = std::move(transaction);
+    editor_->setReadOnly(true);
+    restore_jwp_conversion_state();
+    return true;
+  } catch (const std::exception& error) {
+    if (conversion_active()) {
+      rollback_conversion_noexcept();
+    } else {
+      conversion_preferences_before_.reset();
+    }
+    clear_automatic_conversion_range();
+    statusBar()->showMessage(
+        tr("Could not convert kana: %1")
+            .arg(QString::fromUtf8(error.what())),
+        5000);
+    return false;
+  }
+}
+
+void MainWindow::clear_automatic_conversion_range() {
+  automatic_conversion_range_.reset();
+  if (!conversion_active()) {
+    editor_->setExtraSelections({});
+  }
+}
+
+void MainWindow::show_automatic_conversion_range() {
+  if (!automatic_conversion_range_.has_value() ||
+      !jwp_document_.has_value()) {
+    editor_->setExtraSelections({});
+    return;
+  }
+  const std::u32string text =
+      core::decode_jwp_plain_text(*jwp_document_, jwp_code_page_);
+  const core::JwpRange range = *automatic_conversion_range_;
+  QTextCursor cursor(editor_->document());
+  cursor.setPosition(utf16_offset_for_utf32(
+      text, core::jwp_plain_text_offset(*jwp_document_, range.begin)));
+  cursor.setPosition(utf16_offset_for_utf32(
+                         text, core::jwp_plain_text_offset(*jwp_document_,
+                                                          range.end)),
+                     QTextCursor::KeepAnchor);
+  QTextEdit::ExtraSelection selection;
+  selection.cursor = cursor;
+  QColor highlight = editor_->palette().color(QPalette::Highlight);
+  highlight.setAlpha(80);
+  selection.format.setBackground(highlight);
+  editor_->setExtraSelections({selection});
+}
+
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
-  if (watched != editor_ || event->type() != QEvent::KeyPress ||
-      !kana_input_enabled_ || !jwp_document_.has_value() ||
-      conversion_active()) {
+  if (watched != editor_ || !kana_input_enabled_ ||
+      !jwp_document_.has_value() || conversion_active()) {
+    return QMainWindow::eventFilter(watched, event);
+  }
+  if (event->type() == QEvent::MouseButtonPress) {
+    finish_kana_input();
+    return QMainWindow::eventFilter(watched, event);
+  }
+  if (event->type() != QEvent::KeyPress) {
     return QMainWindow::eventFilter(watched, event);
   }
 
@@ -636,6 +844,13 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
       key_event->key() != Qt::Key_Meta &&
       key_event->key() != Qt::Key_CapsLock) {
     finish_kana_input();
+  } else if (automatic_conversion_range_.has_value() &&
+             key_event->key() != Qt::Key_Shift &&
+             key_event->key() != Qt::Key_Control &&
+             key_event->key() != Qt::Key_Alt &&
+             key_event->key() != Qt::Key_Meta &&
+             key_event->key() != Qt::Key_CapsLock) {
+    finish_kana_input();
   }
   return QMainWindow::eventFilter(watched, event);
 }
@@ -652,6 +867,7 @@ bool MainWindow::load_wnn_resources(const QString& index_path,
     }
     return false;
   }
+  finish_kana_input();
   try {
     core::WnnDictionary dictionary = core::WnnDictionary::parse(
         read_file_bytes(index_path), read_file_bytes(data_path));
@@ -755,6 +971,7 @@ bool MainWindow::accept_conversion() {
     jwp_conversion_->accept();
     jwp_conversion_.reset();
     conversion_preferences_before_.reset();
+    editor_->setExtraSelections({});
     editor_->setReadOnly(false);
     restore_jwp_history_state(caret);
     try {
@@ -794,12 +1011,27 @@ void MainWindow::restore_jwp_conversion_state() {
   updating_editor_ = true;
   editor_->setPlainText(to_qstring(text));
   QTextCursor cursor = editor_->textCursor();
+  editor_->setExtraSelections({});
   if (caret == range.begin) {
     cursor.setPosition(end);
     cursor.setPosition(begin, QTextCursor::KeepAnchor);
-  } else {
+  } else if (caret == range.end) {
     cursor.setPosition(begin);
     cursor.setPosition(end, QTextCursor::KeepAnchor);
+  } else {
+    const int caret_offset = utf16_offset_for_utf32(
+        text, core::jwp_plain_text_offset(*jwp_document_, caret));
+    cursor.setPosition(caret_offset);
+    QTextEdit::ExtraSelection selection;
+    QTextCursor selected(editor_->document());
+    selected.setPosition(begin);
+    selected.setPosition(end, QTextCursor::KeepAnchor);
+    selection.cursor = selected;
+    selection.format.setBackground(
+        editor_->palette().brush(QPalette::Highlight));
+    selection.format.setForeground(
+        editor_->palette().brush(QPalette::HighlightedText));
+    editor_->setExtraSelections({selection});
   }
   editor_->setTextCursor(cursor);
   updating_editor_ = false;
@@ -836,6 +1068,7 @@ void MainWindow::rollback_conversion_noexcept() noexcept {
     conversion_preferences_before_.reset();
   }
   editor_->setReadOnly(false);
+  editor_->setExtraSelections({});
   if (caret.has_value() && jwp_document_.has_value()) {
     try {
       restore_jwp_history_state(*caret);
@@ -1662,9 +1895,13 @@ std::size_t MainWindow::replace_all(const QString& text,
 }
 
 void MainWindow::synchronize_jwp_document(int position, int chars_removed,
-                                          int chars_added) {
+                                           int chars_added) {
   if (updating_editor_ || !jwp_document_.has_value()) {
     return;
+  }
+
+  if (automatic_conversion_range_.has_value() && !applying_kana_input_) {
+    clear_automatic_conversion_range();
   }
 
   const int cursor_position = editor_->textCursor().position();
