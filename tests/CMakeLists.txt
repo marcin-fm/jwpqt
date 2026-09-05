@@ -240,6 +240,15 @@ target_link_libraries(jwpqt_kanji_code_search_tests PRIVATE jwpqt_core)
 target_compile_options(jwpqt_kanji_code_search_tests
   PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME core_kanji_code_search COMMAND jwpqt_kanji_code_search_tests)
+
+add_executable(jwpqt_kanji_reading_search_tests
+  kanji_reading_search_test.cpp
+)
+target_link_libraries(jwpqt_kanji_reading_search_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_kanji_reading_search_tests
+  PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME core_kanji_reading_search
+  COMMAND jwpqt_kanji_reading_search_tests)
 add_executable(jwpqt_kanji_color_list_tests
   kanji_color_list_test.cpp
 )
