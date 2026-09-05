@@ -77,6 +77,21 @@ std::uint16_t euc_runtime_token(std::string_view source, std::size_t offset,
   if (source.size() - offset < 2) {
     throw EdictIndexError("EDICT index EUC-JP character is truncated");
   }
+  if (first == 0x8fU) {
+    if (source.size() - offset < 3) {
+      throw EdictIndexError(
+          "EDICT index JIS X 0212 character is truncated");
+    }
+    const std::optional<std::uint8_t> mapped = edict_euc_0212_byte(
+        static_cast<std::uint8_t>(source[offset + 1]),
+        static_cast<std::uint8_t>(source[offset + 2]));
+    if (!mapped.has_value()) {
+      throw EdictIndexError(
+          "EDICT index JIS X 0212 character is outside the recovered subset");
+    }
+    width = 3;
+    return *mapped;
+  }
   width = 2;
   const auto second = static_cast<unsigned char>(source[offset + 1]);
   const auto pair = static_cast<std::uint16_t>(
@@ -158,6 +173,11 @@ bool EdictIndexEntry::operator==(const EdictIndexEntry& other) const noexcept {
          record_index == other.record_index;
 }
 
+bool EdictIndexMatch::operator==(const EdictIndexMatch& other) const noexcept {
+  return byte_offset == other.byte_offset && byte_length == other.byte_length &&
+         record_index == other.record_index;
+}
+
 EdictIndex EdictIndex::parse(std::string_view bytes,
                              const EdictDictionary& dictionary,
                              const EdictIndexOptions& options) {
@@ -231,13 +251,18 @@ std::uint32_t EdictIndex::source_extent() const noexcept {
   return source_extent_;
 }
 
+std::string_view EdictIndex::source_bytes() const noexcept {
+  return source_bytes_;
+}
+
 const std::vector<EdictIndexEntry>& EdictIndex::entries() const noexcept {
   return entries_;
 }
 
 int EdictIndex::compare_with_key(std::size_t byte_offset,
                                  const JwpText& normalized_key,
-                                 std::size_t& steps) const {
+                                 std::size_t& steps,
+                                 std::size_t* matched_bytes) const {
   std::size_t source_offset = byte_offset;
   for (const std::uint16_t expected : normalized_key) {
     if (steps >= lookup_steps_) {
@@ -256,23 +281,40 @@ int EdictIndex::compare_with_key(std::size_t byte_offset,
     }
     source_offset += width;
   }
+  if (matched_bytes != nullptr) {
+    *matched_bytes = source_offset - byte_offset;
+  }
   return 0;
 }
 
-std::vector<EdictIndexEntry> EdictIndex::find(const JwpText& key) const {
+std::vector<EdictIndexMatch> EdictIndex::find_matches(
+    const JwpText& key) const {
   const JwpText normalized_key = normalize_key(key);
-  std::vector<EdictIndexEntry> matches;
+  std::vector<EdictIndexMatch> matches;
   std::size_t steps = 0;
   for (const EdictIndexEntry& entry : entries_) {
-    if (compare_with_key(entry.byte_offset, normalized_key, steps) != 0) {
+    std::size_t byte_length = 0;
+    if (compare_with_key(entry.byte_offset, normalized_key, steps,
+                         &byte_length) != 0) {
       continue;
     }
     if (matches.size() >= matches_) {
       throw EdictIndexError("EDICT index lookup exceeds its result limit");
     }
-    matches.push_back(entry);
+    matches.push_back(
+        {entry.byte_offset, byte_length, entry.record_index});
   }
   return matches;
+}
+
+std::vector<EdictIndexEntry> EdictIndex::find(const JwpText& key) const {
+  const std::vector<EdictIndexMatch> matches = find_matches(key);
+  std::vector<EdictIndexEntry> entries;
+  entries.reserve(matches.size());
+  for (const EdictIndexMatch& match : matches) {
+    entries.push_back({match.byte_offset, match.record_index});
+  }
+  return entries;
 }
 
 }  // namespace jwpqt::core

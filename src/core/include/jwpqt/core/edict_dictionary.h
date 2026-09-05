@@ -4,12 +4,16 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace jwpqt::core {
+
+std::optional<std::uint8_t> edict_euc_0212_byte(
+    std::uint8_t first, std::uint8_t second) noexcept;
 
 enum class EdictEncoding {
   kEucJp,

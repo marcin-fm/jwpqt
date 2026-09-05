@@ -203,6 +203,12 @@ legacy file structures.
     correctness never depends on trusting attacker-controlled physical sort
     order. Both the recovered source-size header and official size-plus-15
     header variant are accepted, and a four-byte header-only index is valid.
+54. Portable direct EDICT search bounds input to the recovered 100-token limit,
+    rejects short ASCII and mixed ASCII/Japanese keys, normalizes ASCII case and
+    katakana, and carries exact matched source-byte spans from JDX lookup. It
+    reproduces normal and Full ASCII plus Japanese beginning/end boundaries,
+    handles the recovered three-byte JIS X 0212 subset, preserves repeated
+    indexed occurrences, and rejects an index bound to different source bytes.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -211,9 +217,9 @@ requires a separate fixture-backed change rather than silent substitution.
 
 ## Next slices
 
-1. Port EDICT query boundary/filter/deinflection semantics over the completed
-   record and JDX codecs, then add separate resource and native result-view
-   slices.
+1. Port EDICT name/place tag filtering and adaptive deinflection over the
+   completed direct-search boundary, then add separate resource and native
+   result-view slices.
 2. Port paged printing and clipboard color policy over the rich JWP document
    layout.
 3. Port configuration, remaining import/export paths, and help.

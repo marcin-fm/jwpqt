@@ -35,6 +35,14 @@ struct EdictIndexEntry {
   bool operator==(const EdictIndexEntry& other) const noexcept;
 };
 
+struct EdictIndexMatch {
+  std::size_t byte_offset = 0;
+  std::size_t byte_length = 0;
+  std::size_t record_index = 0;
+
+  bool operator==(const EdictIndexMatch& other) const noexcept;
+};
+
 class EdictIndex {
  public:
   static EdictIndex parse(
@@ -43,13 +51,16 @@ class EdictIndex {
 
   std::string serialize() const;
   std::uint32_t source_extent() const noexcept;
+  std::string_view source_bytes() const noexcept;
   const std::vector<EdictIndexEntry>& entries() const noexcept;
+  std::vector<EdictIndexMatch> find_matches(const JwpText& key) const;
   std::vector<EdictIndexEntry> find(const JwpText& key) const;
 
  private:
   int compare_with_key(std::size_t byte_offset,
                        const JwpText& normalized_key,
-                       std::size_t& steps) const;
+                       std::size_t& steps,
+                       std::size_t* matched_bytes) const;
 
   EdictEncoding encoding_ = EdictEncoding::kEucJp;
   LegacyCodePage utf8_code_page_ = LegacyCodePage::k1252;

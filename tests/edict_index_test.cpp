@@ -202,6 +202,19 @@ void test_malformed_indexes() {
                  "Empty JDX query was accepted");
 }
 
+void test_euc_jis_x0212_match_span() {
+  using namespace jwpqt::core;
+  const std::string source = "\x8f\xa2\xed /copyright/\n";
+  const EdictDictionary dictionary =
+      EdictDictionary::parse(source, EdictEncoding::kEucJp);
+  const EdictIndex index = EdictIndex::parse(
+      index_bytes(static_cast<std::uint32_t>(source.size()), {1}),
+      dictionary);
+  require(index.find_matches({0xa9}) ==
+              std::vector<EdictIndexMatch>{{0, 3, 0}},
+          "JDX lookup did not map an EUC JIS X 0212 character or span");
+}
+
 }  // namespace
 
 int main() {
@@ -209,5 +222,6 @@ int main() {
   test_kana_normalization();
   test_utf8_index();
   test_malformed_indexes();
+  test_euc_jis_x0212_match_span();
   return 0;
 }

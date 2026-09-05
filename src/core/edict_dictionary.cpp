@@ -342,6 +342,11 @@ EdictRecord parse_record(std::string_view bytes, EdictEncoding encoding,
 
 }  // namespace
 
+std::optional<std::uint8_t> edict_euc_0212_byte(
+    std::uint8_t first, std::uint8_t second) noexcept {
+  return jwp_euc_0212_byte(first, second);
+}
+
 bool EdictRecord::operator==(const EdictRecord& other) const noexcept {
   return byte_offset == other.byte_offset && byte_length == other.byte_length &&
          headword == other.headword && readings == other.readings &&
