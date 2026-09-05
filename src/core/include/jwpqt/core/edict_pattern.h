@@ -18,6 +18,11 @@ enum class EdictSearchPlanKind {
   kPattern,
 };
 
+enum class EdictContingentMode {
+  kOpen,
+  kLimited,
+};
+
 struct EdictPatternOptions {
   bool jascii_to_ascii = false;
 };
@@ -37,5 +42,7 @@ struct EdictSearchPlan {
 EdictSearchPlan prepare_edict_search_plan(
     const JwpText& input,
     const EdictPatternOptions& options = EdictPatternOptions{});
+EdictSearchPlan prepare_edict_contingent_plan(
+    const EdictQuery& query, EdictContingentMode mode);
 
 }  // namespace jwpqt::core

@@ -157,6 +157,108 @@ void test_query_length_bound() {
           "Pattern preprocessing did not preserve the search-box bound");
 }
 
+void test_contingent_kanji_plans() {
+  using namespace jwpqt::core;
+  const EdictQuery query = prepare_edict_query({0x2522, 0x3021, 0x2424});
+  const EdictSearchPlan open =
+      prepare_edict_contingent_plan(query, EdictContingentMode::kOpen);
+  require(open.kind == EdictSearchPlanKind::kPattern &&
+              open.prefix == JwpText({'*', 0x2422}) &&
+              open.anchor.key == JwpText({0x3021, 0x2424}) &&
+              open.postfix == JwpText({'*'}) &&
+              !open.adaptive_disabled && !open.input_truncated,
+          "Open contingent plan did not wrap and normalize the query");
+
+  const EdictSearchPlan limited =
+      prepare_edict_contingent_plan(query, EdictContingentMode::kLimited);
+  require(limited.prefix == JwpText({'[', 0x2422}) &&
+              limited.anchor.key == open.anchor.key &&
+              limited.anchor.kind == open.anchor.kind &&
+              limited.postfix == open.postfix,
+          "Limited contingent plan did not preserve its left boundary");
+
+  EdictSearchPlan owned;
+  {
+    const EdictQuery temporary = prepare_edict_query({0x3021, 0x2422});
+    owned =
+        prepare_edict_contingent_plan(temporary, EdictContingentMode::kOpen);
+  }
+  require(owned.prefix == JwpText({'*'}) &&
+              owned.anchor.key == JwpText({0x3021, 0x2422}) &&
+              owned.postfix == JwpText({'*'}),
+          "Contingent plan borrowed its source query");
+}
+
+void test_contingent_plan_validation() {
+  using namespace jwpqt::core;
+  JwpText maximum(98, 0x2422);
+  maximum[40] = 0x3021;
+  const EdictSearchPlan accepted = prepare_edict_contingent_plan(
+      prepare_edict_query(maximum), EdictContingentMode::kOpen);
+  require(accepted.prefix.size() + accepted.anchor.key.size() +
+                  accepted.postfix.size() ==
+              100 &&
+              !accepted.input_truncated,
+          "Maximum contingent query did not fit the legacy buffer");
+
+  JwpText too_long(99, 0x2422);
+  too_long[40] = 0x3021;
+  require_throws(
+      [&too_long] {
+        prepare_edict_contingent_plan(
+            prepare_edict_query(too_long), EdictContingentMode::kOpen);
+      },
+      "Oversized contingent query was accepted");
+  JwpText truncated(101, 0x2422);
+  truncated[40] = 0x3021;
+  require_throws(
+      [&truncated] {
+        prepare_edict_contingent_plan(
+            prepare_edict_query(truncated), EdictContingentMode::kOpen);
+      },
+      "Truncated contingent query was accepted");
+  require_throws(
+      [] {
+        prepare_edict_contingent_plan(prepare_edict_query({0x3021}),
+                                      EdictContingentMode::kOpen);
+      },
+      "Single-character contingent query was accepted");
+  require_throws(
+      [] {
+        prepare_edict_contingent_plan(prepare_edict_query({0x2422, 0x2424}),
+                                      EdictContingentMode::kOpen);
+      },
+      "Kanji-free contingent query was accepted");
+  require_throws(
+      [] {
+        prepare_edict_contingent_plan(
+            prepare_edict_query({'c', 'a', 't'}),
+            EdictContingentMode::kOpen);
+      },
+      "ASCII contingent query was accepted");
+  require_throws(
+      [] {
+        prepare_edict_contingent_plan(
+            EdictQuery{{0x3021, '*'}, EdictQueryKind::kJapanese},
+            EdictContingentMode::kOpen);
+      },
+      "Pattern-bearing contingent query was accepted");
+  require_throws(
+      [] {
+        prepare_edict_contingent_plan(
+            prepare_edict_query({0x3021, 0x2176}),
+            EdictContingentMode::kOpen);
+      },
+      "Fullwidth pattern-bearing contingent query was accepted");
+  require_throws(
+      [] {
+        prepare_edict_contingent_plan(
+            prepare_edict_query({0x3021, 0x2422}),
+            static_cast<EdictContingentMode>(99));
+      },
+      "Invalid contingent mode was accepted");
+}
+
 }  // namespace
 
 int main() {
@@ -165,4 +267,6 @@ int main() {
   test_fixed_prefix_and_japanese_patterns();
   test_trailing_star_and_invalid_patterns();
   test_query_length_bound();
+  test_contingent_kanji_plans();
+  test_contingent_plan_validation();
 }

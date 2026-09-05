@@ -248,6 +248,11 @@ legacy file structures.
     names before per-query and global accepted-result limits. UTF extension-page
     interpretation comes from the source-bound index rather than mutable caller
     state.
+61. Portable kanji contingent planning validates the recovered caller
+    preconditions and transforms an eligible query into either `*<query>*` or
+    `[<query>*`. It reproduces the first-kanji anchor split while rejecting
+    truncated, oversized, non-Japanese, kanji-free, and pattern-bearing inputs
+    before wildcard execution.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and

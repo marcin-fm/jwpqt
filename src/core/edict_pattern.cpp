@@ -33,6 +33,12 @@ bool is_pattern(std::uint16_t token) noexcept {
          token == '#';
 }
 
+bool is_fullwidth_pattern(std::uint16_t token) noexcept {
+  return token == kJisLeftBracket || token == kJisRightBracket ||
+         token == kJisNumberSign || token == kJisAsterisk ||
+         token == kJisQuestion;
+}
+
 bool is_version_id(const JwpText& input) noexcept {
   return input.size() == 4 &&
          std::all_of(input.begin(), input.end(), [](std::uint16_t token) {
@@ -179,6 +185,55 @@ EdictSearchPlan prepare_edict_search_plan(
   plan.force_closed_boundaries =
       normalized.size() == 1 && is_kana(normalized.front());
   return plan;
+}
+
+EdictSearchPlan prepare_edict_contingent_plan(
+    const EdictQuery& query, EdictContingentMode mode) {
+  if (query.truncated) {
+    throw EdictPatternError("EDICT contingent search input was truncated");
+  }
+  if (query.key.size() < 2) {
+    throw EdictPatternError(
+        "EDICT contingent search requires at least two characters");
+  }
+  if (query.key.size() > kMaximumQueryLength - 2) {
+    throw EdictPatternError("EDICT contingent search is too long");
+  }
+
+  const EdictQuery validated = prepare_edict_query(query.key);
+  if (validated.kind != EdictQueryKind::kJapanese) {
+    throw EdictPatternError("EDICT contingent search requires Japanese text");
+  }
+  const bool has_kanji =
+      std::any_of(query.key.begin(), query.key.end(), is_kanji);
+  const bool has_pattern =
+      std::any_of(query.key.begin(), query.key.end(), [](std::uint16_t token) {
+        return is_pattern(token) || is_fullwidth_pattern(token);
+      });
+  if (!has_kanji) {
+    throw EdictPatternError(
+        "EDICT contingent pattern requires a kanji anchor");
+  }
+  if (has_pattern) {
+    throw EdictPatternError(
+        "EDICT contingent search does not accept pattern syntax");
+  }
+
+  JwpText pattern;
+  pattern.reserve(query.key.size() + 2);
+  switch (mode) {
+    case EdictContingentMode::kOpen:
+      pattern.push_back('*');
+      break;
+    case EdictContingentMode::kLimited:
+      pattern.push_back('[');
+      break;
+    default:
+      throw EdictPatternError("EDICT contingent mode is invalid");
+  }
+  pattern.insert(pattern.end(), query.key.begin(), query.key.end());
+  pattern.push_back('*');
+  return prepare_edict_search_plan(pattern);
 }
 
 }  // namespace jwpqt::core
