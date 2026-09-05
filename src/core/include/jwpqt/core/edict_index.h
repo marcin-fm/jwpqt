@@ -50,6 +50,12 @@ struct EdictIndexLookup {
 
 class EdictIndex {
  public:
+  EdictIndex() = default;
+  EdictIndex(const EdictIndex&) = default;
+  EdictIndex(EdictIndex&&) noexcept = default;
+  EdictIndex& operator=(const EdictIndex& other);
+  EdictIndex& operator=(EdictIndex&&) noexcept = default;
+
   static EdictIndex parse(
       std::string_view bytes, const EdictDictionary& dictionary,
       const EdictIndexOptions& options = EdictIndexOptions{});
@@ -66,11 +72,12 @@ class EdictIndex {
   std::vector<EdictIndexEntry> find(const JwpText& key) const;
 
  private:
-  int compare_with_key(std::size_t byte_offset,
+  int compare_with_key(std::size_t byte_offset, std::size_t record_end,
                        const JwpText& normalized_key,
                        std::size_t& steps,
                        std::size_t work_limit,
                        std::size_t* matched_bytes) const;
+  void swap(EdictIndex& other) noexcept;
 
   EdictEncoding encoding_ = EdictEncoding::kEucJp;
   LegacyCodePage utf8_code_page_ = LegacyCodePage::k1252;
@@ -79,6 +86,7 @@ class EdictIndex {
   std::size_t lookup_steps_ = 0;
   std::size_t matches_ = 0;
   std::vector<EdictIndexEntry> entries_;
+  std::vector<std::size_t> record_ends_;
 };
 
 }  // namespace jwpqt::core

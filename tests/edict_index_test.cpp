@@ -261,6 +261,58 @@ void test_euc_jis_x0212_match_span() {
           "JDX lookup did not map an EUC JIS X 0212 character or span");
 }
 
+void test_lookup_stops_at_record_boundaries() {
+  using namespace jwpqt::core;
+
+  const auto require_no_cross_record_match = [](const std::string& source,
+                                                 EdictEncoding encoding,
+                                                 std::size_t offset,
+                                                 const JwpText& query,
+                                                 const char* message) {
+    const EdictDictionary dictionary = EdictDictionary::parse(
+        source, encoding, EdictParseLimits{}, LegacyCodePage::k1251);
+    EdictIndexOptions options;
+    options.lookup_steps = query.size();
+    const EdictIndex index = EdictIndex::parse(
+        index_bytes(static_cast<std::uint32_t>(source.size()),
+                    {static_cast<std::uint32_t>(offset + 1)}),
+        dictionary, options);
+    const EdictIndexLookup lookup =
+        index.find_matches_bounded(query, query.size(), 1);
+    require(lookup.matches.empty() &&
+                lookup.work_steps == query.size() - 1,
+            message);
+    require_throws(
+        [&] {
+          (void)index.find_matches_bounded(query, query.size() - 2, 1);
+        },
+        "Record-boundary lookup did not charge its failed comparison");
+  };
+
+  const std::string ascii = "a /x/\nb /y/\n";
+  require_no_cross_record_match(ascii, EdictEncoding::kEucJp,
+                                ascii.find('x'), {'x', '/', '\n', 'b'},
+                                "ASCII JDX lookup crossed a record boundary");
+
+  const std::string euc = "a /\xa4\xa2/\n\xa4\xa4 /y/\n";
+  require_no_cross_record_match(
+      euc, EdictEncoding::kEucJp, euc.find("\xa4\xa2"),
+      {0x2422, '/', '\n', 0x2424},
+      "EUC JDX lookup crossed a record boundary");
+
+  const std::string utf8 = "a /\xe6\x97\xa5/\n\xe6\x9c\xac /y/\n";
+  require_no_cross_record_match(
+      utf8, EdictEncoding::kUtf8, utf8.find("\xe6\x97\xa5"),
+      {0x467c, '/', '\n', 0x4b5c},
+      "UTF-8 JDX lookup crossed a record boundary");
+
+  const std::string mixed = "a /\xc0\xc1/\nb /y/\n";
+  require_no_cross_record_match(
+      mixed, EdictEncoding::kMixed, mixed.find("\xc0\xc1"),
+      {0x4041, '/', '\n', 'b'},
+      "Mixed JDX lookup crossed a record boundary");
+}
+
 }  // namespace
 
 int main() {
@@ -270,5 +322,6 @@ int main() {
   test_mixed_index();
   test_malformed_indexes();
   test_euc_jis_x0212_match_span();
+  test_lookup_stops_at_record_boundaries();
   return 0;
 }

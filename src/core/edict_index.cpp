@@ -201,6 +201,26 @@ bool EdictIndexMatch::operator==(const EdictIndexMatch& other) const noexcept {
          record_index == other.record_index;
 }
 
+EdictIndex& EdictIndex::operator=(const EdictIndex& other) {
+  if (this != &other) {
+    EdictIndex copy(other);
+    swap(copy);
+  }
+  return *this;
+}
+
+void EdictIndex::swap(EdictIndex& other) noexcept {
+  using std::swap;
+  swap(encoding_, other.encoding_);
+  swap(utf8_code_page_, other.utf8_code_page_);
+  source_bytes_.swap(other.source_bytes_);
+  swap(source_extent_, other.source_extent_);
+  swap(lookup_steps_, other.lookup_steps_);
+  swap(matches_, other.matches_);
+  entries_.swap(other.entries_);
+  record_ends_.swap(other.record_ends_);
+}
+
 EdictIndex EdictIndex::parse(std::string_view bytes,
                              const EdictDictionary& dictionary,
                              const EdictIndexOptions& options) {
@@ -251,9 +271,11 @@ EdictIndex EdictIndex::parse(std::string_view bytes,
       throw EdictIndexError(
           "EDICT index offset is not at a dictionary character");
     }
-    result.entries_.push_back(
-        {byte_offset,
-         record_for_offset(dictionary.records(), byte_offset)});
+    const std::size_t record_index =
+        record_for_offset(dictionary.records(), byte_offset);
+    const EdictRecord& record = dictionary.records()[record_index];
+    result.entries_.push_back({byte_offset, record_index});
+    result.record_ends_.push_back(record.byte_offset + record.byte_length);
   }
   return result;
 }
@@ -287,6 +309,7 @@ const std::vector<EdictIndexEntry>& EdictIndex::entries() const noexcept {
 }
 
 int EdictIndex::compare_with_key(std::size_t byte_offset,
+                                 std::size_t record_end,
                                  const JwpText& normalized_key,
                                  std::size_t& steps,
                                  std::size_t work_limit,
@@ -297,13 +320,16 @@ int EdictIndex::compare_with_key(std::size_t byte_offset,
       throw EdictIndexError("EDICT index lookup exceeds its work limit");
     }
     ++steps;
-    if (source_offset >= source_bytes_.size()) {
+    if (source_offset >= record_end) {
       return -1;
     }
     std::size_t width = 0;
     const std::uint16_t actual = normalize_token(
         source_token(source_bytes_, encoding_, utf8_code_page_, source_offset,
                      width));
+    if (width > record_end - source_offset) {
+      return -1;
+    }
     if (actual != expected) {
       return actual < expected ? -1 : 1;
     }
@@ -327,11 +353,12 @@ EdictIndexLookup EdictIndex::find_matches_bounded(
   EdictIndexLookup lookup;
   const std::size_t work_limit = std::min(work_steps, lookup_steps_);
   const std::size_t result_limit = std::min(matches_limit, matches_);
-  for (const EdictIndexEntry& entry : entries_) {
+  for (std::size_t i = 0; i < entries_.size(); ++i) {
+    const EdictIndexEntry& entry = entries_[i];
     std::size_t byte_length = 0;
-    if (compare_with_key(entry.byte_offset, normalized_key, lookup.work_steps,
-                         work_limit,
-                         &byte_length) != 0) {
+    if (compare_with_key(entry.byte_offset, record_ends_[i], normalized_key,
+                          lookup.work_steps, work_limit,
+                          &byte_length) != 0) {
       continue;
     }
     if (lookup.matches.size() >= result_limit) {
