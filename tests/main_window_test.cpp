@@ -377,6 +377,55 @@ void test_explicit_open_and_encoding_action(const QString& directory) {
           "Old JIS action did not control saved bytes");
 }
 
+void test_local_file_lifecycle_actions(const QString& directory) {
+  const QString path = directory + QStringLiteral("/lifecycle.txt");
+  QFile disk(path);
+  require(disk.open(QIODevice::WriteOnly | QIODevice::Truncate) &&
+              disk.write("original") == 8,
+          "Could not create lifecycle fixture");
+  disk.close();
+
+  jwpqt::qt::MainWindow window;
+  require(window.open_path(path, jwpqt::core::TextEncoding::kUtf8,
+                           jwpqt::qt::OpenMode::kNonInteractive),
+          "Could not open lifecycle fixture");
+  QTextEdit* editor = window.findChild<QTextEdit*>();
+  QAction* revert = find_action(window, "revertDocumentAction");
+  QAction* close = find_action(window, "closeDocumentAction");
+  QAction* remove = find_action(window, "deleteDocumentAction");
+  require(editor != nullptr && revert != nullptr && close != nullptr &&
+              remove != nullptr && revert->isEnabled() && remove->isEnabled(),
+          "Local lifecycle actions were not created or enabled");
+
+  editor->selectAll();
+  editor->insertPlainText(QStringLiteral("changed"));
+  require(window.document_modified() &&
+              window.revert_current_document(
+                  jwpqt::qt::OpenMode::kNonInteractive) &&
+              editor->toPlainText() == QStringLiteral("original") &&
+              !window.document_modified() && window.current_path() == path,
+          "Revert did not restore the current file and clean state");
+
+  require(window.delete_current_document(
+              jwpqt::qt::OpenMode::kNonInteractive) &&
+              !QFile::exists(path) && window.current_path().isEmpty() &&
+              editor->toPlainText().isEmpty() && !revert->isEnabled() &&
+              !remove->isEnabled(),
+          "Delete did not remove the file and reset the document");
+
+  const QString close_path = directory + QStringLiteral("/close.txt");
+  QFile close_file(close_path);
+  require(close_file.open(QIODevice::WriteOnly) && close_file.write("close") == 5,
+          "Could not create close fixture");
+  close_file.close();
+  require(window.open_path(close_path, jwpqt::core::TextEncoding::kUtf8,
+                           jwpqt::qt::OpenMode::kNonInteractive),
+          "Could not reopen lifecycle fixture");
+  close->trigger();
+  require(window.current_path().isEmpty() && editor->toPlainText().isEmpty(),
+          "Close did not return to an unnamed document");
+}
+
 void test_leaving_utf8_drops_bom(const QString& directory) {
   const QString source_path = directory + QStringLiteral("/bom.txt");
   jwpqt::qt::write_text_file(
@@ -2899,6 +2948,7 @@ int main(int argc, char* argv[]) {
                             QStringLiteral("/jwpqt-window-test-XXXXXX"));
     require(directory.isValid(), "Could not create temporary test directory");
     test_explicit_open_and_encoding_action(directory.path());
+    test_local_file_lifecycle_actions(directory.path());
     test_leaving_utf8_drops_bom(directory.path());
     test_detected_open(directory.path());
     test_detected_bom_is_preserved(directory.path());

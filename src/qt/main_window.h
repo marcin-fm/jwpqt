@@ -103,6 +103,10 @@ class MainWindow : public QMainWindow {
   bool open_path_detected(const QString& path,
                           OpenMode mode = OpenMode::kInteractive);
   bool save_path(const QString& path);
+  bool revert_current_document(OpenMode mode = OpenMode::kInteractive);
+  bool delete_current_document(OpenMode mode = OpenMode::kInteractive);
+  QString current_path() const;
+  bool document_modified() const noexcept;
   bool load_wnn_resources(const QString& index_path,
                           const QString& data_path,
                           const QString& preferences_path,
@@ -186,6 +190,8 @@ class MainWindow : public QMainWindow {
       const core::JwpDocument& initial);
   virtual bool prompt_for_print(QPrinter& printer);
   virtual bool prompt_for_printer_setup(QPrinter& printer);
+  virtual bool prompt_to_revert(const QString& path);
+  virtual bool prompt_to_delete(const QString& path);
   virtual std::optional<core::KanjiColorPolicy>
   prompt_for_kanji_color_policy(const core::KanjiColorPolicy& initial);
   virtual std::optional<KanjiColorListEditRequest>
@@ -282,6 +288,8 @@ class MainWindow : public QMainWindow {
   QAction* redo_action_;
   QAction* print_action_ = nullptr;
   QAction* printer_setup_action_ = nullptr;
+  QAction* revert_action_ = nullptr;
+  QAction* delete_action_ = nullptr;
   QAction* convert_action_ = nullptr;
   QAction* previous_candidate_action_ = nullptr;
   QAction* next_candidate_action_ = nullptr;

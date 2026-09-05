@@ -22,6 +22,7 @@
 #include <QDoubleSpinBox>
 #include <QDir>
 #include <QEvent>
+#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFileInfo>
@@ -825,6 +826,18 @@ void MainWindow::create_actions() {
   connect(open_action, &QAction::triggered, this,
           [this] { open_document(); });
 
+  revert_action_ = file_menu->addAction(tr("&Revert"));
+  revert_action_->setObjectName(QStringLiteral("revertDocumentAction"));
+  revert_action_->setShortcut(QKeySequence(Qt::ALT | Qt::Key_R));
+  connect(revert_action_, &QAction::triggered, this,
+          [this] { (void)revert_current_document(); });
+
+  QAction* close_action = file_menu->addAction(tr("&Close"));
+  close_action->setObjectName(QStringLiteral("closeDocumentAction"));
+  close_action->setShortcut(QKeySequence::Close);
+  connect(close_action, &QAction::triggered, this,
+          [this] { new_document(); });
+
   QAction* save_action = file_menu->addAction(tr("&Save"));
   save_action->setShortcut(QKeySequence::Save);
   connect(save_action, &QAction::triggered, this,
@@ -834,6 +847,11 @@ void MainWindow::create_actions() {
   save_as_action->setShortcut(QKeySequence::SaveAs);
   connect(save_as_action, &QAction::triggered, this,
           [this] { save_document_as(); });
+
+  delete_action_ = file_menu->addAction(tr("&Delete File"));
+  delete_action_->setObjectName(QStringLiteral("deleteDocumentAction"));
+  connect(delete_action_, &QAction::triggered, this,
+          [this] { (void)delete_current_document(); });
 
   file_menu->addSeparator();
   print_action_ = file_menu->addAction(tr("&Print..."));
@@ -2702,6 +2720,46 @@ bool MainWindow::open_path(const QString& path, core::TextEncoding encoding,
   }
 }
 
+bool MainWindow::revert_current_document(OpenMode mode) {
+  if (current_path_.isEmpty() || conversion_active())
+    return false;
+  finish_kana_input();
+  if (conversion_active())
+    return false;
+  if (mode == OpenMode::kInteractive && document_modified() &&
+      !prompt_to_revert(current_path_)) {
+    return false;
+  }
+  const QString path = current_path_;
+  return is_jwp_document() ? open_jwp_path(path, jwp_code_page_, mode)
+                           : open_path(path, encoding_, mode);
+}
+
+bool MainWindow::delete_current_document(OpenMode mode) {
+  if (current_path_.isEmpty() || conversion_active())
+    return false;
+  finish_kana_input();
+  if (conversion_active())
+    return false;
+  const QString path = current_path_;
+  if (mode == OpenMode::kInteractive && !prompt_to_delete(path))
+    return false;
+  QFile file(path);
+  if (!file.remove()) {
+    const std::runtime_error error(
+        tr("Could not remove %1: %2").arg(path, file.errorString())
+            .toUtf8()
+            .toStdString());
+    if (mode == OpenMode::kInteractive)
+      show_error(tr("Could not delete %1").arg(path), error);
+    return false;
+  }
+  editor_->document()->setModified(false);
+  new_document();
+  statusBar()->showMessage(tr("Deleted %1").arg(path), 3000);
+  return true;
+}
+
 bool MainWindow::open_jwp_path(const QString& path,
                                core::LegacyCodePage code_page,
                                OpenMode mode) {
@@ -4094,6 +4152,28 @@ const core::JwpDocument* MainWindow::current_jwp_document() const noexcept {
   return jwp_document_.has_value() ? &jwp_document_->document() : nullptr;
 }
 
+QString MainWindow::current_path() const { return current_path_; }
+
+bool MainWindow::document_modified() const noexcept {
+  return editor_->document()->isModified();
+}
+
+bool MainWindow::prompt_to_revert(const QString& path) {
+  return QMessageBox::question(
+             this, tr("Revert document"),
+             tr("Discard changes and reload %1?").arg(path),
+             QMessageBox::Yes | QMessageBox::No, QMessageBox::No) ==
+         QMessageBox::Yes;
+}
+
+bool MainWindow::prompt_to_delete(const QString& path) {
+  return QMessageBox::warning(
+             this, tr("Delete file"),
+             tr("Permanently delete %1?").arg(path),
+             QMessageBox::Yes | QMessageBox::No, QMessageBox::No) ==
+         QMessageBox::Yes;
+}
+
 bool MainWindow::maybe_save() {
   if (conversion_active() && !accept_conversion()) {
     return false;
@@ -4120,6 +4200,11 @@ void MainWindow::update_title() {
                            : QFileInfo(current_path_).fileName();
   setWindowTitle(tr("%1[*] - jwpqt").arg(name));
   setWindowModified(editor_->document()->isModified());
+  const bool has_path = !current_path_.isEmpty();
+  if (revert_action_ != nullptr)
+    revert_action_->setEnabled(has_path && !conversion_active());
+  if (delete_action_ != nullptr)
+    delete_action_->setEnabled(has_path && !conversion_active());
 }
 
 void MainWindow::show_error(const QString& action,
