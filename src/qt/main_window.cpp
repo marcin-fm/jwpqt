@@ -961,7 +961,7 @@ void MainWindow::create_actions() {
 
   kanji_lookup_action_ = tools_menu->addAction(tr("&Radical Lookup"));
   kanji_lookup_action_->setObjectName(QStringLiteral("radicalLookupAction"));
-  kanji_lookup_action_->setShortcut(QKeySequence(QStringLiteral("Ctrl+R")));
+  kanji_lookup_action_->setShortcut(QKeySequence(Qt::Key_F5));
   connect(kanji_lookup_action_, &QAction::triggered, this,
           [this] { show_kanji_lookup_dialog(); });
 

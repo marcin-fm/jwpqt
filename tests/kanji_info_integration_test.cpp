@@ -119,7 +119,8 @@ void test_integration(const QString& directory) {
 
   QAction* radical_action =
       window.findChild<QAction*>(QStringLiteral("radicalLookupAction"));
-  require(radical_action != nullptr && radical_action->isEnabled(),
+  require(radical_action != nullptr && radical_action->isEnabled() &&
+              radical_action->shortcut() == QKeySequence(Qt::Key_F5),
           "Radical lookup action is unavailable");
   radical_action->trigger();
   QApplication::processEvents();
