@@ -46,6 +46,8 @@ add_library(jwpqt_qt_ui STATIC
   kanji_info_dialog.h
   kanji_lookup_dialog.cpp
   kanji_lookup_dialog.h
+  kanji_reading_lookup_dialog.cpp
+  kanji_reading_lookup_dialog.h
   main_window.cpp
   main_window.h
   wnn_user_dictionary_dialog.cpp
