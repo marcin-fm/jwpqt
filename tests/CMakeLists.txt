@@ -530,6 +530,8 @@ string(ASCII 65 83 67 73 73 32 27 75 36 34 70 124 75 92 56 108 27 72 10
   sample_nec_jis)
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/sample-nec-jis.txt"
   "${sample_nec_jis}")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/sample-utf7.txt"
+  "ASCII +ZeVnLIqe-\n")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/sample-ascii.txt" "ASCII only\n")
 add_test(NAME application_encoding_euc_jp
   COMMAND jwpqt --smoke-test --encoding euc-jp
@@ -550,6 +552,10 @@ add_test(NAME application_encoding_old_jis
 add_test(NAME application_encoding_nec_jis
   COMMAND jwpqt --smoke-test --encoding nec-jis
           "${CMAKE_CURRENT_BINARY_DIR}/sample-nec-jis.txt"
+)
+add_test(NAME application_encoding_utf7
+  COMMAND jwpqt --smoke-test --encoding utf-7
+          "${CMAKE_CURRENT_BINARY_DIR}/sample-utf7.txt"
 )
 add_test(NAME application_detect_euc_jp
   COMMAND jwpqt --smoke-test
@@ -589,6 +595,7 @@ set_tests_properties(
   application_encoding_new_jis
   application_encoding_old_jis
   application_encoding_nec_jis
+  application_encoding_utf7
   application_detect_euc_jp
   application_detect_shift_jis
   application_detect_new_jis

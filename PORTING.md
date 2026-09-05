@@ -348,6 +348,12 @@ legacy file structures.
     the user search resource is replaced. Disabled entries remain unsearchable,
     failed saves preserve disk and live state, and display-row insertion is one
     portable-history JWP edit.
+77. Strict UTF-7 support reproduces the recovered modified-Base64 direct-set
+    behavior, literal-plus forms, and UTF-16BE wire representation while
+    validating residual bits and surrogate structure. It is exposed through
+    explicit text-file, native filter, and CLI selection; automatic detection
+    deliberately retains JWPxp's UTF-8 default for the shared ASCII `.utf`
+    payload space.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and

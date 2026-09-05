@@ -80,8 +80,9 @@
 namespace jwpqt::qt {
 namespace {
 
-constexpr std::array<core::TextEncoding, 6> kTextEncodings{
-    core::TextEncoding::kUtf8,      core::TextEncoding::kEucJp,
+constexpr std::array<core::TextEncoding, 7> kTextEncodings{
+    core::TextEncoding::kUtf8,      core::TextEncoding::kUtf7,
+    core::TextEncoding::kEucJp,
     core::TextEncoding::kShiftJis,  core::TextEncoding::kNewJis,
     core::TextEncoding::kOldJis,    core::TextEncoding::kNecJis,
 };
@@ -108,6 +109,8 @@ QString encoding_filter(core::TextEncoding encoding) {
   switch (encoding) {
     case core::TextEncoding::kUtf8:
       return MainWindow::tr("UTF-8 text (*.txt *.utf8)");
+    case core::TextEncoding::kUtf7:
+      return MainWindow::tr("UTF-7 text (*.txt *.utf)");
     case core::TextEncoding::kEucJp:
       return MainWindow::tr("EUC-JP text (*.euc)");
     case core::TextEncoding::kShiftJis:

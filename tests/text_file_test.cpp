@@ -44,6 +44,8 @@ std::string require_text_file_error(Function function,
 void test_encoding_names() {
   require(jwpqt::core::text_encoding_name(TextEncoding::kUtf8) == "UTF-8",
           "Wrong UTF-8 display name");
+  require(jwpqt::core::text_encoding_name(TextEncoding::kUtf7) == "UTF-7",
+          "Wrong UTF-7 display name");
   require(jwpqt::core::text_encoding_name(TextEncoding::kEucJp) == "EUC-JP",
           "Wrong EUC-JP display name");
   require(jwpqt::core::text_encoding_name(TextEncoding::kShiftJis) ==
@@ -58,6 +60,8 @@ void test_encoding_names() {
           "Wrong NEC JIS display name");
   require(jwpqt::core::parse_text_encoding("utf-8") == TextEncoding::kUtf8,
           "Could not parse utf-8");
+  require(jwpqt::core::parse_text_encoding("utf-7") == TextEncoding::kUtf7,
+          "Could not parse utf-7");
   require(jwpqt::core::parse_text_encoding("euc-jp") == TextEncoding::kEucJp,
           "Could not parse euc-jp");
   require(jwpqt::core::parse_text_encoding("shift-jis") ==
@@ -145,6 +149,7 @@ int main() {
                      "ASCII \x1b$@\x46\x7c\x4b\x5c\x38\x6c\x1b(J\n");
     test_legacy_file(TextEncoding::kNecJis,
                      "ASCII \x1bK\x46\x7c\x4b\x5c\x38\x6c\x1bH\n");
+    test_legacy_file(TextEncoding::kUtf7, "ASCII +ZeVnLIqe-\n");
     test_invalid_metadata();
     std::cout << "All text file tests passed\n";
     return 0;

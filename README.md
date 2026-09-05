@@ -32,7 +32,7 @@ Run the editor, optionally opening a UTF-8 file:
 
 ## Current scope
 
-The native editor opens and atomically saves UTF-8, EUC-JP, Shift-JIS,
+The native editor opens and atomically saves UTF-8, UTF-7, EUC-JP, Shift-JIS,
 New/Old/NEC JIS, and JWP B1/B2/J1.20 documents. JWP editing preserves metadata,
 paragraph formatting, hard page breaks, code-page interpretation, native
 search/replace, and portable transaction history. The portable core also
