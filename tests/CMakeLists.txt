@@ -161,6 +161,14 @@ add_test(NAME core_wnn_dictionary COMMAND jwpqt_wnn_dictionary_tests)
 add_test(NAME core_wnn_lookup COMMAND jwpqt_wnn_lookup_tests)
 add_test(NAME core_wnn_preferences COMMAND jwpqt_wnn_preferences_tests)
 
+add_executable(jwpqt_wnn_user_dictionary_tests
+  wnn_user_dictionary_test.cpp
+)
+target_link_libraries(jwpqt_wnn_user_dictionary_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_wnn_user_dictionary_tests
+  PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME core_wnn_user_dictionary COMMAND jwpqt_wnn_user_dictionary_tests)
+
 add_executable(jwpqt_wnn_session_tests
   wnn_session_test.cpp
 )

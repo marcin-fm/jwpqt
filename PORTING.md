@@ -148,6 +148,11 @@ legacy file structures.
     atomically persist `colkanji.lst` before publishing the new list; View
     validates a complete unnamed JWP document before replacing the live editor.
     All commands remain inert during active WNN conversion.
+43. A portable ordered `user.cnv` model parses and writes exact high-bit
+    hiragana stems, inflection endings, slash-delimited JWP candidates, and LF
+    records. It reconstructs full readings for editing, preserves imported
+    multi-candidate inflected records, enforces all allocation budgets before
+    growth, and exposes unsorted lookup records without a system index.
 
 The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
@@ -158,8 +163,8 @@ requires a separate fixture-backed change rather than silent substitution.
 
 1. Port paged printing and clipboard color policy over the rich JWP document
    layout.
-2. Port editable WNN user dictionaries and lookup tools as separate vertical
-   slices.
+2. Connect editable WNN user records to lookup, atomic file lifecycle, and
+   native management UI; then port lookup tools as separate vertical slices.
 3. Port configuration, remaining import/export paths, and help.
 
 Each slice is committed independently after focused tests and the complete
