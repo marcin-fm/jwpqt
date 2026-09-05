@@ -36,6 +36,8 @@ add_library(jwpqt_qt_ui STATIC
   edict_lookup_dialog.h
   edict_results_window.cpp
   edict_results_window.h
+  edict_user_dictionary_dialog.cpp
+  edict_user_dictionary_dialog.h
   jwp_editor.cpp
   jwp_editor.h
   main_window.cpp
