@@ -2,12 +2,23 @@
 
 #include "text_bridge.h"
 
+#include <stdexcept>
+
 #include <QList>
 
 namespace jwpqt::qt {
 
 QString to_qstring(std::u32string_view text) {
-  return QString::fromUcs4(text.data(), static_cast<qsizetype>(text.size()));
+  QString result;
+  result.reserve(static_cast<qsizetype>(text.size()));
+  // QString::fromUcs4 treats a leading U+FEFF as a file signature, not text.
+  for (const char32_t value : text) {
+    if (value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff)) {
+      throw std::invalid_argument("Invalid Unicode scalar in Qt text");
+    }
+    result.append(QChar::fromUcs4(value));
+  }
+  return result;
 }
 
 std::u32string from_qstring(const QString& text) {

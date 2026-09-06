@@ -21,6 +21,7 @@
 #include "jwpqt/core/utf16.h"
 #include "jwpqt/core/wnn_preferences.h"
 #include "jwpqt/core/wnn_user_dictionary.h"
+#include "text_bridge.h"
 
 namespace {
 
@@ -36,6 +37,30 @@ QByteArray read_bytes(const QString& path) {
     throw std::runtime_error(input.errorString().toStdString());
   }
   return input.readAll();
+}
+
+void test_text_bridge() {
+  using jwpqt::qt::from_qstring;
+  using jwpqt::qt::to_qstring;
+  const std::u32string signatures = U"\ufeff\ufeff\ufffe\u00a0\U0001f600";
+  require(from_qstring(to_qstring(signatures)) == signatures,
+          "Qt text bridge interpreted text as a Unicode file signature");
+  std::u32string scalars;
+  for (char32_t value = 0; value <= 0x10ffff; ++value) {
+    if (value < 0xd800 || value > 0xdfff) scalars.push_back(value);
+  }
+  require(from_qstring(to_qstring(scalars)) == scalars,
+          "Qt text bridge changed a Unicode scalar");
+  for (const char32_t value : {char32_t{0xd800}, char32_t{0xdfff},
+                              char32_t{0x110000}, char32_t{0xffffffff}}) {
+    bool rejected = false;
+    try {
+      static_cast<void>(to_qstring(std::u32string(1, value)));
+    } catch (const std::invalid_argument&) {
+      rejected = true;
+    }
+    require(rejected, "Qt text bridge accepted a non-scalar Unicode value");
+  }
 }
 
 void test_file_round_trip(const QString& directory,
@@ -693,6 +718,7 @@ void test_edict_user_dictionary_file_errors(const QString& directory) {
 int main(int argc, char* argv[]) {
   QCoreApplication application(argc, argv);
   try {
+    test_text_bridge();
     QTemporaryDir directory(QDir::tempPath() +
                             QStringLiteral("/jwpqt-io-test-XXXXXX"));
     require(directory.isValid(), "Could not create temporary test directory");
