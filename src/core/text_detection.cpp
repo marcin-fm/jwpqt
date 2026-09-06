@@ -3,6 +3,7 @@
 #include "jwpqt/core/jis_text.h"
 #include "jwpqt/core/legacy_text.h"
 #include "jwpqt/core/utf8.h"
+#include "jwpqt/core/utf16.h"
 
 #include <algorithm>
 #include <array>
@@ -60,6 +61,8 @@ bool decodes_as(std::string_view bytes, TextEncoding encoding) {
     return true;
   } catch (const Utf8Error&) {
     return false;
+  } catch (const Utf16Error&) {
+    return false;
   } catch (const LegacyTextError&) {
     return false;
   } catch (const JisTextError&) {
@@ -72,6 +75,15 @@ bool decodes_as(std::string_view bytes, TextEncoding encoding) {
 }  // namespace
 
 TextEncodingDetection detect_text_encoding(std::string_view bytes) {
+  if (bytes.size() >= 2 &&
+      (bytes.substr(0, 2) == "\xff\xfe" || bytes.substr(0, 2) == "\xfe\xff")) {
+    const auto encoding = static_cast<unsigned char>(bytes[0]) == 0xff
+                              ? TextEncoding::kUtf16Le
+                              : TextEncoding::kUtf16Be;
+    if (decodes_as(bytes, encoding))
+      return {DetectionConfidence::kCertain, {encoding}};
+    return {};
+  }
   if (has_utf8_bom(bytes)) {
     if (decodes_as(bytes, TextEncoding::kUtf8)) {
       return {DetectionConfidence::kCertain, {TextEncoding::kUtf8}};

@@ -460,6 +460,81 @@ void test_explicit_open_and_encoding_action(const QString& directory) {
           "Old JIS action did not control saved bytes");
 }
 
+void test_utf16_workflow(const QString& directory) {
+  using jwpqt::core::TextEncoding;
+  using jwpqt::qt::OpenMode;
+  for (const auto encoding : {TextEncoding::kUtf16Le, TextEncoding::kUtf16Be}) {
+    const QString name = encoding == TextEncoding::kUtf16Le
+                             ? QStringLiteral("UTF-16LE") : QStringLiteral("UTF-16BE");
+    const QString filter = name + QStringLiteral(" text (*.txt *.utf16)");
+    const QString source = directory + "/" + name + ".txt";
+    const QString saved = directory + "/saved-" + name + ".txt";
+    for (const bool bom : {false, true}) {
+      const jwpqt::core::TextFile file{U"\u65e5\u672c\n\U0001f600", encoding, bom};
+      jwpqt::qt::write_text_file(source, file);
+      PromptingWindow window;
+      require(bom ? window.open_path_detected(source, OpenMode::kNonInteractive)
+                  : window.open_path(source, encoding, OpenMode::kNonInteractive),
+              "UTF-16 open/detection failed");
+      if (!bom) {
+        bool offered = false;
+        QTimer::singleShot(0, &window, [&] {
+          if (auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget())) {
+            offered = dialog->nameFilters().contains(filter);
+            dialog->selectNameFilter(filter);
+            dialog->selectFile(source);
+            QMetaObject::invokeMethod(dialog, "accept", Qt::DirectConnection);
+          }
+        });
+        find_encoding_action(window, QStringLiteral("&Open..."))->trigger();
+        require(offered && window.text_encoding() == encoding,
+                "UTF-16 Open filter did not select unmarked byte order");
+      }
+      auto* editor = window.findChild<QTextEdit*>();
+      require(editor != nullptr && editor->toPlainText() ==
+                  QString::fromStdU32String(file.text) &&
+                  window.text_encoding() == encoding &&
+                  find_encoding_action(window, name)->isChecked() &&
+                  window.save_path(saved) && read_bytes(saved) == read_bytes(source),
+              "UTF-16 native lifecycle lost text, byte order or BOM");
+      editor->insertPlainText(QStringLiteral("edit"));
+      const auto modified = editor->toPlainText();
+      const QString invalid = directory + QStringLiteral("/invalid-utf16.txt");
+      write_bytes(invalid, QByteArray::fromHex("fffe3dd8"));
+      require(!window.open_path_detected(invalid, OpenMode::kNonInteractive) &&
+                  window.current_path() == saved && window.document_modified() &&
+                  editor->toPlainText() == modified,
+              "Invalid UTF-16 open destroyed live text");
+      require(window.revert_current_document(OpenMode::kNonInteractive) &&
+                  editor->toPlainText() == QString::fromStdU32String(file.text) &&
+                  !window.document_modified(),
+              "UTF-16 Revert did not preserve file policy");
+      bool filtered = false;
+      const QString dialog_saved = directory + "/dialog-" + name +
+                                   (bom ? "-bom.txt" : "-plain.txt");
+      QTimer::singleShot(0, &window, [&] {
+        if (auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget())) {
+          filtered = dialog->selectedNameFilter() == filter;
+          dialog->selectFile(dialog_saved);
+          QMetaObject::invokeMethod(dialog, "accept", Qt::DirectConnection);
+        }
+      });
+      find_encoding_action(window, QStringLiteral("Save &As..."))->trigger();
+      require(filtered && read_bytes(dialog_saved) == read_bytes(source),
+              "UTF-16 Save As did not retain the filter or bytes");
+    }
+  }
+  const QString plain = directory + QStringLiteral("/utf16-menu.txt");
+  jwpqt::qt::write_text_file(plain, {U"\u65e5", TextEncoding::kUtf8, false});
+  PromptingWindow window;
+  require(window.open_path(plain, TextEncoding::kUtf8, OpenMode::kNonInteractive),
+          "Could not open UTF-16 menu fixture");
+  find_encoding_action(window, QStringLiteral("UTF-16BE"))->trigger();
+  require(window.document_modified() && window.save_path(plain) &&
+              read_bytes(plain) == QByteArray::fromHex("feff65e5"),
+          "New UTF-16 encoding selection did not emit a BOM");
+}
+
 void test_jfc_open_save_and_revert(const QString& directory) {
   using jwpqt::core::TextEncoding;
   using jwpqt::qt::OpenMode;
@@ -3416,6 +3491,7 @@ int main(int argc, char* argv[]) {
     test_new_document_workflow(directory.path());
     test_explicit_open_and_encoding_action(directory.path());
     test_jfc_open_save_and_revert(directory.path());
+    test_utf16_workflow(directory.path());
     test_jfc_file_dialogs(directory.path());
     test_local_file_lifecycle_actions(directory.path());
     test_leaving_utf8_drops_bom(directory.path());

@@ -561,6 +561,22 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/sample-nec-jis.txt"
   "${sample_nec_jis}")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/sample-utf7.txt"
   "ASCII +ZeVnLIqe-\n")
+string(ASCII 229 101 44 103 sample_utf16le)
+string(ASCII 101 229 103 44 sample_utf16be)
+string(ASCII 255 254 bom_utf16le)
+string(ASCII 254 255 bom_utf16be)
+foreach(order IN ITEMS le be)
+  file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/sample-utf16${order}.txt"
+    "${sample_utf16${order}}")
+  file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/sample-utf16${order}-bom.txt"
+    "${bom_utf16${order}}${sample_utf16${order}}")
+  add_test(NAME application_encoding_utf16${order}
+    COMMAND jwpqt --smoke-test --encoding utf-16${order}
+      "${CMAKE_CURRENT_BINARY_DIR}/sample-utf16${order}.txt")
+  add_test(NAME application_detect_utf16${order}
+    COMMAND jwpqt --smoke-test
+      "${CMAKE_CURRENT_BINARY_DIR}/sample-utf16${order}-bom.txt")
+endforeach()
 string(ASCII 198 252 9 142 38 143 171 177 10 sample_jfc_euc)
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/sample-jfc-euc.txt" "${sample_jfc_euc}")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/sample-euc.jfc" "${sample_jfc_euc}")
@@ -644,6 +660,10 @@ set_tests_properties(
   application_encoding_old_jis
   application_encoding_nec_jis
   application_encoding_utf7
+  application_encoding_utf16le
+  application_encoding_utf16be
+  application_detect_utf16le
+  application_detect_utf16be
   application_encoding_jfc
   application_detect_jfc_euc
   application_detect_jfc_utf8

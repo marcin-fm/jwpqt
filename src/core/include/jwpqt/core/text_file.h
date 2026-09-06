@@ -19,6 +19,8 @@ enum class TextEncoding {
   kNewJis,
   kOldJis,
   kNecJis,
+  kUtf16Le,
+  kUtf16Be,
 };
 
 struct TextFile {

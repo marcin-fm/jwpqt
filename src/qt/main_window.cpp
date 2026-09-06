@@ -93,8 +93,9 @@
 namespace jwpqt::qt {
 namespace {
 
-constexpr std::array<core::TextEncoding, 8> kTextEncodings{
+constexpr std::array<core::TextEncoding, 10> kTextEncodings{
     core::TextEncoding::kUtf8,      core::TextEncoding::kUtf7,
+    core::TextEncoding::kUtf16Le,   core::TextEncoding::kUtf16Be,
     core::TextEncoding::kJfc,       core::TextEncoding::kEucJp,
     core::TextEncoding::kShiftJis,  core::TextEncoding::kNewJis,
     core::TextEncoding::kOldJis,    core::TextEncoding::kNecJis,
@@ -124,6 +125,10 @@ QString encoding_filter(core::TextEncoding encoding) {
       return MainWindow::tr("UTF-8 text (*.txt *.utf8)");
     case core::TextEncoding::kUtf7:
       return MainWindow::tr("UTF-7 text (*.txt *.utf)");
+    case core::TextEncoding::kUtf16Le:
+      return MainWindow::tr("UTF-16LE text (*.txt *.utf16)");
+    case core::TextEncoding::kUtf16Be:
+      return MainWindow::tr("UTF-16BE text (*.txt *.utf16)");
     case core::TextEncoding::kJfc:
       return MainWindow::tr("JFC text (*.jfc)");
     case core::TextEncoding::kEucJp:
@@ -3849,7 +3854,10 @@ void MainWindow::set_text_encoding(core::TextEncoding encoding,
     return;
   }
   encoding_ = encoding;
-  if (encoding_ != core::TextEncoding::kUtf8) {
+  if (encoding_ == core::TextEncoding::kUtf16Le ||
+      encoding_ == core::TextEncoding::kUtf16Be) {
+    has_byte_order_mark_ = true;
+  } else if (encoding_ != core::TextEncoding::kUtf8) {
     has_byte_order_mark_ = false;
   }
   update_encoding_display();

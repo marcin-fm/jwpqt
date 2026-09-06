@@ -18,6 +18,7 @@
 #include "jwpqt/core/kanji_color_list.h"
 #include "jwpqt/core/kanji_info.h"
 #include "jwpqt/core/utf8.h"
+#include "jwpqt/core/utf16.h"
 #include "jwpqt/core/wnn_preferences.h"
 #include "jwpqt/core/wnn_user_dictionary.h"
 
@@ -76,6 +77,20 @@ void test_encoding_failure_preserves_file(const QString& directory) {
 
   require(read_bytes(path) == original,
           "Failed save changed the existing file");
+  for (const auto encoding : {jwpqt::core::TextEncoding::kUtf16Le,
+                              jwpqt::core::TextEncoding::kUtf16Be}) {
+    for (const bool bom : {false, true}) {
+      test_file_round_trip(directory, encoding, bom);
+      try {
+        jwpqt::qt::write_text_file(
+            path, {std::u32string(1, char32_t{0xd800}), encoding, bom});
+        throw std::runtime_error("Invalid UTF-16 document was saved");
+      } catch (const jwpqt::core::Utf16Error&) {
+      }
+      require(read_bytes(path) == original,
+              "Failed UTF-16 save changed the existing file");
+    }
+  }
 }
 
 void test_jfc_file_io(const QString& directory) {

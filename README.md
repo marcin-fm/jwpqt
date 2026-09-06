@@ -90,11 +90,15 @@ opening an existing file first. **File > New Text Document** creates unrestricte
 Unicode plain text instead; JWP-only tools are unavailable in that mode. Imported
 text files currently use this plain-text mode as well.
 
-The native editor opens and atomically saves UTF-8, UTF-7, JFC, EUC-JP, Shift-JIS,
-New/Old/NEC JIS, and JWP B1/B2/J1.20 documents. JFC files are plain text:
+The native editor opens and atomically saves UTF-8, UTF-7, UTF-16LE/BE, JFC,
+EUC-JP, Shift-JIS, New/Old/NEC JIS, and JWP B1/B2/J1.20 documents. JFC files are plain text:
 opening prefers UTF-8, with a strict fallback for the recovered old-EUC
 extensions, and saving always writes UTF-8 without a BOM. The `.jfc` extension,
 JFC file-dialog filter, or `--encoding jfc` selects that policy.
+UTF-16 preserves byte order and the input BOM, supports supplementary Unicode,
+and rejects malformed surrogate pairs. BOM-marked files are detected; unmarked
+files require their explicit filter or `--encoding utf-16le` / `utf-16be`.
+Switching to UTF-16 through the encoding menu writes a BOM for detection.
 JWP editing preserves metadata,
 paragraph formatting, hard page breaks, code-page interpretation, native
 search/replace, and portable transaction history. The portable core also
