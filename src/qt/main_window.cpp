@@ -4274,6 +4274,15 @@ void MainWindow::synchronize_jwp_document(int position, int chars_removed,
       return;
     }
 
+    // Clipboard insertion can replace Qt's final paragraph marker, which is
+    // absent from both plain-text snapshots. Only discard a paired marker.
+    if (chars_removed > 0 && chars_added > 0 &&
+        static_cast<qsizetype>(position) + chars_removed ==
+            to_qstring(rendered_jwp_text_).size() + 1 &&
+        static_cast<qsizetype>(position) + chars_added == current_qt.size() + 1) {
+      --chars_removed;
+      --chars_added;
+    }
     const std::size_t prefix = utf32_offset_for_utf16(current_qt, position);
     const std::size_t replacement_end =
         utf32_offset_for_utf16(current_qt, position + chars_added);

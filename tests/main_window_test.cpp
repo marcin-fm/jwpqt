@@ -10,6 +10,7 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QClipboard>
 #include <QDialog>
 #include <QDir>
 #include <QFile>
@@ -1039,6 +1040,59 @@ void test_jwp_open_edit_and_save(const QString& directory) {
                    .property(jwpqt::qt::JwpEditor::kPageBreakProperty)
                    .toBool(),
           "Switching to plain text retained JWP paragraph layout");
+}
+
+void test_jwp_clipboard_changes(const QString& directory) {
+  struct Case {
+    QString before;
+    int begin;
+    int end;
+    QString pasted;
+    QString expected;
+  };
+  const Case cases[]{
+      {{}, 0, 0, QStringLiteral("abc"), QStringLiteral("abc")},
+      {QStringLiteral("prefix"), 6, 6, QStringLiteral("\n\u65e5\u672c\n"),
+       QStringLiteral("prefix\n\u65e5\u672c\n")},
+      {QStringLiteral("before"), 0, 6, QStringLiteral("\u65e5\u672c"),
+       QStringLiteral("\u65e5\u672c")},
+      {QStringLiteral("before"), 2, 4, QStringLiteral("\u65e5\u672c"),
+       QStringLiteral("be\u65e5\u672cre")}};
+  for (const auto& test : cases) {
+    jwpqt::core::JwpDocument source;
+    source.paragraphs = {paragraph(test.before.toStdU32String())};
+    source.paragraphs[0].left_indent = 2;
+    const QString path = directory + QStringLiteral("/clipboard.jwp");
+    jwpqt::qt::write_jwp_file(path, source);
+    jwpqt::qt::MainWindow window;
+    require(window.open_jwp_path(path), "Could not open clipboard fixture");
+    auto* editor = window.findChild<QTextEdit*>();
+    QTextCursor cursor = editor->textCursor();
+    cursor.setPosition(test.begin);
+    cursor.setPosition(test.end, QTextCursor::KeepAnchor);
+    editor->setTextCursor(cursor);
+    QApplication::clipboard()->setText(test.pasted);
+    editor->paste();
+    require(editor->toPlainText() == test.expected && window.document_modified(),
+            "Clipboard change including the terminal paragraph marker was rejected");
+    find_action(window, "undoAction")->trigger();
+    require(editor->toPlainText() == test.before && !window.document_modified() &&
+                *window.current_jwp_document() == source,
+            "Clipboard undo did not restore the original text and metadata");
+    find_action(window, "redoAction")->trigger();
+    require(editor->toPlainText() == test.expected && window.save_path(path),
+            "Clipboard redo/save failed");
+    jwpqt::qt::MainWindow reopened;
+    require(reopened.open_jwp_path(path) &&
+                reopened.findChild<QTextEdit*>()->toPlainText() == test.expected,
+            "Clipboard text did not survive a native file round trip");
+    const auto saved = *window.current_jwp_document();
+    QApplication::clipboard()->setText(QString::fromUcs4(U"\U0001f600"));
+    editor->paste();
+    require(editor->toPlainText() == test.expected && !window.document_modified() &&
+                *window.current_jwp_document() == saved,
+            "Clipboard normalization bypassed lossless JWP encoding checks");
+  }
 }
 
 void test_jwp_code_page_switch(const QString& directory) {
@@ -3230,6 +3284,7 @@ int main(int argc, char* argv[]) {
     test_plain_text_replace_actions(directory.path());
     test_jwp_replace_preserves_structure(directory.path());
     test_jwp_open_edit_and_save(directory.path());
+    test_jwp_clipboard_changes(directory.path());
     test_jwp_code_page_switch(directory.path());
     test_jwp_code_page_can_be_selected_before_open(directory.path());
     test_zero_paragraph_jwp_save_is_not_normalized(directory.path());
