@@ -2209,6 +2209,30 @@ void test_edict_user_dictionary_integration(const QString& directory) {
                   QStringLiteral("edictUserDictionaryDialog")) == nullptr,
           "Configuration reload retained a stale user dictionary dialog");
 
+  for (const auto wire_encoding : {
+           jwpqt::core::EdictRegistryWireEncoding::kAnsiBytes,
+           jwpqt::core::EdictRegistryWireEncoding::kUtf16Le}) {
+    auto legacy_registry = registry;
+    legacy_registry.wire_encoding = wire_encoding;
+    legacy_registry.entries[1].path.clear();
+    jwpqt::qt::write_edict_registry_file(registry_path, legacy_registry);
+    const QByteArray original_registry = read_bytes(registry_path);
+    jwpqt::qt::MainWindow imported;
+    require(imported.load_edict_configuration(
+                registry_path, jwpqt::qt::OpenMode::kNonInteractive) &&
+                imported.edict_user_dictionary()->entries() ==
+                    std::vector<jwpqt::core::EdictUserEntry>{replacement} &&
+                imported.edict_resources()->registry.entries.size() == 2 &&
+                imported.edict_resources()->registry.entries[1].path ==
+                    u"user.dct" &&
+                imported.edict_resources()->registry.entries[0] == main &&
+                imported.set_edict_user_dictionary(
+                    replacement_dictionary,
+                    jwpqt::qt::OpenMode::kNonInteractive) &&
+                read_bytes(registry_path) == original_registry,
+            "Empty legacy USER path did not use the native default safely");
+  }
+
   const QString absent_registry =
       case_directory + QStringLiteral("/default/dict.cfg");
   require(QDir().mkpath(QFileInfo(absent_registry).absolutePath()),
