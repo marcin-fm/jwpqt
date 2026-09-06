@@ -86,6 +86,11 @@ void KanaInputField::insert_events(const std::vector<core::KanaInputEvent>& even
       edit_->hasSelectedText()) composer_.discard();
 }
 
+void KanaInputField::clear_input() {
+  composer_.discard();
+  edit_->clear();
+}
+
 void KanaInputField::finish_input() {
   if (!composer_.pending()) return;
   try {

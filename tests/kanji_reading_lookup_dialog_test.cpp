@@ -139,6 +139,15 @@ void test_dialog() {
   dialog.set_query(query);
   require(!dialog.search() && dialog.results().size() == 1,
           "Failed native reading search discarded prior results");
+  input->clear();
+  QKeyEvent pending(QEvent::KeyPress, Qt::Key_N, Qt::NoModifier, QStringLiteral("n"));
+  QApplication::sendEvent(input, &pending);
+  auto* clear = dialog.findChild<QPushButton*>(QStringLiteral("kanjiReadingClear"));
+  require(clear != nullptr, "Reading lookup Clear is missing");
+  clear->click();
+  QApplication::sendEvent(input, &kana);
+  require(input->text() == QStringLiteral("\u3042") && dialog.results().empty(),
+          "Reading Clear retained pending composition or old results");
 }
 
 void test_callback_containment() {

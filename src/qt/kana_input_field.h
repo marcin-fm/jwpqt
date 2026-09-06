@@ -19,6 +19,7 @@ class KanaInputField : public QWidget {
   InputMode input_mode() const noexcept;
   void set_input_mode(InputMode mode);
   void finish_input();
+  void clear_input();
 
  protected:
   bool eventFilter(QObject* watched, QEvent* event) override;

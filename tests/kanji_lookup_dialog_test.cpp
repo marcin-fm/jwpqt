@@ -5,8 +5,11 @@
 #include <string>
 
 #include <QApplication>
+#include <QCheckBox>
+#include <QEventLoop>
 #include <QListWidget>
 #include <QPushButton>
+#include <QTimer>
 
 #include "jwpqt/core/kanji_lookup_lists.h"
 #include "kanji_lookup_dialog.h"
@@ -116,6 +119,33 @@ void test_dialog() {
   require(inserted == std::vector<jwpqt::core::JisCode>{0x3022U} &&
               shown == 0x3022U,
           "Native radical dialog callbacks received wrong results");
+  auto* automatic = dialog.findChild<QCheckBox*>(QStringLiteral("kanjiLookupAutoSearch"));
+  auto* timer = dialog.findChild<QTimer*>(QStringLiteral("kanjiLookupSearchTimer"));
+  auto* clear = dialog.findChild<QPushButton*>(QStringLiteral("kanjiLookupClear"));
+  require(automatic && automatic->isChecked() && timer && clear,
+          "Radical lookup Clear/Auto Search controls are missing");
+  dialog.show();
+  QApplication::processEvents();
+  timer->setInterval(1);
+  dialog.set_selected_radicals({0});
+  QEventLoop loop;
+  QTimer::singleShot(20, &loop, &QEventLoop::quit);
+  loop.exec();
+  require(dialog.result_codes().size() == 2, "Selecting radicals did not run automatic search");
+  dialog.set_selected_radicals({1});
+  clear->click();
+  QTimer::singleShot(20, &loop, &QEventLoop::quit);
+  loop.exec();
+  require(dialog.selected_radicals().empty() && dialog.result_codes().empty() && !timer->isActive(),
+          "Radical Clear left selections or resurrected pending results");
+  automatic->setChecked(false);
+  dialog.set_selected_radicals({0});
+  require(!timer->isActive(), "Disabled radical auto search still scheduled work");
+  automatic->setChecked(true);
+  require(timer->isActive(), "Could not prepare a pending radical search before close");
+  dialog.reject();
+  QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection);
+  require(!timer->isActive() && dialog.result_codes().empty(), "Hidden radical lookup still searched");
 }
 
 }  // namespace

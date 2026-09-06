@@ -116,10 +116,13 @@ KanjiReadingLookupDialog::KanjiReadingLookupDialog(
   outer->addWidget(status_);
 
   auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, this);
+  auto* clear_button = new QPushButton(tr("&Clear"), this);
+  clear_button->setObjectName(QStringLiteral("kanjiReadingClear"));
   copy_button_->setObjectName(QStringLiteral("kanjiReadingCopy"));
   insert_button_->setObjectName(QStringLiteral("kanjiReadingInsert"));
   info_button_->setObjectName(QStringLiteral("kanjiReadingInfo"));
   buttons->addButton(search_button, QDialogButtonBox::ActionRole);
+  buttons->addButton(clear_button, QDialogButtonBox::ActionRole);
   buttons->addButton(info_button_, QDialogButtonBox::ActionRole);
   buttons->addButton(insert_button_, QDialogButtonBox::ActionRole);
   buttons->addButton(copy_button_, QDialogButtonBox::ActionRole);
@@ -131,6 +134,15 @@ KanjiReadingLookupDialog::KanjiReadingLookupDialog(
           [this] { update_mode(); });
   connect(search_button, &QPushButton::clicked, this,
           [this] { (void)search(); });
+  connect(clear_button, &QPushButton::clicked, this, [this] {
+    query_field_->clear_input();
+    minimum_strokes_->setValue(0);
+    maximum_strokes_->setValue(30);
+    results_->clear();
+    status_->clear();
+    update_actions();
+    query_->setFocus();
+  });
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
   connect(results_, &QListWidget::itemSelectionChanged, this,
           [this] { update_actions(); });

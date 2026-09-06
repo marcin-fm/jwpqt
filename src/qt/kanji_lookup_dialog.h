@@ -17,6 +17,7 @@ class QLabel;
 class QListWidget;
 class QPushButton;
 class QSpinBox;
+class QTimer;
 class QToolButton;
 
 namespace jwpqt::qt {
@@ -53,6 +54,7 @@ class KanjiLookupDialog : public QDialog {
   std::vector<QToolButton*> radical_buttons_;
   QSpinBox* minimum_strokes_;
   QSpinBox* maximum_strokes_;
+  QTimer* search_timer_;
   QListWidget* results_;
   QLabel* status_;
   QPushButton* copy_button_;

@@ -7,10 +7,14 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QEventLoop>
+#include <QLabel>
 #include <QListWidget>
+#include <QMouseEvent>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTabWidget>
+#include <QTimer>
 
 #include "jwpqt/core/kanji_info.h"
 #include "kanji_code_lookup_dialog.h"
@@ -203,10 +207,91 @@ void test_index_dialog() {
       type->setCurrentIndex(19);
       require(volume->isEnabled(), "Busy People did not enable volume");
     }
-    dialog.findChild<QPushButton*>(QStringLiteral("kanjiIndexClear"))->click();
+    dialog.findChild<QPushButton*>(QStringLiteral("kanjiCodeClear"))->click();
     require(index->value() == 0 && volume->value() == 0 && dialog.results().empty(),
             "Index Clear did not reset fields and results");
   }
+}
+
+void test_graphical_controls_and_automatic_search() {
+  const auto source = database(0x38U);
+  jwpqt::qt::KanjiCodeLookupDialog dialog(source, {}, {});
+  auto* bushu = dialog.findChild<QListWidget*>(QStringLiteral("bushuRadicals"));
+  auto* spahn = dialog.findChild<QListWidget*>(QStringLiteral("spahnRadicals"));
+  auto* variants = dialog.findChild<QCheckBox*>(QStringLiteral("spahnVariants"));
+  auto* automatic = dialog.findChild<QCheckBox*>(QStringLiteral("kanjiCodeAutoSearch"));
+  auto* timer = dialog.findChild<QTimer*>(QStringLiteral("kanjiCodeSearchTimer"));
+  auto* clear = dialog.findChild<QPushButton*>(QStringLiteral("kanjiCodeClear"));
+  require(bushu && bushu->count() == 258 && spahn && spahn->count() == 116 &&
+              !spahn->item(0)->icon().isNull() && variants && automatic &&
+              automatic->isChecked() && timer && clear,
+          "Graphical radical choices or automatic search controls are missing");
+  for (int row = 0; row < bushu->count(); ++row) {
+    auto* item = bushu->item(row);
+    if (item->data(Qt::UserRole).isValid()) continue;
+    require(!(item->flags() & Qt::ItemIsSelectable), "Stroke header is selectable as a radical");
+    QMetaObject::invokeMethod(bushu, "itemClicked", Qt::DirectConnection,
+                              Q_ARG(QListWidgetItem*, item));
+  }
+  require(dialog.findChild<QSpinBox*>(QStringLiteral("bushuRadical"))->value() == -1,
+          "Clicking a stroke header changed the radical query");
+  for (const char* name : {"skipLegend", "fourCornerLegend"}) {
+    const auto* legend = dialog.findChild<QLabel*>(QLatin1String(name));
+    require(legend && !legend->pixmap().isNull(), "Lookup reference diagram is not embedded");
+  }
+  variants->setChecked(false);
+  require(spahn->count() == 79, "Spahn variants did not reduce to canonical choices");
+  dialog.select_spahn_mode();
+  dialog.show();
+  QApplication::processEvents();
+  const QPoint point = spahn->visualItemRect(spahn->item(0)).center();
+  QMouseEvent press(QEvent::MouseButtonPress, QPointF(point),
+                    QPointF(spahn->viewport()->mapToGlobal(point)), Qt::LeftButton,
+                    Qt::LeftButton, Qt::NoModifier);
+  QMouseEvent release(QEvent::MouseButtonRelease, QPointF(point),
+                      QPointF(spahn->viewport()->mapToGlobal(point)), Qt::LeftButton,
+                      Qt::NoButton, Qt::NoModifier);
+  QApplication::sendEvent(spahn->viewport(), &press);
+  QApplication::sendEvent(spahn->viewport(), &release);
+  require(dialog.findChild<QSpinBox*>(QStringLiteral("spahnRadicalStrokes"))->value() == 2 &&
+              dialog.findChild<QSpinBox*>(QStringLiteral("spahnRadical"))->value() == 0 &&
+              spahn->count() == 19,
+          "Clicking a Spahn glyph did not set the source stroke/letter code");
+
+  timer->setInterval(1);
+  jwpqt::core::KanjiSpahnQuery query;
+  query.radical_strokes = {2, 2};
+  query.radical = {4, 4};
+  query.other_strokes = {5, 5};
+  query.index = {7, 7};
+  dialog.set_spahn_query(query);
+  QEventLoop loop;
+  QTimer::singleShot(20, &loop, &QEventLoop::quit);
+  loop.exec();
+  require(dialog.results().size() == 1, "Visible field changes did not run automatic search");
+  automatic->setChecked(false);
+  dialog.findChild<QSpinBox*>(QStringLiteral("spahnRadical"))->setValue(0);
+  require(!timer->isActive() && dialog.results().size() == 1,
+          "Disabled automatic search still changed the results");
+  automatic->setChecked(true);
+  require(timer->isActive(), "Automatic search did not schedule the pending query");
+  clear->click();
+  QTimer::singleShot(20, &loop, &QEventLoop::quit);
+  loop.exec();
+  require(dialog.results().empty() && !timer->isActive(), "Clear allowed stale results to reappear");
+  dialog.findChild<QSpinBox*>(QStringLiteral("spahnRadical"))->setValue(4);
+  require(timer->isActive(), "Could not prepare pending lookup on tab change");
+  dialog.select_index_mode();
+  require(!timer->isActive() && automatic->isHidden(), "Index tab retained another mode's automatic search");
+  dialog.findChild<QSpinBox*>(QStringLiteral("kanjiIndexValue"))->setValue(2829);
+  QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection);
+  require(dialog.results().empty(), "A stale timeout ran the Index query");
+  dialog.select_spahn_mode();
+  dialog.findChild<QSpinBox*>(QStringLiteral("spahnOtherStrokes"))->setValue(5);
+  require(timer->isActive(), "Could not prepare a pending lookup before close");
+  dialog.reject();
+  QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection);
+  require(!timer->isActive() && dialog.results().empty(), "Closing the lookup retained automatic work");
 }
 
 }  // namespace
@@ -214,6 +299,7 @@ void test_index_dialog() {
 int main(int argc, char* argv[]) {
   QApplication application(argc, argv);
   test_dialog();
+  test_graphical_controls_and_automatic_search();
   test_index_dialog();
   return EXIT_SUCCESS;
 }

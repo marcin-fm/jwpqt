@@ -71,6 +71,9 @@ qt_add_resources(jwpqt_qt_ui toolbar_assets
   PREFIX "/jwpqt"
   BASE "${PROJECT_SOURCE_DIR}"
   FILES "${PROJECT_SOURCE_DIR}/toolbar.bmp"
+        "${PROJECT_SOURCE_DIR}/hsradicals.bmp"
+        "${PROJECT_SOURCE_DIR}/skiptype.bmp"
+        "${PROJECT_SOURCE_DIR}/fourcorners.bmp"
 )
 
 target_link_libraries(jwpqt_qt_ui

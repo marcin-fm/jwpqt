@@ -18,6 +18,7 @@ class QListWidget;
 class QPushButton;
 class QSpinBox;
 class QTabWidget;
+class QTimer;
 
 namespace jwpqt::qt {
 
@@ -59,6 +60,9 @@ class KanjiCodeLookupDialog : public QDialog {
   void insert_results();
   void show_information();
   void populate_stroke_bushu_choices();
+  void populate_spahn_choices();
+  void search_current();
+  void clear_current();
 
   const core::KanjiInfoDatabase& information_;
   InsertHandler insert_handler_;
@@ -73,10 +77,13 @@ class KanjiCodeLookupDialog : public QDialog {
   QSpinBox* bushu_strokes_;
   QCheckBox* bushu_nelson_;
   QCheckBox* bushu_classical_;
+  QListWidget* bushu_radicals_;
   QSpinBox* spahn_radical_strokes_;
   QSpinBox* spahn_radical_;
   QSpinBox* spahn_other_strokes_;
   QSpinBox* spahn_index_;
+  QCheckBox* spahn_variants_;
+  QListWidget* spahn_radicals_;
   QSpinBox* stroke_bushu_radical_strokes_;
   QCheckBox* stroke_bushu_variants_;
   QListWidget* stroke_bushu_radicals_;
@@ -87,6 +94,7 @@ class KanjiCodeLookupDialog : public QDialog {
   QComboBox* index_type_;
   QSpinBox* index_value_;
   QSpinBox* index_volume_;
+  QTimer* search_timer_;
   QPixmap radical_sheet_;
   QListWidget* results_;
   QLabel* status_;
