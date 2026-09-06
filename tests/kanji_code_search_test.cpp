@@ -191,6 +191,80 @@ void test_limits_and_validation() {
       "Invalid Spahn-Hadamitzky range was accepted");
 }
 
+void test_index_types_and_limits() {
+  using namespace jwpqt::core;
+  constexpr std::size_t count = 3;
+  constexpr std::size_t variable = 12 + count * 16;
+  std::string bytes;
+  append_u32(bytes, kKanjiInfoMagic);
+  append_u32(bytes, 0x38U);
+  append_u16(bytes, count);
+  append_u16(bytes, 0x3023U);
+  bytes.resize(variable, '\0');
+  put_u16(bytes, 14, 4);
+  put_u16(bytes, 18, (2492U << 1U) | 1U);
+  put_u16(bytes, 20, 2829U << 1U);
+  put_u16(bytes, 22, 1927);
+  put_u32(bytes, 24, variable << 8U);
+  append_u16(bytes, 10947);
+  append_u32(bytes, 4U | (1123U << 4U));
+  append_u32(bytes, 0);
+  constexpr std::string_view tags = "HIEKLONDFSTCJBG";
+  for (std::size_t i = 0; i < tags.size(); ++i) {
+    bytes.push_back(tags[i]);
+    append_u16(bytes, tags[i] == 'B' ? (2U << 8U) | 7U : 100U + i);
+  }
+  bytes.push_back('F');
+  append_u16(bytes, 640);
+  bytes.push_back('h');
+  append_u16(bytes, 777);
+  bytes.push_back('H');
+  append_u16(bytes, 777);
+  bytes.push_back('\0');
+  put_u32(bytes, 40, bytes.size() << 8U);
+  put_u32(bytes, 56, bytes.size() << 8U);
+  const auto source = KanjiInfoDatabase::parse(bytes);
+  const std::array<KanjiIndexQuery, 6> fixed{{
+      {KanjiIndexType::kNelson, 2829}, {KanjiIndexType::kHaig, 1927},
+      {KanjiIndexType::kHalpern, 2492}, {KanjiIndexType::kGrade, 4},
+      {KanjiIndexType::kMorohashiFull, 10947}, {KanjiIndexType::kMorohashiVolume, 1123, 4}}};
+  for (const auto& query : fixed) {
+    const auto report = search_kanji_index(source, query);
+    require(report.matches.size() == 1 && report.matches[0].code == 0x3021 &&
+                !report.matches[0].alternate && !report.truncated,
+            "Fixed or extended dictionary index returned a wrong character");
+  }
+  for (std::size_t i = 0; i < tags.size(); ++i) {
+    const KanjiIndexQuery query{static_cast<KanjiIndexType>(i + 6),
+        tags[i] == 'F' ? 640U : tags[i] == 'B' ? 7U : 100U + static_cast<unsigned>(i),
+        tags[i] == 'B' ? 2U : 0U};
+    const auto report = search_kanji_index(source, query);
+    require(report.matches.size() == 1 && report.matches[0].code == 0x3021,
+            "A primary reference index used the wrong code or lost the last value");
+  }
+  require(search_kanji_index(source, {KanjiIndexType::kHalpernLearners, 777}).matches.empty() &&
+              search_kanji_index(source, {KanjiIndexType::kFrequency, 108}).matches.empty() &&
+              search_kanji_index(source, {KanjiIndexType::kMorohashiVolume, 1123, 3}).matches.empty(),
+          "Index search used cross-references, superseded tags, or a wrong volume");
+  const auto zero = search_kanji_index(source, {KanjiIndexType::kFrequency, 0});
+  require(zero.matches.size() == 2 && zero.matches[0].code == 0x3022 &&
+              zero.matches[1].code == 0x3023,
+          "Zero index did not match missing primary values in JIS order");
+  require(search_kanji_index(source, {KanjiIndexType::kNelson, 0}, {1, 100}).truncated,
+          "Index result limit did not report truncation");
+  require_error([&] { search_kanji_index(source, {}, {0, 100}); }, "Zero index result budget was accepted");
+  require_error([&] { search_kanji_index(source, {KanjiIndexType::kFrequency, 640}, {3, 2}); },
+                "Index references bypassed the work budget");
+  for (const auto query : {KanjiIndexQuery{static_cast<KanjiIndexType>(99)},
+                          KanjiIndexQuery{KanjiIndexType::kNelson, 65536},
+                          KanjiIndexQuery{KanjiIndexType::kBusyPeople, 256, 2},
+                          KanjiIndexQuery{KanjiIndexType::kBusyPeople, 7, 256},
+                          KanjiIndexQuery{KanjiIndexType::kMorohashiVolume, 8192, 4},
+                          KanjiIndexQuery{KanjiIndexType::kMorohashiVolume, 1123, 16}}) {
+    require_error([&] { search_kanji_index(source, query); }, "Invalid index query was accepted");
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -199,5 +273,6 @@ int main() {
   test_bushu();
   test_spahn();
   test_limits_and_validation();
+  test_index_types_and_limits();
   return EXIT_SUCCESS;
 }

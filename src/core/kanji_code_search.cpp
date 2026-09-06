@@ -212,4 +212,52 @@ KanjiCodeSearchReport search_kanji_spahn(
   return report;
 }
 
+KanjiCodeSearchReport search_kanji_index(
+    const KanjiInfoDatabase& information, const KanjiIndexQuery& query,
+    const KanjiCodeSearchLimits& limits) {
+  validate_limits(limits);
+  constexpr std::array<char, 21> references{
+      0, 0, 0, 0, 0, 0, 'H', 'I', 'E', 'K', 'L', 'O', 'N', 'D', 'F',
+      'S', 'T', 'C', 'J', 'B', 'G'};
+  const auto type = static_cast<std::size_t>(query.type);
+  if (type >= references.size()) throw KanjiInfoError("Unknown kanji index type");
+  if (query.index > 0xffffU ||
+      (query.type == KanjiIndexType::kMorohashiVolume &&
+       (query.volume > 15U || query.index > 8191U)) ||
+      (query.type == KanjiIndexType::kBusyPeople &&
+       (query.volume > 255U || query.index > 255U))) {
+    throw KanjiInfoError("Kanji index search value is out of range");
+  }
+  const auto wanted = query.type == KanjiIndexType::kBusyPeople
+      ? (query.volume << 8U) | query.index : query.index;
+  KanjiCodeSearchReport report;
+  for (std::size_t index = 0; index < information.count(); ++index) {
+    charge(report, limits);
+    const JisCode code = code_at(index);
+    const auto record = information.record(code);
+    std::uint32_t value = 0;
+    switch (query.type) {
+      case KanjiIndexType::kNelson: value = record.fixed.nelson; break;
+      case KanjiIndexType::kHaig: value = record.fixed.haig; break;
+      case KanjiIndexType::kHalpern: value = record.fixed.halpern; break;
+      case KanjiIndexType::kGrade: value = record.fixed.grade; break;
+      case KanjiIndexType::kMorohashiFull: value = record.extended.morohashi_long; break;
+      case KanjiIndexType::kMorohashiVolume:
+        if (record.extended.morohashi_volume != query.volume) continue;
+        value = record.extended.morohashi_index;
+        break;
+      default:
+        // Legacy primary values default to zero; cross-references start at lowercase.
+        for (const auto& reference : record.references) {
+          charge(report, limits);
+          if (reference.kind >= 'a' && reference.kind <= 'z') break;
+          if (reference.kind == references[type]) value = reference.value;
+        }
+        break;
+    }
+    if (value == wanted && !append(report, limits, code, false)) return report;
+  }
+  return report;
+}
+
 }  // namespace jwpqt::core

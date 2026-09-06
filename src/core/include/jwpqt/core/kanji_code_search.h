@@ -58,6 +58,19 @@ struct KanjiSpahnQuery {
   KanjiNumericRange index{0, 47};
 };
 
+enum class KanjiIndexType {
+  kNelson, kHaig, kHalpern, kGrade, kMorohashiFull, kMorohashiVolume,
+  kHalpernLearners, kSpahnKana, kHenshall, kGakken, kHeisig, kONeillNames,
+  kONeillEssential, kDeRoo, kFrequency, kReadWrite, kTuttleCards,
+  kKanjiWay, kKanjiContext, kBusyPeople, kCompactGuide,
+};
+
+struct KanjiIndexQuery {
+  KanjiIndexType type = KanjiIndexType::kNelson;
+  std::uint32_t index = 0;
+  std::uint32_t volume = 0;
+};
+
 KanjiCodeSearchReport search_kanji_skip(
     const KanjiInfoDatabase& information, const KanjiSkipQuery& query,
     const KanjiCodeSearchLimits& limits = KanjiCodeSearchLimits{});
@@ -69,6 +82,9 @@ KanjiCodeSearchReport search_kanji_bushu(
     const KanjiCodeSearchLimits& limits = KanjiCodeSearchLimits{});
 KanjiCodeSearchReport search_kanji_spahn(
     const KanjiInfoDatabase& information, const KanjiSpahnQuery& query,
+    const KanjiCodeSearchLimits& limits = KanjiCodeSearchLimits{});
+KanjiCodeSearchReport search_kanji_index(
+    const KanjiInfoDatabase& information, const KanjiIndexQuery& query,
     const KanjiCodeSearchLimits& limits = KanjiCodeSearchLimits{});
 
 }  // namespace jwpqt::core
