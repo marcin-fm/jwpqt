@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include <QIcon>
 #include <QMainWindow>
 #include <QPixmap>
 #include <QString>
@@ -337,6 +338,7 @@ class MainWindow : public QMainWindow {
   QToolButton* resource_status_button_;
   QToolBar* main_toolbar_ = nullptr;
   std::vector<std::pair<QAction*, int>> toolbar_icons_;
+  std::vector<std::pair<QAction*, QIcon>> toolbar_standard_icons_;
   QActionGroup* input_mode_actions_;
   QActionGroup* encoding_actions_;
   QMenu* jwp_code_page_menu_;

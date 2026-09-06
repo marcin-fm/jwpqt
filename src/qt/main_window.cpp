@@ -445,6 +445,62 @@ void MainWindow::update_command_bar_palette() {
     toolbar_palette.setColor(group, QPalette::WindowText, foreground);
   }
   main_toolbar_->setPalette(toolbar_palette);
+  for (const auto& [action, original] : toolbar_standard_icons_) {
+    if (original.isNull()) continue;
+    QIcon icon;
+    for (const auto mode : {QIcon::Normal, QIcon::Active, QIcon::Selected, QIcon::Disabled}) {
+      const auto group = mode == QIcon::Disabled ? QPalette::Disabled : QPalette::Active;
+      for (const auto state : {QIcon::Off, QIcon::On}) {
+        for (const int size : {16, 32, 64}) {
+          QImage image = original.pixmap(QSize(size, size), 1.0, mode, state)
+                             .toImage().convertToFormat(QImage::Format_ARGB32);
+          int opaque = 0;
+          int visible = 0;
+          bool grayscale = true;
+          const QImage normal = original.pixmap(QSize(size, size), 1.0, QIcon::Normal, state).toImage();
+          for (int y = 0; y < normal.height(); ++y) {
+            for (int x = 0; x < normal.width(); ++x) {
+              const QColor pixel = normal.pixelColor(x, y);
+              if (pixel.alpha() >= 128) {
+                grayscale = grayscale &&
+                    std::max({pixel.red(), pixel.green(), pixel.blue()}) -
+                        std::min({pixel.red(), pixel.green(), pixel.blue()}) <= 24;
+              }
+            }
+          }
+          for (int y = 0; y < image.height(); ++y) {
+            for (int x = 0; x < image.width(); ++x) {
+              const QColor pixel = image.pixelColor(x, y);
+              if (pixel.alpha() < 128) continue;
+              ++opaque;
+              const double alpha = pixel.alphaF();
+              const QColor blended = QColor::fromRgbF(
+                  pixel.redF() * alpha + background.redF() * (1 - alpha),
+                  pixel.greenF() * alpha + background.greenF() * (1 - alpha),
+                  pixel.blueF() * alpha + background.blueF() * (1 - alpha));
+              const double front = luminance(blended), back = luminance(background);
+              if ((std::max(front, back) + 0.05) / (std::min(front, back) + 0.05) >= 3.0) {
+                ++visible;
+              }
+            }
+          }
+          // Repair unreadable monochrome themes without flattening colorful artwork.
+          if (grayscale && opaque != 0 && visible * 8 < opaque) {
+            const QColor foreground = toolbar_palette.color(group, QPalette::ButtonText);
+            for (int y = 0; y < image.height(); ++y) {
+              for (int x = 0; x < image.width(); ++x) {
+                QColor color = foreground;
+                color.setAlpha(image.pixelColor(x, y).alpha());
+                image.setPixelColor(x, y, color);
+              }
+            }
+          }
+          icon.addPixmap(QPixmap::fromImage(image), mode, state);
+        }
+      }
+    }
+    action->setIcon(icon);
+  }
   static const QImage artwork(QStringLiteral(":/jwpqt/toolbar.bmp"));
   if (artwork.size() != QSize(23 * 16, 16)) {
     throw std::runtime_error("Embedded toolbar artwork is invalid");
@@ -1411,6 +1467,7 @@ void MainWindow::create_actions() {
   const auto add_standard = [&](QAction* action, const char* theme,
                                 const QString& label, QIcon fallback = {}) {
     action->setIcon(QIcon::fromTheme(QString::fromLatin1(theme), fallback));
+    toolbar_standard_icons_.emplace_back(action, action->icon());
     action->setIconText(label);
     main_toolbar_->addAction(action);
   };

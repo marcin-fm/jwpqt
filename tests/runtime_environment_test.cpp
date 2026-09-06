@@ -276,7 +276,79 @@ void test_menu_palette_changes() {
   }
 }
 
+void test_toolbar_icon_theme(const QString& root) {
+  const QString old_theme = QIcon::themeName();
+  const QString old_fallback = QIcon::fallbackThemeName();
+  const QStringList old_paths = QIcon::themeSearchPaths();
+  const QStringList old_fallback_paths = QIcon::fallbackSearchPaths();
+  const QString theme = root + QStringLiteral("/icons/low-contrast");
+  require(QDir().mkpath(theme + QStringLiteral("/16x16/actions")),
+          QStringLiteral("Could not create test icon theme"));
+  write_file(theme + QStringLiteral("/index.theme"),
+             "[Icon Theme]\nName=Low Contrast\nDirectories=16x16/actions\n"
+             "[16x16/actions]\nSize=16\nType=Fixed\nContext=Actions\n");
+  QImage monochrome(16, 16, QImage::Format_ARGB32);
+  monochrome.fill(Qt::transparent);
+  QImage colorful = monochrome;
+  for (int y = 2; y < 14; ++y) {
+    for (int x = 2; x < 14; ++x) {
+      monochrome.setPixelColor(x, y, Qt::black);
+      colorful.setPixelColor(x, y, x < 8 ? Qt::cyan : Qt::yellow);
+    }
+  }
+  require(monochrome.save(theme + QStringLiteral("/16x16/actions/edit-cut.png")) &&
+              colorful.save(theme + QStringLiteral("/16x16/actions/edit-copy.png")),
+          QStringLiteral("Could not create test toolbar icons"));
+  QIcon::setThemeSearchPaths({root + QStringLiteral("/icons")});
+  QIcon::setFallbackSearchPaths({});
+  QIcon::setFallbackThemeName({});
+  QIcon::setThemeName(QStringLiteral("low-contrast"));
+  {
+    jwpqt::qt::MainWindow window;
+    window.show();
+    auto* toolbar = window.findChild<QToolBar*>(QStringLiteral("mainToolBar"));
+    auto* cut = window.findChild<QAction*>(QStringLiteral("cutAction"));
+    auto* copy = window.findChild<QAction*>(QStringLiteral("copyAction"));
+    auto* editor = window.findChild<QTextEdit*>();
+    editor->insertPlainText(QStringLiteral("abc"));
+    editor->selectAll();
+    require(!cut->icon().isNull() && !copy->icon().isNull(),
+            QStringLiteral("Test icon theme was not loaded"));
+    for (const bool dark : {true, false, true}) {
+      QApplication::setPalette(menu_palette(dark));
+      QApplication::processEvents();
+      for (const auto mode : {QIcon::Normal, QIcon::Active, QIcon::Selected}) {
+        for (const auto state : {QIcon::Off, QIcon::On}) {
+          const QImage icon = cut->icon().pixmap(16, 16, mode, state).toImage();
+          const QColor ink = icon.pixelColor(8, 8);
+          require(dark ? ink.lightness() > 180 : ink.lightness() < 80,
+                  QStringLiteral("Standard toolbar icon is invisible: dark=%1 mode=%2 state=%3 ink=%4")
+                      .arg(dark).arg(mode).arg(state).arg(ink.name()));
+          require(icon.pixelColor(0, 0).alpha() == 0,
+                  QStringLiteral("Toolbar icon adaptation lost transparency"));
+        }
+      }
+      const QImage color = copy->icon().pixmap(16, 16).toImage();
+      require(color.pixelColor(4, 8) == QColor(Qt::cyan) &&
+                  color.pixelColor(12, 8) == QColor(Qt::yellow),
+              QStringLiteral("Healthy multicolor toolbar artwork was recolored"));
+      const QColor disabled = cut->icon().pixmap(16, 16, QIcon::Disabled).toImage().pixelColor(8, 8);
+      require(std::abs(disabled.lightness() - toolbar->palette().color(QPalette::Window).lightness()) > 60,
+              QStringLiteral("Disabled standard toolbar icon has no visible contrast"));
+      require(toolbar->grab().save(QDir(QCoreApplication::applicationDirPath()).filePath(
+                  dark ? QStringLiteral("toolbar-themed-dark.png")
+                       : QStringLiteral("toolbar-themed-light.png"))),
+              QStringLiteral("Could not capture themed toolbar"));
+    }
+  }
+  QIcon::setThemeName(old_theme);
+  QIcon::setFallbackThemeName(old_fallback);
+  QIcon::setThemeSearchPaths(old_paths);
+  QIcon::setFallbackSearchPaths(old_fallback_paths);
+}
+
 void test_toolbar(const QString& root) {
+  test_toolbar_icon_theme(root);
   const QString old_theme = QIcon::themeName();
   const QString old_fallback = QIcon::fallbackThemeName();
   const QStringList old_paths = QIcon::themeSearchPaths();
