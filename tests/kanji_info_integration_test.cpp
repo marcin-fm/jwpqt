@@ -165,6 +165,7 @@ void test_integration(const QString& directory) {
       QStringLiteral("strokeBushuLookupAction"));
   QAction* reading_action = window.findChild<QAction*>(
       QStringLiteral("kanjiReadingLookupAction"));
+  QAction* index_action = window.findChild<QAction*>(QStringLiteral("indexLookupAction"));
   QAction* count_action =
       window.findChild<QAction*>(QStringLiteral("kanjiCountAction"));
   require(skip_action != nullptr && skip_action->isEnabled() &&
@@ -197,6 +198,14 @@ void test_integration(const QString& directory) {
       window.findChild<QDialog*>(QStringLiteral("kanjiCodeLookupDialog")));
   require(code_dialog != nullptr,
           "SKIP action did not open the code lookup dialog");
+  require(index_action && index_action->isEnabled() &&
+              index_action->shortcut() == QKeySequence(QStringLiteral("Ctrl+Shift+I")),
+          "Index Lookup menu action is unavailable");
+  index_action->trigger();
+  code_dialog->set_index_query({jwpqt::core::KanjiIndexType::kNelson, 0, 0});
+  require(code_dialog->search_index() && code_dialog->results().size() == 1 &&
+              window.findChildren<QDialog*>(QStringLiteral("kanjiCodeLookupDialog")).size() == 1,
+          "Index Lookup did not share the native lookup window");
   jwpqt::core::KanjiSkipQuery skip;
   skip.type = {1, 1};
   skip.first = {2, 2};
@@ -365,6 +374,7 @@ void test_integration(const QString& directory) {
               window.kanji_info_database() == nullptr && action->isEnabled() &&
               !radical_action->isEnabled() &&
                !skip_action->isEnabled() &&
+               !index_action->isEnabled() &&
                !four_corner_action->isEnabled() &&
                !bushu_action->isEnabled() && !spahn_action->isEnabled() &&
                !reading_action->isEnabled() && count_action->isEnabled() &&

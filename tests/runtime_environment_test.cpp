@@ -375,6 +375,7 @@ void test_toolbar(const QString& root) {
       "edictLookupAction", "kanjiCountAction", "radicalLookupAction",
       "bushuLookupAction", "strokeBushuLookupAction", "skipLookupAction",
       "spahnLookupAction", "fourCornerLookupAction", "kanjiReadingLookupAction",
+      "indexLookupAction",
       "pageLayoutAction"};
   QStringList actual;
   int separators = 0;

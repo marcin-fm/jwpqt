@@ -12,6 +12,7 @@
 #include "jwpqt/core/kanji_code_search.h"
 
 class QCheckBox;
+class QComboBox;
 class QLabel;
 class QListWidget;
 class QPushButton;
@@ -35,16 +36,19 @@ class KanjiCodeLookupDialog : public QDialog {
   void set_four_corner_query(const core::KanjiFourCornerQuery& query);
   void set_bushu_query(const core::KanjiBushuQuery& query);
   void set_spahn_query(const core::KanjiSpahnQuery& query);
+  void set_index_query(const core::KanjiIndexQuery& query);
   void select_skip_mode();
   void select_four_corner_mode();
   void select_bushu_mode();
   void select_spahn_mode();
   void select_stroke_bushu_mode();
+  void select_index_mode();
   bool search_skip();
   bool search_four_corner();
   bool search_bushu();
   bool search_spahn();
   bool search_stroke_bushu();
+  bool search_index();
   std::vector<core::KanjiCodeMatch> results() const;
 
  private:
@@ -80,6 +84,9 @@ class KanjiCodeLookupDialog : public QDialog {
   QSpinBox* stroke_bushu_maximum_strokes_;
   QCheckBox* stroke_bushu_nelson_;
   QCheckBox* stroke_bushu_classical_;
+  QComboBox* index_type_;
+  QSpinBox* index_value_;
+  QSpinBox* index_volume_;
   QPixmap radical_sheet_;
   QListWidget* results_;
   QLabel* status_;

@@ -1362,6 +1362,12 @@ void MainWindow::create_actions() {
   connect(kanji_reading_lookup_action_, &QAction::triggered, this,
           [this] { show_kanji_reading_lookup_dialog(); });
 
+  index_lookup_action_ = tools_menu->addAction(tr("&Index Lookup"));
+  index_lookup_action_->setObjectName(QStringLiteral("indexLookupAction"));
+  index_lookup_action_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+I")));
+  connect(index_lookup_action_, &QAction::triggered, this,
+          [this] { show_kanji_code_lookup_dialog(KanjiCodeLookupMode::kIndex); });
+
   kanji_count_action_ = tools_menu->addAction(tr("&Count Kanji"));
   kanji_count_action_->setObjectName(QStringLiteral("kanjiCountAction"));
   kanji_count_action_->setShortcut(
@@ -1552,6 +1558,7 @@ void MainWindow::create_actions() {
   add_legacy(spahn_lookup_action_, 9);
   add_legacy(four_corner_lookup_action_, 10);
   add_legacy(kanji_reading_lookup_action_, 11);
+  add_legacy(index_lookup_action_, 12);
   main_toolbar_->addSeparator();
   add_legacy(page_layout_action_, 18);
 
@@ -1861,6 +1868,8 @@ void MainWindow::update_kanji_code_lookup_actions() {
     stroke_bushu_lookup_action_->setEnabled(enabled);
   if (spahn_lookup_action_ != nullptr)
     spahn_lookup_action_->setEnabled(enabled);
+  if (index_lookup_action_ != nullptr)
+    index_lookup_action_->setEnabled(enabled);
 }
 
 void MainWindow::update_kanji_reading_lookup_action() {
@@ -2565,6 +2574,9 @@ void MainWindow::show_kanji_code_lookup_dialog(KanjiCodeLookupMode mode) {
         break;
       case KanjiCodeLookupMode::kStrokeBushu:
         dialog.select_stroke_bushu_mode();
+        break;
+      case KanjiCodeLookupMode::kIndex:
+        dialog.select_index_mode();
         break;
     }
   };

@@ -8,6 +8,7 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
+#include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -94,6 +95,9 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
       stroke_bushu_maximum_strokes_(new QSpinBox(this)),
       stroke_bushu_nelson_(new QCheckBox(tr("&Nelson radical"), this)),
       stroke_bushu_classical_(new QCheckBox(tr("&Classical radical"), this)),
+      index_type_(new QComboBox(this)),
+      index_value_(new QSpinBox(this)),
+      index_volume_(new QSpinBox(this)),
       radical_sheet_(std::move(radical_sheet)),
       results_(new QListWidget(this)),
       status_(new QLabel(this)),
@@ -194,10 +198,61 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
   stroke_systems->addStretch();
   stroke_bushu_layout->addLayout(stroke_systems);
   tabs_->addTab(stroke_bushu_page, tr("Stroke/Bushu"));
+
+  auto* index_page = new QWidget(tabs_);
+  auto* index_layout = new QFormLayout(index_page);
+  const QStringList index_names{
+      tr("Modern Reader's Japanese-English Character Dictionary, Andrew Nelson"),
+      tr("New Nelson Japanese-English Character Dictionary, John Haig"),
+      tr("New Japanese-English Character Dictionary, Jack Halpern"),
+      tr("School grade"), tr("Morohashi (full index)"), tr("Morohashi (volume/index)"),
+      tr("Halpern Kanji Learners' Dictionary"), tr("Spahn-Hadamitzky Kanji & Kana"),
+      tr("Henshall"), tr("Gakken"), tr("Heisig"), tr("O'Neill Names"),
+      tr("O'Neill Essential Kanji"), tr("De Roo"), tr("Frequency"),
+      tr("Read/Write Japanese"), tr("Tuttle Kanji Cards"), tr("The Kanji Way"),
+      tr("Kanji in Context"), tr("Japanese for Busy People"), tr("Compact Kanji Guide")};
+  const int index_count = (information_.flags() & 0x0008U) == 0 ? 4
+      : (information_.flags() & 0x0010U) == 0 ? 6 : static_cast<int>(index_names.size());
+  index_type_->setObjectName(QStringLiteral("kanjiIndexType"));
+  index_type_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+  index_type_->setMinimumContentsLength(30);
+  for (int index = 0; index < index_count; ++index) {
+    index_type_->addItem(index_names[index], index);
+    index_type_->setItemData(index, index_names[index], Qt::ToolTipRole);
+  }
+  index_type_->setToolTip(index_type_->currentText());
+  index_value_->setObjectName(QStringLiteral("kanjiIndexValue"));
+  index_value_->setRange(0, 65535);
+  index_value_->setToolTip(tr("Exact index number; zero matches an unrecorded value."));
+  index_volume_->setObjectName(QStringLiteral("kanjiIndexVolume"));
+  index_volume_->setRange(0, 255);
+  index_volume_->setEnabled(false);
+  index_layout->addRow(tr("Type of index"), index_type_);
+  index_layout->addRow(tr("Index"), index_value_);
+  index_layout->addRow(tr("Volume"), index_volume_);
+  auto* clear_index = new QPushButton(tr("&Clear"), index_page);
+  clear_index->setObjectName(QStringLiteral("kanjiIndexClear"));
+  index_layout->addRow(clear_index);
+  connect(index_type_, &QComboBox::currentIndexChanged, this, [this] {
+    const auto type = static_cast<core::KanjiIndexType>(index_type_->currentData().toInt());
+    index_volume_->setEnabled(type == core::KanjiIndexType::kMorohashiVolume ||
+                              type == core::KanjiIndexType::kBusyPeople);
+    index_type_->setToolTip(index_type_->currentText());
+  });
+  connect(clear_index, &QPushButton::clicked, this, [this] {
+    index_value_->setValue(0);
+    index_volume_->setValue(0);
+    results_->clear();
+    status_->clear();
+    update_actions();
+    index_value_->setFocus();
+  });
+  tabs_->addTab(index_page, tr("Index"));
   outer->addWidget(tabs_);
 
   auto* search_button = new QPushButton(tr("&Search"), this);
   search_button->setObjectName(QStringLiteral("kanjiCodeSearch"));
+  search_button->setDefault(true);
   outer->addWidget(search_button);
   results_->setObjectName(QStringLiteral("kanjiCodeResults"));
   results_->setSelectionMode(QAbstractItemView::ExtendedSelection);
@@ -228,8 +283,11 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
       case 3:
         (void)search_spahn();
         break;
-      default:
+      case 4:
         (void)search_stroke_bushu();
+        break;
+      case 5:
+        (void)search_index();
         break;
     }
   });
@@ -337,6 +395,31 @@ void KanjiCodeLookupDialog::select_spahn_mode() { tabs_->setCurrentIndex(3); }
 
 void KanjiCodeLookupDialog::select_stroke_bushu_mode() {
   tabs_->setCurrentIndex(4);
+}
+
+void KanjiCodeLookupDialog::select_index_mode() { tabs_->setCurrentIndex(5); }
+
+void KanjiCodeLookupDialog::set_index_query(const core::KanjiIndexQuery& query) {
+  const int type = static_cast<int>(query.type);
+  if (type < 0 || type >= index_type_->count() || query.index > 65535 || query.volume > 255)
+    throw core::KanjiInfoError("Native kanji index query is unavailable or out of range");
+  index_type_->setCurrentIndex(type);
+  index_value_->setValue(static_cast<int>(query.index));
+  index_volume_->setValue(static_cast<int>(query.volume));
+  select_index_mode();
+}
+
+bool KanjiCodeLookupDialog::search_index() {
+  const core::KanjiIndexQuery query{
+      static_cast<core::KanjiIndexType>(index_type_->currentData().toInt()),
+      static_cast<std::uint32_t>(index_value_->value()),
+      static_cast<std::uint32_t>(index_volume_->value())};
+  try {
+    return publish(core::search_kanji_index(information_, query));
+  } catch (const std::exception& error) {
+    status_->setText(QString::fromUtf8(error.what()));
+  }
+  return false;
 }
 
 bool KanjiCodeLookupDialog::search_skip() {

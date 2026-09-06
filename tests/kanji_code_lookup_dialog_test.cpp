@@ -6,9 +6,11 @@
 
 #include <QApplication>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QListWidget>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QTabWidget>
 
 #include "jwpqt/core/kanji_info.h"
 #include "kanji_code_lookup_dialog.h"
@@ -42,23 +44,27 @@ void put_u32(std::string& bytes, std::size_t offset, std::uint32_t value) {
     bytes[offset + shift / 8] = static_cast<char>((value >> shift) & 0xffU);
 }
 
-jwpqt::core::KanjiInfoDatabase database() {
+jwpqt::core::KanjiInfoDatabase database(std::uint32_t flags = 0x28U) {
   constexpr std::size_t variable = 28;
   std::string bytes;
   append_u32(bytes, jwpqt::core::kKanjiInfoMagic);
-  append_u32(bytes, 0x28U);
+  append_u32(bytes, flags);
   append_u16(bytes, 1U);
   append_u16(bytes, 0x3021U);
   bytes.resize(variable, '\0');
   put_u16(bytes, 12, 23U | (3U << 8U));
   put_u16(bytes, 14, (1U << 8U) | (2U << 11U));
   put_u16(bytes, 16, 3U);
-  put_u16(bytes, 18, 1U);
+  put_u16(bytes, 18, (2492U << 1U) | 1U);
+  put_u16(bytes, 20, 2829U << 1U);
+  put_u16(bytes, 22, 1927U);
   put_u32(bytes, 24, static_cast<std::uint32_t>(variable) << 8U);
-  append_u16(bytes, 0U);
+  append_u16(bytes, 10947U);
   append_u32(bytes,
-             (2U << 17U) | (4U << 22U) | (5U << 27U));
+              4U | (1123U << 4U) | (2U << 17U) | (4U << 22U) | (5U << 27U));
   append_u32(bytes, 7U | 1234U << 6U | 5U << 20U);
+  bytes.push_back('F');
+  append_u16(bytes, 640U);
   bytes.push_back('\0');
   return jwpqt::core::KanjiInfoDatabase::parse(bytes);
 }
@@ -157,10 +163,54 @@ void test_dialog() {
           "Stroke/Bushu reduced choices are not source-compatible");
 }
 
+void test_index_dialog() {
+  for (const std::uint32_t flags : {0x20U, 0x28U, 0x38U}) {
+    const auto source = database(flags);
+    jwpqt::qt::KanjiCodeLookupDialog dialog(source, {}, {});
+    auto* type = dialog.findChild<QComboBox*>(QStringLiteral("kanjiIndexType"));
+    auto* index = dialog.findChild<QSpinBox*>(QStringLiteral("kanjiIndexValue"));
+    auto* volume = dialog.findChild<QSpinBox*>(QStringLiteral("kanjiIndexVolume"));
+    auto* tabs = dialog.findChild<QTabWidget*>();
+    require(type && index && volume && tabs && tabs->count() == 6 &&
+                type->count() == (flags == 0x20U ? 4 : flags == 0x28U ? 6 : 21) &&
+                !volume->isEnabled(), "Index lookup types do not follow metadata capabilities");
+    tabs->setCurrentIndex(5);
+    index->setValue(2829);
+    dialog.findChild<QPushButton*>(QStringLiteral("kanjiCodeSearch"))->click();
+    require(dialog.results().size() == 1 && dialog.results()[0].code == 0x3021U,
+            "Index lookup did not search the selected Nelson number");
+    if (flags != 0x20U) {
+      type->setCurrentIndex(5);
+      require(volume->isEnabled() && dialog.results().size() == 1,
+              "Changing index type cleared results or left volume disabled");
+      index->setValue(1123);
+      volume->setValue(4);
+      dialog.findChild<QPushButton*>(QStringLiteral("kanjiCodeSearch"))->click();
+      require(dialog.results().size() == 1, "Morohashi volume lookup failed");
+      index->setValue(65535);
+      require(!dialog.search_index() && dialog.results().size() == 1,
+              "Invalid volume index replaced working results");
+    }
+    if (flags == 0x38U) {
+      type->setCurrentIndex(14);
+      require(!volume->isEnabled(), "Frequency lookup retained an active volume field");
+      index->setValue(640);
+      dialog.findChild<QPushButton*>(QStringLiteral("kanjiCodeSearch"))->click();
+      require(dialog.results().size() == 1, "Frequency index lookup failed");
+      type->setCurrentIndex(19);
+      require(volume->isEnabled(), "Busy People did not enable volume");
+    }
+    dialog.findChild<QPushButton*>(QStringLiteral("kanjiIndexClear"))->click();
+    require(index->value() == 0 && volume->value() == 0 && dialog.results().empty(),
+            "Index Clear did not reset fields and results");
+  }
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
   QApplication application(argc, argv);
   test_dialog();
+  test_index_dialog();
   return EXIT_SUCCESS;
 }

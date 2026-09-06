@@ -71,6 +71,7 @@ enum class KanjiCodeLookupMode {
   kBushu,
   kSpahn,
   kStrokeBushu,
+  kIndex,
 };
 
 struct SearchRequest {
@@ -320,6 +321,7 @@ class MainWindow : public QMainWindow {
   QAction* spahn_lookup_action_ = nullptr;
   QAction* stroke_bushu_lookup_action_ = nullptr;
   QAction* kanji_reading_lookup_action_ = nullptr;
+  QAction* index_lookup_action_ = nullptr;
   QAction* kanji_lookup_action_ = nullptr;
   QAction* format_file_action_ = nullptr;
   QAction* format_paragraph_action_ = nullptr;
