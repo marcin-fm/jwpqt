@@ -5,6 +5,7 @@
 #include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QDir>
+#include <QFileInfo>
 #include <QStandardPaths>
 #include <QTextStream>
 #include <QTimer>
@@ -38,8 +39,23 @@ int main(int argc, char* argv[]) {
       QStringLiteral("Directory containing wnn.dix and wnn.dat."),
       QStringLiteral("directory"));
   parser.addOption(wnn_data_directory_option);
+  const QCommandLineOption config_directory_option(
+      QStringLiteral("config-dir"),
+      QStringLiteral("Application settings and dictionary directory; does not "
+                     "change desktop theme configuration."),
+      QStringLiteral("directory"));
+  parser.addOption(config_directory_option);
+  const QCommandLineOption user_data_directory_option(
+      QStringLiteral("user-data-dir"),
+      QStringLiteral("Directory for user.sel and user.cnv."),
+      QStringLiteral("directory"));
+  parser.addOption(user_data_directory_option);
+  const QCommandLineOption resource_report_option(
+      QStringLiteral("resource-report"),
+      QStringLiteral("Load resources, print their status and exit."));
+  parser.addOption(resource_report_option);
   parser.addPositionalArgument(QStringLiteral("file"),
-                               QStringLiteral("Text file to open."),
+                               QStringLiteral("Document to open."),
                                QStringLiteral("[file]"));
   parser.process(application);
 
@@ -59,12 +75,29 @@ int main(int argc, char* argv[]) {
     return 2;
   }
 
+  for (const auto& option : {config_directory_option,
+                             user_data_directory_option,
+                             wnn_data_directory_option}) {
+    if (parser.isSet(option) && parser.value(option).isEmpty()) {
+      QTextStream(stderr) << "Directory must not be empty: --"
+                          << option.names().constFirst() << '\n';
+      return 2;
+    }
+  }
+
   jwpqt::qt::MainWindow window;
   const jwpqt::qt::OpenMode interaction_mode =
-      parser.isSet(smoke_test) ? jwpqt::qt::OpenMode::kNonInteractive
-                               : jwpqt::qt::OpenMode::kInteractive;
+      parser.isSet(smoke_test) || parser.isSet(resource_report_option)
+          ? jwpqt::qt::OpenMode::kNonInteractive
+          : jwpqt::qt::OpenMode::kInteractive;
   const QString config_directory =
-      QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+      parser.isSet(config_directory_option)
+          ? parser.value(config_directory_option)
+          : QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+  const QString user_data_directory =
+      parser.isSet(user_data_directory_option)
+          ? parser.value(user_data_directory_option)
+          : QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
   if (config_directory.isEmpty() || !QDir().mkpath(config_directory)) {
     QTextStream(stderr)
         << "Could not create the jwpqt configuration directory.\n";
@@ -95,20 +128,23 @@ int main(int argc, char* argv[]) {
     QTextStream(stderr) << "Could not load the radical lookup data.\n";
     return 1;
   }
-  if (parser.isSet(wnn_data_directory_option)) {
-    const QDir data_directory(parser.value(wnn_data_directory_option));
-    const QString user_data =
-        QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
-    if (user_data.isEmpty() || !QDir().mkpath(user_data)) {
+  const QDir wnn_directory(parser.isSet(wnn_data_directory_option)
+                               ? parser.value(wnn_data_directory_option)
+                               : config_directory);
+  const QFileInfo wnn_index(wnn_directory.filePath(QStringLiteral("wnn.dix")));
+  const QFileInfo wnn_data(wnn_directory.filePath(QStringLiteral("wnn.dat")));
+  if (parser.isSet(wnn_data_directory_option) || wnn_index.exists() ||
+      wnn_index.isSymLink() || wnn_data.exists() || wnn_data.isSymLink()) {
+    if (user_data_directory.isEmpty() ||
+        !QDir().mkpath(user_data_directory)) {
       QTextStream(stderr)
           << "Could not create the jwpqt user data directory.\n";
       return 1;
     }
     if (!window.load_wnn_resources(
-            data_directory.filePath(QStringLiteral("wnn.dix")),
-            data_directory.filePath(QStringLiteral("wnn.dat")),
-            QDir(user_data).filePath(QStringLiteral("user.sel")),
-            QDir(user_data).filePath(QStringLiteral("user.cnv")),
+            wnn_index.absoluteFilePath(), wnn_data.absoluteFilePath(),
+            QDir(user_data_directory).filePath(QStringLiteral("user.sel")),
+            QDir(user_data_directory).filePath(QStringLiteral("user.cnv")),
             interaction_mode)) {
       QTextStream(stderr) << "Could not load WNN conversion resources.\n";
       return 1;
@@ -134,6 +170,14 @@ int main(int argc, char* argv[]) {
       }
       return 1;
     }
+  }
+  if (parser.isSet(resource_report_option)) {
+    QTextStream(stdout)
+        << "Configuration directory: " << config.absolutePath() << '\n'
+        << "User data directory: " << QDir(user_data_directory).absolutePath()
+        << '\n' << "WNN directory: " << wnn_directory.absolutePath() << '\n'
+        << window.resource_report() << '\n';
+    return 0;
   }
   window.show();
 

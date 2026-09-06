@@ -28,6 +28,7 @@
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QFontDatabase>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QKeyEvent>
@@ -50,6 +51,8 @@
 #include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStatusBar>
+#include <QStringList>
+#include <QStyle>
 #include <QTextCursor>
 #include <QTextDocument>
 #include <QTextEdit>
@@ -279,6 +282,7 @@ MainWindow::MainWindow(QWidget* parent)
       undo_action_(nullptr),
       redo_action_(nullptr),
       input_mode_button_(new QToolButton(this)),
+      resource_status_button_(new QToolButton(this)),
       input_mode_actions_(new QActionGroup(this)),
       encoding_actions_(new QActionGroup(this)),
       jwp_code_page_menu_(nullptr) {
@@ -304,6 +308,11 @@ MainWindow::MainWindow(QWidget* parent)
   });
   statusBar()->addPermanentWidget(encoding_label_);
   statusBar()->addPermanentWidget(input_mode_button_);
+  resource_status_button_->setObjectName(QStringLiteral("resourceStatus"));
+  resource_status_button_->setAutoRaise(true);
+  resource_status_button_->setAccessibleName(tr("Runtime resources"));
+  statusBar()->addPermanentWidget(resource_status_button_);
+  update_resource_status();
   update_encoding_display();
   resize(900, 680);
 
@@ -381,6 +390,7 @@ bool MainWindow::load_kanji_info(const QString& path, OpenMode mode) {
     kanji_info_dialog_ = nullptr;
     kanji_info_database_ = std::move(candidate);
     kanji_info_path_ = path;
+    update_resource_status();
     update_kanji_info_action();
     update_jis_table_action();
     update_kanji_count_action();
@@ -435,6 +445,7 @@ bool MainWindow::load_kanji_lookup(const QString& radical_path,
     radical_lists_ = std::move(radical_candidate);
     stroke_lists_ = std::move(stroke_candidate);
     radical_sheet_ = std::move(sheet);
+    update_resource_status();
     update_kanji_lookup_action();
     statusBar()->showMessage(
         has_kanji_lookup() ? tr("Loaded radical and stroke lookup data")
@@ -493,6 +504,7 @@ bool MainWindow::load_edict_configuration(const QString& registry_path,
     edict_resources_ = std::move(candidate);
     edict_user_resources_ = std::move(candidate_user);
     edict_config_directory_ = directory;
+    update_resource_status();
     update_edict_actions();
     statusBar()->showMessage(
         tr("Loaded %1 dictionary resources")
@@ -605,6 +617,7 @@ bool MainWindow::set_edict_user_dictionary(
                        }),
         failures.end());
     edict_user_resources_ = std::move(candidate_user);
+    update_resource_status();
     update_edict_actions();
     statusBar()->showMessage(tr("Updated user dictionary"), 3000);
     return true;
@@ -1264,6 +1277,109 @@ void MainWindow::create_actions() {
     connect(action, &QAction::triggered, this,
             [this, code_page] { set_jwp_code_page(code_page); });
   }
+  QMenu* help_menu = menuBar()->addMenu(tr("&Help"));
+  QAction* resources = help_menu->addAction(tr("Runtime &Resources..."));
+  resources->setObjectName(QStringLiteral("resourceStatusAction"));
+  connect(resources, &QAction::triggered, this, [this] {
+    QMessageBox dialog(QMessageBox::Information, tr("Runtime Resources"), {},
+                       QMessageBox::Ok, this);
+    dialog.setTextFormat(Qt::PlainText);
+    dialog.setText(resource_report());
+    dialog.exec();
+  });
+  connect(resource_status_button_, &QToolButton::clicked,
+          resources, &QAction::trigger);
+}
+
+QString MainWindow::resource_report() const {
+  QStringList lines;
+  lines << (wnn_resources_ != nullptr
+                ? tr("WNN conversion: loaded (%1 records)")
+                      .arg(wnn_resources_->dictionary.records().size())
+                : tr("WNN conversion: unavailable (wnn.dix and wnn.dat)"));
+  if (wnn_resources_ != nullptr) {
+    lines << tr("Conversion preferences: %1")
+                 .arg(wnn_resources_->preferences_path)
+          << tr("User conversions: %1")
+                 .arg(wnn_resources_->user_dictionary_path);
+  }
+  lines << (kanji_info_database_ != nullptr
+                ? tr("Kanji information: loaded (%1 characters)")
+                      .arg(kanji_info_database_->count())
+                : tr("Kanji information: unavailable (kanjinfo.dat)"))
+        << (has_kanji_lookup()
+                ? tr("Radical/stroke lookup: loaded")
+                : tr("Radical/stroke lookup: unavailable "
+                     "(kanjinfo.dat, radical.dat and stroke.dat)"))
+        << (radical_sheet_.isNull()
+                ? tr("Radical graphics: unavailable (radicals.bmp)")
+                : tr("Radical graphics: loaded"));
+  if (edict_resources_ == nullptr) {
+    lines << tr("Word dictionaries: not configured (dict.cfg)");
+  } else {
+    lines << tr("Dictionary directory: %1").arg(edict_config_directory_)
+          << tr("Word dictionaries: %1 loaded")
+                 .arg(edict_resources_->resources.size());
+    for (const auto& resource : edict_resources_->resources) {
+      lines << tr("  %1: %2 records (%3)")
+                    .arg(resource.label)
+                    .arg(resource.dictionary.records().size())
+                    .arg(resource.source_path);
+      const auto& errors = resource.dictionary.record_errors();
+      if (!errors.empty()) {
+        lines << tr("    %1 invalid records skipped").arg(errors.size());
+        for (std::size_t i = 0; i < std::min<std::size_t>(errors.size(), 5); ++i) {
+          lines << QStringLiteral("    ") + QString::fromStdString(errors[i]);
+        }
+      }
+    }
+    for (const auto& failure : edict_resources_->failures) {
+      lines << tr("  Unavailable: %1: %2")
+                   .arg(failure.source_path, failure.message);
+    }
+    if (edict_resources_->truncated) {
+      lines << tr("Dictionary resource limits were reached.");
+    }
+  }
+  lines << QString()
+        << tr("Use --config-dir for settings and dictionaries, and "
+              "--user-data-dir for conversion learning. WNN files are found "
+              "in the config directory unless --wnn-data-dir overrides it.")
+        << tr("Qt platform/style: %1 / %2")
+               .arg(QGuiApplication::platformName(), style()->objectName())
+        << tr("Menu colors (background/text/button text): %1 / %2 / %3")
+               .arg(menuBar()->palette().color(QPalette::Window).name(),
+                    menuBar()->palette().color(QPalette::WindowText).name(),
+                    menuBar()->palette().color(QPalette::ButtonText).name());
+  return lines.join(QLatin1Char('\n'));
+}
+
+void MainWindow::update_resource_status() {
+  const bool dictionaries_loaded =
+      edict_resources_ != nullptr && !edict_resources_->truncated &&
+      std::any_of(edict_resources_->resources.begin(),
+                  edict_resources_->resources.end(), [](const auto& resource) {
+                    return resource.entry.special !=
+                           core::EdictRegistrySpecial::kUser;
+                  }) &&
+      std::none_of(edict_resources_->failures.begin(),
+                   edict_resources_->failures.end(), [this](const auto& failure) {
+                     return !failure.quiet ||
+                            edict_resources_->registry.entries
+                                    [failure.registry_index].special !=
+                                core::EdictRegistrySpecial::kUser;
+                   });
+  const bool record_warnings =
+      edict_resources_ != nullptr &&
+      std::any_of(edict_resources_->resources.begin(),
+                  edict_resources_->resources.end(), [](const auto& resource) {
+                    return !resource.dictionary.record_errors().empty();
+                  });
+  resource_status_button_->setText(
+      wnn_resources_ != nullptr && has_kanji_lookup() && dictionaries_loaded
+          ? (record_warnings ? tr("Resources: warnings") : tr("Resources: loaded"))
+          : tr("Resources: incomplete"));
+  resource_status_button_->setToolTip(tr("Inspect dictionary and lookup data"));
 }
 
 void MainWindow::undo_document() {
@@ -1897,6 +2013,7 @@ bool MainWindow::load_wnn_resources(const QString& index_path,
     delete wnn_user_dictionary_dialog_;
     wnn_user_dictionary_dialog_ = nullptr;
     wnn_resources_ = std::move(resources);
+    update_resource_status();
     update_conversion_actions();
     statusBar()->showMessage(tr("Loaded WNN conversion dictionaries"), 3000);
     return true;

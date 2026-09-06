@@ -180,6 +180,7 @@ class MainWindow : public QMainWindow {
   bool clear_kanji_color_list(OpenMode mode = OpenMode::kInteractive);
   const core::KanjiColorPolicy& kanji_color_policy() const noexcept;
   const core::KanjiColorList& kanji_color_list() const noexcept;
+  QString resource_report() const;
 
  protected:
   void closeEvent(QCloseEvent* event) override;
@@ -209,6 +210,7 @@ class MainWindow : public QMainWindow {
   struct EdictUserResources;
 
   void create_actions();
+  void update_resource_status();
   void undo_document();
   void redo_document();
   void restore_jwp_history_state(core::JwpPosition caret);
@@ -328,6 +330,7 @@ class MainWindow : public QMainWindow {
   QAction* view_kanji_color_list_action_ = nullptr;
   QAction* clear_kanji_color_list_action_ = nullptr;
   QToolButton* input_mode_button_;
+  QToolButton* resource_status_button_;
   QActionGroup* input_mode_actions_;
   QActionGroup* encoding_actions_;
   QMenu* jwp_code_page_menu_;

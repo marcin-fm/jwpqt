@@ -449,6 +449,15 @@ set_tests_properties(qt_jis_table_dialog PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 add_test(NAME qt_kanji_color_settings COMMAND jwpqt_kanji_color_settings_tests)
 add_test(NAME qt_main_window COMMAND jwpqt_main_window_tests)
+add_executable(jwpqt_runtime_environment_tests runtime_environment_test.cpp)
+target_link_libraries(jwpqt_runtime_environment_tests PRIVATE jwpqt_qt_ui)
+target_compile_options(jwpqt_runtime_environment_tests PRIVATE -Wall -Wextra -Wpedantic)
+add_dependencies(jwpqt_runtime_environment_tests jwpqt)
+add_test(NAME qt_runtime_environment
+  COMMAND jwpqt_runtime_environment_tests $<TARGET_FILE:jwpqt>)
+set_tests_properties(qt_runtime_environment PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/xdg-config"
+  TIMEOUT 30)
 add_test(NAME qt_wnn_user_dictionary_dialog
   COMMAND jwpqt_wnn_user_dictionary_dialog_tests)
 add_executable(jwpqt_jwp_editor_tests
