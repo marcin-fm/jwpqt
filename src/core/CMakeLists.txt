@@ -10,6 +10,7 @@ add_library(jwpqt_core STATIC
   edict_registry.cpp
   edict_search.cpp
   edict_user_dictionary.cpp
+  jfc_text.cpp
   jis_encoding.cpp
   jis_table.cpp
   jis_text.cpp
