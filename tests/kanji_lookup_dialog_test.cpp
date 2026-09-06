@@ -7,9 +7,11 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QEventLoop>
+#include <QImage>
 #include <QListWidget>
 #include <QPushButton>
 #include <QTimer>
+#include <QToolButton>
 
 #include "jwpqt/core/kanji_lookup_lists.h"
 #include "kanji_lookup_dialog.h"
@@ -126,6 +128,16 @@ void test_dialog() {
           "Radical lookup Clear/Auto Search controls are missing");
   dialog.show();
   QApplication::processEvents();
+  auto* selected = dialog.findChild<QToolButton*>(QStringLiteral("radicalButton1"));
+  QPalette palette = dialog.palette();
+  palette.setColor(QPalette::Highlight, QColor(48, 140, 198));
+  dialog.setPalette(palette);
+  QApplication::processEvents();
+  const QImage selected_image = selected->grab().toImage();
+  const qreal scale = selected_image.devicePixelRatio();
+  require(selected_image.pixelColor(qRound(scale), selected_image.height() / 2) ==
+              palette.color(QPalette::Highlight),
+          "Selected radical has no visible highlight border");
   timer->setInterval(1);
   dialog.set_selected_radicals({0});
   QEventLoop loop;

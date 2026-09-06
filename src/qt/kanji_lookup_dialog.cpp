@@ -99,6 +99,9 @@ KanjiLookupDialog::KanjiLookupDialog(
     }
     auto* button = new QToolButton(radical_widget);
     button->setCheckable(true);
+    button->setStyleSheet(QStringLiteral(
+        "QToolButton:checked { background: palette(highlight); "
+        "color: palette(highlighted-text); border: 2px solid palette(highlight); }"));
     button->setObjectName(
         QStringLiteral("radicalButton%1").arg(index + 1));
     button->setToolTip(tr("Radical group %1").arg(index + 1));

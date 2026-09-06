@@ -98,6 +98,8 @@ JisTableDialog::JisTableDialog(InsertHandler insert_handler,
   table_->setFont(content_font);
   table_->horizontalHeader()->hide();
   table_->verticalHeader()->hide();
+  table_->horizontalHeader()->setMinimumSectionSize(24);
+  table_->verticalHeader()->setMinimumSectionSize(24);
   table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
   table_->verticalHeader()->setSectionResizeMode(QHeaderView::Stretch);
   table_->setMinimumSize(16 * 24, 6 * 24);

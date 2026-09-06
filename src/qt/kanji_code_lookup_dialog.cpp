@@ -156,10 +156,12 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
   bushu_radicals_->setViewMode(QListView::IconMode);
   bushu_radicals_->setResizeMode(QListView::Adjust);
   bushu_radicals_->setMovement(QListView::Static);
-  bushu_radicals_->setIconSize(QSize(22, 22));
-  bushu_radicals_->setGridSize(QSize(32, 32));
-  bushu_radicals_->setMinimumHeight(170);
   const bool has_bushu_sheet = radical_sheet_.width() >= 16 && radical_sheet_.height() >= 241 * 16;
+  bushu_radicals_->setIconSize(QSize(16, 16));
+  bushu_radicals_->setGridSize(has_bushu_sheet ? QSize(26, 26) : QSize(36, 32));
+  bushu_radicals_->setMinimumHeight(has_bushu_sheet ? 9 * 26 + 2 * bushu_radicals_->frameWidth() : 170);
+  bushu_radicals_->setStyleSheet(QStringLiteral(
+      "QListWidget::item:selected { background: palette(highlight); color: palette(highlighted-text); }"));
   for (std::uint8_t strokes = 1; strokes <= core::kMaximumBushuRadicalStrokes; ++strokes) {
     auto* heading = new QListWidgetItem(QString::number(strokes), bushu_radicals_);
     heading->setFlags(Qt::ItemIsEnabled);
@@ -179,16 +181,22 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
     }
   }
   bushu_outer->addWidget(bushu_radicals_, 1);
-  auto* bushu_layout = new QFormLayout;
-  bushu_outer->addLayout(bushu_layout);
-  bushu_layout->addRow(tr("Radical number"), bushu_radical_);
-  bushu_layout->addRow(tr("Stroke count"), bushu_strokes_);
+  auto* bushu_fields = new QHBoxLayout;
+  bushu_fields->addWidget(new QLabel(tr("Radical number"), bushu_page));
+  bushu_fields->addWidget(bushu_radical_);
+  bushu_fields->addWidget(new QLabel(tr("Stroke count"), bushu_page));
+  bushu_fields->addWidget(bushu_strokes_);
+  bushu_fields->addStretch();
+  bushu_outer->addLayout(bushu_fields);
   bushu_nelson_->setObjectName(QStringLiteral("bushuNelson"));
   bushu_classical_->setObjectName(QStringLiteral("bushuClassical"));
   bushu_nelson_->setChecked(true);
   bushu_classical_->setChecked(true);
-  bushu_layout->addRow(bushu_nelson_);
-  bushu_layout->addRow(bushu_classical_);
+  auto* bushu_sources = new QHBoxLayout;
+  bushu_sources->addWidget(bushu_nelson_);
+  bushu_sources->addWidget(bushu_classical_);
+  bushu_sources->addStretch();
+  bushu_outer->addLayout(bushu_sources);
   tabs_->addTab(bushu_page, tr("Bushu"));
 
   auto* spahn_page = new QWidget(tabs_);

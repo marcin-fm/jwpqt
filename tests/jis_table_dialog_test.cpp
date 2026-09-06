@@ -9,6 +9,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QScrollBar>
 #include <QTableWidget>
 
 #include "jis_table_dialog.h"
@@ -63,6 +64,9 @@ void test_grid_and_invalid_input() {
   require(table->font().pixelSize() == 16 &&
               table->mapTo(&dialog, QPoint()).x() > jis->mapTo(&dialog, QPoint()).x(),
           "Character table does not place its readable grid beside the codes");
+  require(table->horizontalScrollBar()->maximum() == 0 &&
+              table->verticalScrollBar()->maximum() == 0,
+          "The default character table clips assigned grid cells");
   const auto before = dialog.current();
   jis->setText(QStringLiteral("FFFF"));
   QMetaObject::invokeMethod(jis, "editingFinished", Qt::DirectConnection);

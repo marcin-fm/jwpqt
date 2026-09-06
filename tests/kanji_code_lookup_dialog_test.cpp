@@ -8,10 +8,12 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QEventLoop>
+#include <QFontMetrics>
 #include <QLabel>
 #include <QListWidget>
 #include <QMouseEvent>
 #include <QPushButton>
+#include <QScrollBar>
 #include <QSpinBox>
 #include <QTabWidget>
 #include <QTimer>
@@ -215,6 +217,24 @@ void test_index_dialog() {
 
 void test_graphical_controls_and_automatic_search() {
   const auto source = database(0x38U);
+  QPixmap sheet(16, 241 * 16);
+  sheet.fill(Qt::white);
+  jwpqt::qt::KanjiCodeLookupDialog compact(source, {}, {}, nullptr, sheet);
+  compact.select_bushu_mode();
+  compact.show();
+  QApplication::processEvents();
+  auto* compact_grid = compact.findChild<QListWidget*>(QStringLiteral("bushuRadicals"));
+  require(compact_grid->verticalScrollBar()->maximum() == 0 &&
+              compact_grid->horizontalScrollBar()->maximum() == 0,
+          "The default Bushu glyph grid unnecessarily hides later stroke groups");
+  for (int i = 0; i < compact_grid->count(); ++i) {
+    const auto* item = compact_grid->item(i);
+    if (item->data(Qt::UserRole).isValid()) continue;
+    require(QFontMetrics(item->font()).horizontalAdvance(item->text()) + 6 <=
+                compact_grid->gridSize().width(),
+            "A two-digit Bushu stroke heading is clipped");
+  }
+  compact.close();
   jwpqt::qt::KanjiCodeLookupDialog dialog(source, {}, {});
   auto* bushu = dialog.findChild<QListWidget*>(QStringLiteral("bushuRadicals"));
   auto* spahn = dialog.findChild<QListWidget*>(QStringLiteral("spahnRadicals"));
