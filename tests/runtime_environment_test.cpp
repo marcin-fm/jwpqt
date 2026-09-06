@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
@@ -14,6 +15,8 @@
 #include <QIcon>
 #include <QImage>
 #include <QKeyEvent>
+#include <QLineEdit>
+#include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -21,6 +24,7 @@
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QPushButton>
+#include <QSpinBox>
 #include <QStyle>
 #include <QStyleFactory>
 #include <QStatusBar>
@@ -32,11 +36,17 @@
 #include <QToolButton>
 
 #include "main_window.h"
+#include "edict_lookup_dialog.h"
 #include "kanji_info_dialog.h"
+#include "kanji_code_lookup_dialog.h"
+#include "kanji_lookup_dialog.h"
+#include "kanji_reading_lookup_dialog.h"
+#include "jis_table_dialog.h"
 #include "edict_resources.h"
 #include "jwpqt/core/edict_registry.h"
 #include "jwpqt/core/edict_search.h"
 #include "jwpqt/core/jwp_text_codec.h"
+#include "jwpqt/core/kanji_bushu_selector.h"
 
 namespace {
 
@@ -706,8 +716,150 @@ void test_real_resources(const QString& root, const QString& source,
               kana->findChild<QTextEdit*>(QStringLiteral("kanjiInfoReadings"))->toPlainText() ==
                   QStringLiteral("-- romaji --\na"),
           QStringLiteral("Real on-yomi lookup did not open independent kana information"));
+  const auto capture = [](QWidget* widget, const QString& name) {
+    for (const bool dark : {false, true}) {
+      QApplication::setPalette(menu_palette(dark));
+      QApplication::processEvents();
+      require(widget->grab().save(QDir(QCoreApplication::applicationDirPath()).filePath(
+                  name + (dark ? QStringLiteral("-dark.png") : QStringLiteral("-light.png")))),
+              QStringLiteral("Could not capture ") + name);
+    }
+  };
+  const auto open = [&window](const char* name) {
+    auto* action = window.findChild<QAction*>(QString::fromLatin1(name));
+    require(action && action->isEnabled(), QStringLiteral("Real-data action unavailable: ") + name);
+    action->trigger();
+    QApplication::processEvents();
+  };
+  open("edictLookupAction");
+  auto* dictionary = dynamic_cast<jwpqt::qt::EdictLookupDialog*>(
+      window.findChild<QDialog*>(QStringLiteral("edictLookupDialog")));
+  require(dictionary != nullptr, QStringLiteral("Real dictionary dialog did not open"));
+  auto* query_edit = dictionary->findChild<QLineEdit*>(QStringLiteral("edictQuery"));
+  query_edit->clear();
+  for (const char ch : std::string("ai")) {
+    const QString text(QChar::fromLatin1(ch));
+    QKeyEvent key(QEvent::KeyPress, text.front().toUpper().unicode(), Qt::NoModifier, text);
+    QApplication::sendEvent(query_edit, &key);
+  }
+  require(query_edit->text() == QStringLiteral("\u3042\u3044") && dictionary->search(),
+          QStringLiteral("Real dictionary kana-field search failed"));
+  auto* dictionary_results = dictionary->findChild<QTextEdit*>(QStringLiteral("edictResults"));
+  const int love = dictionary_results->toPlainText().indexOf(QChar(0x611b));
+  auto* aggregate = window.findChild<QWidget*>(QStringLiteral("edictResultsWindow"));
+  require(love >= 0 && dictionary->isVisible() && (!aggregate || !aggregate->isVisible()) &&
+              window.findChildren<QDialog*>(QStringLiteral("edictLookupDialog")).size() == 1,
+          QStringLiteral("Real dictionary search lost Love or opened a second results window"));
+  QTextCursor result_cursor(dictionary_results->document());
+  result_cursor.setPosition(love);
+  dictionary_results->setTextCursor(result_cursor);
+  dictionary_results->ensureCursorVisible();
+  const QRect love_start = dictionary_results->cursorRect(result_cursor);
+  result_cursor.movePosition(QTextCursor::NextCharacter);
+  const QPoint love_point((love_start.left() + dictionary_results->cursorRect(result_cursor).left()) / 2,
+                          love_start.center().y());
+  const auto information_count = window.findChildren<QDialog*>(QStringLiteral("kanjiInfoDialog")).size();
+  QContextMenuEvent dictionary_info(QContextMenuEvent::Mouse, love_point,
+      dictionary_results->viewport()->mapToGlobal(love_point), Qt::ShiftModifier);
+  QApplication::sendEvent(dictionary_results->viewport(), &dictionary_info);
+  require(window.findChildren<QDialog*>(QStringLiteral("kanjiInfoDialog")).size() == information_count + 1,
+          QStringLiteral("Real dictionary character navigation did not open independent information"));
+  capture(dictionary, QStringLiteral("lookup-dictionary"));
+
+  open("jisTableAction");
+  auto* table = dynamic_cast<jwpqt::qt::JisTableDialog*>(
+      window.findChild<QDialog*>(QStringLiteral("jisTableDialog")));
+  require(table && table->set_jis(0x2421), QStringLiteral("Real Character Table did not select hiragana"));
+  capture(table, QStringLiteral("lookup-character-table"));
+
+  open("radicalLookupAction");
+  auto* radical = dynamic_cast<jwpqt::qt::KanjiLookupDialog*>(
+      window.findChild<QDialog*>(QStringLiteral("kanjiLookupDialog")));
+  require(radical != nullptr, QStringLiteral("Real radical dialog did not open"));
+  const auto bushu_choices = jwpqt::core::kanji_bushu_choices(0, true);
+  const auto claw = std::find_if(bushu_choices.begin(), bushu_choices.end(),
+      [](const auto& choice) { return choice.bushu == 87; });
+  require(claw != bushu_choices.end(), QStringLiteral("Recovered claw radical is missing"));
+  radical->set_selected_radicals({claw->sprite_index});
+  radical->set_stroke_range(13, 13);
+  require(radical->search(), QStringLiteral("Real radical search failed"));
+  const auto radical_results = radical->result_codes();
+  require(std::find(radical_results.begin(), radical_results.end(), 0x3026) != radical_results.end(),
+          QStringLiteral("Real radical search did not find Love"));
+  capture(radical, QStringLiteral("lookup-radical"));
+
+  open("bushuLookupAction");
+  auto* codes = dynamic_cast<jwpqt::qt::KanjiCodeLookupDialog*>(
+      window.findChild<QDialog*>(QStringLiteral("kanjiCodeLookupDialog")));
+  require(codes != nullptr, QStringLiteral("Real code lookup dialog did not open"));
+  const auto has_love = [codes] {
+    const auto results = codes->results();
+    return std::any_of(results.begin(), results.end(), [](const auto& match) { return match.code == 0x3026; });
+  };
+  codes->set_bushu_query({{87, 87}, {13, 13}, true, true});
+  require(codes->search_bushu() && has_love(), QStringLiteral("Real Bushu search did not find Love"));
+  capture(codes, QStringLiteral("lookup-bushu"));
+  open("strokeBushuLookupAction");
+  codes->findChild<QSpinBox*>(QStringLiteral("strokeBushuRadicalStrokes"))->setValue(4);
+  auto* stroke_choices = codes->findChild<QListWidget*>(QStringLiteral("strokeBushuRadicals"));
+  for (int i = 0; i < stroke_choices->count(); ++i)
+    if (stroke_choices->item(i)->data(Qt::UserRole).toInt() == 87) {
+      stroke_choices->setCurrentRow(i);
+      break;
+    }
+  require(stroke_choices->currentItem() &&
+              stroke_choices->currentItem()->data(Qt::UserRole).toInt() == 87,
+          QStringLiteral("Stroke/Bushu claw choice is missing"));
+  codes->findChild<QSpinBox*>(QStringLiteral("strokeBushuMinimumStrokes"))->setValue(13);
+  codes->findChild<QSpinBox*>(QStringLiteral("strokeBushuMaximumStrokes"))->setValue(13);
+  require(codes->search_stroke_bushu() && has_love(), QStringLiteral("Real stroke/Bushu search did not find Love"));
+  capture(codes, QStringLiteral("lookup-stroke-bushu"));
+  open("skipLookupAction");
+  codes->set_skip_query({{2, 2}, {4, 4}, {9, 9}, false});
+  require(codes->search_skip() && has_love(), QStringLiteral("Real SKIP search did not find Love"));
+  capture(codes, QStringLiteral("lookup-skip"));
+  open("spahnLookupAction");
+  codes->set_spahn_query({{4, 4}, {8, 8}, {10, 10}, {1, 1}});
+  require(codes->search_spahn() && has_love(), QStringLiteral("Real Spahn search did not find Love"));
+  capture(codes, QStringLiteral("lookup-spahn"));
+  open("fourCornerLookupAction");
+  codes->set_four_corner_query({{2, 0, 2, 4, 7}});
+  require(codes->search_four_corner() && has_love(), QStringLiteral("Real Four Corner search did not find Love"));
+  capture(codes, QStringLiteral("lookup-four-corner"));
+  open("indexLookupAction");
+  codes->set_index_query({jwpqt::core::KanjiIndexType::kNelson, 2829, 0});
+  require(codes->search_index() && has_love(), QStringLiteral("Real Nelson index search did not find Love"));
+  capture(codes, QStringLiteral("lookup-index"));
+  open("kanjiReadingLookupAction");
+  auto* reading = dynamic_cast<jwpqt::qt::KanjiReadingLookupDialog*>(
+      window.findChild<QDialog*>(QStringLiteral("kanjiReadingLookupDialog")));
+  require(reading != nullptr, QStringLiteral("Real reading dialog did not open"));
+  reading->set_query_text(U"\u3042\u3044");
+  require(reading->search(), QStringLiteral("Real reading lookup failed"));
+  const auto readings_result = reading->results();
+  require(std::find(readings_result.begin(), readings_result.end(), 0x3026) != readings_result.end(),
+          QStringLiteral("Real reading search did not find Love"));
+  capture(reading, QStringLiteral("lookup-reading"));
+  require(!window.document_modified() && editor->toPlainText() == QStringLiteral("\u65e5\u672c"),
+          QStringLiteral("Browsing lookup references mutated the document"));
+  editor->selectAll();
+  editor->insertPlainText(QStringLiteral("\u3042\u3044"));
+  editor->selectAll();
+  auto* convert = window.findChild<QAction*>(QStringLiteral("convertSelectionAction"));
+  qobject_cast<QToolButton*>(window.findChild<QToolBar*>(QStringLiteral("mainToolBar"))
+                                ->widgetForAction(convert))->click();
+  require(window.conversion_active(), QStringLiteral("Real Convert toolbar button did not start conversion"));
+  auto* candidate_list = window.findChild<QListWidget*>(QStringLiteral("conversionCandidates"));
+  const auto love_candidates = candidate_list->findItems(QStringLiteral("\u611b"), Qt::MatchExactly);
+  require(!love_candidates.empty(), QStringLiteral("Real conversion strip did not contain Love"));
+  candidate_list->setCurrentItem(love_candidates.front());
+  require(window.conversion_active() && editor->toPlainText() == QStringLiteral("\u611b"),
+          QStringLiteral("Selecting the Love candidate did not preserve the conversion preview"));
+  capture(&window, QStringLiteral("conversion-candidates"));
+  require(window.accept_conversion(), QStringLiteral("Real Love conversion could not be accepted"));
   std::cout << "Real-data workflow: romanized input -> WNN Japan -> save/reopen; "
-               "EDICT indexed lookup; Love character metadata; independent reading lookup.\n";
+               "EDICT indexed lookup; Love metadata and independent character navigation; "
+               "all lookup reference modes; conversion candidate strip.\n";
 }
 
 }  // namespace

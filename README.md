@@ -101,10 +101,12 @@ search/replace, and portable transaction history. The portable core also
 contains the recovered desktop romaji-to-kana composer plus bounded WNN
 dictionary parsing, ordered candidate lookup, a portable user-selection cache,
 atomic preference file I/O, candidate-session state, and one-undo document
-conversion transactions. With WNN loaded, the native JWP editor converts
-selected kana, cycles candidates with Space or Shift+Space, accepts with Enter
-or Escape, and loads editable `user.cnv` entries beside learned choices in the
-selected user-data directory. Its
+conversion transactions. With WNN loaded, Convert handles selected kana or a
+pending automatic conversion range without prematurely accepting the preview.
+The horizontal strip below the editor previews candidates on click; Space,
+Shift+Space or Convert cycles them, and Enter or Escape accepts the displayed
+candidate as one undoable conversion. Editable `user.cnv` entries live beside
+learned choices in the selected user-data directory. Its
 default Kanji input mode converts printable desktop romaji to recovered JWP
 hiragana and katakana while preserving portable document history. Kana Input
 tracks automatic conversion spans, waits for extendable WNN keys, applies
@@ -135,7 +137,9 @@ displayed conversion candidate. Plain Unicode text retains direct input.
 
 `Ctrl+A` remains Select All. Close uses `Ctrl+F4`, leaving `Ctrl+W` for conversion.
 SKIP uses `Ctrl+Alt+S` and Spahn-Hadamitzky uses `Ctrl+Alt+H`, avoiding native
-Save As and Replace shortcuts. Count Kanji remains `Ctrl+Shift+K`.
+Save As and Replace shortcuts. Index Lookup uses `Ctrl+Shift+I`; Count Kanji
+remains `Ctrl+Shift+K`. Japanese editor, candidate and lookup content defaults
+to the recovered 16-logical-pixel size, independently of the desktop UI font.
 
 ### Menus and toolbar
 
@@ -146,11 +150,40 @@ the remaining actions through the toolbar's extension button. Mode checks and
 disabled actions track the editor and loaded resources.
 
 Menu text and the embedded legacy Japanese toolbar artwork adapt to light/dark
-palettes, including mismatched desktop text colors. Standard toolbar buttons
-use theme icons with short text or native icon fallbacks when no icon theme is
-installed. Toolbar customization and saved toolbar layout/visibility are not
-implemented yet; unsupported Index Lookup and General Options buttons are not
-shown as working commands.
+palettes, including mismatched desktop text colors. Low-contrast monochrome
+standard icons also adapt, while colored artwork is retained. The 29 toolbar
+actions include Index Lookup; short text or native icon fallbacks remain when
+no icon theme is installed. Toolbar customization and saved layout/visibility
+are not implemented yet; the unavailable General Options button is omitted.
+
+### Dictionary and kanji lookup
+
+Dictionary Search replaces results in the same window without opening or
+raising the separate result history. Headwords/readings and definitions are
+selectable text; right-clicking an exact character opens its context menu and
+independent Character Information window. Copy uses the selected display text;
+Insert uses the full dictionary entries touched by that selection.
+
+Dictionary and Reading query fields have their own **K / A / J** mode button
+and `F4` toggle. Kanji mode composes romaji into kana; ASCII and JASCII work
+without changing the main editor's mode. Search resolves pending kana once.
+
+Character Table places its code fields beside the full character grid. Lookup
+results use horizontal character strips with Information, Insert and Copy
+actions. Bushu, Stroke/Bushu, SKIP, Spahn-Hadamitzky, Four Corner and Index Lookup
+share a tabbed window. Graphical radical selectors, recovered SKIP/Four Corner
+legends, Clear and debounced Auto Search are available where applicable. Index
+Lookup supports the 21 recovered dictionary/reference types, limited by the
+loaded metadata; its volume field is enabled only for the relevant indexes.
+Additional selector/legend artwork is embedded, requiring no new provisioning.
+In dark palettes, radical strokes use light ink on dark paper and stroke-count
+headings stay readable. Switching back restores the original light artwork
+without changing queries, selections or results.
+
+This is not complete dialog parity: dictionary query history, explicit
+begin/end/advanced controls, sort/options integration, radical automatic stroke
+estimation and stroke-tolerance shortcuts remain open. Existing numeric ranges
+and portable dictionary search algorithms do not substitute for those controls.
 
 ### Character information
 
