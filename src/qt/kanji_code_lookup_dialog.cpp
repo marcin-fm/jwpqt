@@ -10,6 +10,7 @@
 #include <QClipboard>
 #include <QComboBox>
 #include <QDialogButtonBox>
+#include <QEvent>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -26,6 +27,7 @@
 #include "jwpqt/core/jwp_text_codec.h"
 #include "jwpqt/core/kanji_bushu_selector.h"
 #include "jwpqt/core/kanji_spahn_selector.h"
+#include "lookup_artwork.h"
 #include "text_bridge.h"
 
 namespace jwpqt::qt {
@@ -177,6 +179,7 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
       auto* item = new QListWidgetItem(QIcon(icon), icon.isNull()
           ? QString::number(choice.bushu) : QString(), bushu_radicals_);
       item->setData(Qt::UserRole, choice.bushu);
+      item->setData(Qt::UserRole + 1, choice.sprite_index);
       item->setToolTip(tr("Bushu %1, %2 radical strokes").arg(choice.bushu).arg(strokes));
     }
   }
@@ -437,6 +440,47 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
   populate_stroke_bushu_choices();
   populate_spahn_choices();
   update_actions();
+  update_artwork();
+}
+
+void KanjiCodeLookupDialog::changeEvent(QEvent* event) {
+  QDialog::changeEvent(event);
+  if (event->type() == QEvent::PaletteChange || event->type() == QEvent::ApplicationPaletteChange ||
+      event->type() == QEvent::StyleChange) update_artwork();
+}
+
+void KanjiCodeLookupDialog::update_artwork() {
+  const bool dark = palette().color(QPalette::Window).lightness() < 128;
+  for (auto* list : {bushu_radicals_, stroke_bushu_radicals_, spahn_radicals_})
+    list->setPalette(palette());
+  const QSignalBlocker blocker(bushu_radicals_);
+  for (int row = 0; row < bushu_radicals_->count(); ++row) {
+    auto* item = bushu_radicals_->item(row);
+    if (item->data(Qt::UserRole).isValid()) continue;
+    item->setBackground(dark ? palette().color(QPalette::Window) : QColor(Qt::white));
+    item->setForeground(dark ? QColor(255, 128, 128) : QColor(176, 0, 32));
+  }
+  auto refresh_icons = [this](QListWidget* list, const QPixmap& sheet, int sprite_role) {
+    if (sheet.isNull()) return;
+    const QSignalBlocker signal_blocker(list);
+    for (int row = 0; row < list->count(); ++row) {
+      auto* item = list->item(row);
+      const QVariant sprite = item->data(sprite_role);
+      if (sprite.isValid())
+        item->setIcon(themed_lookup_icon(sheet.copy(0, sprite.toInt() * 16, 16, 16), palette()));
+    }
+  };
+  if (radical_sheet_.width() >= 16 && radical_sheet_.height() >= 241 * 16) {
+    refresh_icons(bushu_radicals_, radical_sheet_, Qt::UserRole + 1);
+    refresh_icons(stroke_bushu_radicals_, radical_sheet_, Qt::UserRole + 1);
+  }
+  refresh_icons(spahn_radicals_, QPixmap(QStringLiteral(":/jwpqt/hsradicals.bmp")), Qt::UserRole + 2);
+  if (auto* legend = findChild<QLabel*>(QStringLiteral("skipLegend")))
+    legend->setPixmap(themed_lookup_artwork(QPixmap(QStringLiteral(":/jwpqt/skiptype.bmp")), palette())
+                          .scaled(236, 96, Qt::KeepAspectRatio));
+  if (auto* legend = findChild<QLabel*>(QStringLiteral("fourCornerLegend")))
+    legend->setPixmap(themed_lookup_artwork(QPixmap(QStringLiteral(":/jwpqt/fourcorners.bmp")), palette())
+                          .scaled(320, 120, Qt::KeepAspectRatio));
 }
 
 void KanjiCodeLookupDialog::search_current() {
@@ -497,10 +541,12 @@ void KanjiCodeLookupDialog::populate_spahn_choices() {
     const QPixmap icon = sheet.copy(0, choice.sprite_index * 16, 16, 16);
     const QString code = QStringLiteral("%1%2").arg(choice.radical_strokes)
         .arg(QChar(static_cast<char>('a' + choice.radical)));
-    auto* item = new QListWidgetItem(QIcon(icon), icon.isNull() ? code : QString(), spahn_radicals_);
+    auto* item = new QListWidgetItem(themed_lookup_icon(icon, palette()),
+                                    icon.isNull() ? code : QString(), spahn_radicals_);
     item->setToolTip(code);
     item->setData(Qt::UserRole, choice.radical);
     item->setData(Qt::UserRole + 1, choice.radical_strokes);
+    item->setData(Qt::UserRole + 2, choice.sprite_index);
     if (spahn_radicals_->currentRow() < 0 && choice.radical == spahn_radical_->value())
       spahn_radicals_->setCurrentItem(item);
   }
@@ -677,9 +723,9 @@ void KanjiCodeLookupDialog::populate_stroke_bushu_choices() {
   for (const core::KanjiBushuChoice& choice : choices) {
     auto* item = new QListWidgetItem(
         has_sheet
-            ? QIcon(radical_sheet_.copy(
+            ? themed_lookup_icon(radical_sheet_.copy(
                   0, static_cast<int>(choice.sprite_index) * kRadicalSourceSize,
-                  kRadicalSourceSize, kRadicalSourceSize))
+                  kRadicalSourceSize, kRadicalSourceSize), palette())
             : QIcon(),
         QString::number(choice.bushu), stroke_bushu_radicals_);
     item->setToolTip(tr("Bushu %1").arg(choice.bushu));

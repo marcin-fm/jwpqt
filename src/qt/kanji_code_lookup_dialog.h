@@ -52,7 +52,11 @@ class KanjiCodeLookupDialog : public QDialog {
   bool search_index();
   std::vector<core::KanjiCodeMatch> results() const;
 
+ protected:
+  void changeEvent(QEvent* event) override;
+
  private:
+  void update_artwork();
   bool publish(core::KanjiCodeSearchReport report);
   std::vector<core::JisCode> selected_codes() const;
   void update_actions();

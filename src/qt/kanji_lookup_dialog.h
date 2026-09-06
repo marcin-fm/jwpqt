@@ -39,7 +39,11 @@ class KanjiLookupDialog : public QDialog {
   bool search();
   std::vector<core::JisCode> result_codes() const;
 
+ protected:
+  void changeEvent(QEvent* event) override;
+
  private:
+  void update_artwork();
   std::vector<core::JisCode> selected_result_codes() const;
   void update_result_actions();
   void copy_results();
@@ -51,7 +55,9 @@ class KanjiLookupDialog : public QDialog {
   const core::KanjiInfoDatabase& information_;
   InsertHandler insert_handler_;
   InfoHandler info_handler_;
+  QPixmap radical_sheet_;
   std::vector<QToolButton*> radical_buttons_;
+  std::vector<QLabel*> stroke_headings_;
   QSpinBox* minimum_strokes_;
   QSpinBox* maximum_strokes_;
   QTimer* search_timer_;

@@ -8,6 +8,7 @@
 #include <QCheckBox>
 #include <QEventLoop>
 #include <QImage>
+#include <QLabel>
 #include <QListWidget>
 #include <QPushButton>
 #include <QTimer>
@@ -160,10 +161,77 @@ void test_dialog() {
   require(!timer->isActive() && dialog.result_codes().empty(), "Hidden radical lookup still searched");
 }
 
+void test_artwork_palette_changes() {
+  std::vector<std::vector<jwpqt::core::JisCode>> groups(241);
+  groups[0] = {0x3021U};
+  const auto radicals = lists(groups);
+  groups.resize(30);
+  const auto strokes = lists(groups);
+  const auto info = information();
+  QImage image(16, 241 * 16, QImage::Format_ARGB32);
+  image.fill(Qt::white);
+  image.setPixelColor(4, 8, Qt::black);
+  image.setPixelColor(5, 8, QColor(0, 0, 0, 128));
+  image.setPixelColor(14, 14, Qt::red);
+  image.setPixelColor(15, 15, Qt::transparent);
+  const QPixmap original = QPixmap::fromImage(image);
+  const QImage before = original.toImage();
+  jwpqt::qt::KanjiLookupDialog dialog(radicals, strokes, info, original, {}, {});
+  dialog.findChild<QCheckBox*>(QStringLiteral("kanjiLookupAutoSearch"))->setChecked(false);
+  dialog.set_selected_radicals({0});
+  require(dialog.search(), "Could not prepare radical palette regression");
+  dialog.show();
+  auto* button = dialog.findChild<QToolButton*>(QStringLiteral("radicalButton1"));
+  auto* timer = dialog.findChild<QTimer*>(QStringLiteral("kanjiLookupSearchTimer"));
+  for (bool dark : {true, false, true, false}) {
+    QPalette palette = dialog.palette();
+    palette.setColor(QPalette::Window, dark ? QColor(32, 35, 37) : QColor(240, 240, 240));
+    palette.setColor(QPalette::Text, dark ? QColor(240, 240, 240) : QColor(16, 16, 16));
+    palette.setColor(QPalette::Button, palette.color(QPalette::Window));
+    palette.setColor(QPalette::ButtonText, palette.color(QPalette::Text));
+    dialog.setPalette(palette);
+    QApplication::processEvents();
+    const QImage icon = button->icon().pixmap(QSize(16, 16), 1.0).toImage();
+    require(button->palette().color(QPalette::Button) == palette.color(QPalette::Button),
+            "Radical button background retained the previous palette");
+    require(icon.pixelColor(0, 0) == (dark ? palette.color(QPalette::Window) : QColor(Qt::white)) &&
+                icon.pixelColor(4, 8) == (dark ? palette.color(QPalette::Text) : QColor(Qt::black)),
+            "Radical bitmap does not follow the live light/dark palette");
+    require(icon.pixelColor(5, 8).alpha() == 128 && icon.pixelColor(15, 15).alpha() == 0 &&
+                icon.pixelColor(14, 14) == QColor(Qt::red) && original.toImage() == before,
+            "Radical recoloring changed alpha, colored accents or the source sheet");
+    const QImage selected = button->icon().pixmap(QSize(16, 16), 1.0, QIcon::Selected, QIcon::On).toImage();
+    const QImage disabled = button->icon().pixmap(QSize(16, 16), 1.0, QIcon::Disabled).toImage();
+    require(!selected.isNull() && !disabled.isNull() &&
+                (!dark || (selected.pixelColor(4, 8).lightness() > selected.pixelColor(0, 0).lightness() &&
+                           disabled.pixelColor(4, 8).alpha() < icon.pixelColor(4, 8).alpha())),
+            "Selected or disabled dark radical artwork is unreadable");
+    auto* heading = dialog.findChild<QLabel*>(QStringLiteral("radicalStrokeHeader1"));
+    require(heading && heading->palette().color(QPalette::Window) ==
+                (dark ? palette.color(QPalette::Window) : QColor(Qt::white)),
+            "Radical stroke headings retained white paper in dark mode");
+    require(dialog.selected_radicals() == std::vector<std::size_t>{0} &&
+                dialog.result_codes() == std::vector<jwpqt::core::JisCode>{0x3021U} && !timer->isActive(),
+            "Palette changes altered radical selection, results or search scheduling");
+  }
+  QPalette broken = dialog.palette();
+  broken.setColor(QPalette::Window, QColor(32, 35, 37));
+  broken.setColor(QPalette::Text, broken.color(QPalette::Window));
+  timer->setInterval(60000);
+  dialog.findChild<QCheckBox*>(QStringLiteral("kanjiLookupAutoSearch"))->setChecked(true);
+  const int timer_id = timer->timerId();
+  dialog.setPalette(broken);
+  QApplication::processEvents();
+  require(button->icon().pixmap(QSize(16, 16), 1.0).toImage().pixelColor(4, 8) == QColor(Qt::white) &&
+              timer->isActive() && timer->timerId() == timer_id,
+          "Unreadable theme ink was retained or palette changes restarted pending radical work");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
   QApplication application(argc, argv);
   test_dialog();
+  test_artwork_palette_changes();
   return EXIT_SUCCESS;
 }

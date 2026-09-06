@@ -9,6 +9,7 @@
 #include <QCheckBox>
 #include <QClipboard>
 #include <QDialogButtonBox>
+#include <QEvent>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -25,6 +26,7 @@
 
 #include "jwpqt/core/jwp_text_codec.h"
 #include "jwpqt/core/kanji_bushu_selector.h"
+#include "lookup_artwork.h"
 #include "text_bridge.h"
 
 namespace jwpqt::qt {
@@ -50,6 +52,7 @@ KanjiLookupDialog::KanjiLookupDialog(
       information_(information),
       insert_handler_(std::move(insert_handler)),
       info_handler_(std::move(info_handler)),
+      radical_sheet_(std::move(radical_sheet)),
       minimum_strokes_(new QSpinBox(this)),
       maximum_strokes_(new QSpinBox(this)),
       search_timer_(new QTimer(this)),
@@ -72,9 +75,9 @@ KanjiLookupDialog::KanjiLookupDialog(
   auto* radical_grid = new QGridLayout(radical_widget);
   radical_grid->setSpacing(0);
   radical_buttons_.reserve(radical_lists_.group_count());
-  const bool has_sheet = !radical_sheet.isNull() &&
-                         radical_sheet.width() >= kRadicalSourceSize &&
-                         radical_sheet.height() >=
+  const bool has_sheet = !radical_sheet_.isNull() &&
+                         radical_sheet_.width() >= kRadicalSourceSize &&
+                         radical_sheet_.height() >=
                              static_cast<int>(radical_lists_.group_count()) *
                                  kRadicalSourceSize;
   std::vector<std::size_t> stroke_starts;
@@ -87,9 +90,11 @@ KanjiLookupDialog::KanjiLookupDialog(
   for (std::size_t index = 0; index < radical_lists_.group_count(); ++index) {
     if (next_heading < stroke_starts.size() && stroke_starts[next_heading] == index) {
       auto* heading = new QLabel(QString::number(++next_heading), radical_widget);
+      heading->setObjectName(QStringLiteral("radicalStrokeHeader%1").arg(next_heading));
       heading->setFixedSize(28, 28);
       heading->setAlignment(Qt::AlignCenter);
-      heading->setStyleSheet(QStringLiteral("color: #b00020; background: white;"));
+      heading->setAutoFillBackground(true);
+      stroke_headings_.push_back(heading);
       QFont font = heading->font();
       font.setPixelSize(16);
       font.setBold(true);
@@ -107,7 +112,7 @@ KanjiLookupDialog::KanjiLookupDialog(
     button->setToolTip(tr("Radical group %1").arg(index + 1));
     button->setFixedSize(28, 28);
     if (has_sheet) {
-      button->setIcon(QIcon(radical_sheet.copy(
+      button->setIcon(QIcon(radical_sheet_.copy(
           0, static_cast<int>(index) * kRadicalSourceSize,
           kRadicalSourceSize, kRadicalSourceSize)));
       button->setIconSize(QSize(22, 22));
@@ -217,6 +222,31 @@ KanjiLookupDialog::KanjiLookupDialog(
   connect(info_button_, &QPushButton::clicked, this,
           [this] { show_information(); });
   update_result_actions();
+  update_artwork();
+}
+
+void KanjiLookupDialog::changeEvent(QEvent* event) {
+  QDialog::changeEvent(event);
+  if (event->type() == QEvent::PaletteChange || event->type() == QEvent::ApplicationPaletteChange ||
+      event->type() == QEvent::StyleChange) update_artwork();
+}
+
+void KanjiLookupDialog::update_artwork() {
+  const bool dark = palette().color(QPalette::Window).lightness() < 128;
+  for (auto* heading : stroke_headings_) {
+    QPalette colors = heading->palette();
+    colors.setColor(QPalette::Window, dark ? palette().color(QPalette::Window) : QColor(Qt::white));
+    colors.setColor(QPalette::WindowText, dark ? QColor(255, 128, 128) : QColor(176, 0, 32));
+    heading->setPalette(colors);
+  }
+  const bool has_sheet = radical_sheet_.width() >= 16 &&
+      radical_sheet_.height() >= static_cast<int>(radical_buttons_.size()) * 16;
+  for (std::size_t index = 0; index < radical_buttons_.size(); ++index) {
+    auto* button = radical_buttons_[index];
+    button->setPalette(palette());
+    if (has_sheet) button->setIcon(themed_lookup_icon(
+        radical_sheet_.copy(0, static_cast<int>(index) * 16, 16, 16), palette()));
+  }
 }
 
 void KanjiLookupDialog::set_selected_radicals(

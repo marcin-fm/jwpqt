@@ -9,6 +9,7 @@
 #include <QComboBox>
 #include <QEventLoop>
 #include <QFontMetrics>
+#include <QImage>
 #include <QLabel>
 #include <QListWidget>
 #include <QMouseEvent>
@@ -314,6 +315,75 @@ void test_graphical_controls_and_automatic_search() {
   require(!timer->isActive() && dialog.results().empty(), "Closing the lookup retained automatic work");
 }
 
+void test_artwork_palette_changes() {
+  const auto source = database(0x38U);
+  QImage image(16, 241 * 16, QImage::Format_ARGB32);
+  image.fill(Qt::white);
+  for (int sprite = 0; sprite < 241; ++sprite) image.setPixelColor(4, sprite * 16 + 8, Qt::black);
+  jwpqt::qt::KanjiCodeLookupDialog dialog(source, {}, {}, nullptr, QPixmap::fromImage(image));
+  dialog.findChild<QCheckBox*>(QStringLiteral("kanjiCodeAutoSearch"))->setChecked(false);
+  auto* bushu = dialog.findChild<QListWidget*>(QStringLiteral("bushuRadicals"));
+  auto* stroke = dialog.findChild<QListWidget*>(QStringLiteral("strokeBushuRadicals"));
+  auto* spahn = dialog.findChild<QListWidget*>(QStringLiteral("spahnRadicals"));
+  auto* timer = dialog.findChild<QTimer*>(QStringLiteral("kanjiCodeSearchTimer"));
+  auto* bushu_item = bushu->item(1);
+  auto* stroke_item = stroke->item(1);
+  auto* spahn_item = spahn->item(0);
+  bushu->setCurrentItem(bushu_item);
+  stroke->setCurrentItem(stroke_item);
+  spahn->setCurrentItem(spahn_item);
+  dialog.set_index_query({jwpqt::core::KanjiIndexType::kNelson, 2829, 0});
+  require(dialog.search_index(), "Could not prepare code lookup palette regression");
+  dialog.select_bushu_mode();
+  dialog.show();
+  QImage light_spahn, light_skip, light_corner;
+  for (bool dark : {false, true, false, true}) {
+    QPalette palette = dialog.palette();
+    palette.setColor(QPalette::Window, dark ? QColor(32, 35, 37) : QColor(240, 240, 240));
+    palette.setColor(QPalette::Text, dark ? QColor(240, 240, 240) : QColor(16, 16, 16));
+    palette.setColor(QPalette::Base, dark ? QColor(21, 22, 23) : QColor(Qt::white));
+    dialog.setPalette(palette);
+    QApplication::processEvents();
+    require(bushu->palette().color(QPalette::Base) == palette.color(QPalette::Base),
+            "Bushu grid background retained the previous palette");
+    for (const auto* item : {bushu_item, stroke_item}) {
+      const QImage icon = item->icon().pixmap(QSize(16, 16), 1.0).toImage();
+      require(icon.pixelColor(0, 0) == (dark ? palette.color(QPalette::Window) : QColor(Qt::white)) &&
+                  icon.pixelColor(4, 8) == (dark ? palette.color(QPalette::Text) : QColor(Qt::black)),
+              "Bushu bitmap does not follow the live light/dark palette");
+    }
+    const QImage spahn_image = spahn_item->icon().pixmap(QSize(16, 16), 1.0).toImage();
+    const QImage skip = dialog.findChild<QLabel*>(QStringLiteral("skipLegend"))->pixmap().toImage();
+    const QImage corner = dialog.findChild<QLabel*>(QStringLiteral("fourCornerLegend"))->pixmap().toImage();
+    if (light_spahn.isNull()) { light_spahn = spahn_image; light_skip = skip; light_corner = corner; }
+    require((spahn_image == light_spahn) != dark && (skip == light_skip) != dark &&
+                (corner == light_corner) != dark,
+            "Embedded lookup artwork did not switch and restore with the palette");
+    require(bushu->item(0)->background().color() ==
+                (dark ? palette.color(QPalette::Window) : QColor(Qt::white)) &&
+                bushu->item(0)->foreground().color() == (dark ? QColor(255, 128, 128) : QColor(176, 0, 32)),
+            "Bushu stroke headings do not follow the dark palette");
+    require(bushu->currentItem() == bushu_item && stroke->currentItem() == stroke_item &&
+                spahn->currentItem() == spahn_item && dialog.results().size() == 1 && !timer->isActive(),
+            "Changing artwork rebuilt selections, results or pending lookup work");
+  }
+  dialog.findChild<QCheckBox*>(QStringLiteral("spahnVariants"))->setChecked(false);
+  dialog.findChild<QSpinBox*>(QStringLiteral("strokeBushuRadicalStrokes"))->setValue(4);
+  for (const auto* item : {spahn->item(0), stroke->item(1)})
+    require(item->icon().pixmap(QSize(16, 16), 1.0).toImage().pixelColor(0, 0) ==
+                dialog.palette().color(QPalette::Window),
+            "Rebuilt radical choices lost the active dark palette");
+  timer->setInterval(60000);
+  dialog.findChild<QCheckBox*>(QStringLiteral("kanjiCodeAutoSearch"))->setChecked(true);
+  const int timer_id = timer->timerId();
+  QPalette light = dialog.palette();
+  light.setColor(QPalette::Window, QColor(240, 240, 240));
+  dialog.setPalette(light);
+  QApplication::processEvents();
+  require(timer->isActive() && timer->timerId() == timer_id,
+          "Changing artwork restarted or cancelled a pending code lookup");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -321,5 +391,6 @@ int main(int argc, char* argv[]) {
   test_dialog();
   test_graphical_controls_and_automatic_search();
   test_index_dialog();
+  test_artwork_palette_changes();
   return EXIT_SUCCESS;
 }
