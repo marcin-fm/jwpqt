@@ -169,15 +169,11 @@ QString decode_registry_text(const core::EdictRegistry& registry,
 std::size_t ensure_edict_user_entry(core::EdictRegistry& registry) {
   for (std::size_t i = 0; i < registry.entries.size(); ++i) {
     if (registry.entries[i].special == core::EdictRegistrySpecial::kUser) {
-      core::EdictRegistryEntry& entry = registry.entries[i];
+      const core::EdictRegistryEntry& entry = registry.entries[i];
       if (entry.encoding != core::EdictRegistryEncoding::kMixed ||
           entry.indexed) {
         throw std::runtime_error(
             "Editable user dictionary must be mixed and unindexed");
-      }
-      // The recovered JWPxp registry leaves its optional USER path empty.
-      if (entry.path.empty()) {
-        entry.path = u"user.dct";
       }
       return i;
     }
