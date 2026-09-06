@@ -108,6 +108,45 @@ void test_recovered_euc_jis_x_0212_subset() {
       "truncated JIS X 0212 sequence");
 }
 
+void test_legacy_euc_record_compatibility() {
+  const std::string bytes =
+      "\xa4\x2c /first/last without slash\r\n"
+      "word /\x8f\xaa\xa1/\xa4\x2c/\n";
+  const EdictDictionary dictionary =
+      EdictDictionary::parse(bytes, EdictEncoding::kEucJp);
+  require(dictionary.source_bytes() == bytes &&
+              dictionary.records().size() == 2 &&
+              dictionary.records()[0].headword == U"\u304c" &&
+              dictionary.records()[0].definitions ==
+                  std::vector<std::u32string>{U"first", U"last without slash"} &&
+              dictionary.records()[1].byte_offset == bytes.find("word") &&
+              dictionary.records()[1].definitions ==
+                  std::vector<std::u32string>{U"\u00c1", U"\u304c"},
+          "Legacy EUC records lost meanings, mapped text, or source offsets");
+  for (const std::string& malformed :
+       {std::string("\xa4 /value/\n"), std::string("\xa4\x20 /value/\n"),
+        std::string("\xa4\x7f /value/\n"), std::string("\xa4\xff /value/\n"),
+        std::string("\x8f\xaa /value/\n"), std::string("word /\x8e\xa1/\n"),
+        std::string("word /value"), std::string("word /one//two\n"),
+        std::string("word /\n")}) {
+    expect_error([&] { EdictDictionary::parse(malformed, EdictEncoding::kEucJp); },
+                 "invalid record beyond legacy EUC compatibility");
+  }
+  for (const EdictEncoding encoding :
+       {EdictEncoding::kUtf8, EdictEncoding::kMixed}) {
+    expect_error([&] { EdictDictionary::parse("word /value\n", encoding); },
+                 "non-EUC unterminated definitions");
+  }
+  EdictParseLimits limits;
+  limits.definitions = 1;
+  expect_error([&] { EdictDictionary::parse(bytes, EdictEncoding::kEucJp, limits); },
+               "legacy EUC compatibility definition budget");
+  limits = EdictParseLimits{};
+  limits.decoded_code_points = 2;
+  expect_error([&] { EdictDictionary::parse(bytes, EdictEncoding::kEucJp, limits); },
+               "legacy EUC compatibility decoded budget");
+}
+
 void test_mixed_record_definitions() {
   const std::string prefix = jwpqt::core::encode_legacy_text(
       U"日本 [にほん]", jwpqt::core::LegacyEncoding::kEucJp);
@@ -316,6 +355,7 @@ int main() {
     test_utf8_records_and_boundaries();
     test_euc_jp_record();
     test_recovered_euc_jis_x_0212_subset();
+    test_legacy_euc_record_compatibility();
     test_mixed_record_definitions();
     test_invalid_mixed_records();
     test_invalid_records();

@@ -181,6 +181,24 @@ std::optional<std::uint8_t> jwp_euc_0212_byte(std::uint8_t first,
 
 std::u32string decode_edict_euc(std::string_view bytes,
                                 std::size_t byte_offset) {
+  // Legacy dictionary readers mask both JIS bytes, including low-bit trails
+  // found in ENAMDICT. Normalize only the decoding copy, never JDX source bytes.
+  std::string normalized(bytes);
+  for (std::size_t index = 0; index < normalized.size();) {
+    const auto first = static_cast<std::uint8_t>(normalized[index]);
+    const std::size_t width = first == 0x8fU ? 3 : (first & 0x80U) ? 2 : 1;
+    if (width > normalized.size() - index) {
+      break;
+    }
+    if (first >= 0xa1U && first <= 0xfeU) {
+      const auto second = static_cast<std::uint8_t>(normalized[index + 1]);
+      if (second >= 0x21U && second <= 0x7eU) {
+        normalized[index + 1] = static_cast<char>(second | 0x80U);
+      }
+    }
+    index += width;
+  }
+  bytes = normalized;
   std::u32string result;
   std::size_t segment_start = 0;
   std::size_t cursor = 0;
@@ -319,15 +337,18 @@ void parse_headword_and_readings(std::u32string_view prefix,
 
 void parse_definitions(std::u32string_view text, EdictRecord& record,
                        std::size_t& definition_count,
-                       const EdictParseLimits& limits) {
-  if (text.empty() || text.front() != U'/' || text.back() != U'/') {
+                       const EdictParseLimits& limits,
+                       EdictEncoding encoding) {
+  if (text.empty() || text.front() != U'/' ||
+      (text.back() != U'/' && encoding != EdictEncoding::kEucJp)) {
     fail(record.byte_offset, "definition list is not slash-terminated");
   }
   std::size_t start = 1;
   while (start < text.size()) {
-    const std::size_t end = text.find(U'/', start);
+    std::size_t end = text.find(U'/', start);
     if (end == std::u32string_view::npos) {
-      fail(record.byte_offset, "definition list is unterminated");
+      // The shipped CLASSICAL dictionary also terminates meanings at CR/LF.
+      end = text.size();
     }
     if (end == start) {
       fail(record.byte_offset, "definition is empty");
@@ -412,7 +433,7 @@ EdictRecord parse_record(std::string_view bytes, EdictEncoding encoding,
   parse_headword_and_readings(
       std::u32string_view(line).substr(0, definitions_start), record);
   parse_definitions(std::u32string_view(line).substr(definitions_start + 1),
-                    record, definition_count, limits);
+                    record, definition_count, limits, encoding);
   return record;
 }
 

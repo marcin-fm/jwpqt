@@ -90,6 +90,20 @@ void test_kana_normalization() {
   require(index.find({0x242b, 0x244a}) ==
               std::vector<EdictIndexEntry>({{0, 0}}),
           "EUC JDX query did not fold katakana to hiragana");
+
+  const std::string legacy = "\xa4\x2c /legacy low-bit trail\n";
+  const EdictDictionary legacy_dictionary =
+      EdictDictionary::parse(legacy, EdictEncoding::kEucJp);
+  const std::string legacy_index_bytes =
+      index_bytes(static_cast<std::uint32_t>(legacy.size()), {1});
+  const EdictIndex legacy_index =
+      EdictIndex::parse(legacy_index_bytes, legacy_dictionary);
+  require(legacy_dictionary.source_bytes() == legacy &&
+              legacy_dictionary.records()[0].headword == U"\u304c" &&
+              legacy_index.serialize() == legacy_index_bytes &&
+              legacy_index.find({0x242c}) ==
+                  std::vector<EdictIndexEntry>({{0, 0}}),
+          "Legacy EUC compatibility changed original JDX offsets or search");
 }
 
 void test_utf8_index() {

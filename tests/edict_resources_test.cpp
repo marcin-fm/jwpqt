@@ -304,7 +304,7 @@ void test_special_files_and_symlinks(const QString& directory) {
 }
 
 void test_failed_parse_budget_accounting(const QString& directory) {
-  const std::string malformed = "bad /one/two\n";
+  const std::string malformed = "bad /one//two/\n";
   const std::string valid = "good /entry/\n";
   write_bytes(directory + QStringLiteral("/malformed.dic"), malformed);
   write_bytes(directory + QStringLiteral("/after-malformed.dic"), valid);
