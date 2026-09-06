@@ -154,6 +154,10 @@ void KanjiCountDialog::set_display_options(
   meanings_->setChecked(options.meanings);
 }
 
+void KanjiCountDialog::set_document_provider(DocumentProvider provider) {
+  document_provider_ = std::move(provider);
+}
+
 KanjiCountDisplayOptions KanjiCountDialog::display_options() const {
   KanjiCountDisplayOptions options;
   options.all_documents = all_documents_->isChecked();
@@ -168,6 +172,14 @@ KanjiCountDisplayOptions KanjiCountDialog::display_options() const {
 
 bool KanjiCountDialog::count() {
   try {
+    if (document_provider_) {
+      auto documents = document_provider_();
+      if (documents.empty())
+        throw core::KanjiCountError("Kanji count requires a current document");
+      documents_ = std::move(documents);
+      all_documents_->setEnabled(documents_.size() > 1);
+      if (documents_.size() == 1) all_documents_->setChecked(false);
+    }
     const KanjiCountDisplayOptions options = display_options();
     std::vector<const core::JwpDocument*> selected;
     if (options.all_documents) {

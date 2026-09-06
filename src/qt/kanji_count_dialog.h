@@ -33,6 +33,8 @@ class KanjiCountDialog : public QDialog {
  public:
   using InsertHandler = std::function<void(std::u32string)>;
   using InfoHandler = std::function<void(core::JisCode)>;
+  // Each refresh returns owning snapshots, with the current document first.
+  using DocumentProvider = std::function<std::vector<core::JwpDocument>()>;
 
   KanjiCountDialog(std::vector<const core::JwpDocument*> documents,
                    const core::KanjiColorList& color_list,
@@ -41,6 +43,7 @@ class KanjiCountDialog : public QDialog {
                    QWidget* parent = nullptr);
 
   void set_display_options(const KanjiCountDisplayOptions& options);
+  void set_document_provider(DocumentProvider provider);
   bool count();
   std::vector<core::KanjiCountEntry> results() const;
 
@@ -60,6 +63,7 @@ class KanjiCountDialog : public QDialog {
   void show_information();
 
   std::vector<core::JwpDocument> documents_;
+  DocumentProvider document_provider_;
   const core::KanjiColorList& color_list_;
   const core::KanjiInfoDatabase* information_;
   InsertHandler insert_handler_;

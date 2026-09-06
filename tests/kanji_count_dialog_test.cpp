@@ -4,6 +4,7 @@
 #include <iostream>
 
 #include <QApplication>
+#include <QCheckBox>
 #include <QLabel>
 #include <QListWidget>
 #include <QPushButton>
@@ -73,10 +74,43 @@ void test_dialog() {
   require(false, "Count dialog accepted an invalid filter");
 }
 
+void test_live_documents() {
+  auto initial = document({0x3021});
+  jwpqt::core::KanjiColorList color_list;
+  jwpqt::qt::KanjiCountDialog dialog({&initial}, color_list, nullptr, {}, {});
+  std::vector<jwpqt::core::JwpDocument> sources{
+      document({0x3022, 0x3022}), document({0x3021})};
+  bool fail = false;
+  dialog.set_document_provider([&] {
+    if (fail) throw std::runtime_error("Snapshot unavailable");
+    return sources;
+  });
+  auto* all = dialog.findChild<QCheckBox*>(QStringLiteral("kanjiCountAllDocuments"));
+  require(dialog.count() && all->isEnabled() && dialog.results().size() == 1 &&
+              dialog.results()[0].code == 0x3022 && dialog.results()[0].count == 2,
+          "Count did not refresh its current document");
+  all->setChecked(true);
+  require(dialog.count() && dialog.results().size() == 2,
+          "Refreshed count did not include all documents");
+  sources = {document({0x3021, 0x3021, 0x3021})};
+  require(dialog.count() && !all->isEnabled() && !all->isChecked() &&
+              dialog.results().size() == 1 && dialog.results()[0].count == 3,
+          "Count retained a closed document or invalid all-document scope");
+  fail = true;
+  require(!dialog.count() && dialog.results().size() == 1 &&
+              dialog.results()[0].count == 3,
+          "Failed snapshot discarded count results");
+  fail = false;
+  sources.clear();
+  require(!dialog.count() && dialog.results()[0].count == 3,
+          "Empty snapshot discarded count results");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
   QApplication application(argc, argv);
   test_dialog();
+  test_live_documents();
   return EXIT_SUCCESS;
 }

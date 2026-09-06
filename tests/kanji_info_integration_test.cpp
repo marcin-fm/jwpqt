@@ -300,8 +300,9 @@ void test_integration(const QString& directory) {
   count_options.frequency = false;
   if (count_dialog != nullptr)
     count_dialog->set_display_options(count_options);
-  require(count_dialog != nullptr && count_dialog->count() &&
-              count_dialog->results().size() == 1 &&
+  require(count_dialog != nullptr, "Count Kanji action did not open its dialog");
+  require(count_dialog->count(), "Count Kanji could not refresh its snapshots");
+  require(count_dialog->results().size() == 1 &&
               count_dialog->results()[0].code == 0x3021U &&
               count_dialog->results()[0].count == 3,
           "Count Kanji action did not report the current document");

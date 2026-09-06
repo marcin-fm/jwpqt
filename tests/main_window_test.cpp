@@ -10,6 +10,7 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QCheckBox>
 #include <QClipboard>
 #include <QContextMenuEvent>
 #include <QDialog>
@@ -50,6 +51,7 @@
 #include "jwpqt/core/jis_unicode.h"
 #include "jwpqt/core/jwp_text_codec.h"
 #include "kanji_color_settings.h"
+#include "kanji_count_dialog.h"
 #include "kanji_info_dialog.h"
 #include "jis_table_dialog.h"
 #include "main_window.h"
@@ -557,6 +559,66 @@ void test_document_tabs(const QString& directory) {
           "Closing all tabs did not leave a clean usable Japanese document");
 }
 
+void test_workspace_kanji_count() {
+  using Window = jwpqt::qt::MainWindow;
+  Window window;
+  require(window.insert_edict_text(U"\u65e5\u65e5"), "Could not seed first count document");
+  const auto first = *window.current_jwp_document();
+  QPointer<QTextEdit> first_editor = window.active_editor();
+  require(window.new_document_tab(false) == 1, "Could not create Unicode count document");
+  QPointer<QTextEdit> unicode_editor = window.active_editor();
+  unicode_editor->insertPlainText(QString::fromStdU32String(U"\U0001f600\u672c"));
+  const QString unicode_text = unicode_editor->toPlainText();
+  auto* action = find_action(window, "kanjiCountAction");
+  require(action->isEnabled(), "Unicode document disabled read-only kanji counting");
+  action->trigger();
+  auto* dialog = dynamic_cast<jwpqt::qt::KanjiCountDialog*>(
+      window.findChild<QDialog*>(QStringLiteral("kanjiCountDialog")));
+  require(dialog != nullptr && dialog->results().size() == 1 &&
+              dialog->results()[0].code == *jwpqt::core::unicode_to_jis_x0208(U'\u672c'),
+          "Kanji count did not follow the current Unicode document");
+  auto* all = dialog->findChild<QCheckBox*>(QStringLiteral("kanjiCountAllDocuments"));
+  require(all->isEnabled(), "Multiple documents did not enable all-document counting");
+  all->setChecked(true);
+  require(dialog->count() && dialog->results().size() == 2 &&
+              dialog->results()[0].count == 2 &&
+              dialog->findChild<QLabel*>(QStringLiteral("kanjiCountStatus"))
+                  ->text().contains(QStringLiteral("4 characters; 3 kanji (2 unique)")) &&
+              unicode_editor->toPlainText() == unicode_text &&
+              unicode_editor->document()->isUndoAvailable(),
+          "All-document count changed Unicode input/history or returned wrong counts");
+  QTextCursor edit = unicode_editor->textCursor();
+  edit.beginEditBlock();
+  edit.insertText(QStringLiteral("\u65e5"));
+  edit.endEditBlock();
+  unicode_editor->setTextCursor(edit);
+  dialog->findChild<QPushButton*>(QStringLiteral("kanjiCountSearch"))->click();
+  require(dialog->results()[0].count == 3,
+          "Count button reused stale snapshots after an editor change");
+  require(window.activate_document(0) && *window.current_jwp_document() == first,
+          "Read-only count modified the native document");
+  all->setChecked(false);
+  require(dialog->count() && dialog->results().size() == 1 &&
+              dialog->results()[0].count == 2,
+          "Count button did not follow document activation");
+  require(window.activate_document(1) &&
+              window.view_kanji_color_list(jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.document_count() == 3 && unicode_editor != nullptr &&
+              unicode_editor->toPlainText() == unicode_text + QStringLiteral("\u65e5"),
+          "Color-list View replaced a modified source document");
+  require(window.activate_document(1), "Could not return from color-list View");
+  find_action(window, "undoAction")->trigger();
+  require(unicode_editor->toPlainText() == unicode_text,
+          "Color-list View or counting damaged Unicode undo");
+  require(window.close_document(2, jwpqt::qt::OpenMode::kNonInteractive),
+          "Could not close the empty color-list document");
+  first_editor->document()->setModified(false);
+  require(window.close_document(0, jwpqt::qt::OpenMode::kNonInteractive) &&
+              first_editor == nullptr && dialog->count() && !all->isEnabled() &&
+              dialog->results().size() == 1 && dialog->results()[0].count == 1,
+          "Count retained a closed source or failed after its editor was deleted");
+}
+
 void test_tab_conversion_lifetimes(const QString& directory) {
   using jwpqt::qt::OpenMode;
   jwpqt::qt::MainWindow window;
@@ -566,8 +628,15 @@ void test_tab_conversion_lifetimes(const QString& directory) {
   QPointer<jwpqt::qt::JwpEditor> first = window.active_editor();
   first->insertPlainText(QStringLiteral("\u3042"));
   first->selectAll();
+  find_action(window, "kanjiCountAction")->trigger();
+  auto* count_dialog = dynamic_cast<jwpqt::qt::KanjiCountDialog*>(
+      window.findChild<QDialog*>(QStringLiteral("kanjiCountDialog")));
+  require(count_dialog != nullptr, "Could not open count before conversion");
   require(window.convert_selection(), "Could not start first tab conversion");
   const QString glyph = first->toPlainText();
+  require(!count_dialog->count() && window.conversion_active() &&
+              first->toPlainText() == glyph,
+          "Read-only count accepted or changed an active conversion preview");
   const QString invalid_text = directory + QStringLiteral("/tab-preview-invalid.txt");
   write_bytes(invalid_text, QByteArray::fromHex("fffe00d8"));
   jwpqt::core::JwpDocument unmapped;
@@ -4164,6 +4233,7 @@ int main(int argc, char* argv[]) {
     require(directory.isValid(), "Could not create temporary test directory");
     test_new_document_workflow(directory.path());
     test_document_tabs(directory.path());
+    test_workspace_kanji_count();
     test_tab_conversion_lifetimes(directory.path());
     test_recent_file_workflow(directory.path());
     test_recent_file_failures(directory.path());

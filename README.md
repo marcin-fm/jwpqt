@@ -95,6 +95,9 @@ discarding any. **Window > Next/Previous File** (`Ctrl+Tab`/`Ctrl+Shift+Tab`, al
 Modeless dictionary and character-information windows insert into the currently
 active tab, even after their original document is closed. Save As and Export
 Copy cannot overwrite another open document's path.
+**Count Kanji** refreshes the current/all-document counts on every Count,
+including JIS kanji in unrestricted Unicode documents without changing their
+text or history. **View Kanji Color List** opens a separate Japanese tab.
 
 **File > Recent Files** retains nine named documents, including each text
 encoding or JWP code page. Reopening activates an existing tab or opens a new

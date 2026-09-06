@@ -84,6 +84,7 @@
 #include "page_layout_dialog.h"
 #include "print_document.h"
 #include "jwpqt/core/jis_table.h"
+#include "jwpqt/core/jis_unicode.h"
 #include "jwpqt/core/jwp_plain_text.h"
 #include "jwpqt/core/jwp_text_codec.h"
 #include "jwpqt/core/plain_text_change.h"
@@ -1350,14 +1351,15 @@ bool MainWindow::view_kanji_color_list(OpenMode mode) {
     return false;
   }
   finish_kana_input();
-  if (conversion_active() || !maybe_save()) {
+  if (conversion_active()) {
     return false;
   }
   try {
     core::JwpDocument document;
     document.paragraphs.emplace_back();
     document.paragraphs.front().text = kanji_color_list_.codes();
-    load_jwp_document(QString(), std::move(document), document_->jwp_code_page_);
+    load_jwp_document(QString(), std::move(document), document_->jwp_code_page_,
+                      true);
     statusBar()->showMessage(tr("Viewing kanji color list"), 3000);
     return true;
   } catch (const std::exception& error) {
@@ -2264,8 +2266,7 @@ void MainWindow::update_jis_table_action() {
 
 void MainWindow::update_kanji_count_action() {
   if (kanji_count_action_ != nullptr) {
-    kanji_count_action_->setEnabled(document_->jwp_document_.has_value() &&
-                                    !conversion_active());
+    kanji_count_action_->setEnabled(!conversion_active());
   }
 }
 
@@ -2941,30 +2942,72 @@ void MainWindow::show_jis_table_dialog() {
 }
 
 void MainWindow::show_kanji_count_dialog() {
-  if (!document_->jwp_document_.has_value() || conversion_active()) {
+  if (document_->updating_editor_ || document_->applying_kana_input_ ||
+      conversion_active()) {
     statusBar()->showMessage(tr("Count Kanji is not available"), 3000);
     return;
   }
-  finish_kana_input();
-  if (!document_->jwp_document_.has_value() || conversion_active())
-    return;
-  if (kanji_count_dialog_ != nullptr) {
+  try {
+    if (kanji_count_dialog_ == nullptr) {
+      const core::JwpDocument empty;
+      auto* dialog = new KanjiCountDialog(
+          {&empty}, kanji_color_list_, kanji_info_database_.get(),
+          [this](std::u32string text) { insert_edict_text(std::move(text)); },
+          [this](core::JisCode code) { show_kanji_info_code(code); }, this);
+      dialog->set_document_provider([this] {
+        if (conversion_active() || !finish_document_input())
+          throw core::KanjiCountError("Count Kanji is not available during input");
+        const core::KanjiCountLimits limits;
+        if (documents_.size() > limits.documents)
+          throw core::KanjiCountError("Kanji count document limit exceeded");
+        std::vector<core::JwpDocument> snapshots;
+        snapshots.reserve(documents_.size());
+        std::size_t remaining = limits.characters;
+        const auto current = static_cast<std::size_t>(current_document_index());
+        for (std::size_t offset = 0; offset < documents_.size(); ++offset) {
+          const auto& state = *documents_[(current + offset) % documents_.size()];
+          if (state.jwp_document_) {
+            for (const auto& paragraph :
+                 state.jwp_document_->document().paragraphs) {
+              if (paragraph.text.size() > remaining)
+                throw core::KanjiCountError(
+                    "Kanji count character limit exceeded");
+              remaining -= paragraph.text.size();
+            }
+            snapshots.push_back(state.jwp_document_->document());
+          } else {
+            core::JwpDocument snapshot;
+            snapshot.paragraphs.emplace_back();
+            for (const char32_t value :
+                 from_qstring(document_plain_text(*state.editor_->document()))) {
+              if (value == U'\n') {
+                snapshot.paragraphs.emplace_back();
+              } else {
+                if (remaining == 0)
+                  throw core::KanjiCountError(
+                      "Kanji count character limit exceeded");
+                --remaining;
+                // Count-only geta marks classify unmapped Unicode as "other".
+                snapshot.paragraphs.back().text.push_back(
+                    value < 0x80
+                        ? static_cast<core::JisCode>(value)
+                        : core::unicode_to_jis_x0208(value).value_or(0x222e));
+              }
+            }
+            snapshots.push_back(std::move(snapshot));
+          }
+        }
+        return snapshots;
+      });
+      dialog->setAttribute(Qt::WA_DeleteOnClose);
+      connect(dialog, &QObject::destroyed, this,
+              [this] { kanji_count_dialog_ = nullptr; });
+      kanji_count_dialog_ = dialog;
+    }
+    kanji_count_dialog_->count();
     kanji_count_dialog_->show();
     kanji_count_dialog_->raise();
     kanji_count_dialog_->activateWindow();
-    return;
-  }
-  try {
-    auto* dialog = new KanjiCountDialog(
-        {&document_->jwp_document_->document()}, kanji_color_list_,
-        kanji_info_database_ != nullptr ? kanji_info_database_.get() : nullptr,
-        [this](std::u32string text) { insert_edict_text(std::move(text)); },
-        [this](core::JisCode code) { show_kanji_info_code(code); }, this);
-    dialog->setAttribute(Qt::WA_DeleteOnClose);
-    connect(dialog, &QObject::destroyed, this,
-            [this] { kanji_count_dialog_ = nullptr; });
-    kanji_count_dialog_ = dialog;
-    dialog->show();
   } catch (const std::exception& error) {
     show_error(tr("Could not open Count Kanji"), error);
   }
