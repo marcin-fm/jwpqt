@@ -53,12 +53,15 @@ class EdictDictionary {
       const EdictParseLimits& limits = EdictParseLimits{});
   static EdictDictionary parse(std::string_view bytes, EdictEncoding encoding,
                                const EdictParseLimits& limits,
-                               LegacyCodePage mixed_code_page);
+                               LegacyCodePage mixed_code_page,
+                               bool recover_euc_records = false);
 
   EdictEncoding encoding() const noexcept;
   LegacyCodePage mixed_code_page() const noexcept;
   std::string_view source_bytes() const noexcept;
   const std::vector<EdictRecord>& records() const noexcept;
+  const std::vector<std::string>& record_errors() const noexcept;
+  // Recovery charges skipped records conservatively against these budgets.
   std::size_t definition_count() const noexcept;
   std::size_t decoded_code_points() const noexcept;
 
@@ -67,6 +70,7 @@ class EdictDictionary {
   LegacyCodePage mixed_code_page_ = kDefaultLegacyCodePage;
   std::string source_bytes_;
   std::vector<EdictRecord> records_;
+  std::vector<std::string> record_errors_;
   std::size_t definition_count_ = 0;
   std::size_t decoded_code_points_ = 0;
 };

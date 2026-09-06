@@ -341,6 +341,34 @@ void test_failed_parse_budget_accounting(const QString& directory) {
           "Malformed index bypassed aggregate entry accounting");
 }
 
+void test_classical_record_recovery(const QString& directory) {
+  const std::string source = "bad [read} /meaning/\ngood /entry/\n";
+  write_bytes(directory + QStringLiteral("/classical.dic"), source);
+  jwpqt::core::EdictRegistry registry;
+  registry.entries = {entry(u"classical.dic", false)};
+  registry.entries[0].special = jwpqt::core::EdictRegistrySpecial::kClassical;
+  const auto recovered = jwpqt::qt::load_edict_resources(registry, directory);
+  require(recovered.resources.size() == 1 && recovered.failures.empty() &&
+              recovered.resources[0].dictionary.records().size() == 1 &&
+              recovered.resources[0].dictionary.record_errors().size() == 1 &&
+              recovered.resources[0].dictionary.source_bytes() == source,
+          "Classical dictionary recovery dropped valid entries or diagnostics");
+  registry.entries[0].indexed = true;
+  require(jwpqt::qt::load_edict_resources(registry, directory).resources.empty(),
+          "Indexed dictionaries silently skipped malformed source records");
+  registry.entries[0].indexed = false;
+  registry.entries.push_back(entry(u"classical.dic", false));
+  registry.entries[1].special = jwpqt::core::EdictRegistrySpecial::kClassical;
+  jwpqt::qt::EdictResourceLoadOptions options;
+  options.dictionary_records = 2;
+  const auto limited = jwpqt::qt::load_edict_resources(registry, directory, options);
+  require(limited.resources.size() == 1 && limited.failures.size() == 1,
+          "Skipped classical records bypassed aggregate record accounting");
+  write_bytes(directory + QStringLiteral("/classical.dic"), "bad [read} /meaning/\n");
+  require(jwpqt::qt::load_edict_resources(registry, directory).resources.empty(),
+          "Entirely invalid classical dictionaries appeared available");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -355,6 +383,7 @@ int main(int argc, char** argv) {
   test_registry_validation(temporary_directory.path());
   test_special_files_and_symlinks(temporary_directory.path());
   test_failed_parse_budget_accounting(temporary_directory.path());
+  test_classical_record_recovery(temporary_directory.path());
 
   std::cout << "All EDICT resource tests passed\n";
   return EXIT_SUCCESS;

@@ -199,6 +199,58 @@ void test_mixed_record_definitions() {
           "Mixed EDICT did not apply the recovered unknown-page fallback");
 }
 
+void test_bounded_euc_record_recovery() {
+  const std::string bytes =
+      "first /valid/\r\n"
+      "broken [reading} /bad/\r\n"
+      "missing [meaning/\r\n"
+      "invalid /\xff/\r\n"
+      "\r\n"
+      "last /valid/\r\n";
+  const auto recover = [&](const EdictParseLimits& limits) {
+    return EdictDictionary::parse(bytes, EdictEncoding::kEucJp, limits,
+                                 jwpqt::core::kDefaultLegacyCodePage, true);
+  };
+  const EdictDictionary dictionary = recover(EdictParseLimits{});
+  require(dictionary.source_bytes() == bytes &&
+              dictionary.records().size() == 2 &&
+              dictionary.records().back().headword == U"last" &&
+              dictionary.records().back().byte_offset == bytes.find("last") &&
+              dictionary.record_errors().size() == 4 &&
+              dictionary.record_errors()[0].find("byte 15:") != std::string::npos &&
+              dictionary.definition_count() == 7 &&
+              dictionary.decoded_code_points() == bytes.size() - 12,
+          "EUC recovery lost source positions, diagnostics, or budget charges");
+  expect_error([&] { EdictDictionary::parse(bytes, EdictEncoding::kEucJp); },
+               "default parser must remain strict");
+  for (const EdictEncoding encoding :
+       {EdictEncoding::kUtf8, EdictEncoding::kMixed}) {
+    expect_error([&] {
+      EdictDictionary::parse(bytes, encoding, EdictParseLimits{},
+                             jwpqt::core::kDefaultLegacyCodePage, true);
+    }, "recovery of a non-EUC dictionary");
+  }
+  EdictParseLimits limits;
+  limits.records = 5;
+  expect_error([&] { recover(limits); }, "recovered record count budget");
+  limits = EdictParseLimits{};
+  limits.decoded_code_points = 20;
+  expect_error([&] { recover(limits); }, "fatal parse budget during recovery");
+  limits.decoded_code_points = 60;
+  expect_error([&] { recover(limits); }, "failed EUC decode budget accounting");
+  limits = EdictParseLimits{};
+  limits.definitions = 5;
+  expect_error([&] { recover(limits); }, "failed record definition accounting");
+  limits = EdictParseLimits{};
+  limits.line_bytes = 10;
+  expect_error([&] { recover(limits); }, "fatal line budget during recovery");
+  expect_error([] {
+    EdictDictionary::parse("broken /last", EdictEncoding::kEucJp,
+                           EdictParseLimits{},
+                           jwpqt::core::kDefaultLegacyCodePage, true);
+  }, "recovery of a truncated file");
+}
+
 void test_invalid_mixed_records() {
   expect_error(
       [] {
@@ -356,6 +408,7 @@ int main() {
     test_euc_jp_record();
     test_recovered_euc_jis_x_0212_subset();
     test_legacy_euc_record_compatibility();
+    test_bounded_euc_record_recovery();
     test_mixed_record_definitions();
     test_invalid_mixed_records();
     test_invalid_records();

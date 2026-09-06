@@ -340,7 +340,10 @@ EdictResourceSet load_edict_resources(
       try {
         dictionary = core::EdictDictionary::parse(
             source_bytes, dictionary_encoding(entry.encoding),
-            dictionary_limits, options.mixed_code_page);
+            dictionary_limits, options.mixed_code_page,
+            entry.special == core::EdictRegistrySpecial::kClassical &&
+                entry.encoding == core::EdictRegistryEncoding::kEucJp &&
+                !entry.indexed);
       } catch (const std::bad_alloc&) {
         throw;
       } catch (const std::exception&) {
@@ -359,12 +362,16 @@ EdictResourceSet load_edict_resources(
                options.decoded_code_points, "Dictionary decoded text");
         throw;
       }
-      charge(used_records, dictionary.records().size(),
+      charge(used_records,
+             dictionary.records().size() + dictionary.record_errors().size(),
              options.dictionary_records, "Dictionary records");
       charge(used_definitions, dictionary.definition_count(),
              options.definitions, "Dictionary definitions");
       charge(used_code_points, dictionary.decoded_code_points(),
              options.decoded_code_points, "Dictionary decoded text");
+      if (dictionary.records().empty() && !dictionary.record_errors().empty()) {
+        throw core::EdictDictionaryError("Dictionary has no valid records");
+      }
 
       std::optional<QString> index_path;
       std::optional<core::EdictIndex> index;

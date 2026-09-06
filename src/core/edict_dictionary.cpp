@@ -2,6 +2,7 @@
 
 #include "jwpqt/core/edict_dictionary.h"
 
+#include <algorithm>
 #include <limits>
 #include <optional>
 #include <sstream>
@@ -14,10 +15,16 @@
 namespace jwpqt::core {
 namespace {
 
+class EdictParseLimitError : public EdictDictionaryError {
+ public:
+  using EdictDictionaryError::EdictDictionaryError;
+};
+
+template <typename Error = EdictDictionaryError>
 [[noreturn]] void fail(std::size_t byte_offset, std::string_view reason) {
   std::ostringstream message;
   message << "Invalid EDICT record at byte " << byte_offset << ": " << reason;
-  throw EdictDictionaryError(message.str());
+  throw Error(message.str());
 }
 
 bool is_line_break(char value) { return value == '\r' || value == '\n'; }
@@ -256,7 +263,7 @@ void consume_budget(std::size_t amount, std::size_t& used, std::size_t limit,
   if (amount > limit - used) {
     std::ostringstream reason;
     reason << "dictionary exceeds the " << name << " limit";
-    fail(byte_offset, reason.str());
+    fail<EdictParseLimitError>(byte_offset, reason.str());
   }
   used += amount;
 }
@@ -459,7 +466,8 @@ EdictDictionary EdictDictionary::parse(std::string_view bytes,
 EdictDictionary EdictDictionary::parse(std::string_view bytes,
                                        EdictEncoding encoding,
                                        const EdictParseLimits& limits,
-                                       LegacyCodePage mixed_code_page) {
+                                       LegacyCodePage mixed_code_page,
+                                       bool recover_euc_records) {
   if (bytes.size() > limits.encoded_bytes) {
     throw EdictDictionaryError("EDICT dictionary exceeds the encoded size limit");
   }
@@ -471,6 +479,9 @@ EdictDictionary EdictDictionary::parse(std::string_view bytes,
       break;
     default:
       throw EdictDictionaryError("EDICT dictionary encoding is invalid");
+  }
+  if (recover_euc_records && encoding != EdictEncoding::kEucJp) {
+    throw EdictDictionaryError("Record recovery requires an EUC dictionary");
   }
   if (encoding == EdictEncoding::kMixed &&
       legacy_code_page_name(mixed_code_page) == "Unknown") {
@@ -496,7 +507,8 @@ EdictDictionary EdictDictionary::parse(std::string_view bytes,
     } else {
       previous_line_break.reset();
     }
-    if (dictionary.records_.size() == limits.records) {
+    if (dictionary.records_.size() + dictionary.record_errors_.size() ==
+        limits.records) {
       fail(line_start, "dictionary exceeds the record count limit");
     }
     std::size_t line_end = line_start;
@@ -509,15 +521,36 @@ EdictDictionary EdictDictionary::parse(std::string_view bytes,
     if (line_end - line_start > limits.line_bytes) {
       fail(line_start, "record exceeds the line size limit");
     }
-    if (line_end == line_start) {
-      fail(line_start, "record is empty");
+    const std::string_view line = bytes.substr(line_start, line_end - line_start);
+    const std::size_t previous_code_points = decoded_code_points;
+    const std::size_t previous_definitions = definition_count;
+    try {
+      if (line.empty()) {
+        fail(line_start, "record is empty");
+      }
+      dictionary.records_.push_back(parse_record(
+          line, encoding, line_start, decoded_code_points, definition_count,
+          limits, line_start == 0 && encoding == EdictEncoding::kUtf8,
+          mixed_code_page));
+    } catch (const EdictParseLimitError&) {
+      throw;
+    } catch (const EdictDictionaryError& error) {
+      if (!recover_euc_records) {
+        throw;
+      }
+      // Failed rows still consume work/memory budgets, including decode errors
+      // that occur before parse_record can charge the whole row.
+      consume_budget(line.size() - (decoded_code_points - previous_code_points),
+                     decoded_code_points, limits.decoded_code_points,
+                     line_start, "decoded code-point");
+      const std::size_t possible_definitions = static_cast<std::size_t>(
+          std::count(line.begin(), line.end(), '/'));
+      consume_budget(possible_definitions -
+                         (definition_count - previous_definitions),
+                     definition_count, limits.definitions,
+                     line_start, "definition count");
+      dictionary.record_errors_.emplace_back(error.what());
     }
-
-    dictionary.records_.push_back(parse_record(
-        bytes.substr(line_start, line_end - line_start), encoding, line_start,
-        decoded_code_points, definition_count, limits,
-        line_start == 0 && encoding == EdictEncoding::kUtf8,
-        mixed_code_page));
 
     previous_line_break = bytes[line_end];
     ++line_end;
@@ -540,6 +573,10 @@ std::string_view EdictDictionary::source_bytes() const noexcept {
 
 const std::vector<EdictRecord>& EdictDictionary::records() const noexcept {
   return records_;
+}
+
+const std::vector<std::string>& EdictDictionary::record_errors() const noexcept {
+  return record_errors_;
 }
 
 std::size_t EdictDictionary::definition_count() const noexcept {
