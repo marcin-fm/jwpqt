@@ -183,6 +183,7 @@ class MainWindow : public QMainWindow {
   QString resource_report() const;
 
  protected:
+  void changeEvent(QEvent* event) override;
   void closeEvent(QCloseEvent* event) override;
   bool eventFilter(QObject* watched, QEvent* event) override;
   virtual std::optional<core::TextEncoding> prompt_for_encoding(
@@ -210,6 +211,7 @@ class MainWindow : public QMainWindow {
   struct EdictUserResources;
 
   void create_actions();
+  void update_menu_bar_palette();
   void update_resource_status();
   void undo_document();
   void redo_document();

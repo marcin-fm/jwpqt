@@ -11,8 +11,10 @@
 #include <QFileInfo>
 #include <QImage>
 #include <QKeyEvent>
+#include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QMouseEvent>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QStyle>
@@ -135,7 +137,7 @@ void test_runtime_paths(const QString& executable, const QString& root) {
           QStringLiteral("Desktop settings were modified"));
 }
 
-void test_visible_menus(bool dark) {
+QPalette menu_palette(bool dark) {
   QPalette palette = QApplication::style()->standardPalette();
   const QColor background = dark ? QColor(32, 35, 37) : QColor(239, 239, 239);
   const QColor foreground = dark ? QColor(240, 240, 240) : QColor(24, 24, 24);
@@ -149,15 +151,16 @@ void test_visible_menus(bool dark) {
     palette.setColor(QPalette::Disabled, role,
                      dark ? QColor(150, 150, 150) : QColor(100, 100, 100));
   }
-  QApplication::setPalette(palette);
-  jwpqt::qt::MainWindow window;
-  window.show();
-  QApplication::processEvents();
-  const QImage menus = window.menuBar()->grab().toImage();
-  for (QAction* action : window.menuBar()->actions()) {
+  return palette;
+}
+
+void require_menu_text(QMenuBar* bar, const QColor& foreground,
+                      QAction* only = nullptr) {
+  const QImage menus = bar->grab().toImage();
+  for (QAction* action : bar->actions()) {
+    if (only != nullptr && action != only) continue;
     int foreground_pixels = 0;
-    const QRect box = window.menuBar()->actionGeometry(action)
-                          .intersected(menus.rect());
+    const QRect box = bar->actionGeometry(action).intersected(menus.rect());
     for (int y = box.top(); y <= box.bottom(); ++y) {
       for (int x = box.left(); x <= box.right(); ++x) {
         const QColor pixel = menus.pixelColor(x, y);
@@ -171,6 +174,15 @@ void test_visible_menus(bool dark) {
     require(foreground_pixels >= 3,
             QStringLiteral("Menu label has no visible foreground: ") + action->text());
   }
+}
+
+void test_visible_menus(bool dark) {
+  const QPalette palette = menu_palette(dark);
+  QApplication::setPalette(palette);
+  jwpqt::qt::MainWindow window;
+  window.show();
+  QApplication::processEvents();
+  require_menu_text(window.menuBar(), palette.color(QPalette::WindowText));
   auto* resources = window.findChild<QToolButton*>(QStringLiteral("resourceStatus"));
   require(resources != nullptr && resources->isVisible() &&
               resources->text() == QStringLiteral("Resources: incomplete"),
@@ -190,6 +202,67 @@ void test_visible_menus(bool dark) {
       dark ? QStringLiteral("runtime-dark.png") : QStringLiteral("runtime-light.png"));
   require(window.grab().save(screenshot),
           QStringLiteral("Could not capture runtime UI: ") + screenshot);
+}
+
+void test_menu_palette_changes() {
+  jwpqt::qt::MainWindow window;
+  window.show();
+  auto* bar = window.menuBar();
+  QAction* first = bar->actions().front();
+  for (const bool dark : {true, false, true}) {
+    QPalette palette = menu_palette(dark);
+    const QColor background = palette.color(QPalette::Window);
+    palette.setColor(QPalette::WindowText, background);
+    palette.setColor(QPalette::ButtonText, background);
+    palette.setColor(QPalette::Highlight,
+                     dark ? QColor(60, 80, 95) : QColor(190, 215, 230));
+    palette.setColor(QPalette::HighlightedText, palette.color(QPalette::Highlight));
+    QApplication::setPalette(palette);
+    QApplication::processEvents();
+    require_menu_text(bar, palette.color(QPalette::Text));
+    require(window.palette().color(QPalette::WindowText) == background &&
+                window.findChild<QTextEdit*>()->palette().color(QPalette::Text) ==
+                    palette.color(QPalette::Text) &&
+                first->menu()->styleSheet().isEmpty() &&
+                first->menu()->palette().color(QPalette::Text) ==
+                    palette.color(QPalette::Text),
+            QStringLiteral("Menu contrast repair leaked into other widgets"));
+    bar->setActiveAction(first);
+    QApplication::processEvents();
+    require_menu_text(bar, palette.color(QPalette::Text), first);
+    first->menu()->hide();
+    bar->setActiveAction(nullptr);
+    first->setEnabled(false);
+    require_menu_text(bar, palette.color(QPalette::Disabled, QPalette::Text), first);
+    first->setEnabled(true);
+  }
+  require(window.grab().save(QDir(QCoreApplication::applicationDirPath()).filePath(
+              QStringLiteral("runtime-menu-contrast.png"))),
+          QStringLiteral("Could not capture repaired menu contrast"));
+  const QPoint point = bar->actionGeometry(first).center();
+  for (const auto type : {QEvent::MouseButtonPress, QEvent::MouseButtonRelease}) {
+    QMouseEvent mouse(type, point, bar->mapToGlobal(point), Qt::LeftButton,
+                      type == QEvent::MouseButtonPress ? Qt::LeftButton : Qt::NoButton,
+                      Qt::NoModifier);
+    QApplication::sendEvent(bar, &mouse);
+  }
+  require(first->menu()->isVisible(),
+          QStringLiteral("Styled menu no longer opens on click"));
+  QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+  QApplication::sendEvent(first->menu(), &escape);
+  require(!first->menu()->isVisible(),
+          QStringLiteral("Styled menu no longer closes with Escape"));
+  bar->setActiveAction(nullptr);
+
+  for (const bool dark : {false, true}) {
+    QPalette palette = menu_palette(dark);
+    for (const auto role : {QPalette::WindowText, QPalette::ButtonText, QPalette::Text}) {
+      palette.setColor(role, palette.color(QPalette::Window));
+    }
+    QApplication::setPalette(palette);
+    QApplication::processEvents();
+    require_menu_text(bar, dark ? QColor(Qt::white) : QColor(Qt::black));
+  }
 }
 
 void test_real_resources(const QString& root, const QString& source,
@@ -299,6 +372,8 @@ int main(int argc, char* argv[]) {
     test_runtime_paths(QString::fromLocal8Bit(argv[1]), directory.path());
     test_visible_menus(false);
     test_visible_menus(true);
+    test_menu_palette_changes();
+    QApplication::setPalette(menu_palette(true));
     if (argc == 5) {
       test_real_resources(directory.path(), QString::fromLocal8Bit(argv[3]),
                           QString::fromLocal8Bit(argv[4]));

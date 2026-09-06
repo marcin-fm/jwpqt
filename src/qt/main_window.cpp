@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <exception>
 #include <optional>
@@ -292,6 +293,7 @@ MainWindow::MainWindow(QWidget* parent)
   editor_->setLineWrapMode(QTextEdit::WidgetWidth);
 
   create_actions();
+  update_menu_bar_palette();
   encoding_label_->setObjectName(QStringLiteral("documentEncoding"));
   input_mode_button_->setObjectName(QStringLiteral("inputMode"));
   input_mode_button_->setAutoRaise(true);
@@ -368,6 +370,61 @@ MainWindow::~MainWindow() {
   delete kanji_code_lookup_dialog_;
   delete kanji_reading_lookup_dialog_;
   delete kanji_lookup_dialog_;
+}
+
+void MainWindow::changeEvent(QEvent* event) {
+  QMainWindow::changeEvent(event);
+  if (event->type() == QEvent::PaletteChange ||
+      event->type() == QEvent::ApplicationPaletteChange ||
+      event->type() == QEvent::StyleChange) {
+    update_menu_bar_palette();
+  }
+}
+
+void MainWindow::update_menu_bar_palette() {
+  // Read the window palette, not the menu's previous stylesheet overrides.
+  const QPalette source = palette();
+  const auto luminance = [](QColor color) {
+    const auto linear = [](double channel) {
+      return channel <= 0.04045 ? channel / 12.92
+                               : std::pow((channel + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * linear(color.redF()) + 0.7152 * linear(color.greenF()) +
+           0.0722 * linear(color.blueF());
+  };
+  const auto readable = [&](QColor preferred, QColor background,
+                            QPalette::ColorGroup group, double minimum) {
+    const double back = luminance(background);
+    const auto contrast = [&](QColor color) {
+      const double front = luminance(color);
+      return (std::max(front, back) + 0.05) / (std::min(front, back) + 0.05);
+    };
+    for (QColor color : {preferred, source.color(group, QPalette::Text)}) {
+      color.setAlpha(255);
+      if (contrast(color) >= minimum) return color;
+    }
+    return contrast(Qt::black) >= contrast(Qt::white) ? QColor(Qt::black)
+                                                     : QColor(Qt::white);
+  };
+  QColor background = source.color(QPalette::Window);
+  QColor highlight = source.color(QPalette::Highlight);
+  background.setAlpha(255);
+  highlight.setAlpha(255);
+  const QColor text = readable(source.color(QPalette::WindowText), background,
+                              QPalette::Active, 4.5);
+  const QColor selected = readable(source.color(QPalette::HighlightedText),
+                                  highlight, QPalette::Active, 4.5);
+  const QColor disabled = readable(
+      source.color(QPalette::Disabled, QPalette::WindowText), background,
+      QPalette::Disabled, 3.0);
+  const QString rules = QStringLiteral(
+      "QMenuBar { background-color: %1; color: %2; }"
+      "QMenuBar::item { background-color: transparent; color: %2; }"
+      "QMenuBar::item:selected { background-color: %3; color: %4; }"
+      "QMenuBar::item:disabled { color: %5; }")
+      .arg(background.name(), text.name(), highlight.name(), selected.name(),
+           disabled.name());
+  if (menuBar()->styleSheet() != rules) menuBar()->setStyleSheet(rules);
 }
 
 bool MainWindow::load_kanji_info(const QString& path, OpenMode mode) {
