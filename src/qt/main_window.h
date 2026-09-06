@@ -215,6 +215,7 @@ class MainWindow : public QMainWindow {
   prompt_for_kanji_color_list_edit();
 
  private:
+  struct DocumentState;
   struct WnnResources;
   struct EdictUserResources;
 
@@ -303,7 +304,6 @@ class MainWindow : public QMainWindow {
   void update_title();
   void show_error(const QString& action, const std::exception& error);
 
-  JwpEditor* editor_;
   QListWidget* conversion_candidates_;
   std::unique_ptr<QPrinter> printer_;
   QLabel* encoding_label_;
@@ -354,23 +354,10 @@ class MainWindow : public QMainWindow {
   QActionGroup* encoding_actions_;
   QMenu* jwp_code_page_menu_;
   std::vector<QAction*> jwp_code_page_actions_;
-  QString current_path_;
-  core::TextEncoding encoding_ = core::TextEncoding::kUtf8;
-  bool has_byte_order_mark_ = false;
-  bool jwp_format_ = true;
-  std::optional<core::TextFile> saved_text_file_;
-  std::optional<core::JwpDocumentModel> jwp_document_;
-  core::JwpDocumentHistory jwp_history_;
   core::KanjiColorPolicy kanji_color_policy_;
   core::KanjiColorList kanji_color_list_;
   QString kanji_color_settings_path_;
   QString kanji_color_list_path_;
-  std::optional<core::JwpPosition> jwp_caret_;
-  std::optional<core::JwpPosition> expected_jwp_caret_;
-  std::optional<core::JwpDocument> saved_jwp_document_;
-  std::optional<core::JwpDocument> pristine_jwp_document_;
-  std::u32string rendered_jwp_text_;
-  core::LegacyCodePage jwp_code_page_ = core::kDefaultLegacyCodePage;
   std::unique_ptr<WnnResources> wnn_resources_;
   WnnUserDictionaryDialog* wnn_user_dictionary_dialog_ = nullptr;
   std::unique_ptr<EdictResourceSet> edict_resources_;
@@ -389,18 +376,11 @@ class MainWindow : public QMainWindow {
   std::unique_ptr<core::KanjiLookupLists> stroke_lists_;
   QPixmap radical_sheet_;
   KanjiLookupDialog* kanji_lookup_dialog_ = nullptr;
-  std::unique_ptr<core::JwpConversionTransaction> jwp_conversion_;
-  std::optional<core::WnnPreferences> conversion_preferences_before_;
-  core::KanaInputComposer kana_input_;
-  std::optional<core::JwpRange> automatic_conversion_range_;
-  InputMode input_mode_ = InputMode::kKanji;
-  bool applying_kana_input_ = false;
   QString search_text_;
   QString replacement_text_;
   core::JwpSearchOptions search_options_;
-  bool qt_undo_available_ = false;
-  bool qt_redo_available_ = false;
-  bool updating_editor_ = false;
+  // Conversion transactions must be destroyed before the shared dictionaries.
+  std::unique_ptr<DocumentState> document_;
 };
 
 }  // namespace jwpqt::qt
