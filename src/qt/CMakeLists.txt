@@ -9,6 +9,8 @@ add_library(jwpqt_qt_support STATIC
   file_io.h
   kanji_color_settings.cpp
   kanji_color_settings.h
+  recent_files.cpp
+  recent_files.h
   text_bridge.cpp
   text_bridge.h
 )
