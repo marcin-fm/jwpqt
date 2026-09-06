@@ -178,6 +178,11 @@ target_link_libraries(jwpqt_utf7_tests PRIVATE jwpqt_core)
 target_compile_options(jwpqt_utf7_tests PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME core_utf7 COMMAND jwpqt_utf7_tests)
 
+add_executable(jwpqt_utf16_tests utf16_test.cpp)
+target_link_libraries(jwpqt_utf16_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_utf16_tests PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME core_utf16 COMMAND jwpqt_utf16_tests)
+
 add_executable(jwpqt_jfc_text_tests
   jfc_text_test.cpp
 )
