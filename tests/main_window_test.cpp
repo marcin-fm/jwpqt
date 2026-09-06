@@ -21,6 +21,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
+#include <QMouseEvent>
 #include <QPageLayout>
 #include <QPushButton>
 #include <QPrinter>
@@ -1593,6 +1594,10 @@ void test_jwp_wnn_conversion(const QString& directory) {
   QTextEdit* editor = window.findChild<QTextEdit*>();
   QAction* convert = find_action(window, "convertSelectionAction");
   QAction* next = find_action(window, "nextCandidateAction");
+  auto* candidates = window.findChild<QListWidget*>(QStringLiteral("conversionCandidates"));
+  require(candidates != nullptr && candidates->isHidden() &&
+              editor->font().pixelSize() == 16 && candidates->font().pixelSize() == 16,
+          "Conversion strip or recovered Japanese content font is missing");
   QAction* accept = find_action(window, "acceptCandidateAction");
   QAction* page_break = find_action(window, "insertPageBreakAction");
   QAction* make_color_list =
@@ -1620,6 +1625,12 @@ void test_jwp_wnn_conversion(const QString& directory) {
               window.current_jwp_document()->paragraphs[0].text ==
                   jwpqt::core::JwpText{0x3021},
           "Native WNN conversion did not display the preferred candidate");
+  require(!candidates->isHidden() && candidates->count() == 3 &&
+              candidates->currentRow() == 0 &&
+              candidates->item(0)->text() == QString::fromUtf8(u8"亜") &&
+              candidates->item(2)->text() == QString::fromUtf8(u8"あ") &&
+              candidates->flow() == QListView::LeftToRight && !candidates->isWrapping(),
+          "Conversion strip did not list the candidates and original kana");
   jwpqt::core::KanjiColorPolicy conversion_color;
   conversion_color.list_mode = jwpqt::core::KanjiListColorMode::kMatch;
   conversion_color.list_color = {7, 8, 9};
@@ -1655,6 +1666,27 @@ void test_jwp_wnn_conversion(const QString& directory) {
   window.show();
   editor->setFocus();
   QApplication::processEvents();
+  const auto click_candidate = [&](int row) {
+    const QPoint point = candidates->visualItemRect(candidates->item(row)).center();
+    QMouseEvent press(QEvent::MouseButtonPress, QPointF(point),
+                      QPointF(candidates->viewport()->mapToGlobal(point)),
+                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QMouseEvent release(QEvent::MouseButtonRelease, QPointF(point),
+                        QPointF(candidates->viewport()->mapToGlobal(point)),
+                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(candidates->viewport(), &press);
+    QApplication::sendEvent(candidates->viewport(), &release);
+  };
+  click_candidate(1);
+  require(window.conversion_active() && editor->hasFocus() &&
+              window.current_jwp_document()->paragraphs[0].text == jwpqt::core::JwpText{0x3022},
+          "Clicking a conversion candidate lost focus or accepted the conversion");
+  require(convert->isEnabled(), "Convert button is disabled during candidate selection");
+  convert->trigger();
+  require(candidates->currentRow() == 2 &&
+              window.current_jwp_document()->paragraphs[0].text == jwpqt::core::JwpText{0x2422},
+          "Convert button did not cycle the visible candidate strip");
+  click_candidate(0);
   QKeyEvent next_key(QEvent::KeyPress, Qt::Key_Space, Qt::NoModifier);
   QApplication::sendEvent(editor, &next_key);
   require(window.current_jwp_document()->paragraphs[0].text ==
@@ -1663,7 +1695,8 @@ void test_jwp_wnn_conversion(const QString& directory) {
   QKeyEvent accept_key(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
   QApplication::sendEvent(editor, &accept_key);
   require(!window.conversion_active() && !editor->isReadOnly() &&
-              QFile::exists(fixture.preferences_path),
+              QFile::exists(fixture.preferences_path) && candidates->isHidden() &&
+              candidates->count() == 0,
           "Escape did not accept and persist native WNN conversion");
 
   QAction* undo = find_action(window, "undoAction");

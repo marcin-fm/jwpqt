@@ -37,6 +37,7 @@ class QActionGroup;
 class QCloseEvent;
 class QEvent;
 class QLabel;
+class QListWidget;
 class QMenu;
 class QPrinter;
 class QTextCursor;
@@ -296,6 +297,7 @@ class MainWindow : public QMainWindow {
   void show_error(const QString& action, const std::exception& error);
 
   JwpEditor* editor_;
+  QListWidget* conversion_candidates_;
   std::unique_ptr<QPrinter> printer_;
   QLabel* encoding_label_;
   QAction* undo_action_;

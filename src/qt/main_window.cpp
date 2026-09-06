@@ -39,6 +39,7 @@
 #include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -284,6 +285,7 @@ struct MainWindow::EdictUserResources {
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
       editor_(new JwpEditor(this)),
+      conversion_candidates_(new QListWidget(this)),
       printer_(std::make_unique<QPrinter>(QPrinter::HighResolution)),
       encoding_label_(new QLabel(this)),
       undo_action_(nullptr),
@@ -293,11 +295,48 @@ MainWindow::MainWindow(QWidget* parent)
       input_mode_actions_(new QActionGroup(this)),
       encoding_actions_(new QActionGroup(this)),
       jwp_code_page_menu_(nullptr) {
-  setCentralWidget(editor_);
+  auto* central = new QWidget(this);
+  auto* layout = new QVBoxLayout(central);
+  layout->setContentsMargins(0, 0, 0, 0);
+  layout->setSpacing(0);
+  layout->addWidget(editor_, 1);
+  layout->addWidget(conversion_candidates_);
+  setCentralWidget(central);
   editor_->installEventFilter(this);
   editor_->viewport()->installEventFilter(this);
-  editor_->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+  QFont content_font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+  content_font.setPixelSize(16);  // Recovered file/edit/list/bar defaults: k16x16.
+  editor_->setFont(content_font);
   editor_->setLineWrapMode(QTextEdit::WidgetWidth);
+  conversion_candidates_->setObjectName(QStringLiteral("conversionCandidates"));
+  conversion_candidates_->setAccessibleName(tr("Conversion candidates"));
+  conversion_candidates_->setFont(content_font);
+  conversion_candidates_->setFlow(QListView::LeftToRight);
+  conversion_candidates_->setWrapping(false);
+  conversion_candidates_->setWordWrap(false);
+  conversion_candidates_->setResizeMode(QListView::Adjust);
+  conversion_candidates_->setMovement(QListView::Static);
+  conversion_candidates_->setSpacing(4);
+  conversion_candidates_->setFocusPolicy(Qt::NoFocus);
+  conversion_candidates_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  conversion_candidates_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+  conversion_candidates_->setFixedHeight(
+      conversion_candidates_->fontMetrics().height() + 12 +
+      style()->pixelMetric(QStyle::PM_ScrollBarExtent));
+  conversion_candidates_->hide();
+  connect(conversion_candidates_, &QListWidget::currentRowChanged, this,
+          [this](int row) {
+    if (row < 0 || !conversion_active()) return;
+    try {
+      jwp_conversion_->select(static_cast<std::size_t>(row));
+      restore_jwp_conversion_state();
+      editor_->setFocus();
+    } catch (const std::exception& error) {
+      rollback_conversion_noexcept();
+      statusBar()->showMessage(tr("Could not change candidate: %1")
+                                  .arg(QString::fromUtf8(error.what())), 5000);
+    }
+  });
 
   create_actions();
   update_command_bar_palette();
@@ -1735,7 +1774,12 @@ void MainWindow::update_conversion_actions() {
       }
     }
   }
-  convert_action_->setEnabled(can_convert);
+  convert_action_->setEnabled(active || can_convert);
+  conversion_candidates_->setVisible(active);
+  if (!active && conversion_candidates_->count() != 0) {
+    const QSignalBlocker blocker(conversion_candidates_);
+    conversion_candidates_->clear();
+  }
   previous_candidate_action_->setEnabled(active);
   next_candidate_action_->setEnabled(active);
   accept_candidate_action_->setEnabled(active);
@@ -3054,6 +3098,17 @@ void MainWindow::restore_jwp_conversion_state() {
       jwp_document_->document() != *saved_jwp_document_);
   const std::size_t selected = jwp_conversion_->selected_index() + 1U;
   const std::size_t total = jwp_conversion_->result().candidates.size();
+  {
+    const QSignalBlocker blocker(conversion_candidates_);
+    if (conversion_candidates_->count() == 0) {
+      for (const auto& candidate : jwp_conversion_->result().candidates) {
+        conversion_candidates_->addItem(
+            to_qstring(core::decode_jwp_text(candidate.text, jwp_code_page_)));
+      }
+    }
+    conversion_candidates_->setCurrentRow(static_cast<int>(selected - 1));
+    conversion_candidates_->scrollToItem(conversion_candidates_->currentItem());
+  }
   statusBar()->showMessage(
       tr("Conversion candidate %1 of %2")
           .arg(static_cast<qulonglong>(selected))
