@@ -14,6 +14,7 @@
 #include <QPixmap>
 #include <QString>
 
+#include "character_context_menu.h"
 #include "jwpqt/core/jwp_conversion.h"
 #include "jwpqt/core/jwp_document_history.h"
 #include "jwpqt/core/jwp_document_model.h"
@@ -52,7 +53,6 @@ class JisTableDialog;
 class JwpEditor;
 class KanjiCodeLookupDialog;
 class KanjiCountDialog;
-class KanjiInfoDialog;
 class KanjiLookupDialog;
 class KanjiReadingLookupDialog;
 class WnnUserDictionaryDialog;
@@ -244,7 +244,8 @@ class MainWindow : public QMainWindow {
   void show_wnn_user_dictionary_dialog();
   void show_edict_lookup_dialog();
   void show_edict_user_dictionary_dialog();
-  void show_kanji_info_dialog();
+  void show_kanji_info_dialog(std::optional<CharacterTarget> target = {},
+                             std::optional<core::JisCode> code = {});
   void show_kanji_info_code(core::JisCode code);
   void show_jis_table_dialog();
   void show_kanji_count_dialog();
@@ -252,7 +253,6 @@ class MainWindow : public QMainWindow {
   void show_kanji_reading_lookup_dialog();
   void show_kanji_lookup_dialog();
   std::optional<core::JisCode> jwp_character_target() const;
-  std::optional<core::JisCode> kanji_info_target() const;
   std::u32string edict_query_seed() const;
   void new_document();
   void open_document();
@@ -366,7 +366,6 @@ class MainWindow : public QMainWindow {
   EdictUserDictionaryDialog* edict_user_dictionary_dialog_ = nullptr;
   std::unique_ptr<core::KanjiInfoDatabase> kanji_info_database_;
   QString kanji_info_path_;
-  KanjiInfoDialog* kanji_info_dialog_ = nullptr;
   JisTableDialog* jis_table_dialog_ = nullptr;
   KanjiCountDialog* kanji_count_dialog_ = nullptr;
   KanjiCodeLookupDialog* kanji_code_lookup_dialog_ = nullptr;

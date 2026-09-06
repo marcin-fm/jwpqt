@@ -7,6 +7,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QClipboard>
+#include <QContextMenuEvent>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -19,16 +20,19 @@
 #include <QMouseEvent>
 #include <QProcess>
 #include <QProcessEnvironment>
+#include <QPushButton>
 #include <QStyle>
 #include <QStyleFactory>
 #include <QStatusBar>
 #include <QTemporaryDir>
+#include <QTableWidget>
 #include <QTextEdit>
 #include <QTimer>
 #include <QToolBar>
 #include <QToolButton>
 
 #include "main_window.h"
+#include "kanji_info_dialog.h"
 #include "edict_resources.h"
 #include "jwpqt/core/edict_registry.h"
 #include "jwpqt/core/edict_search.h"
@@ -563,8 +567,74 @@ void test_real_resources(const QString& root, const QString& source,
   require(window.grab().save(QDir(QCoreApplication::applicationDirPath()).filePath(
               QStringLiteral("runtime-real-data.png"))),
           QStringLiteral("Could not capture real-data UI"));
+  auto* information = window.findChild<QAction*>(QStringLiteral("kanjiInfoAction"));
+  require(information && information->isEnabled(), QStringLiteral("Character Information is unavailable"));
+  information->trigger();
+  auto* character = dynamic_cast<jwpqt::qt::KanjiInfoDialog*>(
+      window.findChild<QDialog*>(QStringLiteral("kanjiInfoDialog")));
+  require(character != nullptr, QStringLiteral("Character Information did not open"));
+  QApplication::clipboard()->setText(QStringLiteral("\u611b"));
+  character->findChild<QPushButton*>(QStringLiteral("kanjiInfoClipboard"))->click();
+  auto* fields = character->findChild<QTableWidget*>(QStringLiteral("kanjiInfoFields"));
+  auto* readings = character->findChild<QTextEdit*>(QStringLiteral("kanjiInfoReadings"));
+  const auto field = [fields](const QString& name) {
+    for (int i = 0; i < fields->rowCount(); ++i)
+      if (fields->item(i, 0)->text() == name) return fields->item(i, 1)->text();
+    return QString();
+  };
+  QStringList details;
+  for (int i = 0; i < fields->rowCount(); ++i)
+    details << fields->item(i, 0)->text() + QStringLiteral(": ") + fields->item(i, 1)->text();
+  require(character->code() == 0x3026 && character->character() == U'\u611b' &&
+              field(QStringLiteral("JIS Code")) == QStringLiteral("3026 (B0A6)") &&
+              field(QStringLiteral("Shift-JIS")) == QStringLiteral("88A4") &&
+              field(QStringLiteral("Unicode")) == QStringLiteral("U+611B") &&
+              field(QStringLiteral("Strokes")) == QStringLiteral("13") &&
+              field(QStringLiteral("Bushu")).contains(QStringLiteral("87 (61)")) &&
+              field(QStringLiteral("Grade")) == QStringLiteral("4") &&
+              field(QStringLiteral("Frequency")) == QStringLiteral("640") &&
+              field(QStringLiteral("Halpern / SKIP")) == QStringLiteral("2492    2-4-9") &&
+              field(QStringLiteral("Spahn")) == QStringLiteral("4i10.1    259") &&
+              field(QStringLiteral("Four Corners")) == QStringLiteral("2024.7") &&
+              field(QStringLiteral("Morohashi")) == QStringLiteral("10947    4.1123") &&
+              field(QStringLiteral("Pinyin")) == QStringLiteral("\u00e0i") &&
+              field(QStringLiteral("Korean")) == QStringLiteral("ae") &&
+              field(QStringLiteral("Nelson")) == QStringLiteral("2829    1927") &&
+              readings->toPlainText().contains(QStringLiteral("love\naffection\nfavourite")) &&
+              readings->toPlainText().contains(QStringLiteral("-- on-yomi --\n\u30a2\u30a4")) &&
+              readings->toPlainText().contains(QStringLiteral("\u3044\u3068(\u3057\u3044)")),
+          QStringLiteral("Recovered Love character differs from the reference dialog:\n") +
+              details.join(QLatin1Char('\n')) + QLatin1Char('\n') + readings->toPlainText());
+  for (const bool dark : {false, true}) {
+    QApplication::setPalette(menu_palette(dark));
+    QApplication::processEvents();
+    require(character->grab().save(QDir(QCoreApplication::applicationDirPath()).filePath(
+                dark ? QStringLiteral("character-information-dark.png")
+                     : QStringLiteral("character-information-light.png"))),
+            QStringLiteral("Could not capture the real Character Information dialog"));
+  }
+  QTextCursor cursor(readings->document());
+  cursor.setPosition(readings->toPlainText().indexOf(QChar(0x30a2)));
+  const QRect start = readings->cursorRect(cursor);
+  cursor.movePosition(QTextCursor::NextCharacter);
+  const QPoint point((start.left() + readings->cursorRect(cursor).left()) / 2,
+                      start.center().y());
+  QContextMenuEvent nested(QContextMenuEvent::Mouse, point,
+      readings->viewport()->mapToGlobal(point), Qt::ShiftModifier);
+  QApplication::sendEvent(readings->viewport(), &nested);
+  QApplication::processEvents();
+  const auto dialogs = window.findChildren<QDialog*>(QStringLiteral("kanjiInfoDialog"));
+  require(dialogs.size() == 2 && character->code() == 0x3026 && character->isVisible() &&
+              !window.document_modified() && editor->toPlainText() == QStringLiteral("\u65e5\u672c"),
+          QStringLiteral("Real reading lookup did not preserve its original window and document"));
+  auto* kana = dynamic_cast<jwpqt::qt::KanjiInfoDialog*>(
+      dialogs.front() == character ? dialogs.back() : dialogs.front());
+  require(kana && kana->isVisible() && kana->code() == 0x2522 &&
+              kana->findChild<QTextEdit*>(QStringLiteral("kanjiInfoReadings"))->toPlainText() ==
+                  QStringLiteral("-- romaji --\na"),
+          QStringLiteral("Real on-yomi lookup did not open independent kana information"));
   std::cout << "Real-data workflow: romanized input -> WNN Japan -> save/reopen; "
-               "EDICT indexed lookup; kanji/radical resources loaded.\n";
+               "EDICT indexed lookup; Love character metadata; independent reading lookup.\n";
 }
 
 }  // namespace

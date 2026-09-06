@@ -5,11 +5,20 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QClipboard>
+#include <QContextMenuEvent>
 #include <QDialog>
 #include <QFile>
+#include <QKeyEvent>
+#include <QLabel>
 #include <QListWidget>
+#include <QMenu>
+#include <QMouseEvent>
+#include <QPointer>
 #include <QPushButton>
 #include <QTemporaryDir>
+#include <QTextEdit>
+#include <QTimer>
 
 #include "file_io.h"
 #include "jwpqt/core/kanji_info.h"
@@ -64,16 +73,19 @@ void write_database(const QString& path) {
   append_u16(bytes, 1U);
   append_u16(bytes, 0x3021U);
   bytes.resize(28, '\0');
-  put_u16(bytes, 12, 23U | (3U << 8U));
+  put_u16(bytes, 12, 23U | (3U << 8U) | (1U << 13U));
   put_u16(bytes, 14, (1U << 4U) | (1U << 8U) | (2U << 11U));
   put_u16(bytes, 16, 3U);
   put_u16(bytes, 18, 1U);
   put_u32(bytes, 24, 28U << 8U);
   bytes.append("tree\0", 5);
+  bytes.append("\x37\0", 2);
   append_u16(bytes, 0U);
   append_u32(bytes,
              (2U << 17U) | (4U << 22U) | (5U << 27U));
   append_u32(bytes, 7U | (1234U << 6U) | (5U << 20U));
+  bytes.append('k');
+  append_u16(bytes, 0x3021);
   bytes.append('\0');
   write_bytes(path, bytes);
 }
@@ -138,8 +150,8 @@ void test_integration(const QString& directory) {
   action->trigger();
   QApplication::processEvents();
   require(window.findChildren<QDialog*>(QStringLiteral("kanjiInfoDialog"))
-              .size() == 1,
-          "Kanji information action created duplicate dialogs");
+              .size() == 2 && dialog->isVisible() && dialog->code() == 0x3021U,
+          "Repeated Character Information did not create independent windows");
 
   QAction* skip_action =
       window.findChild<QAction*>(QStringLiteral("skipLookupAction"));
@@ -350,7 +362,7 @@ void test_integration(const QString& directory) {
   require(QFile::remove(info_path), "Could not remove database fixture");
   require(window.load_kanji_info(
               info_path, jwpqt::qt::OpenMode::kNonInteractive) &&
-              window.kanji_info_database() == nullptr && !action->isEnabled() &&
+              window.kanji_info_database() == nullptr && action->isEnabled() &&
               !radical_action->isEnabled() &&
                !skip_action->isEnabled() &&
                !four_corner_action->isEnabled() &&
@@ -367,6 +379,231 @@ void test_integration(const QString& directory) {
            "Absent database reload retained stale kanji information state");
 }
 
+jwpqt::qt::KanjiInfoDialog* request_information(QTextEdit& editor, int position,
+                         QContextMenuEvent::Reason reason = QContextMenuEvent::Mouse,
+                         Qt::KeyboardModifiers modifiers = Qt::NoModifier,
+                         bool enabled = true) {
+  const auto previous = QApplication::topLevelWidgets();
+  const QString text = editor.toPlainText();
+  QPoint point = editor.viewport()->rect().bottomRight();
+  if (position >= 0) {
+    QTextCursor cursor(editor.document());
+    cursor.setPosition(position);
+    const QRect first = editor.cursorRect(cursor);
+    cursor.setPosition(position + (text.at(position).isHighSurrogate() ? 2 : 1));
+    const QRect next = editor.cursorRect(cursor);
+    point = QPoint((first.x() * 3 + next.x()) / 4, first.center().y());
+  }
+  const QPoint global = editor.viewport()->mapToGlobal(point);
+  if (reason == QContextMenuEvent::Mouse) {
+    QMouseEvent press(QEvent::MouseButtonPress, point, global, Qt::RightButton,
+                       Qt::RightButton, modifiers);
+    QApplication::sendEvent(editor.viewport(), &press);
+  }
+  if (!modifiers.testFlag(Qt::ShiftModifier)) {
+    QTimer::singleShot(0, &editor, [enabled] {
+      auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+      require(menu != nullptr, "Right-click did not open a native context menu");
+      QAction* info = menu->findChild<QAction*>(QStringLiteral("characterInfoContextAction"));
+      require(info && info->isEnabled() == enabled && menu->actions().size() > 3,
+              "Context menu lost standard actions or uses the wrong character target");
+      if (enabled) {
+        menu->setActiveAction(info);
+        QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+        QApplication::sendEvent(menu, &enter);
+      } else {
+        menu->close();
+      }
+    });
+  }
+  QContextMenuEvent context(reason, point, global, modifiers);
+  QApplication::sendEvent(reason == QContextMenuEvent::Keyboard ? &editor : editor.viewport(),
+                          &context);
+  if (reason == QContextMenuEvent::Mouse) {
+    QMouseEvent release(QEvent::MouseButtonRelease, point, global, Qt::RightButton,
+                         Qt::NoButton, modifiers);
+    QApplication::sendEvent(editor.viewport(), &release);
+  }
+  QApplication::processEvents();
+  if (enabled) {
+    for (auto* widget : QApplication::topLevelWidgets()) {
+      auto* dialog = dynamic_cast<jwpqt::qt::KanjiInfoDialog*>(widget);
+      if (dialog != nullptr && !previous.contains(dialog)) return dialog;
+    }
+    require(false, "Information request did not create a separate modeless window");
+  }
+  return nullptr;
+}
+
+void test_character_context(const QString& directory) {
+  const QString info_path = directory + QStringLiteral("/context-info.dat");
+  write_database(info_path);
+  jwpqt::core::JwpDocument source;
+  source.paragraphs = {jwpqt::core::JwpParagraph{{'A', 0x3021, 0x2437, 0xe9, 0x2574}}};
+  const QString path = directory + QStringLiteral("/context.jwp");
+  jwpqt::qt::write_jwp_file(path, source);
+  jwpqt::qt::MainWindow window;
+  require(window.load_kanji_info(info_path, jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.open_jwp_path(path), "Could not load context workflow fixture");
+  window.show();
+  QApplication::processEvents();
+  auto* editor = window.findChild<QTextEdit*>();
+  require(editor != nullptr, "Context workflow has no document editor");
+  QTextCursor selection(editor->document());
+  selection.setPosition(1);
+  selection.setPosition(0, QTextCursor::KeepAnchor);
+  editor->setTextCursor(selection);
+  auto* undo = window.findChild<QAction*>(QStringLiteral("undoAction"));
+  const auto pristine = [&] {
+    return window.current_jwp_document()->paragraphs[0].text == source.paragraphs[0].text &&
+        !window.document_modified() && !undo->isEnabled();
+  };
+  const auto unchanged = [&] {
+    return editor->textCursor().position() == 0 && editor->textCursor().anchor() == 1 &&
+        pristine();
+  };
+  auto* dialog = request_information(*editor, 1);
+  require(dialog && dialog->code() == 0x3021 && unchanged(),
+          "Editor right-click ignored the pointer or changed selection/document/history");
+  auto* readings = dialog->findChild<QTextEdit*>(QStringLiteral("kanjiInfoReadings"));
+  QTextCursor retained_selection(readings->document());
+  retained_selection.setPosition(readings->toPlainText().indexOf(QStringLiteral("tree")));
+  retained_selection.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor, 4);
+  readings->setTextCursor(retained_selection);
+  auto* kana = request_information(*readings, readings->toPlainText().indexOf(QChar(0x30b7)));
+  auto* kana_text = kana->findChild<QTextEdit*>(QStringLiteral("kanjiInfoReadings"));
+  require(kana->code() == 0x2537 && unchanged() && kana != dialog &&
+              kana_text->toPlainText().contains(QStringLiteral("shi\nsi")) &&
+              dialog->code() == 0x3021 && dialog->isVisible() &&
+              readings->textCursor().selectedText() == QStringLiteral("tree"),
+          "Reading navigation replaced its source window or lost its selection");
+  auto* latin = request_information(*kana_text,
+      kana_text->toPlainText().indexOf(QStringLiteral("shi")) + 1);
+  require(latin->character() == U'h' && unchanged() && kana->code() == 0x2537 &&
+              window.findChildren<QDialog*>(QStringLiteral("kanjiInfoDialog")).size() == 3 &&
+              kana->parentWidget() == &window && latin->parentWidget() == &window,
+          "Nested information windows are not independent main-window children");
+  auto* code_page = request_information(*editor, 3, QContextMenuEvent::Mouse, Qt::ShiftModifier);
+  require(code_page->code() == 0xe9 && code_page->character() == U'\u00e9' && unchanged(),
+          "Shift-right-click lost the original native code-page byte");
+  auto* keyboard = request_information(*editor, -1, QContextMenuEvent::Keyboard);
+  require(keyboard->character() == U'A' && unchanged(),
+          "Keyboard context information ignored the selected character");
+  request_information(*editor, -1, QContextMenuEvent::Mouse, Qt::NoModifier, false);
+  require(keyboard->character() == U'A' && unchanged() &&
+              window.findChildren<QDialog*>(QStringLiteral("kanjiInfoDialog")).size() == 5,
+          "Blank-area context menu inspected the caret instead of the pointer");
+
+  dialog->findChild<QPushButton*>(QStringLiteral("kanjiInfoMore"))->click();
+  auto* extra = dialog->findChild<QTextEdit*>(QStringLiteral("kanjiInfoReferences"));
+  require(extra && extra->isVisible(), "More Info did not expose its reference pane");
+  auto* cross_reference = request_information(*extra,
+      extra->toPlainText().indexOf(QChar(0x4e9c)));
+  require(cross_reference->code() == 0x3021 && extra->isVisible() && unchanged() &&
+              cross_reference != dialog && dialog->code() == 0x3021,
+          "JIS cross-reference navigation replaced or closed its source window");
+  auto* pane_keyboard = request_information(*readings, -1, QContextMenuEvent::Keyboard);
+  require(pane_keyboard->character() == U't' && unchanged() && dialog->code() == 0x3021,
+          "Reading-pane keyboard context did not open a separate information window");
+  QApplication::clipboard()->setText(QStringLiteral("\u3042"));
+  kana->findChild<QPushButton*>(QStringLiteral("kanjiInfoClipboard"))->click();
+  require(kana->character() == U'\u3042' && dialog->code() == 0x3021 &&
+              latin->character() == U'h' && unchanged(),
+          "From Clipboard changed a different information window or the document");
+
+  QTextCursor reading_selection(readings->document());
+  reading_selection.setPosition(readings->toPlainText().indexOf(QStringLiteral("tree")));
+  reading_selection.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor, 4);
+  readings->setTextCursor(reading_selection);
+  dialog->findChild<QPushButton*>(QStringLiteral("kanjiInfoInsert"))->click();
+  require(editor->toPlainText().startsWith(QStringLiteral("tree\u4e9c")) &&
+              undo->isEnabled(), "Character Information insertion did not reach native history");
+  undo->trigger();
+  require(pristine() && editor->textCursor().position() == 0,
+          "Undo did not restore the pre-information document and caret");
+  selection.setPosition(1);
+  selection.setPosition(0, QTextCursor::KeepAnchor);
+  editor->setTextCursor(selection);
+  auto* glyph = dialog->findChild<QLabel*>(QStringLiteral("kanjiInfoCharacter"));
+  const QPoint center = glyph->rect().center();
+  QMouseEvent double_click(QEvent::MouseButtonDblClick, center, glyph->mapToGlobal(center),
+                            Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(glyph, &double_click);
+  require(window.current_jwp_document()->paragraphs[0].text.front() == 0x3021 &&
+              undo->isEnabled(), "Large character insertion bypassed the native document");
+  undo->trigger();
+  require(pristine() && editor->textCursor().position() == 0,
+          "Large character insertion could not be undone exactly");
+  selection.setPosition(1);
+  selection.setPosition(0, QTextCursor::KeepAnchor);
+  editor->setTextCursor(selection);
+
+  QPointer<QDialog> closed_dialog = dialog;
+  QPointer<QTextEdit> closed_more = extra;
+  dialog->findChild<QPushButton*>(QStringLiteral("kanjiInfoDone"))->click();
+  QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+  require(!closed_dialog && !closed_more && kana->isVisible() && latin->isVisible() &&
+              cross_reference->isVisible(),
+          "Closing an originating viewer closed its independently opened information windows");
+  std::vector<QPointer<QDialog>> old_dialogs;
+  for (auto* view : window.findChildren<QDialog*>(QStringLiteral("kanjiInfoDialog")))
+    old_dialogs.emplace_back(view);
+  require(window.load_kanji_info(directory + QStringLiteral("/no-context-info.dat"),
+                                 jwpqt::qt::OpenMode::kNonInteractive),
+          "Could not unload metadata with multiple viewers open");
+  for (const auto& view : old_dialogs)
+    require(!view, "Metadata reload retained a viewer holding the previous database");
+  dialog = request_information(*editor, 2);
+  require(dialog && dialog->code() == 0x2437 && unchanged(),
+          "Basic character navigation stopped after unloading kanji metadata");
+  dialog->close();
+  QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+  window.findChild<QAction*>(QStringLiteral("newTextDocumentAction"))->trigger();
+  editor->insertPlainText(QStringLiteral("x\U0001f600\u3042"));
+  selection = editor->textCursor();
+  selection.setPosition(0);
+  editor->setTextCursor(selection);
+  dialog = request_information(*editor, 1);
+  require(dialog && dialog->character() == 0x1f600 && dialog->code() == 0 &&
+              editor->textCursor().position() == 0 &&
+              editor->toPlainText() == QStringLiteral("x\U0001f600\u3042"),
+           "Unicode text context split a surrogate pair or changed the document");
+
+  jwpqt::core::JwpDocument reading;
+  reading.paragraphs = {jwpqt::core::JwpParagraph{{0x2422}}};
+  const QString preview_path = directory + QStringLiteral("/context-preview.jwp");
+  const QString wnn_path = directory + QStringLiteral("/context-wnn");
+  jwpqt::qt::write_jwp_file(preview_path, reading);
+  write_bytes(wnn_path + QStringLiteral(".dix"),
+              QByteArray::fromHex("a280807700000000"));
+  write_bytes(wnn_path + QStringLiteral(".dat"),
+              QByteArray::fromHex("a22ab0a1b0a1b0a10a"));
+  require(window.open_jwp_path(preview_path) &&
+              window.load_wnn_resources(wnn_path + QStringLiteral(".dix"),
+                  wnn_path + QStringLiteral(".dat"),
+                  directory + QStringLiteral("/context-user.sel"),
+                  jwpqt::qt::OpenMode::kNonInteractive),
+           "Could not prepare character information during a conversion preview");
+  editor->selectAll();
+  require(window.convert_selection() && window.conversion_active() &&
+              editor->toPlainText() == QStringLiteral("\u4e9c\u4e9c\u4e9c"),
+           "Conversion context fixture did not produce a longer displayed candidate");
+  const auto candidate_document = *window.current_jwp_document();
+  const bool candidate_modified = window.document_modified();
+  const QTextCursor candidate_selection = editor->textCursor();
+  for (int position : {0, 2}) {
+    dialog = request_information(*editor, position);
+    require(dialog && dialog->code() == 0x3021 &&
+                window.conversion_active() &&
+                window.document_modified() == candidate_modified &&
+                *window.current_jwp_document() == candidate_document &&
+                editor->textCursor().position() == candidate_selection.position() &&
+                editor->textCursor().anchor() == candidate_selection.anchor() &&
+                editor->toPlainText() == QStringLiteral("\u4e9c\u4e9c\u4e9c"),
+             "Character information changed or committed the conversion preview");
+  }
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -374,5 +611,6 @@ int main(int argc, char* argv[]) {
   QTemporaryDir directory(QStringLiteral("/srv/tmp/jwpqt-kanji-ui-XXXXXX"));
   require(directory.isValid(), "Could not create kanji integration directory");
   test_integration(directory.path());
+  test_character_context(directory.path());
   return EXIT_SUCCESS;
 }

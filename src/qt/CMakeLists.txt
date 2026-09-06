@@ -32,6 +32,8 @@ target_compile_options(jwpqt_qt_support
 )
 
 add_library(jwpqt_qt_ui STATIC
+  character_context_menu.cpp
+  character_context_menu.h
   edict_lookup_dialog.cpp
   edict_lookup_dialog.h
   edict_results_window.cpp

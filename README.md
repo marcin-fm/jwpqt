@@ -152,5 +152,23 @@ installed. Toolbar customization and saved toolbar layout/visibility are not
 implemented yet; unsupported Index Lookup and General Options buttons are not
 shown as working commands.
 
+### Character information
+
+Right-click a character and choose **Character Information**, or use `Ctrl+I`
+at the caret/selection. Shift-right-click opens information directly. Each
+request opens an independent modeless window, including requests from the
+readings or **More Info** panes; the original windows remain open.
+
+The viewer shows a large glyph, character codes, kanji metadata, and separate
+meanings/on-yomi/kun-yomi/nanori sections. Kana shows its supported romaji
+spellings. Basic character codes also work without `kanjinfo.dat`, including
+ASCII and Unicode text outside the JWP character set.
+
+**From Clipboard** changes only its own window. **Insert to File** inserts
+selected reading text; double-clicking the large glyph inserts that character.
+Both use the editor's normal history. Inspecting characters does not change
+the editor's selection or commit an active conversion. Closing one information
+window does not close the others.
+
 JWPce/JWPxp copyright and licensing notices remain in `_cpright.txt`,
 `_readme.txt`, and `gnugpl.txt`.
