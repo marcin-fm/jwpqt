@@ -62,6 +62,7 @@
 #include <QStyle>
 #include <QTextCursor>
 #include <QTextDocument>
+#include <QTabWidget>
 #include <QTextEdit>
 #include <QToolBar>
 #include <QVBoxLayout>
@@ -317,6 +318,7 @@ struct MainWindow::EdictUserResources {
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
+      document_tabs_(new QTabWidget(this)),
       conversion_candidates_(new QListWidget(this)),
       printer_(std::make_unique<QPrinter>(QPrinter::HighResolution)),
       encoding_label_(new QLabel(this)),
@@ -326,17 +328,20 @@ MainWindow::MainWindow(QWidget* parent)
       resource_status_button_(new QToolButton(this)),
       input_mode_actions_(new QActionGroup(this)),
       encoding_actions_(new QActionGroup(this)),
-      jwp_code_page_menu_(nullptr),
-      document_(std::make_unique<DocumentState>(this)) {
+      jwp_code_page_menu_(nullptr) {
+  documents_.push_back(std::make_unique<DocumentState>(this));
+  document_ = documents_.front().get();
   auto* central = new QWidget(this);
   auto* layout = new QVBoxLayout(central);
   layout->setContentsMargins(0, 0, 0, 0);
   layout->setSpacing(0);
-  layout->addWidget(document_->editor_, 1);
+  document_tabs_->setObjectName(QStringLiteral("documentTabs"));
+  document_tabs_->setDocumentMode(true);
+  document_tabs_->setTabsClosable(true);
+  document_tabs_->addTab(document_->editor_, tr("Untitled"));
+  layout->addWidget(document_tabs_, 1);
   layout->addWidget(conversion_candidates_);
   setCentralWidget(central);
-  document_->editor_->installEventFilter(this);
-  document_->editor_->viewport()->installEventFilter(this);
   QFont content_font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
   content_font.setPixelSize(16);  // Recovered file/edit/list/bar defaults: k16x16.
   document_->editor_->setFont(content_font);
@@ -372,6 +377,15 @@ MainWindow::MainWindow(QWidget* parent)
   });
 
   create_actions();
+  connect_editor(document_->editor_);
+  connect(document_tabs_, &QTabWidget::currentChanged, this, [this](int index) {
+    if (!activate_document(index)) {
+      const QSignalBlocker blocker(document_tabs_);
+      document_tabs_->setCurrentIndex(current_document_index());
+    }
+  });
+  connect(document_tabs_, &QTabWidget::tabCloseRequested, this,
+          [this](int index) { close_document(index); });
   update_command_bar_palette();
   encoding_label_->setObjectName(QStringLiteral("documentEncoding"));
   input_mode_button_->setObjectName(QStringLiteral("inputMode"));
@@ -397,13 +411,24 @@ MainWindow::MainWindow(QWidget* parent)
   update_encoding_display();
   resize(900, 680);
 
-  connect(document_->editor_->document(), &QTextDocument::contentsChange, this,
-          [this](int position, int chars_removed, int chars_added) {
-            synchronize_jwp_document(position, chars_removed, chars_added);
+  new_document();
+}
+
+void MainWindow::connect_editor(JwpEditor* editor) {
+  editor->installEventFilter(this);
+  editor->viewport()->installEventFilter(this);
+  // Shared actions route through the active state, never a retired editor.
+  editor->setContextMenuPolicy(Qt::ActionsContextMenu);
+  editor->addActions(editor_actions_);
+  connect(editor->document(), &QTextDocument::contentsChange, this,
+          [this, editor](int position, int chars_removed, int chars_added) {
+            if (document_->editor_ == editor)
+              synchronize_jwp_document(position, chars_removed, chars_added);
           });
-  connect(document_->editor_->document(), &QTextDocument::modificationChanged, this,
-          [this] { update_title(); });
-  connect(document_->editor_, &QTextEdit::cursorPositionChanged, this, [this] {
+  connect(editor->document(), &QTextDocument::modificationChanged, this,
+          [this, editor] { if (document_->editor_ == editor) update_title(); });
+  connect(editor, &QTextEdit::cursorPositionChanged, this, [this, editor] {
+    if (document_->editor_ != editor) return;
     if (!document_->updating_editor_) update_kanji_info_action();
     if (document_->updating_editor_ || conversion_active() ||
         !document_->jwp_document_.has_value()) {
@@ -433,12 +458,160 @@ MainWindow::MainWindow(QWidget* parent)
       document_->jwp_history_.break_coalescing();
     }
   });
-  connect(document_->editor_, &QTextEdit::selectionChanged, this,
-          [this] { update_conversion_actions(); });
-  new_document();
+  connect(editor, &QTextEdit::selectionChanged, this, [this, editor] {
+    if (document_->editor_ == editor) update_conversion_actions();
+  });
+  connect(editor, &QTextEdit::undoAvailable, this, [this, editor](bool available) {
+    if (document_->editor_ != editor) return;
+    document_->qt_undo_available_ = available;
+    update_undo_actions();
+  });
+  connect(editor, &QTextEdit::redoAvailable, this, [this, editor](bool available) {
+    if (document_->editor_ != editor) return;
+    document_->qt_redo_available_ = available;
+    update_undo_actions();
+  });
+  connect(editor, &QTextEdit::copyAvailable, this, [this, editor](bool available) {
+    if (document_->editor_ != editor) return;
+    cut_action_->setEnabled(available);
+    copy_action_->setEnabled(available);
+  });
+}
+
+JwpEditor* MainWindow::active_editor() const noexcept { return document_->editor_; }
+
+int MainWindow::document_count() const noexcept {
+  return static_cast<int>(documents_.size());
+}
+
+int MainWindow::current_document_index() const noexcept {
+  for (int i = 0; i < document_count(); ++i)
+    if (documents_[i].get() == document_) return i;
+  return -1;
+}
+
+bool MainWindow::finish_document_input() {
+  if (document_->updating_editor_ || document_->applying_kana_input_) return false;
+  if (conversion_active() && !accept_conversion()) return false;
+  finish_kana_input();
+  if (conversion_active() && !accept_conversion()) return false;
+  document_->jwp_history_.break_coalescing();
+  clear_automatic_conversion_range();
+  return true;
+}
+
+bool MainWindow::activate_document(int index) {
+  if (index < 0 || index >= document_count()) return false;
+  if (documents_[index].get() == document_) return true;
+  if (!finish_document_input()) return false;
+  document_ = documents_[index].get();
+  {
+    const QSignalBlocker blocker(document_tabs_);
+    document_tabs_->setCurrentIndex(index);
+  }
+  if (document_->jwp_document_) {
+    const QScopedValueRollback<bool> guard(document_->updating_editor_, true);
+    apply_jwp_presentation(document_->jwp_document_->document(), document_->jwp_code_page_);
+  }
+  document_->qt_undo_available_ = document_->editor_->document()->isUndoAvailable();
+  document_->qt_redo_available_ = document_->editor_->document()->isRedoAvailable();
+  cut_action_->setEnabled(document_->editor_->textCursor().hasSelection());
+  copy_action_->setEnabled(document_->editor_->textCursor().hasSelection());
+  update_encoding_display();
+  update_undo_actions();
+  update_conversion_actions();
+  update_title();
+  document_->editor_->setFocus();
+  return true;
+}
+
+int MainWindow::new_document_tab(bool japanese_editing) {
+  if (!finish_document_input()) return -1;
+  auto next = std::make_unique<DocumentState>(this);
+  next->jwp_code_page_ = document_->jwp_code_page_;
+  next->editor_->setFont(document_->editor_->font());
+  next->editor_->setLineWrapMode(QTextEdit::WidgetWidth);
+  connect_editor(next->editor_);
+  documents_.push_back(std::move(next));
+  {
+    const QSignalBlocker blocker(document_tabs_);
+    document_tabs_->addTab(documents_.back()->editor_, tr("Untitled"));
+  }
+  const int index = document_count() - 1;
+  if (!activate_document(index)) return -1;
+  if (japanese_editing) new_document();
+  else load_document({}, core::TextFile{}, false);
+  return index;
+}
+
+bool MainWindow::close_document(int index, OpenMode mode) {
+  if (!activate_document(index)) return false;
+  if (mode == OpenMode::kInteractive) {
+    if (!maybe_save()) return false;
+  } else if (!finish_document_input() || document_modified()) return false;
+  if (document_count() == 1) {
+    document_->editor_->document()->setModified(false);
+    document_->saved_text_file_.reset();
+    new_document();
+    return true;
+  }
+  if (!activate_document(index + 1 < document_count() ? index + 1 : index - 1))
+    return false;
+  const QSignalBlocker blocker(document_tabs_);
+  document_tabs_->removeTab(index);
+  auto closed = std::move(documents_[index]);
+  documents_.erase(documents_.begin() + index);
+  delete closed->editor_;
+  update_title();
+  return true;
+}
+
+bool MainWindow::approve_close_all(OpenMode mode) {
+  for (int i = 0; i < document_count(); ++i) {
+    if (!activate_document(i)) return false;
+    if (mode == OpenMode::kInteractive) {
+      if (!maybe_save()) return false;
+    } else if (!finish_document_input() || document_modified()) return false;
+  }
+  return true;
+}
+
+bool MainWindow::close_all_documents(OpenMode mode) {
+  if (!approve_close_all(mode)) return false;
+  // Do not discard even the first document until every prompt has succeeded.
+  for (const auto& state : documents_) {
+    state->editor_->document()->setModified(false);
+    state->saved_text_file_.reset();
+  }
+  for (int i = document_count() - 1; i >= 0; --i)
+    if (!close_document(i, OpenMode::kNonInteractive)) return false;
+  return true;
+}
+
+bool MainWindow::save_all_documents(OpenMode mode) {
+  const int original = current_document_index();
+  for (int i = 0; i < document_count(); ++i) {
+    if (!activate_document(i)) return false;
+    if (mode == OpenMode::kInteractive) {
+      if (!save_document()) return false;
+    } else if (document_->current_path_.isEmpty() ||
+               !save_as_path(document_->current_path_,
+                             document_->jwp_format_ ? std::nullopt
+                                 : std::optional{document_->encoding_},
+                             false, false, mode)) return false;
+  }
+  return activate_document(original);
 }
 
 MainWindow::~MainWindow() {
+  document_tabs_->disconnect(this);
+  conversion_candidates_->disconnect(this);
+  for (const auto& state : documents_) {
+    state->editor_->disconnect(this);
+    state->editor_->document()->disconnect(this);
+    state->editor_->removeEventFilter(this);
+    state->editor_->viewport()->removeEventFilter(this);
+  }
   delete wnn_user_dictionary_dialog_;
   delete edict_lookup_dialog_;
   delete edict_results_window_;
@@ -1081,16 +1254,14 @@ void MainWindow::create_actions() {
   new_action->setObjectName(QStringLiteral("newDocumentAction"));
   new_action->setShortcut(QKeySequence::New);
   connect(new_action, &QAction::triggered, this,
-          [this] { new_document(); });
+          [this] { new_document_tab(); });
 
   QAction* new_text_action = file_menu->addAction(tr("New &Text Document"));
   new_text_action->setObjectName(QStringLiteral("newTextDocumentAction"));
   new_text_action->setStatusTip(
       tr("Create unrestricted Unicode text without JWP formatting"));
   connect(new_text_action, &QAction::triggered, this, [this] {
-    if (maybe_save()) {
-      load_document({}, core::TextFile{}, false);
-    }
+    new_document_tab(false);
   });
 
   QAction* open_action = file_menu->addAction(tr("&Open..."));
@@ -1109,13 +1280,21 @@ void MainWindow::create_actions() {
   close_action->setObjectName(QStringLiteral("closeDocumentAction"));
   close_action->setShortcut(QKeySequence(QStringLiteral("Ctrl+F4")));
   connect(close_action, &QAction::triggered, this,
-          [this] { new_document(); });
+          [this] { close_document(current_document_index()); });
+  QAction* close_all_action = file_menu->addAction(tr("Close A&ll"));
+  close_all_action->setObjectName(QStringLiteral("closeAllDocumentsAction"));
+  connect(close_all_action, &QAction::triggered, this,
+          [this] { close_all_documents(); });
 
   QAction* save_action = file_menu->addAction(tr("&Save"));
   save_action->setObjectName(QStringLiteral("saveDocumentAction"));
   save_action->setShortcut(QKeySequence::Save);
   connect(save_action, &QAction::triggered, this,
           [this] { save_document(); });
+  QAction* save_all_action = file_menu->addAction(tr("Save All"));
+  save_all_action->setObjectName(QStringLiteral("saveAllDocumentsAction"));
+  connect(save_all_action, &QAction::triggered, this,
+          [this] { save_all_documents(); });
 
   QAction* save_as_action = file_menu->addAction(tr("Save &As..."));
   save_as_action->setShortcut(QKeySequence::SaveAs);
@@ -1157,11 +1336,6 @@ void MainWindow::create_actions() {
   undo_action_->setEnabled(false);
   connect(undo_action_, &QAction::triggered, this,
           [this] { undo_document(); });
-  connect(document_->editor_, &QTextEdit::undoAvailable, this,
-          [this](bool available) {
-            document_->qt_undo_available_ = available;
-            update_undo_actions();
-          });
 
   redo_action_ = edit_menu->addAction(tr("&Redo"));
   redo_action_->setObjectName(QStringLiteral("redoAction"));
@@ -1169,14 +1343,10 @@ void MainWindow::create_actions() {
   redo_action_->setEnabled(false);
   connect(redo_action_, &QAction::triggered, this,
           [this] { redo_document(); });
-  connect(document_->editor_, &QTextEdit::redoAvailable, this,
-          [this](bool available) {
-            document_->qt_redo_available_ = available;
-            update_undo_actions();
-          });
 
   edit_menu->addSeparator();
   QAction* cut_action = edit_menu->addAction(tr("Cu&t"));
+  cut_action_ = cut_action;
   cut_action->setObjectName(QStringLiteral("cutAction"));
   cut_action->setShortcut(QKeySequence::Cut);
   cut_action->setEnabled(false);
@@ -1184,10 +1354,9 @@ void MainWindow::create_actions() {
     finish_kana_input();
     document_->editor_->cut();
   });
-  connect(document_->editor_, &QTextEdit::copyAvailable, cut_action,
-          &QAction::setEnabled);
 
   QAction* copy_action = edit_menu->addAction(tr("&Copy"));
+  copy_action_ = copy_action;
   copy_action->setObjectName(QStringLiteral("copyAction"));
   copy_action->setShortcut(QKeySequence::Copy);
   copy_action->setEnabled(false);
@@ -1195,8 +1364,6 @@ void MainWindow::create_actions() {
     finish_kana_input();
     document_->editor_->copy();
   });
-  connect(document_->editor_, &QTextEdit::copyAvailable, copy_action,
-          &QAction::setEnabled);
 
   QAction* paste_action = edit_menu->addAction(tr("&Paste"));
   paste_action->setObjectName(QStringLiteral("pasteAction"));
@@ -1215,13 +1382,8 @@ void MainWindow::create_actions() {
   });
 
   // The standard QTextEdit menu would bypass portable JWP history.
-  document_->editor_->setContextMenuPolicy(Qt::ActionsContextMenu);
-  document_->editor_->addAction(undo_action_);
-  document_->editor_->addAction(redo_action_);
-  document_->editor_->addAction(cut_action);
-  document_->editor_->addAction(copy_action);
-  document_->editor_->addAction(paste_action);
-  document_->editor_->addAction(select_all_action);
+  editor_actions_ = {undo_action_, redo_action_, cut_action, copy_action,
+                     paste_action, select_all_action};
 
   edit_menu->addSeparator();
   QAction* find_action = edit_menu->addAction(tr("&Find..."));
@@ -1546,6 +1708,42 @@ void MainWindow::create_actions() {
     connect(action, &QAction::triggered, this,
             [this, code_page] { set_jwp_code_page(code_page); });
   }
+  QMenu* window_menu = menuBar()->addMenu(tr("&Window"));
+  next_file_action_ = window_menu->addAction(tr("&Next File"));
+  next_file_action_->setObjectName(QStringLiteral("nextFileAction"));
+  next_file_action_->setShortcuts({QKeySequence(Qt::CTRL | Qt::Key_Tab),
+                                  QKeySequence(Qt::CTRL | Qt::Key_PageDown)});
+  connect(next_file_action_, &QAction::triggered, this, [this] {
+    activate_document((current_document_index() + 1) % document_count());
+  });
+  previous_file_action_ = window_menu->addAction(tr("&Previous File"));
+  previous_file_action_->setObjectName(QStringLiteral("previousFileAction"));
+  previous_file_action_->setShortcuts({QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Tab),
+                                      QKeySequence(Qt::CTRL | Qt::Key_PageUp)});
+  connect(previous_file_action_, &QAction::triggered, this, [this] {
+    activate_document((current_document_index() + document_count() - 1) % document_count());
+  });
+  QAction* files_action = window_menu->addAction(tr("&Files..."));
+  files_action->setObjectName(QStringLiteral("filesAction"));
+  files_action->setShortcut(QKeySequence(Qt::ALT | Qt::Key_W));
+  connect(files_action, &QAction::triggered, this, [this] {
+    QStringList files;
+    for (int i = 0; i < document_count(); ++i) {
+      const auto& state = *documents_[i];
+      const QString name = state.current_path_.isEmpty() ? tr("Untitled") : state.current_path_;
+      files << tr("%1. %2").arg(i + 1).arg(name);
+    }
+    QInputDialog dialog(this);
+    dialog.setObjectName(QStringLiteral("filesDialog"));
+    dialog.setWindowTitle(tr("Open Files"));
+    dialog.setLabelText(tr("Activate a document:"));
+    dialog.setComboBoxItems(files);
+    dialog.setOption(QInputDialog::UseListViewForComboBoxItems);
+    dialog.setTextValue(files[current_document_index()]);
+    if (dialog.exec() == QDialog::Accepted)
+      activate_document(files.indexOf(dialog.textValue()));
+  });
+
   QMenu* help_menu = menuBar()->addMenu(tr("&Help"));
   QAction* resources = help_menu->addAction(tr("Runtime &Resources..."));
   resources->setObjectName(QStringLiteral("resourceStatusAction"));
@@ -3247,9 +3445,6 @@ void MainWindow::new_document() {
 }
 
 void MainWindow::open_document() {
-  if (!maybe_save()) {
-    return;
-  }
   QString selected_filter = all_files_filter();
   const QString path = QFileDialog::getOpenFileName(
       this, tr("Open document"), QString(), file_filters(), &selected_filter);
@@ -3257,26 +3452,45 @@ void MainWindow::open_document() {
     return;
   }
   if (selected_filter == jwp_filter()) {
-    open_jwp_path(path, document_->jwp_code_page_);
+    open_jwp_path(path, document_->jwp_code_page_, OpenMode::kInteractive, true);
     return;
   }
   const std::optional<core::TextEncoding> encoding =
       encoding_from_filter(selected_filter);
   if (encoding.has_value()) {
-    open_path(path, *encoding);
+    open_path(path, *encoding, OpenMode::kInteractive, true);
   } else {
-    open_path_detected(path);
+    open_path_detected(path, OpenMode::kInteractive, true);
   }
 }
 
+int MainWindow::find_document_path(const QString& path) const {
+  if (path.isEmpty()) return -1;
+  const QFileInfo requested(path);
+  const QString canonical = requested.canonicalFilePath();
+  for (int i = 0; i < document_count(); ++i) {
+    if (documents_[i]->current_path_.isEmpty()) continue;
+    const QFileInfo current(documents_[i]->current_path_);
+    if (requested.absoluteFilePath() == current.absoluteFilePath() ||
+        (!canonical.isEmpty() && canonical == current.canonicalFilePath())) return i;
+  }
+  return -1;
+}
+
 bool MainWindow::open_path(const QString& path, core::TextEncoding encoding,
-                           OpenMode mode) {
-  if (conversion_active() && !accept_conversion()) {
+                           OpenMode mode, bool new_tab) {
+  const int existing = find_document_path(path);
+  if (existing >= 0 && (new_tab || existing != current_document_index())) {
+    const bool activated = activate_document(existing);
+    if (activated) statusBar()->showMessage(tr("Already open: %1 (existing format retained)").arg(path), 3000);
+    return activated;
+  }
+  if (!new_tab && conversion_active() && !accept_conversion()) {
     return false;
   }
   try {
     const core::TextFile file = read_text_file(path, encoding);
-    load_document(path, file);
+    load_document(path, file, true, new_tab);
     statusBar()->showMessage(
         tr("Opened %1 as %2").arg(path, encoding_name(document_->encoding_)), 3000);
     return true;
@@ -3331,12 +3545,18 @@ bool MainWindow::delete_current_document(OpenMode mode) {
 
 bool MainWindow::open_jwp_path(const QString& path,
                                core::LegacyCodePage code_page,
-                               OpenMode mode) {
-  if (conversion_active() && !accept_conversion()) {
+                               OpenMode mode, bool new_tab) {
+  const int existing = find_document_path(path);
+  if (existing >= 0 && (new_tab || existing != current_document_index())) {
+    const bool activated = activate_document(existing);
+    if (activated) statusBar()->showMessage(tr("Already open: %1 (existing format retained)").arg(path), 3000);
+    return activated;
+  }
+  if (!new_tab && conversion_active() && !accept_conversion()) {
     return false;
   }
   try {
-    load_jwp_document(path, read_jwp_file(path), code_page);
+    load_jwp_document(path, read_jwp_file(path), code_page, new_tab);
     statusBar()->showMessage(
         tr("Opened %1 as JWP (%2)").arg(path, code_page_name(code_page)),
         3000);
@@ -3349,15 +3569,21 @@ bool MainWindow::open_jwp_path(const QString& path,
   }
 }
 
-bool MainWindow::open_path_detected(const QString& path, OpenMode mode) {
-  if (conversion_active() && !accept_conversion()) {
+bool MainWindow::open_path_detected(const QString& path, OpenMode mode, bool new_tab) {
+  const int existing = find_document_path(path);
+  if (existing >= 0 && (new_tab || existing != current_document_index())) {
+    const bool activated = activate_document(existing);
+    if (activated) statusBar()->showMessage(tr("Already open: %1 (existing format retained)").arg(path), 3000);
+    return activated;
+  }
+  if (!new_tab && conversion_active() && !accept_conversion()) {
     return false;
   }
   try {
     const std::string bytes = read_file_bytes(path);
     if (core::has_jwp_document_magic(bytes)) {
       load_jwp_document(path, core::decode_jwp_document(bytes),
-                        document_->jwp_code_page_);
+                        document_->jwp_code_page_, new_tab);
       statusBar()->showMessage(
           tr("Opened %1 as JWP (%2)")
               .arg(path, code_page_name(document_->jwp_code_page_)),
@@ -3367,7 +3593,8 @@ bool MainWindow::open_path_detected(const QString& path, OpenMode mode) {
 
     if (QFileInfo(path).suffix().compare(QStringLiteral("jfc"),
                                         Qt::CaseInsensitive) == 0) {
-      load_document(path, core::decode_text_file(bytes, core::TextEncoding::kJfc));
+      load_document(path, core::decode_text_file(bytes, core::TextEncoding::kJfc),
+                    true, new_tab);
       statusBar()->showMessage(
           tr("Opened %1 as %2").arg(path, encoding_name(document_->encoding_)), 3000);
       return true;
@@ -3406,7 +3633,7 @@ bool MainWindow::open_path_detected(const QString& path, OpenMode mode) {
     }
 
     const core::TextFile file = core::decode_text_file(bytes, *encoding);
-    load_document(path, file);
+    load_document(path, file, true, new_tab);
     statusBar()->showMessage(
         tr("Opened %1 as %2").arg(path, encoding_name(*encoding)), 3000);
     return true;
@@ -3420,7 +3647,7 @@ bool MainWindow::open_path_detected(const QString& path, OpenMode mode) {
 
 void MainWindow::load_document(const QString& path,
                                const core::TextFile& file,
-                               bool japanese_editing) {
+                               bool japanese_editing, bool new_tab) {
   QTextDocument staged_text;
   staged_text.setPlainText(to_qstring(file.text));
   core::TextFile normalized = file;
@@ -3434,7 +3661,7 @@ void MainWindow::load_document(const QString& path,
     }
   }
   if (model) {
-    load_jwp_document(path, model->document(), document_->jwp_code_page_);
+    load_jwp_document(path, model->document(), document_->jwp_code_page_, new_tab);
     document_->jwp_format_ = false;
     document_->encoding_ = file.encoding;
     document_->has_byte_order_mark_ = file.has_byte_order_mark;
@@ -3442,6 +3669,8 @@ void MainWindow::load_document(const QString& path,
     update_encoding_display();
     return;
   }
+  if (new_tab && new_document_tab(false) < 0)
+    throw std::runtime_error("Could not finish input before opening a document");
   reset_kana_input(true);
   document_->jwp_document_.reset();
   document_->saved_jwp_document_.reset();
@@ -3468,8 +3697,8 @@ void MainWindow::load_document(const QString& path,
 }
 
 void MainWindow::load_jwp_document(const QString& path,
-                                     core::JwpDocument document,
-                                     core::LegacyCodePage code_page) {
+                                      core::JwpDocument document,
+                                      core::LegacyCodePage code_page, bool new_tab) {
   std::optional<core::JwpDocument> pristine_document;
   if (document.paragraphs.empty()) {
     pristine_document = document;
@@ -3486,6 +3715,8 @@ void MainWindow::load_jwp_document(const QString& path,
   staged_editor.prepare_kanji_colors(model.document(), kanji_color_list_,
                                       kanji_color_policy_, code_page);
 
+  if (new_tab && new_document_tab() < 0)
+    throw std::runtime_error("Could not finish input before opening a document");
   reset_kana_input(false);
   {
     QScopedValueRollback<bool> update_guard(document_->updating_editor_, true);
@@ -3566,6 +3797,13 @@ bool MainWindow::save_as_path(const QString& path,
                               std::optional<core::TextEncoding> encoding,
                               bool allow_format_loss, bool export_copy,
                               OpenMode mode) {
+  const int existing = find_document_path(path);
+  if (existing >= 0 && documents_[existing].get() != document_) {
+    if (mode == OpenMode::kInteractive)
+      QMessageBox::warning(this, tr("Document is already open"),
+                           tr("This path belongs to another open document."));
+    return false;
+  }
   if (export_copy) {
     if (conversion_active() || document_->kana_input_.pending()) return false;
     if (!document_->current_path_.isEmpty() &&
@@ -4952,6 +5190,15 @@ void MainWindow::update_title() {
                            : QFileInfo(document_->current_path_).fileName();
   setWindowTitle(tr("%1[*] - jwpqt").arg(name));
   setWindowModified(document_modified());
+  const int index = current_document_index();
+  if (index >= 0) {
+    const QString tab_name = QString(name).replace(QLatin1Char('&'), QStringLiteral("&&"));
+    document_tabs_->setTabText(
+        index, tab_name + (document_modified() ? QStringLiteral(" *") : QString()));
+    document_tabs_->setTabToolTip(index, document_->current_path_);
+  }
+  if (next_file_action_) next_file_action_->setEnabled(document_count() > 1);
+  if (previous_file_action_) previous_file_action_->setEnabled(document_count() > 1);
   const bool has_path = !document_->current_path_.isEmpty();
   if (revert_action_ != nullptr)
     revert_action_->setEnabled(has_path && !conversion_active());
@@ -4967,7 +5214,7 @@ void MainWindow::show_error(const QString& action,
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
-  if (maybe_save()) {
+  if (approve_close_all(OpenMode::kInteractive)) {
     event->accept();
   } else {
     event->ignore();

@@ -28,6 +28,7 @@
 #include "kanji_lookup_dialog.h"
 #include "kanji_reading_lookup_dialog.h"
 #include "main_window.h"
+#include "jwp_editor.h"
 
 namespace {
 
@@ -569,6 +570,7 @@ void test_character_context(const QString& directory) {
   dialog->close();
   QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
   window.findChild<QAction*>(QStringLiteral("newTextDocumentAction"))->trigger();
+  editor = window.active_editor();
   editor->insertPlainText(QStringLiteral("x\U0001f600\u3042"));
   selection = editor->textCursor();
   selection.setPosition(0);

@@ -11,6 +11,7 @@
 #include <vector>
 
 #include <QIcon>
+#include <QList>
 #include <QMainWindow>
 #include <QPixmap>
 #include <QString>
@@ -41,6 +42,7 @@ class QLabel;
 class QListWidget;
 class QMenu;
 class QPrinter;
+class QTabWidget;
 class QTextCursor;
 class QTextEdit;
 class QToolBar;
@@ -101,14 +103,25 @@ class MainWindow : public QMainWindow {
   explicit MainWindow(QWidget* parent = nullptr);
   ~MainWindow() override;
 
+  JwpEditor* active_editor() const noexcept;
+  int document_count() const noexcept;
+  int current_document_index() const noexcept;
+  int new_document_tab(bool japanese_editing = true);
+  bool activate_document(int index);
+  bool close_document(int index, OpenMode mode = OpenMode::kInteractive);
+  bool close_all_documents(OpenMode mode = OpenMode::kInteractive);
+  bool save_all_documents(OpenMode mode = OpenMode::kInteractive);
+
+  // A new-tab open preserves other buffers and activates already-open paths.
   bool open_path(const QString& path, core::TextEncoding encoding,
-                 OpenMode mode = OpenMode::kInteractive);
+                 OpenMode mode = OpenMode::kInteractive, bool new_tab = false);
   bool open_jwp_path(
       const QString& path,
       core::LegacyCodePage code_page = core::kDefaultLegacyCodePage,
-      OpenMode mode = OpenMode::kInteractive);
+      OpenMode mode = OpenMode::kInteractive, bool new_tab = false);
   bool open_path_detected(const QString& path,
-                          OpenMode mode = OpenMode::kInteractive);
+                          OpenMode mode = OpenMode::kInteractive,
+                          bool new_tab = false);
   bool save_path(const QString& path);
   // An absent encoding selects the JWP container; text losses require consent.
   bool save_as_path(const QString& path,
@@ -262,17 +275,21 @@ class MainWindow : public QMainWindow {
   std::optional<core::JisCode> jwp_character_target() const;
   std::u32string edict_query_seed() const;
   void new_document();
+  void connect_editor(JwpEditor* editor);
+  bool finish_document_input();
+  int find_document_path(const QString& path) const;
   void open_document();
   bool save_document();
   bool save_document_as(bool export_copy = false);
   bool maybe_save();
+  bool approve_close_all(OpenMode mode);
   std::optional<core::TextEncoding> choose_encoding();
   void load_document(const QString& path, const core::TextFile& file,
-                     bool japanese_editing = true);
+                     bool japanese_editing = true, bool new_tab = false);
   bool native_document_modified() const;
   bool confirm_text_export();
   void load_jwp_document(const QString& path, core::JwpDocument document,
-                         core::LegacyCodePage code_page);
+                         core::LegacyCodePage code_page, bool new_tab = false);
   void set_text_encoding(core::TextEncoding encoding, bool mark_modified);
   void set_jwp_code_page(core::LegacyCodePage code_page);
   void apply_jwp_presentation(const core::JwpDocument& document,
@@ -304,11 +321,17 @@ class MainWindow : public QMainWindow {
   void update_title();
   void show_error(const QString& action, const std::exception& error);
 
+  QTabWidget* document_tabs_;
   QListWidget* conversion_candidates_;
   std::unique_ptr<QPrinter> printer_;
   QLabel* encoding_label_;
   QAction* undo_action_;
   QAction* redo_action_;
+  QAction* cut_action_ = nullptr;
+  QAction* copy_action_ = nullptr;
+  QAction* next_file_action_ = nullptr;
+  QAction* previous_file_action_ = nullptr;
+  QList<QAction*> editor_actions_;
   QAction* print_action_ = nullptr;
   QAction* printer_setup_action_ = nullptr;
   QAction* revert_action_ = nullptr;
@@ -380,7 +403,8 @@ class MainWindow : public QMainWindow {
   QString replacement_text_;
   core::JwpSearchOptions search_options_;
   // Conversion transactions must be destroyed before the shared dictionaries.
-  std::unique_ptr<DocumentState> document_;
+  std::vector<std::unique_ptr<DocumentState>> documents_;
+  DocumentState* document_ = nullptr;
 };
 
 }  // namespace jwpqt::qt

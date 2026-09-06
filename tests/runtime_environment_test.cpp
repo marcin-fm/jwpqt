@@ -36,6 +36,7 @@
 #include <QToolButton>
 
 #include "main_window.h"
+#include "jwp_editor.h"
 #include "edict_lookup_dialog.h"
 #include "kanji_info_dialog.h"
 #include "kanji_code_lookup_dialog.h"
@@ -470,6 +471,7 @@ void test_toolbar(const QString& root) {
   require(button("jisTableAction")->isEnabled() &&
               button("pageLayoutAction")->isEnabled(),
           QStringLiteral("Toolbar state did not return for a new Japanese document"));
+  editor = window.active_editor();
   window.findChild<QAction*>(QStringLiteral("jasciiInputAction"))->trigger();
   require(button("jasciiInputAction")->isChecked() &&
               !button("asciiInputAction")->isChecked(),

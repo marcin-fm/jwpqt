@@ -28,6 +28,10 @@
 #include <QPrinter>
 #include <QSettings>
 #include <QSignalBlocker>
+#include <QScrollBar>
+#include <QTabWidget>
+#include <QInputDialog>
+#include <QPointer>
 #include <QTextEdit>
 #include <QTemporaryDir>
 #include <QTextBlock>
@@ -377,7 +381,9 @@ void test_new_document_workflow(const QString& directory) {
           "Fresh Japanese document did not save correctly");
 
   find_action(window, "newTextDocumentAction")->trigger();
+  editor = window.active_editor();
   require(!window.is_jwp_document() && !window.document_modified() &&
+              window.document_count() == 2 &&
               window.current_path().isEmpty() &&
               !find_action(window, "kanaInputAction")->isEnabled(),
           "Explicit New Text did not create an independent Unicode document");
@@ -387,22 +393,228 @@ void test_new_document_workflow(const QString& directory) {
   require(window.save_path(text_path) && read_bytes(text_path) == unicode.toUtf8(),
           "Explicit New Text lost supplementary Unicode");
   editor->insertPlainText(QStringLiteral("unsaved"));
+  const auto* unicode_editor = editor;
+  find_action(window, "newDocumentAction")->trigger();
+  require(window.document_count() == 3 && window.is_jwp_document() &&
+              window.active_editor()->toPlainText().isEmpty() &&
+              unicode_editor->toPlainText() == unicode + QStringLiteral("unsaved"),
+          "New tab discarded another document's unsaved Unicode");
+  require(window.activate_document(1), "Could not reactivate Unicode tab");
   QTimer::singleShot(0, [] {
     auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
-    if (prompt != nullptr) prompt->done(QMessageBox::Cancel);
+    if (prompt != nullptr) prompt->button(QMessageBox::Cancel)->click();
   });
-  find_action(window, "newDocumentAction")->trigger();
+  find_action(window, "closeDocumentAction")->trigger();
   require(!window.is_jwp_document() && window.document_modified() &&
+              window.document_count() == 3 &&
               editor->toPlainText() == unicode + QStringLiteral("unsaved"),
-          "Cancelled New discarded unsaved Unicode text");
+          "Cancelled Close discarded unsaved Unicode text");
   require(window.save_path(text_path), "Could not save before New");
-  find_action(window, "newDocumentAction")->trigger();
+  require(window.activate_document(2), "Could not reactivate new Japanese tab");
+  editor = window.active_editor();
   require(window.is_jwp_document() && window.current_path().isEmpty() &&
               !window.document_modified() && editor->toPlainText().isEmpty() &&
               !find_action(window, "undoAction")->isEnabled(),
           "New did not reset the document and history");
   require(window.open_jwp_path(path) && *window.current_jwp_document() == saved,
           "Could not reopen a document created through New");
+}
+
+void test_document_tabs(const QString& directory) {
+  using jwpqt::qt::OpenMode;
+  using jwpqt::core::TextEncoding;
+  jwpqt::qt::MainWindow window;
+  window.show();
+  const QString native_path = directory + QStringLiteral("/tab-&native.jwp");
+  const QString unicode_path = directory + QStringLiteral("/tab-unicode.txt");
+  auto source = sample_jwp_document();
+  for (int i = 0; i < 80; ++i) source.paragraphs.push_back(paragraph(U"row"));
+  jwpqt::qt::write_jwp_file(native_path, source);
+  jwpqt::qt::write_text_file(unicode_path, {U"Unicode \U0001f600", TextEncoding::kUtf16Le, true});
+  require(window.open_jwp_path(native_path), "Could not load first tab");
+  QPointer<jwpqt::qt::JwpEditor> native = window.active_editor();
+  native->moveCursor(QTextCursor::End);
+  native->insertPlainText(QStringLiteral("X"));
+  const auto edited = *window.current_jwp_document();
+  QTextCursor selection = native->textCursor();
+  selection.setPosition(1);
+  selection.setPosition(3, QTextCursor::KeepAnchor);
+  native->setTextCursor(selection);
+  QApplication::processEvents();
+  native->verticalScrollBar()->setValue(native->verticalScrollBar()->maximum() / 2);
+  const int scroll = native->verticalScrollBar()->value();
+  require(window.open_path(unicode_path, TextEncoding::kUtf16Le,
+                            OpenMode::kNonInteractive, true), "Could not append Unicode tab");
+  QPointer<jwpqt::qt::JwpEditor> unicode = window.active_editor();
+  require(window.document_count() == 2 && window.current_document_index() == 1 &&
+              unicode != native && !window.is_jwp_document(), "Text tab did not own an independent editor");
+  unicode->moveCursor(QTextCursor::End);
+  unicode->insertPlainText(QStringLiteral("Y"));
+  auto* tabs = window.findChild<QTabWidget*>(QStringLiteral("documentTabs"));
+  require(tabs && tabs->tabText(0).endsWith(QStringLiteral(" *")) &&
+              tabs->tabText(0).contains(QStringLiteral("&&native")) &&
+              tabs->tabText(1).endsWith(QStringLiteral(" *")), "Tab modified markers are incorrect");
+  require(window.activate_document(0) && window.active_editor() == native &&
+              *window.current_jwp_document() == edited &&
+              native->textCursor().anchor() == 1 && native->textCursor().position() == 3 &&
+              native->verticalScrollBar()->value() == scroll &&
+              find_action(window, "copyAction")->isEnabled(),
+          "Tab activation lost native metadata, selection, scroll or action state");
+  require_jwp_layout(native, edited);
+  const auto prior_bytes = read_bytes(unicode_path);
+  require(!window.save_as_path(unicode_path, TextEncoding::kUtf8, true) &&
+              read_bytes(unicode_path) == prior_bytes && window.current_path() == native_path,
+          "Save As overwrote another open document");
+  const QString malformed = directory + QStringLiteral("/tab-invalid.txt");
+  write_bytes(malformed, QByteArray::fromHex("fffe00d8"));
+  require(!window.open_path_detected(malformed, OpenMode::kNonInteractive, true) &&
+              window.document_count() == 2 && window.active_editor() == native &&
+              *window.current_jwp_document() == edited,
+          "Invalid tab open changed existing documents");
+  find_action(window, "nextFileAction")->trigger();
+  require(window.active_editor() == unicode && !find_action(window, "copyAction")->isEnabled(),
+          "Next File did not restore Unicode action state");
+  require(window.save_all_documents(OpenMode::kNonInteractive) &&
+              window.active_editor() == unicode && !window.document_modified() &&
+              jwpqt::qt::read_jwp_file(native_path) == edited &&
+              jwpqt::qt::read_text_file(unicode_path, TextEncoding::kUtf16Le).text == U"Unicode \U0001f600Y",
+          "Save All lost an encoding, document or active tab");
+  find_action(window, "undoAction")->trigger();
+  require(unicode->toPlainText().toStdU32String() == U"Unicode \U0001f600" && window.document_modified(),
+          "Unicode tab lost its Qt undo history");
+  require(window.activate_document(0), "Could not switch back to native undo");
+  find_action(window, "undoAction")->trigger();
+  require(*window.current_jwp_document() == source && window.document_modified(),
+          "Native tab lost its portable undo history");
+  find_action(window, "redoAction")->trigger();
+  require(*window.current_jwp_document() == edited && !window.document_modified(),
+          "Native redo did not restore its own saved baseline");
+  require(window.open_path_detected(native_path, OpenMode::kNonInteractive, true) &&
+              window.document_count() == 2 && window.active_editor() == native,
+          "Opening an existing path duplicated or reloaded its tab");
+  find_action(window, "previousFileAction")->trigger();
+  require(window.active_editor() == unicode, "Previous File did not wrap around");
+  find_action(window, "redoAction")->trigger();
+  require(!window.document_modified(), "Unicode redo did not restore its saved baseline");
+  QTimer::singleShot(0, [] {
+    auto* dialog = qobject_cast<QInputDialog*>(QApplication::activeModalWidget());
+    require(dialog != nullptr, "Files chooser was not shown");
+    dialog->setTextValue(dialog->comboBoxItems().front());
+    dialog->accept();
+  });
+  find_action(window, "filesAction")->trigger();
+  require(window.active_editor() == native, "Files chooser did not activate the selected document");
+
+  native->moveCursor(QTextCursor::End);
+  native->insertPlainText(QStringLiteral("discard A"));
+  window.activate_document(1);
+  unicode->moveCursor(QTextCursor::End);
+  unicode->insertPlainText(QStringLiteral("cancel B"));
+  int prompts = 0;
+  QTimer timer;
+  QObject::connect(&timer, &QTimer::timeout, [&] {
+    auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    if (!prompt) return;
+    prompt->button(prompts++ == 0 ? QMessageBox::Discard : QMessageBox::Cancel)->click();
+  });
+  timer.start(0);
+  require(!window.close_all_documents(), "Close All ignored cancellation");
+  timer.stop();
+  require(prompts == 2 && window.document_count() == 2 && native && unicode &&
+              native->toPlainText().endsWith(QStringLiteral("discard A")) &&
+              unicode->toPlainText().endsWith(QStringLiteral("cancel B")),
+          "Close All discarded an earlier tab before later cancellation");
+  QTimer::singleShot(0, [] {
+    auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    require(prompt != nullptr, "Exit did not inspect dirty background tabs");
+    prompt->button(QMessageBox::Cancel)->click();
+  });
+  require(!window.close() && window.document_count() == 2,
+          "Exit discarded dirty background documents");
+
+  require(window.new_document_tab(false) == 2, "Could not create unnamed tab");
+  QPointer<jwpqt::qt::JwpEditor> unnamed = window.active_editor();
+  unnamed->insertPlainText(QStringLiteral("unsaved"));
+  require(!window.save_all_documents(OpenMode::kNonInteractive) &&
+              window.active_editor() == unnamed && window.document_count() == 3 &&
+              window.document_modified(), "Save All silently skipped an unnamed tab");
+  require(!window.close_all_documents(OpenMode::kNonInteractive) &&
+              window.document_count() == 3, "Noninteractive Close All discarded changes");
+  QTimer::singleShot(0, [] {
+    auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    require(prompt != nullptr, "Closing unnamed tab did not prompt");
+    prompt->button(QMessageBox::Discard)->click();
+  });
+  require(window.close_document(2) && unnamed.isNull() && window.document_count() == 2,
+          "Closing a tab did not release only its own editor");
+  require(window.close_document(1, OpenMode::kNonInteractive) && unicode.isNull() &&
+              window.active_editor() == native && window.document_count() == 1,
+          "Closing Unicode tab damaged the remaining document");
+  require(window.close_all_documents(OpenMode::kNonInteractive) &&
+              window.document_count() == 1 && window.current_path().isEmpty() &&
+              window.active_editor()->toPlainText().isEmpty() && window.is_jwp_document() &&
+              !window.document_modified() && !find_action(window, "nextFileAction")->isEnabled(),
+          "Closing all tabs did not leave a clean usable Japanese document");
+}
+
+void test_tab_conversion_lifetimes(const QString& directory) {
+  using jwpqt::qt::OpenMode;
+  jwpqt::qt::MainWindow window;
+  const auto fixture = write_wnn_fixture(directory);
+  require(window.load_wnn_resources(fixture.index_path, fixture.data_path,
+                                    fixture.preferences_path), "Could not load tab conversion resources");
+  QPointer<jwpqt::qt::JwpEditor> first = window.active_editor();
+  first->insertPlainText(QStringLiteral("\u3042"));
+  first->selectAll();
+  require(window.convert_selection(), "Could not start first tab conversion");
+  const QString glyph = first->toPlainText();
+  const QString invalid_text = directory + QStringLiteral("/tab-preview-invalid.txt");
+  write_bytes(invalid_text, QByteArray::fromHex("fffe00d8"));
+  jwpqt::core::JwpDocument unmapped;
+  unmapped.paragraphs = {jwpqt::core::JwpParagraph{{0x81}}};
+  const QString invalid_native = directory + QStringLiteral("/tab-preview-invalid.jwp");
+  jwpqt::qt::write_jwp_file(invalid_native, unmapped);
+  require(!window.open_path_detected(invalid_text, OpenMode::kNonInteractive, true) &&
+              !window.open_jwp_path(invalid_native, jwpqt::core::kDefaultLegacyCodePage,
+                                    OpenMode::kNonInteractive, true) &&
+              window.document_count() == 1 && window.active_editor() == first &&
+              window.conversion_active() && first->toPlainText() == glyph,
+          "Rejected tab imports accepted or discarded an active preview");
+  find_action(window, "kanjiInfoAction")->trigger();
+  QPointer<QDialog> information = window.findChild<QDialog*>(QStringLiteral("kanjiInfoDialog"));
+  require(information, "Could not inspect a tab's conversion candidate");
+  require(window.new_document_tab() == 1 && !window.conversion_active() &&
+              !first->isReadOnly() && first->toPlainText() == glyph,
+          "Tab creation did not settle the shared conversion transaction");
+  auto* second = window.active_editor();
+  second->insertPlainText(QStringLiteral("\u3042"));
+  second->selectAll();
+  require(window.convert_selection(), "Shared conversion could not start in a second tab");
+  const QString second_glyph = second->toPlainText();
+  require(window.activate_document(0) && !window.conversion_active() && !second->isReadOnly(),
+          "Tab activation left a shared conversion attached to the previous document");
+  find_action(window, "undoAction")->trigger();
+  require(first->toPlainText() == QStringLiteral("\u3042") && second->toPlainText() == second_glyph,
+          "Undo followed the shared conversion session into another document");
+  require(window.save_path(directory + QStringLiteral("/tab-info-origin.jwp")) &&
+              window.close_document(0, OpenMode::kNonInteractive) && first.isNull() &&
+              information && window.active_editor() == second,
+          "Closing a source tab destroyed its independent information window");
+  second->moveCursor(QTextCursor::End);
+  auto* character = information->findChild<QLabel*>(QStringLiteral("kanjiInfoCharacter"));
+  require(character != nullptr, "Information lost its character after origin closes");
+  const QPoint center = character->rect().center();
+  QMouseEvent insert(QEvent::MouseButtonDblClick, QPointF(center),
+                     QPointF(character->mapToGlobal(center)), Qt::LeftButton,
+                     Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(character, &insert);
+  require(second->toPlainText() == second_glyph + glyph,
+          "Modeless insertion used a closed editor rather than the active document");
+  find_action(window, "undoAction")->trigger();
+  require(second->toPlainText() == second_glyph, "Modeless insertion used the wrong tab's history");
+  require(window.load_wnn_resources(fixture.index_path, fixture.data_path,
+                                    fixture.preferences_path, OpenMode::kNonInteractive),
+          "Settled tab transactions retained a stale shared dictionary reference");
 }
 
 void test_explicit_open_and_encoding_action(const QString& directory) {
@@ -2640,6 +2852,7 @@ void test_input_mode_workflow(const QString& directory) {
                                    directory + QStringLiteral("/input-mode-user.sel")),
           "Could not load mode-switch conversion fixture");
   find_action(window, "newDocumentAction")->trigger();
+  editor = window.active_editor();
   editor->insertPlainText(QStringLiteral("\u3042"));
   editor->selectAll();
   require(window.convert_selection(), "Could not start mode-switch conversion");
@@ -3618,6 +3831,7 @@ void test_document_format_separation(const QString& directory) {
               !window.document_modified() && window.text_encoding() == TextEncoding::kUtf8,
           "Unrepresentable Save As mutated live format or existing disk content");
   find_action(window, "newTextDocumentAction")->trigger();
+  editor = window.active_editor();
   const std::u32string signature_text = U"\ufeff\U0001f600";
   const QString signature = QString(QChar(0xfeff)) +
                             QString::fromStdU32String(U"\U0001f600");
@@ -3733,6 +3947,8 @@ int main(int argc, char* argv[]) {
                             QStringLiteral("/jwpqt-window-test-XXXXXX"));
     require(directory.isValid(), "Could not create temporary test directory");
     test_new_document_workflow(directory.path());
+    test_document_tabs(directory.path());
+    test_tab_conversion_lifetimes(directory.path());
     test_explicit_open_and_encoding_action(directory.path());
     test_jfc_open_save_and_revert(directory.path());
     test_utf16_workflow(directory.path());
