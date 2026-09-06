@@ -104,6 +104,10 @@ int main(int argc, char* argv[]) {
     return 1;
   }
   const QDir config(config_directory);
+  if (!window.load_recent_file_configuration(
+          config.filePath(QStringLiteral("recent-files.json")))) {
+    QTextStream(stderr) << window.recent_file_warning() << '\n';
+  }
   if (!window.load_kanji_color_configuration(
           config.filePath(QStringLiteral("settings.ini")),
           config.filePath(QStringLiteral("colkanji.lst")),

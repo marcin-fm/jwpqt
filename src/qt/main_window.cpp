@@ -158,6 +158,17 @@ QString file_filters() {
 
 QString all_files_filter() { return MainWindow::tr("All files (*)"); }
 
+QString absolute_document_path(const QString& path) {
+  // Cleaning ".." before resolving directory symlinks changes the target file.
+  return path.isEmpty() || QDir::isAbsolutePath(path)
+             ? path : QDir::currentPath() + QLatin1Char('/') + path;
+}
+
+QString document_path_identity(const QString& path) {
+  const QString canonical = QFileInfo(path).canonicalFilePath();
+  return canonical.isEmpty() ? absolute_document_path(path) : canonical;
+}
+
 QString decode_registry_text(const core::EdictRegistry& registry,
                              std::u16string_view text,
                              core::LegacyCodePage code_page) {
@@ -550,6 +561,7 @@ bool MainWindow::close_document(int index, OpenMode mode) {
     if (!maybe_save()) return false;
   } else if (!finish_document_input() || document_modified()) return false;
   if (document_count() == 1) {
+    record_recent_document(*document_);
     document_->editor_->document()->setModified(false);
     document_->saved_text_file_.reset();
     new_document();
@@ -557,6 +569,7 @@ bool MainWindow::close_document(int index, OpenMode mode) {
   }
   if (!activate_document(index + 1 < document_count() ? index + 1 : index - 1))
     return false;
+  record_recent_document(*documents_[index]);
   const QSignalBlocker blocker(document_tabs_);
   document_tabs_->removeTab(index);
   auto closed = std::move(documents_[index]);
@@ -581,7 +594,10 @@ bool MainWindow::close_all_documents(OpenMode mode) {
   // Do not discard even the first document until every prompt has succeeded.
   for (const auto& state : documents_) {
     state->editor_->document()->setModified(false);
-    state->saved_text_file_.reset();
+    if (state->saved_text_file_) {
+      state->encoding_ = state->saved_text_file_->encoding;
+      state->has_byte_order_mark_ = state->saved_text_file_->has_byte_order_mark;
+    }
   }
   for (int i = document_count() - 1; i >= 0; --i)
     if (!close_document(i, OpenMode::kNonInteractive)) return false;
@@ -601,6 +617,122 @@ bool MainWindow::save_all_documents(OpenMode mode) {
                              false, false, mode)) return false;
   }
   return activate_document(original);
+}
+
+const std::vector<RecentDocument>& MainWindow::recent_documents() const noexcept {
+  return recent_documents_;
+}
+
+QString MainWindow::recent_file_warning() const { return recent_file_warning_; }
+
+bool MainWindow::load_recent_file_configuration(const QString& path, OpenMode mode) {
+  recent_files_path_ = absolute_document_path(path);
+  try {
+    auto files = read_recent_documents(recent_files_path_);
+    recent_documents_ = std::move(files);
+    recent_file_persistence_enabled_ = true;
+    recent_file_warning_.clear();
+    update_recent_file_actions();
+    update_resource_status();
+    return true;
+  } catch (const std::exception& error) {
+    recent_file_persistence_enabled_ = false;
+    recent_file_warning_ = tr("Could not load recent files: %1")
+                               .arg(QString::fromUtf8(error.what()));
+    update_recent_file_actions();
+    update_resource_status();
+    if (mode == OpenMode::kInteractive)
+      QMessageBox::warning(this, tr("Recent files"), recent_file_warning_);
+    return false;
+  }
+}
+
+bool MainWindow::open_recent_document(int index, OpenMode mode) {
+  if (index < 0 || static_cast<std::size_t>(index) >= recent_documents_.size())
+    return false;
+  const RecentDocument entry = recent_documents_[index];
+  return entry.encoding ? open_path(entry.path, *entry.encoding, mode, true)
+                        : open_jwp_path(entry.path, entry.code_page, mode, true);
+}
+
+bool MainWindow::clear_recent_documents(OpenMode mode) {
+  try {
+    if (!recent_files_path_.isEmpty()) {
+      if (find_document_path(recent_files_path_) >= 0)
+        throw RecentFilesError("Close the recent history document before clearing it");
+      write_recent_documents(recent_files_path_, {});
+    }
+    recent_documents_.clear();
+    recent_file_warning_.clear();
+    recent_file_persistence_enabled_ = true;
+    update_recent_file_actions();
+    update_resource_status();
+    return true;
+  } catch (const std::exception& error) {
+    recent_file_warning_ = tr("Could not clear recent files: %1")
+                               .arg(QString::fromUtf8(error.what()));
+    update_recent_file_actions();
+    update_resource_status();
+    if (mode == OpenMode::kInteractive)
+      QMessageBox::warning(this, tr("Recent files"), recent_file_warning_);
+    return false;
+  }
+}
+
+void MainWindow::record_recent_document(const DocumentState& state) {
+  if (state.current_path_.isEmpty()) return;
+  try {
+    RecentDocument entry;
+    entry.path = absolute_document_path(state.current_path_);
+    entry.code_page = state.jwp_code_page_;
+    if (!state.jwp_format_)
+      entry.encoding = state.saved_text_file_ ? state.saved_text_file_->encoding
+                                              : state.encoding_;
+    auto next = recent_documents_;
+    const QString identity = document_path_identity(entry.path);
+    next.erase(std::remove_if(next.begin(), next.end(), [&](const auto& old) {
+      return document_path_identity(old.path) == identity;
+    }), next.end());
+    next.insert(next.begin(), std::move(entry));
+    if (next.size() > kMaximumRecentDocuments) next.resize(kMaximumRecentDocuments);
+    recent_documents_ = std::move(next);
+    if (!recent_files_path_.isEmpty() && recent_file_persistence_enabled_) {
+      if (find_document_path(recent_files_path_) >= 0)
+        throw RecentFilesError("History is open as a document; automatic history saving is paused");
+      (void)read_recent_documents(recent_files_path_);
+      write_recent_documents(recent_files_path_, recent_documents_);
+      recent_file_warning_.clear();
+    }
+  } catch (const std::exception& error) {
+    // History is auxiliary: never report completed document I/O as a failure.
+    recent_file_warning_ = tr("Could not save recent files: %1")
+                               .arg(QString::fromUtf8(error.what()));
+  }
+  update_recent_file_actions();
+  update_resource_status();
+  if (!recent_file_warning_.isEmpty()) statusBar()->showMessage(recent_file_warning_, 10000);
+}
+
+void MainWindow::update_recent_file_actions() {
+  for (qsizetype i = 0; i < recent_file_actions_.size(); ++i) {
+    auto* action = recent_file_actions_[i];
+    const bool available = static_cast<std::size_t>(i) < recent_documents_.size();
+    action->setVisible(available);
+    if (!available) continue;
+    const auto& entry = recent_documents_[i];
+    QString display = entry.path;
+    for (qsizetype j = 0; j < display.size(); ++j)
+      if (display[j].category() == QChar::Other_Control) display[j] = QLatin1Char(' ');
+    display = menuBar()->fontMetrics().elidedText(display, Qt::ElideMiddle, 600);
+    action->setText(tr("&%1 %2").arg(i + 1)
+                        .arg(display.replace(QLatin1Char('&'), QStringLiteral("&&"))));
+    action->setToolTip(entry.path + QStringLiteral("\n") +
+                      (entry.encoding ? encoding_name(*entry.encoding)
+                                      : tr("JWP (%1)").arg(code_page_name(entry.code_page))));
+  }
+  if (clear_recent_files_action_)
+    clear_recent_files_action_->setEnabled(!recent_documents_.empty() ||
+                                           !recent_file_warning_.isEmpty());
 }
 
 MainWindow::~MainWindow() {
@@ -1324,6 +1456,24 @@ void MainWindow::create_actions() {
           [this] { setup_printer(); });
 
   file_menu->addSeparator();
+  auto* recent_files_menu = file_menu->addMenu(tr("Recent &Files"));
+  recent_files_menu->setObjectName(QStringLiteral("recentFilesMenu"));
+  // A triggered action must survive the resulting change in recent-file order.
+  for (std::size_t i = 0; i < kMaximumRecentDocuments; ++i) {
+    auto* action = recent_files_menu->addAction(QString());
+    action->setObjectName(QStringLiteral("recentFile%1Action").arg(i + 1));
+    recent_file_actions_.append(action);
+    connect(action, &QAction::triggered, this, [this, i] {
+      open_recent_document(static_cast<int>(i), OpenMode::kInteractive);
+    });
+  }
+  recent_files_menu->addSeparator();
+  clear_recent_files_action_ = recent_files_menu->addAction(tr("Clear Recent Files"));
+  clear_recent_files_action_->setObjectName(QStringLiteral("clearRecentFilesAction"));
+  connect(clear_recent_files_action_, &QAction::triggered, this,
+          [this] { clear_recent_documents(OpenMode::kInteractive); });
+  update_recent_file_actions();
+  file_menu->addSeparator();
   QAction* quit_action = file_menu->addAction(tr("&Quit"));
   quit_action->setShortcut(QKeySequence::Quit);
   connect(quit_action, &QAction::triggered, this, &QWidget::close);
@@ -1874,6 +2024,9 @@ QString MainWindow::resource_report() const {
       lines << tr("Dictionary resource limits were reached.");
     }
   }
+  lines << (recent_files_path_.isEmpty() ? tr("Recent files: memory only")
+                                        : tr("Recent files: %1").arg(recent_files_path_));
+  if (!recent_file_warning_.isEmpty()) lines << recent_file_warning_;
   lines << QString()
         << tr("Use --config-dir for settings and dictionaries, and "
               "--user-data-dir for conversion learning. WNN files are found "
@@ -1910,9 +2063,12 @@ void MainWindow::update_resource_status() {
                   });
   resource_status_button_->setText(
       wnn_resources_ != nullptr && has_kanji_lookup() && dictionaries_loaded
-          ? (record_warnings ? tr("Resources: warnings") : tr("Resources: loaded"))
+          ? (record_warnings || !recent_file_warning_.isEmpty()
+                 ? tr("Resources: warnings") : tr("Resources: loaded"))
           : tr("Resources: incomplete"));
-  resource_status_button_->setToolTip(tr("Inspect dictionary and lookup data"));
+  resource_status_button_->setToolTip(
+      recent_file_warning_.isEmpty() ? tr("Inspect dictionary and lookup data")
+                                    : recent_file_warning_);
 }
 
 void MainWindow::undo_document() {
@@ -3466,13 +3622,10 @@ void MainWindow::open_document() {
 
 int MainWindow::find_document_path(const QString& path) const {
   if (path.isEmpty()) return -1;
-  const QFileInfo requested(path);
-  const QString canonical = requested.canonicalFilePath();
+  const QString identity = document_path_identity(path);
   for (int i = 0; i < document_count(); ++i) {
     if (documents_[i]->current_path_.isEmpty()) continue;
-    const QFileInfo current(documents_[i]->current_path_);
-    if (requested.absoluteFilePath() == current.absoluteFilePath() ||
-        (!canonical.isEmpty() && canonical == current.canonicalFilePath())) return i;
+    if (identity == document_path_identity(documents_[i]->current_path_)) return i;
   }
   return -1;
 }
@@ -3483,6 +3636,7 @@ bool MainWindow::open_path(const QString& path, core::TextEncoding encoding,
   if (existing >= 0 && (new_tab || existing != current_document_index())) {
     const bool activated = activate_document(existing);
     if (activated) statusBar()->showMessage(tr("Already open: %1 (existing format retained)").arg(path), 3000);
+    if (activated) record_recent_document(*document_);
     return activated;
   }
   if (!new_tab && conversion_active() && !accept_conversion()) {
@@ -3493,6 +3647,7 @@ bool MainWindow::open_path(const QString& path, core::TextEncoding encoding,
     load_document(path, file, true, new_tab);
     statusBar()->showMessage(
         tr("Opened %1 as %2").arg(path, encoding_name(document_->encoding_)), 3000);
+    record_recent_document(*document_);
     return true;
   } catch (const std::exception& error) {
     if (mode == OpenMode::kInteractive) {
@@ -3550,6 +3705,7 @@ bool MainWindow::open_jwp_path(const QString& path,
   if (existing >= 0 && (new_tab || existing != current_document_index())) {
     const bool activated = activate_document(existing);
     if (activated) statusBar()->showMessage(tr("Already open: %1 (existing format retained)").arg(path), 3000);
+    if (activated) record_recent_document(*document_);
     return activated;
   }
   if (!new_tab && conversion_active() && !accept_conversion()) {
@@ -3560,6 +3716,7 @@ bool MainWindow::open_jwp_path(const QString& path,
     statusBar()->showMessage(
         tr("Opened %1 as JWP (%2)").arg(path, code_page_name(code_page)),
         3000);
+    record_recent_document(*document_);
     return true;
   } catch (const std::exception& error) {
     if (mode == OpenMode::kInteractive) {
@@ -3574,6 +3731,7 @@ bool MainWindow::open_path_detected(const QString& path, OpenMode mode, bool new
   if (existing >= 0 && (new_tab || existing != current_document_index())) {
     const bool activated = activate_document(existing);
     if (activated) statusBar()->showMessage(tr("Already open: %1 (existing format retained)").arg(path), 3000);
+    if (activated) record_recent_document(*document_);
     return activated;
   }
   if (!new_tab && conversion_active() && !accept_conversion()) {
@@ -3588,6 +3746,7 @@ bool MainWindow::open_path_detected(const QString& path, OpenMode mode, bool new
           tr("Opened %1 as JWP (%2)")
               .arg(path, code_page_name(document_->jwp_code_page_)),
           3000);
+      record_recent_document(*document_);
       return true;
     }
 
@@ -3597,6 +3756,7 @@ bool MainWindow::open_path_detected(const QString& path, OpenMode mode, bool new
                     true, new_tab);
       statusBar()->showMessage(
           tr("Opened %1 as %2").arg(path, encoding_name(document_->encoding_)), 3000);
+      record_recent_document(*document_);
       return true;
     }
 
@@ -3636,6 +3796,7 @@ bool MainWindow::open_path_detected(const QString& path, OpenMode mode, bool new
     load_document(path, file, true, new_tab);
     statusBar()->showMessage(
         tr("Opened %1 as %2").arg(path, encoding_name(*encoding)), 3000);
+    record_recent_document(*document_);
     return true;
   } catch (const std::exception& error) {
     if (mode == OpenMode::kInteractive) {
@@ -3807,9 +3968,7 @@ bool MainWindow::save_as_path(const QString& path,
   if (export_copy) {
     if (conversion_active() || document_->kana_input_.pending()) return false;
     if (!document_->current_path_.isEmpty() &&
-        (QFileInfo(path).absoluteFilePath() == QFileInfo(document_->current_path_).absoluteFilePath() ||
-         (!QFileInfo(path).canonicalFilePath().isEmpty() &&
-          QFileInfo(path).canonicalFilePath() == QFileInfo(document_->current_path_).canonicalFilePath()))) {
+        document_path_identity(path) == document_path_identity(document_->current_path_)) {
       return false;
     }
   } else {
@@ -3876,6 +4035,7 @@ bool MainWindow::save_as_path(const QString& path,
     statusBar()->showMessage(
         (export_copy ? tr("Exported %1 as %2") : tr("Saved %1 as %2"))
             .arg(path, encoding ? encoding_name(*encoding) : tr("JWP")), 3000);
+    if (!export_copy) record_recent_document(*document_);
     return true;
   } catch (const std::exception& error) {
     if (mode == OpenMode::kInteractive) {
@@ -5215,6 +5375,7 @@ void MainWindow::show_error(const QString& action,
 
 void MainWindow::closeEvent(QCloseEvent* event) {
   if (approve_close_all(OpenMode::kInteractive)) {
+    for (const auto& state : documents_) record_recent_document(*state);
     event->accept();
   } else {
     event->ignore();

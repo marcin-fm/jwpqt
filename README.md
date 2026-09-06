@@ -96,6 +96,15 @@ Modeless dictionary and character-information windows insert into the currently
 active tab, even after their original document is closed. Save As and Export
 Copy cannot overwrite another open document's path.
 
+**File > Recent Files** retains nine named documents, including each text
+encoding or JWP code page. Reopening activates an existing tab or opens a new
+one without guessing the encoding again. History is stored atomically in
+`recent-files.json` in the application configuration directory. Failed opens,
+cancelled dialogs, and Export Copy do not add entries. **Clear Recent Files**
+clears history, not documents. Corrupt history is preserved until an explicit
+Clear; history errors appear in Runtime Resources without failing document I/O.
+Automatic history writes pause while that history file is open as a document.
+
 Startup and **File > New Japanese Document** create a native JWP document with
 Japanese editing, conversion, formatting, and lookup insertion available without
 opening an existing file first. **File > New Text Document** creates unrestricted
@@ -151,7 +160,7 @@ global color list with atomic persistence. The native modeless EDICT tool loads
 ordered indexed or unindexed resources from `dict.cfg`, searches with the
 portable direct, adaptive, wildcard, contingent, and name filters, and inserts
 selected rows into JWP with portable undo. Editable EDICT `user.dct` and native
-kanji lookup tools are available. Recent files/project lifecycle, remaining
+kanji lookup tools are available. Project lifecycle, remaining
 configuration, complete printing, help, and packaging remain in progress.
 
 ### Input modes and shortcuts

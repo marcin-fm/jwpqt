@@ -617,6 +617,222 @@ void test_tab_conversion_lifetimes(const QString& directory) {
           "Settled tab transactions retained a stale shared dictionary reference");
 }
 
+void test_recent_file_workflow(const QString& directory) {
+  using jwpqt::core::TextEncoding;
+  using jwpqt::qt::OpenMode;
+  constexpr auto mode = OpenMode::kNonInteractive;
+  const QString history = directory + QStringLiteral("/recent-ui.json");
+  const QString ascii = directory + QStringLiteral("/recent&a.txt");
+  const QString unicode = directory + QStringLiteral("/recent-unmarked.txt");
+  const QString jwp = directory + QStringLiteral("/recent-cyrillic.jwp");
+  jwpqt::qt::write_text_file(ascii, {U"ASCII", TextEncoding::kOldJis, false});
+  jwpqt::qt::write_text_file(unicode, {U"A\U0001f600", TextEncoding::kUtf16Be, false});
+  auto native = sample_jwp_document();
+  native.paragraphs.front().text = {0x80, 0x81};
+  jwpqt::qt::write_jwp_file(jwp, native);
+  PromptingWindow window;
+  require(window.recent_documents().empty() &&
+              !find_action(window, "clearRecentFilesAction")->isEnabled() &&
+              window.load_recent_file_configuration(history) && !QFile::exists(history),
+          "Recent history was not initially empty and read-only");
+  require(window.open_path(ascii, TextEncoding::kOldJis, mode) &&
+              window.open_path(unicode, TextEncoding::kUtf16Be, mode, true) &&
+              window.open_jwp_path(jwp, jwpqt::core::LegacyCodePage::k1251, mode, true),
+          "Could not create recent-file workflow documents");
+  require(window.recent_documents().size() == 3 &&
+              window.recent_documents()[0].path == jwp &&
+              !window.recent_documents()[0].encoding &&
+              window.recent_documents()[0].code_page == jwpqt::core::LegacyCodePage::k1251 &&
+              window.recent_documents()[1].encoding == TextEncoding::kUtf16Be &&
+              window.recent_documents()[2].encoding == TextEncoding::kOldJis &&
+              find_action(window, "recentFile3Action")->text().contains(QStringLiteral("&&")),
+          "Recent paths, ordering, encoding or menu escaping was wrong");
+  const auto stored = jwpqt::qt::read_recent_documents(history);
+  require(stored.size() == 3 && stored[1].encoding == TextEncoding::kUtf16Be,
+          "Successful opens did not persist their explicit formats");
+  QPointer<QAction> fixed_action = find_action(window, "recentFile2Action");
+  require(window.activate_document(1), "Could not select recent Unicode document");
+  auto* editor = window.active_editor();
+  editor->moveCursor(QTextCursor::End);
+  editor->insertPlainText(QStringLiteral("X"));
+  require(window.activate_document(2), "Could not select recent JWP document");
+  fixed_action->trigger();
+  require(fixed_action && window.document_count() == 3 &&
+              window.active_editor() == editor && window.document_modified() &&
+              window.recent_documents().front().path == unicode,
+          "Recent-menu activation reloaded an open buffer or deleted its action");
+  find_action(window, "undoAction")->trigger();
+  require(!window.document_modified(), "Recent activation lost Unicode undo");
+  const QString saved = directory + QStringLiteral("/recent-saved.utf8");
+  require(window.save_as_path(saved, TextEncoding::kUtf8) &&
+              window.recent_documents().front().path == saved &&
+              window.recent_documents().front().encoding == TextEncoding::kUtf8,
+          "Save As did not record the new path and encoding");
+  const QByteArray before = read_bytes(history);
+  require(window.save_as_path(directory + QStringLiteral("/recent-copy.txt"),
+                              TextEncoding::kUtf8, false, true) &&
+              !window.save_as_path(directory, TextEncoding::kUtf8) &&
+              read_bytes(history) == before,
+          "Export Copy or failed Save As changed recent history");
+  const QString invalid = directory + QStringLiteral("/recent-invalid.txt");
+  write_bytes(invalid, QByteArray::fromHex("fffe00"));
+  require(!window.open_path_detected(invalid, mode, true) &&
+              !window.open_path_detected(ascii + QStringLiteral(".missing"), mode, true) &&
+              read_bytes(history) == before && window.document_count() == 3,
+          "Failed opening changed recent history or tabs");
+  const QString ambiguous = directory + QStringLiteral("/recent-ambiguous.txt");
+  write_bytes(ambiguous, QByteArray("ASCII"));
+  require(!window.open_path_detected(ambiguous, OpenMode::kInteractive, true) &&
+              read_bytes(history) == before,
+          "Cancelled encoding selection changed recent history");
+  bool cancelled = false;
+  QTimer::singleShot(0, [&] {
+    if (auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget())) {
+      cancelled = true;
+      dialog->reject();
+    }
+  });
+  find_action(window, "openDocumentAction")->trigger();
+  require(cancelled && read_bytes(history) == before,
+          "Cancelled Open dialog changed recent history");
+
+  PromptingWindow restored;
+  require(restored.load_recent_file_configuration(history) &&
+              restored.open_recent_document(1) &&
+              restored.text_encoding() == TextEncoding::kUtf16Be &&
+              restored.active_editor()->toPlainText() == QString::fromStdU32String(U"A\U0001f600"),
+          "Recent unmarked UTF-16 was redetected or lost text");
+  const auto native_entry = std::find_if(restored.recent_documents().begin(),
+      restored.recent_documents().end(), [&](const auto& entry) { return entry.path == jwp; });
+  require(native_entry != restored.recent_documents().end() &&
+              restored.open_recent_document(static_cast<int>(native_entry - restored.recent_documents().begin())) &&
+              restored.jwp_code_page() == jwpqt::core::LegacyCodePage::k1251 &&
+              restored.current_jwp_document()->paragraphs.front().text == native.paragraphs.front().text,
+          "Recent JWP did not retain its code page");
+  const int count = window.document_count();
+  find_action(window, "clearRecentFilesAction")->trigger();
+  require(window.recent_documents().empty() && window.document_count() == count &&
+              jwpqt::qt::read_recent_documents(history).empty() && fixed_action &&
+              !fixed_action->isVisible() && !find_action(window, "clearRecentFilesAction")->isEnabled(),
+          "Clear recent files changed open documents or left stale menu entries");
+
+  PromptingWindow bounded;
+  for (int i = 0; i < 11; ++i) {
+    const QString path = directory + QStringLiteral("/recent-%1.txt").arg(i);
+    write_bytes(path, QByteArray("ASCII"));
+    require(bounded.open_path(path, TextEncoding::kUtf8, mode), "Could not fill recent history");
+  }
+  require(bounded.recent_documents().size() == 9 &&
+              bounded.recent_documents().front().path.endsWith(QStringLiteral("recent-10.txt")) &&
+              bounded.recent_documents().back().path.endsWith(QStringLiteral("recent-2.txt")) &&
+              bounded.resource_report().contains(QStringLiteral("Recent files: memory only")),
+          "Recent history limit, ordering or memory-only constructor failed");
+}
+
+void test_recent_file_failures(const QString& directory) {
+  using jwpqt::core::TextEncoding;
+  using jwpqt::qt::OpenMode;
+  constexpr auto mode = OpenMode::kNonInteractive;
+  const QString source = directory + QStringLiteral("/recent-failure-source.txt");
+  const QString history = directory + QStringLiteral("/recent-corrupt.json");
+  const QByteArray corrupt("preserve invalid history");
+  write_bytes(source, QByteArray("ASCII"));
+  write_bytes(history, corrupt);
+  PromptingWindow window;
+  require(!window.load_recent_file_configuration(history) &&
+              !window.recent_file_warning().isEmpty() &&
+              window.open_path(source, TextEncoding::kUtf8, mode) &&
+              window.recent_documents().size() == 1 && read_bytes(history) == corrupt,
+          "Corrupt history blocked opening or was overwritten automatically");
+  require(window.clear_recent_documents() && window.recent_file_warning().isEmpty() &&
+              jwpqt::qt::read_recent_documents(history).empty(),
+          "Explicit Clear did not recover corrupt history");
+  write_bytes(history, corrupt);
+  require(window.save_as_path(directory + QStringLiteral("/recent-after-corruption.txt"), TextEncoding::kUtf8) &&
+              read_bytes(history) == corrupt && !window.recent_file_warning().isEmpty(),
+          "Automatic persistence overwrote history corrupted after loading");
+  require(window.clear_recent_documents(), "Could not reset corrupt history");
+  const QString blocked = directory + QStringLiteral("/absent-recent-parent/history.json");
+  require(window.load_recent_file_configuration(blocked) &&
+              window.save_as_path(directory + QStringLiteral("/recent-success.txt"), TextEncoding::kUtf8) &&
+              !window.document_modified() && !window.recent_file_warning().isEmpty() &&
+              window.resource_report().contains(QStringLiteral("Could not save recent files")),
+          "History write failure turned a successful document save into failure");
+  require(!window.clear_recent_documents() && window.recent_documents().size() == 1,
+          "Failed Clear discarded the in-memory history");
+
+  jwpqt::qt::write_recent_documents(history, {{source, TextEncoding::kUtf8,
+                                            jwpqt::core::kDefaultLegacyCodePage}});
+  const QByteArray original = read_bytes(history);
+  require(window.load_recent_file_configuration(history) &&
+              window.open_path(history, TextEncoding::kUtf8, mode, true) &&
+              !window.clear_recent_documents() && read_bytes(history) == original,
+          "Automatic history persistence overwrote an open history document");
+
+  PromptingWindow closing;
+  require(closing.open_path(source, TextEncoding::kOldJis, mode), "Could not open saved-codec fixture");
+  find_encoding_action(closing, QStringLiteral("UTF-16BE"))->trigger();
+  require(closing.document_modified(), "Codec selection was not pending");
+  QTimer::singleShot(0, [] {
+    if (auto* message = qobject_cast<QMessageBox*>(QApplication::activeModalWidget()))
+      message->button(QMessageBox::Discard)->click();
+  });
+  require(closing.close_all_documents() &&
+              closing.recent_documents().front().encoding == TextEncoding::kOldJis &&
+              closing.open_recent_document(0) && closing.text_encoding() == TextEncoding::kOldJis,
+          "Discarded codec selection replaced the saved recent-file encoding");
+  const auto before = closing.recent_documents();
+  closing.active_editor()->insertPlainText(QStringLiteral("X"));
+  require(!closing.close_document(closing.current_document_index(), mode) &&
+              closing.recent_documents().size() == before.size() &&
+              closing.recent_documents().front().path == before.front().path,
+          "Cancelled close changed recent history");
+  const int dirty_index = closing.current_document_index();
+  const QString other = directory + QStringLiteral("/recent-close-other.txt");
+  write_bytes(other, QByteArray("other"));
+  require(closing.open_path(other, TextEncoding::kUtf8, mode, true),
+          "Could not create close-cancellation history fixture");
+  QTimer::singleShot(0, [] {
+    if (auto* message = qobject_cast<QMessageBox*>(QApplication::activeModalWidget()))
+      message->button(QMessageBox::Cancel)->click();
+  });
+  require(!closing.close_document(dirty_index) && closing.document_modified() &&
+              closing.recent_documents().front().path == other,
+          "Cancelled background close reordered recent files");
+  require(QFile::remove(source) && closing.open_recent_document(1),
+          "Already-open recent activation unexpectedly failed");
+  PromptingWindow missing;
+  jwpqt::qt::write_recent_documents(history, before);
+  require(missing.load_recent_file_configuration(history) && !missing.open_recent_document(0) &&
+              missing.recent_documents().size() == before.size() && missing.document_count() == 1,
+          "Missing recent file changed history or created a tab");
+}
+
+void test_document_path_identity(const QString& directory) {
+  using jwpqt::core::TextEncoding;
+  constexpr auto mode = jwpqt::qt::OpenMode::kNonInteractive;
+  const QString target = directory + QStringLiteral("/recent-target");
+  const QString alias = directory + QStringLiteral("/recent-link");
+  require(QDir().mkpath(target + QStringLiteral("/deep")) &&
+              QFile::link(target + QStringLiteral("/deep"), alias),
+          "Could not create directory-symlink fixture");
+  const QString root = directory + QStringLiteral("/identity.txt");
+  const QString physical = target + QStringLiteral("/identity.txt");
+  const QString linked = alias + QStringLiteral("/../identity.txt");
+  write_bytes(root, QByteArray("root"));
+  write_bytes(physical, QByteArray("nested"));
+  PromptingWindow window;
+  require(window.open_path(root, TextEncoding::kUtf8, mode) &&
+              window.open_path(linked, TextEncoding::kUtf8, mode, true) &&
+              window.document_count() == 2 && window.active_editor()->toPlainText() == QStringLiteral("nested") &&
+              window.recent_documents().size() == 2 && window.recent_documents().front().path == linked,
+          "Lexical path cleaning conflated distinct files through a directory symlink");
+  require(window.open_path(physical, TextEncoding::kUtf8, mode, true) && window.document_count() == 2 &&
+              window.recent_documents().size() == 2 && window.close_document(0, mode) &&
+              window.save_as_path(root, TextEncoding::kUtf8, false, true) && read_bytes(root) == QByteArray("nested"),
+          "Canonical alias activation or distinct-file Export Copy identity failed");
+}
+
 void test_explicit_open_and_encoding_action(const QString& directory) {
   const QString path = directory + QStringLiteral("/explicit.euc");
   const jwpqt::core::TextFile file{
@@ -3949,6 +4165,9 @@ int main(int argc, char* argv[]) {
     test_new_document_workflow(directory.path());
     test_document_tabs(directory.path());
     test_tab_conversion_lifetimes(directory.path());
+    test_recent_file_workflow(directory.path());
+    test_recent_file_failures(directory.path());
+    test_document_path_identity(directory.path());
     test_explicit_open_and_encoding_action(directory.path());
     test_jfc_open_save_and_revert(directory.path());
     test_utf16_workflow(directory.path());

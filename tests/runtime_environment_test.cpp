@@ -105,6 +105,17 @@ void test_runtime_paths(const QString& executable, const QString& root) {
   require(run({QStringLiteral("--smoke-test")}, 1)
               .contains(QStringLiteral("Could not load the kanji color configuration")),
           QStringLiteral("Explicit config did not bypass the default app settings"));
+  const QString history = config + QStringLiteral("/recent-files.json");
+  write_file(history, QByteArray("preserve corrupt history"));
+  const QString history_report = run(options, 0);
+  require(history_report.contains(QStringLiteral("Could not load recent files")),
+          QStringLiteral("Invalid recent history blocked startup or was not disclosed"));
+  QFile history_file(history);
+  require(history_file.open(QIODevice::ReadOnly) &&
+              history_file.readAll() == QByteArray("preserve corrupt history"),
+          QStringLiteral("Startup overwrote corrupt recent history"));
+  history_file.close();
+  require(history_file.remove(), QStringLiteral("Could not remove history fixture"));
   for (const QString& option : {QStringLiteral("--config-dir"),
                                 QStringLiteral("--user-data-dir"),
                                 QStringLiteral("--wnn-data-dir")}) {

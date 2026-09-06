@@ -18,6 +18,7 @@
 
 #include "character_context_menu.h"
 #include "input_mode.h"
+#include "recent_files.h"
 #include "jwpqt/core/jwp_conversion.h"
 #include "jwpqt/core/jwp_document_history.h"
 #include "jwpqt/core/jwp_document_model.h"
@@ -111,6 +112,12 @@ class MainWindow : public QMainWindow {
   bool close_document(int index, OpenMode mode = OpenMode::kInteractive);
   bool close_all_documents(OpenMode mode = OpenMode::kInteractive);
   bool save_all_documents(OpenMode mode = OpenMode::kInteractive);
+  bool load_recent_file_configuration(
+      const QString& path, OpenMode mode = OpenMode::kNonInteractive);
+  const std::vector<RecentDocument>& recent_documents() const noexcept;
+  QString recent_file_warning() const;
+  bool open_recent_document(int index, OpenMode mode = OpenMode::kNonInteractive);
+  bool clear_recent_documents(OpenMode mode = OpenMode::kNonInteractive);
 
   // A new-tab open preserves other buffers and activates already-open paths.
   bool open_path(const QString& path, core::TextEncoding encoding,
@@ -278,6 +285,8 @@ class MainWindow : public QMainWindow {
   void connect_editor(JwpEditor* editor);
   bool finish_document_input();
   int find_document_path(const QString& path) const;
+  void record_recent_document(const DocumentState& state);
+  void update_recent_file_actions();
   void open_document();
   bool save_document();
   bool save_document_as(bool export_copy = false);
@@ -332,6 +341,12 @@ class MainWindow : public QMainWindow {
   QAction* next_file_action_ = nullptr;
   QAction* previous_file_action_ = nullptr;
   QList<QAction*> editor_actions_;
+  QList<QAction*> recent_file_actions_;
+  QAction* clear_recent_files_action_ = nullptr;
+  std::vector<RecentDocument> recent_documents_;
+  QString recent_files_path_;
+  QString recent_file_warning_;
+  bool recent_file_persistence_enabled_ = true;
   QAction* print_action_ = nullptr;
   QAction* printer_setup_action_ = nullptr;
   QAction* revert_action_ = nullptr;
