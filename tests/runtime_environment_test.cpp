@@ -6,9 +6,11 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QClipboard>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QIcon>
 #include <QImage>
 #include <QKeyEvent>
 #include <QMenu>
@@ -19,9 +21,11 @@
 #include <QProcessEnvironment>
 #include <QStyle>
 #include <QStyleFactory>
+#include <QStatusBar>
 #include <QTemporaryDir>
 #include <QTextEdit>
 #include <QTimer>
+#include <QToolBar>
 #include <QToolButton>
 
 #include "main_window.h"
@@ -160,7 +164,10 @@ void require_menu_text(QMenuBar* bar, const QColor& foreground,
   for (QAction* action : bar->actions()) {
     if (only != nullptr && action != only) continue;
     int foreground_pixels = 0;
-    const QRect box = bar->actionGeometry(action).intersected(menus.rect());
+    const QRect logical = bar->actionGeometry(action);
+    const qreal scale = menus.devicePixelRatio();
+    const QRect box = QRect(logical.topLeft() * scale, logical.size() * scale)
+                          .intersected(menus.rect());
     for (int y = box.top(); y <= box.bottom(); ++y) {
       for (int x = box.left(); x <= box.right(); ++x) {
         const QColor pixel = menus.pixelColor(x, y);
@@ -263,6 +270,209 @@ void test_menu_palette_changes() {
     QApplication::processEvents();
     require_menu_text(bar, dark ? QColor(Qt::white) : QColor(Qt::black));
   }
+}
+
+void test_toolbar(const QString& root) {
+  const QString old_theme = QIcon::themeName();
+  const QString old_fallback = QIcon::fallbackThemeName();
+  const QStringList old_paths = QIcon::themeSearchPaths();
+  const QStringList old_fallback_paths = QIcon::fallbackSearchPaths();
+  QIcon::setThemeName(QStringLiteral("jwpqt-no-icon-theme"));
+  QIcon::setFallbackThemeName(QString());
+  QIcon::setThemeSearchPaths({});
+  QIcon::setFallbackSearchPaths({});
+  jwpqt::qt::MainWindow window;
+  window.setAnimated(false);
+  window.resize(1500, 680);
+  window.show();
+  QApplication::processEvents();
+  auto* toolbar = window.findChild<QToolBar*>(QStringLiteral("mainToolBar"));
+  auto* editor = window.findChild<QTextEdit*>();
+  require(toolbar != nullptr && toolbar->isVisible() && editor != nullptr,
+          QStringLiteral("Default native toolbar is missing"));
+  const QStringList expected{
+      "newDocumentAction", "openDocumentAction", "saveDocumentAction",
+      "printAction", "cutAction", "copyAction", "pasteAction", "undoAction",
+      "redoAction", "findAction", "replaceAction", "findNextAction",
+      "kanaInputAction", "asciiInputAction", "jasciiInputAction",
+      "convertSelectionAction", "kanjiInfoAction", "jisTableAction",
+      "edictLookupAction", "kanjiCountAction", "radicalLookupAction",
+      "bushuLookupAction", "strokeBushuLookupAction", "skipLookupAction",
+      "spahnLookupAction", "fourCornerLookupAction", "kanjiReadingLookupAction",
+      "pageLayoutAction"};
+  QStringList actual;
+  int separators = 0;
+  for (QAction* action : toolbar->actions()) {
+    if (action->isSeparator()) {
+      ++separators;
+      continue;
+    }
+    actual << action->objectName();
+    auto* button = qobject_cast<QToolButton*>(toolbar->widgetForAction(action));
+    bool in_menu = false;
+    for (QMenu* menu : window.findChildren<QMenu*>()) {
+      in_menu = in_menu || menu->actions().contains(action);
+    }
+    require(action == window.findChild<QAction*>(action->objectName()) &&
+                in_menu && button != nullptr && button->defaultAction() == action &&
+                !button->toolTip().isEmpty() &&
+                (!button->icon().isNull() || !button->text().isEmpty()),
+            QStringLiteral("Toolbar did not reuse a labeled menu action: ") + action->objectName());
+  }
+  require(actual == expected && separators == 8,
+          QStringLiteral("Toolbar order does not match the supported legacy groups"));
+  const auto button = [&](const char* name) {
+    QAction* action = window.findChild<QAction*>(QString::fromLatin1(name));
+    auto* result = qobject_cast<QToolButton*>(toolbar->widgetForAction(action));
+    require(result != nullptr, QStringLiteral("Missing toolbar button: ") + name);
+    return result;
+  };
+  require(button("undoAction")->icon().isNull() &&
+              button("undoAction")->text() == QStringLiteral("Undo") &&
+              !button("undoAction")->isEnabled() &&
+              !button("edictLookupAction")->isEnabled() &&
+              !button("radicalLookupAction")->isEnabled() &&
+              button("kanaInputAction")->isChecked(),
+          QStringLiteral("Iconless toolbar fallback or initial action state is wrong"));
+  button("asciiInputAction")->click();
+  require(button("asciiInputAction")->isChecked() &&
+              !button("kanaInputAction")->isChecked() &&
+              !button("jasciiInputAction")->isChecked(),
+          QStringLiteral("Toolbar input modes are not exclusive"));
+  editor->insertPlainText(QStringLiteral("abc"));
+  require(button("undoAction")->isEnabled(), QStringLiteral("Toolbar undo did not enable"));
+  button("undoAction")->click();
+  require(editor->toPlainText().isEmpty() && button("redoAction")->isEnabled(),
+          QStringLiteral("Toolbar undo bypassed document history"));
+  button("redoAction")->click();
+  editor->selectAll();
+  require(button("copyAction")->isEnabled() && button("cutAction")->isEnabled(),
+          QStringLiteral("Toolbar clipboard actions did not track the selection"));
+  button("copyAction")->click();
+  require(QApplication::clipboard()->text() == QStringLiteral("abc"),
+          QStringLiteral("Toolbar copy did not publish selected text: ") +
+              QApplication::clipboard()->text());
+  button("cutAction")->click();
+  require(editor->toPlainText().isEmpty(), QStringLiteral("Toolbar cut failed"));
+  require(QApplication::clipboard()->text() == QStringLiteral("abc") &&
+              editor->canPaste() && button("pasteAction")->isEnabled(),
+          QStringLiteral("Toolbar cut lost clipboard data: [") +
+              QApplication::clipboard()->text() + ']');
+  button("pasteAction")->click();
+  require(editor->toPlainText() == QStringLiteral("abc"),
+          QStringLiteral("Toolbar paste failed: [") + editor->toPlainText() +
+              "] " + window.statusBar()->currentMessage());
+
+  const QString path = root + QStringLiteral("/toolbar.jwp");
+  require(window.save_path(path), QStringLiteral("Toolbar save fixture failed"));
+  editor->insertPlainText(QStringLiteral("x"));
+  button("saveDocumentAction")->click();
+  jwpqt::qt::MainWindow reopened;
+  require(!window.document_modified() &&
+              reopened.open_jwp_path(path, jwpqt::core::kDefaultLegacyCodePage,
+                                     jwpqt::qt::OpenMode::kNonInteractive) &&
+              reopened.findChild<QTextEdit*>()->toPlainText() == QStringLiteral("abcx"),
+          QStringLiteral("Toolbar save did not persist the edited document"));
+  button("newDocumentAction")->click();
+  window.findChild<QAction*>(QStringLiteral("newTextDocumentAction"))->trigger();
+  require(!button("kanaInputAction")->isEnabled() &&
+              !button("jisTableAction")->isEnabled() &&
+              !button("pageLayoutAction")->isEnabled(),
+          QStringLiteral("Toolbar state diverged in Unicode text mode"));
+  button("newDocumentAction")->click();
+  require(button("jisTableAction")->isEnabled() &&
+              button("pageLayoutAction")->isEnabled(),
+          QStringLiteral("Toolbar state did not return for a new Japanese document"));
+  window.findChild<QAction*>(QStringLiteral("jasciiInputAction"))->trigger();
+  require(button("jasciiInputAction")->isChecked() &&
+              !button("asciiInputAction")->isChecked(),
+          QStringLiteral("Menu mode changes did not update toolbar checks"));
+
+  editor->insertPlainText(QStringLiteral("\u3042"));
+  editor->selectAll();
+  require(!button("convertSelectionAction")->isEnabled(),
+          QStringLiteral("Toolbar conversion enabled without WNN"));
+  const QString data = root + QStringLiteral("/toolbar-wnn.dat");
+  const QString index = root + QStringLiteral("/toolbar-wnn.dix");
+  write_file(data, QByteArray::fromHex("a22ab0a12fb0a20a"));
+  write_file(index, QByteArray::fromHex("a280807700000000"));
+  require(window.load_wnn_resources(index, data, root + QStringLiteral("/toolbar-user.sel"),
+                                    jwpqt::qt::OpenMode::kNonInteractive),
+          QStringLiteral("Toolbar WNN fixture did not load"));
+  require(button("convertSelectionAction")->isEnabled(),
+          QStringLiteral("Toolbar did not react to newly loaded conversion resources"));
+  button("convertSelectionAction")->click();
+  require(window.conversion_active() && !button("undoAction")->isEnabled() &&
+              !button("printAction")->isEnabled(),
+          QStringLiteral("Toolbar conversion state: active=%1 undo=%2 print=%3: %4")
+              .arg(window.conversion_active()).arg(button("undoAction")->isEnabled())
+              .arg(button("printAction")->isEnabled()).arg(window.statusBar()->currentMessage()));
+  require(window.accept_conversion() && button("undoAction")->isEnabled(),
+          QStringLiteral("Toolbar conversion did not restore undo"));
+  button("undoAction")->click();
+  require(editor->toPlainText() == QStringLiteral("\u3042"),
+          QStringLiteral("Toolbar conversion did not undo as one edit"));
+
+  QAction* visibility = window.findChild<QAction*>(QStringLiteral("showToolbarAction"));
+  require(visibility == toolbar->toggleViewAction() && visibility->isChecked(),
+          QStringLiteral("Toolbar visibility action is not shared"));
+  visibility->trigger();
+  require(!toolbar->isVisible() && !visibility->isChecked(), QStringLiteral("Toolbar hide failed"));
+  visibility->trigger();
+  require(toolbar->isVisible() && visibility->isChecked(), QStringLiteral("Toolbar restore failed"));
+  for (const bool dark : {false, true}) {
+    QApplication::setPalette(menu_palette(dark));
+    QApplication::processEvents();
+    for (const auto mode : {QIcon::Normal, QIcon::Disabled}) {
+      const auto group = mode == QIcon::Normal ? QPalette::Active : QPalette::Disabled;
+      const QColor ink = toolbar->palette().color(group, QPalette::ButtonText);
+      const QImage icon = button("kanaInputAction")->icon().pixmap(16, 16, mode).toImage();
+      int visible_ink = 0;
+      int transparent = 0;
+      for (int y = 0; y < icon.height(); ++y) {
+        for (int x = 0; x < icon.width(); ++x) {
+          const QColor pixel = icon.pixelColor(x, y);
+          if (pixel == ink) ++visible_ink;
+          if (pixel.alpha() == 0) ++transparent;
+        }
+      }
+      require(visible_ink > 10 && transparent > 10,
+              QStringLiteral("Toolbar artwork lost its theme ink or transparent background"));
+    }
+    require(window.grab().save(QDir(QCoreApplication::applicationDirPath()).filePath(
+                dark ? QStringLiteral("toolbar-dark.png") : QStringLiteral("toolbar-light.png"))),
+            QStringLiteral("Could not capture toolbar UI"));
+  }
+  window.resize(360, 680);
+  QApplication::processEvents();
+  auto* overflow = toolbar->findChild<QToolButton*>(QStringLiteral("qt_toolbar_ext_button"));
+  QAction* overflow_mode = window.findChild<QAction*>(QStringLiteral("asciiInputAction"));
+  require(overflow != nullptr && overflow->isVisible() && !button("asciiInputAction")->isVisible(),
+          QStringLiteral("Narrow toolbar did not expose overflow"));
+  bool used_overflow = false;
+  QTimer::singleShot(0, [&] {
+    auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+    if (menu != nullptr) {
+      used_overflow = menu->actions().contains(overflow_mode);
+      if (used_overflow) overflow_mode->trigger();
+      menu->close();
+    }
+  });
+  overflow->click();
+  QApplication::processEvents();
+  if (overflow->menu() == nullptr && button("asciiInputAction")->isVisible()) {
+    button("asciiInputAction")->click();
+    used_overflow = true;
+  }
+  require(used_overflow && button("asciiInputAction")->isChecked(),
+          QStringLiteral("Overflow failed: used=%1 checked=%2 visible=%3 menu=%4 popup=%5")
+              .arg(used_overflow).arg(button("asciiInputAction")->isChecked())
+              .arg(button("asciiInputAction")->isVisible()).arg(overflow->menu() != nullptr)
+              .arg(QApplication::activePopupWidget() != nullptr));
+  QIcon::setThemeName(old_theme);
+  QIcon::setFallbackThemeName(old_fallback);
+  QIcon::setThemeSearchPaths(old_paths);
+  QIcon::setFallbackSearchPaths(old_fallback_paths);
 }
 
 void test_real_resources(const QString& root, const QString& source,
@@ -373,6 +583,7 @@ int main(int argc, char* argv[]) {
     test_visible_menus(false);
     test_visible_menus(true);
     test_menu_palette_changes();
+    test_toolbar(directory.path());
     QApplication::setPalette(menu_palette(true));
     if (argc == 5) {
       test_real_resources(directory.path(), QString::fromLocal8Bit(argv[3]),

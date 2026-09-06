@@ -137,5 +137,20 @@ displayed conversion candidate. Plain Unicode text retains direct input.
 SKIP uses `Ctrl+Alt+S` and Spahn-Hadamitzky uses `Ctrl+Alt+H`, avoiding native
 Save As and Replace shortcuts. Count Kanji remains `Ctrl+Shift+K`.
 
+### Menus and toolbar
+
+The toolbar is visible by default and shares the menu actions for files,
+clipboard/history, search, input modes, conversion, dictionaries, kanji tools,
+and page layout. **View > Toolbar** hides or restores it; narrow windows expose
+the remaining actions through the toolbar's extension button. Mode checks and
+disabled actions track the editor and loaded resources.
+
+Menu text and the embedded legacy Japanese toolbar artwork adapt to light/dark
+palettes, including mismatched desktop text colors. Standard toolbar buttons
+use theme icons with short text or native icon fallbacks when no icon theme is
+installed. Toolbar customization and saved toolbar layout/visibility are not
+implemented yet; unsupported Index Lookup and General Options buttons are not
+shown as working commands.
+
 JWPce/JWPxp copyright and licensing notices remain in `_cpright.txt`,
 `_readme.txt`, and `gnugpl.txt`.

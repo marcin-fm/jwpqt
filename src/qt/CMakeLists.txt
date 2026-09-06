@@ -62,6 +62,12 @@ add_library(jwpqt_qt_ui STATIC
   wnn_user_dictionary_dialog.h
 )
 
+qt_add_resources(jwpqt_qt_ui toolbar_assets
+  PREFIX "/jwpqt"
+  BASE "${PROJECT_SOURCE_DIR}"
+  FILES "${PROJECT_SOURCE_DIR}/toolbar.bmp"
+)
+
 target_link_libraries(jwpqt_qt_ui
   PUBLIC
     jwpqt_qt_support

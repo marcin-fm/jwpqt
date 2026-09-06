@@ -31,6 +31,8 @@
 #include <QFontDatabase>
 #include <QGuiApplication>
 #include <QHBoxLayout>
+#include <QIcon>
+#include <QImage>
 #include <QInputDialog>
 #include <QKeyEvent>
 #include <QKeySequence>
@@ -57,6 +59,7 @@
 #include <QTextCursor>
 #include <QTextDocument>
 #include <QTextEdit>
+#include <QToolBar>
 #include <QVBoxLayout>
 
 #include "edict_lookup_dialog.h"
@@ -293,7 +296,7 @@ MainWindow::MainWindow(QWidget* parent)
   editor_->setLineWrapMode(QTextEdit::WidgetWidth);
 
   create_actions();
-  update_menu_bar_palette();
+  update_command_bar_palette();
   encoding_label_->setObjectName(QStringLiteral("documentEncoding"));
   input_mode_button_->setObjectName(QStringLiteral("inputMode"));
   input_mode_button_->setAutoRaise(true);
@@ -377,11 +380,11 @@ void MainWindow::changeEvent(QEvent* event) {
   if (event->type() == QEvent::PaletteChange ||
       event->type() == QEvent::ApplicationPaletteChange ||
       event->type() == QEvent::StyleChange) {
-    update_menu_bar_palette();
+    update_command_bar_palette();
   }
 }
 
-void MainWindow::update_menu_bar_palette() {
+void MainWindow::update_command_bar_palette() {
   // Read the window palette, not the menu's previous stylesheet overrides.
   const QPalette source = palette();
   const auto luminance = [](QColor color) {
@@ -425,6 +428,48 @@ void MainWindow::update_menu_bar_palette() {
       .arg(background.name(), text.name(), highlight.name(), selected.name(),
            disabled.name());
   if (menuBar()->styleSheet() != rules) menuBar()->setStyleSheet(rules);
+
+  if (main_toolbar_ == nullptr) return;
+  QPalette toolbar_palette = source;
+  for (const auto group : {QPalette::Active, QPalette::Inactive,
+                           QPalette::Disabled}) {
+    const QColor foreground = readable(
+        source.color(group, QPalette::ButtonText), background, group,
+        group == QPalette::Disabled ? 3.0 : 4.5);
+    toolbar_palette.setColor(group, QPalette::ButtonText, foreground);
+    toolbar_palette.setColor(group, QPalette::WindowText, foreground);
+  }
+  main_toolbar_->setPalette(toolbar_palette);
+  static const QImage artwork(QStringLiteral(":/jwpqt/toolbar.bmp"));
+  if (artwork.size() != QSize(23 * 16, 16)) {
+    throw std::runtime_error("Embedded toolbar artwork is invalid");
+  }
+  for (const auto& [action, index] : toolbar_icons_) {
+    QIcon icon;
+    for (const auto mode : {QIcon::Normal, QIcon::Disabled}) {
+      const auto group = mode == QIcon::Disabled ? QPalette::Disabled
+                                                : QPalette::Active;
+      QImage image = artwork.copy(index * 16, 0, 16, 16)
+                        .convertToFormat(QImage::Format_ARGB32);
+      for (int y = 0; y < image.height(); ++y) {
+        for (int x = 0; x < image.width(); ++x) {
+          const QColor pixel = image.pixelColor(x, y);
+          // Replace the Win32 mask and monochrome ink, retaining colored marks.
+          if (pixel == QColor(192, 192, 192)) {
+            image.setPixelColor(x, y, Qt::transparent);
+          } else if (pixel == QColor(Qt::black)) {
+            image.setPixelColor(x, y,
+                toolbar_palette.color(group, QPalette::ButtonText));
+          } else if (pixel == QColor(Qt::white)) {
+            image.setPixelColor(x, y, background);
+          }
+        }
+      }
+      icon.addPixmap(QPixmap::fromImage(image), mode);
+      icon.addPixmap(QPixmap::fromImage(image.scaled(32, 32)), mode);
+    }
+    action->setIcon(icon);
+  }
 }
 
 bool MainWindow::load_kanji_info(const QString& path, OpenMode mode) {
@@ -916,6 +961,7 @@ void MainWindow::create_actions() {
   });
 
   QAction* open_action = file_menu->addAction(tr("&Open..."));
+  open_action->setObjectName(QStringLiteral("openDocumentAction"));
   open_action->setShortcut(QKeySequence::Open);
   connect(open_action, &QAction::triggered, this,
           [this] { open_document(); });
@@ -933,6 +979,7 @@ void MainWindow::create_actions() {
           [this] { new_document(); });
 
   QAction* save_action = file_menu->addAction(tr("&Save"));
+  save_action->setObjectName(QStringLiteral("saveDocumentAction"));
   save_action->setShortcut(QKeySequence::Save);
   connect(save_action, &QAction::triggered, this,
           [this] { save_document(); });
@@ -992,6 +1039,7 @@ void MainWindow::create_actions() {
 
   edit_menu->addSeparator();
   QAction* cut_action = edit_menu->addAction(tr("Cu&t"));
+  cut_action->setObjectName(QStringLiteral("cutAction"));
   cut_action->setShortcut(QKeySequence::Cut);
   cut_action->setEnabled(false);
   connect(cut_action, &QAction::triggered, this, [this] {
@@ -1002,6 +1050,7 @@ void MainWindow::create_actions() {
           &QAction::setEnabled);
 
   QAction* copy_action = edit_menu->addAction(tr("&Copy"));
+  copy_action->setObjectName(QStringLiteral("copyAction"));
   copy_action->setShortcut(QKeySequence::Copy);
   copy_action->setEnabled(false);
   connect(copy_action, &QAction::triggered, this, [this] {
@@ -1012,6 +1061,7 @@ void MainWindow::create_actions() {
           &QAction::setEnabled);
 
   QAction* paste_action = edit_menu->addAction(tr("&Paste"));
+  paste_action->setObjectName(QStringLiteral("pasteAction"));
   paste_action->setShortcut(QKeySequence::Paste);
   connect(paste_action, &QAction::triggered, this, [this] {
     finish_kana_input();
@@ -1076,10 +1126,10 @@ void MainWindow::create_actions() {
   kana_input_action_ = add_input_mode(InputMode::kKanji, tr("&Kanji"),
                                       "kanaInputAction", QStringLiteral("Ctrl+K"));
   kana_input_action_->setStatusTip(tr("Compose hiragana and katakana from romaji"));
-  add_input_mode(InputMode::kAscii, tr("&ASCII"), "asciiInputAction",
-                 QStringLiteral("Ctrl+Alt+A"));
-  add_input_mode(InputMode::kJascii, tr("&JASCII"), "jasciiInputAction",
-                 QStringLiteral("Ctrl+J"));
+  QAction* ascii_input = add_input_mode(
+      InputMode::kAscii, tr("&ASCII"), "asciiInputAction", QStringLiteral("Ctrl+Alt+A"));
+  QAction* jascii_input = add_input_mode(
+      InputMode::kJascii, tr("&JASCII"), "jasciiInputAction", QStringLiteral("Ctrl+J"));
   connect(input_mode_actions_, &QActionGroup::triggered, this,
           [this](QAction* action) {
             set_input_mode(static_cast<InputMode>(action->data().toInt()));
@@ -1346,6 +1396,70 @@ void MainWindow::create_actions() {
   });
   connect(resource_status_button_, &QToolButton::clicked,
           resources, &QAction::trigger);
+
+  main_toolbar_ = addToolBar(tr("Main Toolbar"));
+  main_toolbar_->setObjectName(QStringLiteral("mainToolBar"));
+  main_toolbar_->setIconSize(QSize(16, 16));
+  main_toolbar_->setToolButtonStyle(Qt::ToolButtonIconOnly);
+  main_toolbar_->setAllowedAreas(Qt::TopToolBarArea | Qt::BottomToolBarArea);
+  main_toolbar_->setFloatable(false);
+  const auto add_standard = [&](QAction* action, const char* theme,
+                                const QString& label, QIcon fallback = {}) {
+    action->setIcon(QIcon::fromTheme(QString::fromLatin1(theme), fallback));
+    action->setIconText(label);
+    main_toolbar_->addAction(action);
+  };
+  const auto add_legacy = [&](QAction* action, int index) {
+    toolbar_icons_.emplace_back(action, index);
+    main_toolbar_->addAction(action);
+  };
+  // Default groups and custom bitmap indices: jwp_stat.cpp:235-325.
+  add_standard(new_action, "document-new", tr("New"),
+               style()->standardIcon(QStyle::SP_FileIcon));
+  add_standard(open_action, "document-open", tr("Open"),
+               style()->standardIcon(QStyle::SP_DialogOpenButton));
+  add_standard(save_action, "document-save", tr("Save"),
+               style()->standardIcon(QStyle::SP_DialogSaveButton));
+  main_toolbar_->addSeparator();
+  add_standard(print_action_, "document-print", tr("Print"));
+  main_toolbar_->addSeparator();
+  add_standard(cut_action, "edit-cut", tr("Cut"));
+  add_standard(copy_action, "edit-copy", tr("Copy"));
+  add_standard(paste_action, "edit-paste", tr("Paste"));
+  main_toolbar_->addSeparator();
+  add_standard(undo_action_, "edit-undo", tr("Undo"));
+  add_standard(redo_action_, "edit-redo", tr("Redo"));
+  main_toolbar_->addSeparator();
+  add_standard(find_action, "edit-find", tr("Find"));
+  add_standard(replace_action, "edit-find-replace", tr("Replace"));
+  add_legacy(find_next_action, 21);
+  main_toolbar_->addSeparator();
+  add_legacy(kana_input_action_, 0);
+  add_legacy(ascii_input, 1);
+  add_legacy(jascii_input, 2);
+  add_legacy(convert_action_, 3);
+  main_toolbar_->addSeparator();
+  add_legacy(kanji_info_action_, 4);
+  add_legacy(jis_table_action_, 13);
+  add_legacy(edict_lookup_action_, 19);
+  add_legacy(kanji_count_action_, 14);
+  main_toolbar_->addSeparator();
+  add_legacy(kanji_lookup_action_, 5);
+  add_legacy(bushu_lookup_action_, 6);
+  add_legacy(stroke_bushu_lookup_action_, 7);
+  add_legacy(skip_lookup_action_, 8);
+  add_legacy(spahn_lookup_action_, 9);
+  add_legacy(four_corner_lookup_action_, 10);
+  add_legacy(kanji_reading_lookup_action_, 11);
+  main_toolbar_->addSeparator();
+  add_legacy(page_layout_action_, 18);
+
+  QMenu* view_menu = new QMenu(tr("&View"), this);
+  menuBar()->insertMenu(format_menu->menuAction(), view_menu);
+  QAction* toolbar_visible = main_toolbar_->toggleViewAction();
+  toolbar_visible->setText(tr("&Toolbar"));
+  toolbar_visible->setObjectName(QStringLiteral("showToolbarAction"));
+  view_menu->addAction(toolbar_visible);
 }
 
 QString MainWindow::resource_report() const {

@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <QMainWindow>
@@ -38,6 +39,7 @@ class QMenu;
 class QPrinter;
 class QTextCursor;
 class QTextEdit;
+class QToolBar;
 class QToolButton;
 
 namespace jwpqt::qt {
@@ -211,7 +213,7 @@ class MainWindow : public QMainWindow {
   struct EdictUserResources;
 
   void create_actions();
-  void update_menu_bar_palette();
+  void update_command_bar_palette();
   void update_resource_status();
   void undo_document();
   void redo_document();
@@ -333,6 +335,8 @@ class MainWindow : public QMainWindow {
   QAction* clear_kanji_color_list_action_ = nullptr;
   QToolButton* input_mode_button_;
   QToolButton* resource_status_button_;
+  QToolBar* main_toolbar_ = nullptr;
+  std::vector<std::pair<QAction*, int>> toolbar_icons_;
   QActionGroup* input_mode_actions_;
   QActionGroup* encoding_actions_;
   QMenu* jwp_code_page_menu_;
