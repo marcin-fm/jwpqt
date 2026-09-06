@@ -21,6 +21,7 @@
 #include <QVBoxLayout>
 
 #include "jwpqt/core/jwp_text_codec.h"
+#include "kana_input_field.h"
 #include "text_bridge.h"
 
 namespace jwpqt::qt {
@@ -61,7 +62,8 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
     : QDialog(parent),
       search_handler_(std::move(search_handler)),
       insert_handler_(std::move(insert_handler)),
-      query_edit_(new QLineEdit(this)),
+      query_field_(new KanaInputField(QStringLiteral("edictQuery"), this)),
+      query_edit_(query_field_->edit()),
       personal_names_(new QCheckBox(tr("Personal &names"), this)),
       place_names_(new QCheckBox(tr("Place na&mes"), this)),
       classical_(new QCheckBox(tr("&Classical"), this)),
@@ -79,7 +81,8 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   query_edit_->setClearButtonEnabled(true);
   auto* search_button = new QPushButton(tr("&Search"), this);
   search_button->setObjectName(QStringLiteral("edictSearch"));
-  query_row->addWidget(query_edit_, 1);
+  search_button->setDefault(true);
+  query_row->addWidget(query_field_, 1);
   query_row->addWidget(search_button);
   outer->addLayout(query_row);
 
@@ -111,11 +114,10 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   copy_action->setObjectName(QStringLiteral("edictCopy"));
   copy_action->setShortcut(QKeySequence::Copy);
   copy_action->setShortcutContext(Qt::WidgetWithChildrenShortcut);
-  addAction(copy_action);
+  results_->addAction(copy_action);
 
   connect(search_button, &QPushButton::clicked, this,
           [this] { search(); });
-  connect(query_edit_, &QLineEdit::returnPressed, this, [this] { search(); });
   connect(insert_button_, &QPushButton::clicked, this,
           [this] { insert_selected(); });
   connect(results_, &QListWidget::itemSelectionChanged, this,
@@ -136,6 +138,7 @@ void EdictLookupDialog::set_query(std::u32string_view query) {
 }
 
 bool EdictLookupDialog::search() {
+  query_field_->finish_input();
   if (!search_handler_) {
     status_->setText(tr("Dictionary resources are unavailable."));
     return false;

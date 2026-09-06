@@ -19,6 +19,8 @@ class QPushButton;
 
 namespace jwpqt::qt {
 
+class KanaInputField;
+
 struct EdictLookupOptions {
   bool personal_names = false;
   bool place_names = false;
@@ -51,6 +53,7 @@ class EdictLookupDialog : public QDialog {
 
   SearchHandler search_handler_;
   InsertHandler insert_handler_;
+  KanaInputField* query_field_;
   QLineEdit* query_edit_;
   QCheckBox* personal_names_;
   QCheckBox* place_names_;

@@ -20,6 +20,7 @@
 #include <QVBoxLayout>
 
 #include "jwpqt/core/jwp_text_codec.h"
+#include "kana_input_field.h"
 #include "text_bridge.h"
 
 namespace jwpqt::qt {
@@ -43,7 +44,8 @@ KanjiReadingLookupDialog::KanjiReadingLookupDialog(
       insert_handler_(std::move(insert_handler)),
       info_handler_(std::move(info_handler)),
       kind_(new QComboBox(this)),
-      query_(new QLineEdit(this)),
+      query_field_(new KanaInputField(QStringLiteral("kanjiReadingQuery"), this)),
+      query_(query_field_->edit()),
       minimum_strokes_(new QSpinBox(this)),
       maximum_strokes_(new QSpinBox(this)),
       flexible_kun_(new QCheckBox(tr("Flexible &kun-yomi matching"), this)),
@@ -82,7 +84,7 @@ KanjiReadingLookupDialog::KanjiReadingLookupDialog(
   auto* outer = new QVBoxLayout(this);
   auto* form = new QFormLayout;
   form->addRow(tr("Type"), kind_);
-  form->addRow(tr("Reading or text"), query_);
+  form->addRow(tr("Reading or text"), query_field_);
   auto* strokes = new QHBoxLayout;
   strokes->addWidget(minimum_strokes_);
   strokes->addWidget(new QLabel(tr("to"), this));
@@ -151,6 +153,7 @@ void KanjiReadingLookupDialog::set_query_text(std::u32string_view text) {
 }
 
 bool KanjiReadingLookupDialog::search() {
+  query_field_->finish_input();
   core::KanjiReadingQuery query;
   query.kind = selected_kind(*kind_);
   query.text = from_qstring(query_->text());
@@ -209,6 +212,10 @@ std::vector<core::JisCode> KanjiReadingLookupDialog::selected_codes() const {
 
 void KanjiReadingLookupDialog::update_mode() {
   const core::KanjiReadingKind kind = selected_kind(*kind_);
+  query_field_->set_input_mode(
+      kind == core::KanjiReadingKind::kMeaning || kind == core::KanjiReadingKind::kPinyin ||
+              kind == core::KanjiReadingKind::kKorean
+          ? InputMode::kAscii : InputMode::kKanji);
   flexible_kun_->setEnabled(kind == core::KanjiReadingKind::kKun ||
                             kind == core::KanjiReadingKind::kOnOrKun);
   partial_words_->setEnabled(kind == core::KanjiReadingKind::kMeaning);

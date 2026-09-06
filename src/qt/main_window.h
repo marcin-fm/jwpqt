@@ -16,6 +16,7 @@
 #include <QString>
 
 #include "character_context_menu.h"
+#include "input_mode.h"
 #include "jwpqt/core/jwp_conversion.h"
 #include "jwpqt/core/jwp_document_history.h"
 #include "jwpqt/core/jwp_document_model.h"
@@ -62,12 +63,6 @@ class WnnUserDictionaryDialog;
 enum class OpenMode {
   kInteractive,
   kNonInteractive,
-};
-
-enum class InputMode {
-  kKanji,
-  kAscii,
-  kJascii,
 };
 
 enum class KanjiCodeLookupMode {

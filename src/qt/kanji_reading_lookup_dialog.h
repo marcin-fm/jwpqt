@@ -20,6 +20,8 @@ class QSpinBox;
 
 namespace jwpqt::qt {
 
+class KanaInputField;
+
 class KanjiReadingLookupDialog : public QDialog {
  public:
   using InsertHandler = std::function<void(const std::vector<core::JisCode>&)>;
@@ -48,6 +50,7 @@ class KanjiReadingLookupDialog : public QDialog {
   InsertHandler insert_handler_;
   InfoHandler info_handler_;
   QComboBox* kind_;
+  KanaInputField* query_field_;
   QLineEdit* query_;
   QSpinBox* minimum_strokes_;
   QSpinBox* maximum_strokes_;

@@ -44,6 +44,9 @@ add_library(jwpqt_qt_ui STATIC
   jis_table_dialog.h
   jwp_editor.cpp
   jwp_editor.h
+  input_mode.h
+  kana_input_field.cpp
+  kana_input_field.h
   kanji_code_lookup_dialog.cpp
   kanji_code_lookup_dialog.h
   kanji_count_dialog.cpp

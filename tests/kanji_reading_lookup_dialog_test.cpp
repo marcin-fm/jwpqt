@@ -8,8 +8,11 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QLabel>
+#include <QKeyEvent>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QPushButton>
+#include <QToolButton>
 
 #include "jwpqt/core/kanji_info.h"
 #include "kanji_reading_lookup_dialog.h"
@@ -82,6 +85,10 @@ void test_dialog() {
   query.text = U"apple";
   query.strokes = {4, 4};
   dialog.set_query(query);
+  auto* mode = dialog.findChild<QToolButton*>(QStringLiteral("kanjiReadingQueryMode"));
+  auto* input = dialog.findChild<QLineEdit*>(QStringLiteral("kanjiReadingQuery"));
+  require(mode && input && mode->text() == QStringLiteral("A") && input->font().pixelSize() == 16,
+          "Meaning lookup did not offer ASCII field input");
   auto* flexible = dialog.findChild<QCheckBox*>(
       QStringLiteral("kanjiReadingFlexibleKun"));
   auto* partial = dialog.findChild<QCheckBox*>(
@@ -114,6 +121,17 @@ void test_dialog() {
   dialog.findChild<QPushButton*>(QStringLiteral("kanjiReadingSearch"))->click();
   require(dialog.results().size() == 1,
           "Native reading dialog did not run a kana lookup");
+  require(mode->text() == QStringLiteral("K"), "Kana lookup did not select Kanji field input");
+  dialog.show();
+  input->clear();
+  input->setFocus();
+  QApplication::processEvents();
+  QKeyEvent kana(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier, QStringLiteral("a"));
+  QKeyEvent submit(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+  QApplication::sendEvent(input, &kana);
+  QApplication::sendEvent(input, &submit);
+  require(input->text() == QStringLiteral("\u3042") && dialog.results().size() == 1,
+          "Reading query could not compose and submit romaji");
   query.text = U"not kana";
   dialog.set_query(query);
   require(!dialog.search() && dialog.results().size() == 1,

@@ -11,10 +11,14 @@
 #include <QCheckBox>
 #include <QClipboard>
 #include <QLabel>
+#include <QInputMethodEvent>
+#include <QKeyEvent>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QToolButton>
 
 #include "jwpqt/core/jwp_text_codec.h"
+#include "kana_input_field.h"
 
 namespace {
 
@@ -159,6 +163,87 @@ void test_empty_invalid_and_failed_search_are_contained() {
           "Unknown dictionary insertion failure escaped the dialog");
 }
 
+void test_query_input_modes() {
+  int searches = 0;
+  jwpqt::core::JwpText received;
+  jwpqt::qt::EdictLookupDialog dialog(
+      [&](const jwpqt::core::JwpText& query, const jwpqt::qt::EdictLookupOptions&) {
+        ++searches;
+        received = query;
+        return jwpqt::qt::EdictResourceSearchReport{};
+      });
+  auto* query = dialog.findChild<QLineEdit*>(QStringLiteral("edictQuery"));
+  auto* mode = dialog.findChild<QToolButton*>(QStringLiteral("edictQueryMode"));
+  require(query && mode && mode->text() == QStringLiteral("K") && query->font().pixelSize() == 16,
+          "Dictionary query has no local Japanese input mode");
+  const auto key = [&](int code, const QString& text = {}, Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+    QKeyEvent event(QEvent::KeyPress, code, modifiers, text);
+    QApplication::sendEvent(query, &event);
+  };
+  const auto type = [&](const QString& text) {
+    for (const QChar character : text) key(character.toUpper().unicode(), QString(character));
+  };
+  dialog.show();
+  query->setFocus();
+  QApplication::processEvents();
+  type(QStringLiteral("ain"));
+  require(query->text() == QStringLiteral("\u3042\u3044"), "Lookup romaji was not composed locally");
+  key(Qt::Key_Return);
+  require(searches == 1 && received == jwpqt::core::JwpText({0x2422, 0x2424, 0x2473}),
+          (std::string("Return did not submit pending n exactly once: ") +
+           std::to_string(searches) + " " + query->text().toStdString()).c_str());
+  query->clear();
+  type(QStringLiteral("n"));
+  key(Qt::Key_F4);
+  require(mode->text() == QStringLiteral("A") && query->text() == QStringLiteral("\u3093"),
+          "F4 failed to finish kana and switch this field to ASCII");
+  type(QStringLiteral("abc"));
+  require(query->text().endsWith(QStringLiteral("abc")), "ASCII field input was converted");
+  mode->click();
+  query->clear();
+  type(QStringLiteral("A,.-"));
+  require(mode->text() == QStringLiteral("J") && query->text() == QStringLiteral("\uff21\uff0c\uff0e\u2015"),
+          "Lookup JASCII mode did not use the recovered punctuation");
+  key(Qt::Key_F4);
+  require(mode->text() == QStringLiteral("K"), "F4 did not return JASCII to Kanji");
+  query->clear();
+  type(QStringLiteral("k"));
+  query->setText(QStringLiteral("x"));
+  type(QStringLiteral("a"));
+  require(query->text() == QStringLiteral("x\u3042"), "External query replacement retained pending kana");
+  query->clear();
+  type(QStringLiteral("n"));
+  key(Qt::Key_Backspace);
+  type(QStringLiteral("a"));
+  require(query->text() == QStringLiteral("\u3042"), "Backspace did not discard pending composition");
+  query->undo();
+  require(query->text().isEmpty(), "Composed query did not preserve native undo");
+  query->redo();
+  require(query->text() == QStringLiteral("\u3042"), "Composed query did not preserve native redo");
+  type(QStringLiteral("k"));
+  QInputMethodEvent preedit(QStringLiteral("\u611b"), {});
+  QApplication::sendEvent(query, &preedit);
+  QInputMethodEvent commit;
+  commit.setCommitString(QStringLiteral("\u611b"));
+  QApplication::sendEvent(query, &commit);
+  type(QStringLiteral("a"));
+  require(query->text() == QStringLiteral("\u3042\u611b\u3042"), "Native IME input was mixed into romaji composition");
+  query->clear();
+  bool changed = false;
+  const auto connection = QObject::connect(query, &QLineEdit::textChanged, query, [&] {
+    if (!changed) { changed = true; query->setText(QStringLiteral("x")); }
+  });
+  type(QStringLiteral("kka"));
+  QObject::disconnect(connection);
+  require(query->text() == QStringLiteral("x\u3042"), "Reentrant text replacement retained a pending doubled consonant");
+  query->selectAll();
+  key(Qt::Key_C, {}, Qt::ControlModifier);
+  require(QApplication::clipboard()->text() == query->text(), "Query Copy was captured by the results view");
+  query->setReadOnly(true);
+  key(Qt::Key_F4);
+  require(mode->text() == QStringLiteral("K"), "Read-only field changed input mode");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -166,6 +251,7 @@ int main(int argc, char** argv) {
   try {
     test_search_render_status_copy_and_insert();
     test_empty_invalid_and_failed_search_are_contained();
+    test_query_input_modes();
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {
     std::cerr << "edict_lookup_dialog_test: " << error.what() << '\n';
