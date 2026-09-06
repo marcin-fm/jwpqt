@@ -33,6 +33,9 @@ struct KanaInputOptions {
 // cell. Small kana spellings retain their leading '+'.
 std::optional<std::string_view> romaji_for_kana(JisCode kana) noexcept;
 
+// Visible aliases followed by the primary spelling, as in Character Information.
+std::vector<std::string_view> kana_input_spellings(JisCode kana);
+
 // JASCII mode uses Western comma/period and a dash rather than kana punctuation.
 std::optional<JisCode> ascii_to_jascii(char input, bool jascii_mode = false);
 

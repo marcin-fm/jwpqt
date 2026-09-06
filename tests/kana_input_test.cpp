@@ -206,6 +206,32 @@ void test_jascii_mode_mapping() {
           "JASCII-specific punctuation changed kana-mode punctuation");
 }
 
+void test_character_information_spellings() {
+  using jwpqt::core::kana_input_spellings;
+  using Spellings = std::vector<std::string_view>;
+  require(kana_input_spellings(0x2437) == Spellings{"shi", "si"} &&
+              kana_input_spellings(0x2541) == Spellings{"chi", "ci", "ti"} &&
+              kana_input_spellings(0x2444) == Spellings{"tsu", "tu"} &&
+              kana_input_spellings(0x2445) == Spellings{"dzu", "du"} &&
+              kana_input_spellings(0x2442) == Spellings{"dji", "dzi", "di"} &&
+              kana_input_spellings(0x2473) == Spellings{"n", "n'"} &&
+              kana_input_spellings(0x242b) == Spellings{"ka"} &&
+              kana_input_spellings(0x2574) == Spellings{"vu"} &&
+              kana_input_spellings(0x2575) == Spellings{"+ka"} &&
+              kana_input_spellings(0x2576) == Spellings{"+ke"},
+          "Character Information lost visible aliases or exposed hidden input");
+  for (unsigned cell = 0x21; cell <= 0x73; ++cell) {
+    const auto hiragana = kana_input_spellings(0x2400 | cell);
+    require(!hiragana.empty() &&
+                hiragana == kana_input_spellings(0x2500 | cell) &&
+                hiragana.back() == *jwpqt::core::romaji_for_kana(0x2400 | cell),
+            "Kana information spellings differ between scripts");
+  }
+  for (const auto code : {0U, 0x41U, 0x2420U, 0x2474U, 0x2577U, 0x3021U})
+    require(kana_input_spellings(code).empty(),
+            "Invalid or non-kana cell has kana input spellings");
+}
+
 }  // namespace
 
 int main() {
@@ -219,6 +245,7 @@ int main() {
     test_state_replay_and_rejection();
     test_discard_and_options();
     test_jascii_mode_mapping();
+    test_character_information_spellings();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return EXIT_FAILURE;

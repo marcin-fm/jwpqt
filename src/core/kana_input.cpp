@@ -94,6 +94,7 @@ constexpr std::array<std::string_view, 83> kDirectKana{{
 struct KanaMapping {
   std::string_view input;
   std::array<JisCode, 2> output;
+  bool hidden = false;
 };
 
 constexpr std::array<KanaMapping, 70> kCompoundKana{{
@@ -107,9 +108,9 @@ constexpr std::array<KanaMapping, 70> kCompoundKana{{
     {"ci", {0x41, 0}}, {"cha", {0x41, 0x63}},
     {"chu", {0x41, 0x65}}, {"che", {0x41, 0x27}},
     {"cho", {0x41, 0x67}}, {"tsu", {0x44, 0}},
-    {"tzu", {0x44, 0}}, {"dsu", {0x45, 0}},
+    {"tzu", {0x44, 0}, true}, {"dsu", {0x45, 0}, true},
     {"dzu", {0x45, 0}}, {"+tsu", {0x43, 0}},
-    {"+tzu", {0x43, 0}}, {"la", {0x69, 0}},
+    {"+tzu", {0x43, 0}, true}, {"la", {0x69, 0}},
     {"li", {0x6a, 0}}, {"lu", {0x6b, 0}},
     {"le", {0x6c, 0}}, {"lo", {0x6d, 0}},
     {"lya", {0x6a, 0x63}}, {"lyu", {0x6a, 0x65}},
@@ -126,12 +127,12 @@ constexpr std::array<KanaMapping, 70> kCompoundKana{{
     {"tho", {0x46, 0x29}}, {"dha", {0x47, 0x21}},
     {"dhi", {0x47, 0x23}}, {"dhu", {0x47, 0x25}},
     {"dhe", {0x47, 0x27}}, {"dho", {0x47, 0x29}},
-    {"ca", {0x2b, 0}}, {"cu", {0x2f, 0}},
-    {"ce", {0x3b, 0}}, {"co", {0x33, 0}},
+    {"ca", {0x2b, 0}, true}, {"cu", {0x2f, 0}, true},
+    {"ce", {0x3b, 0}, true}, {"co", {0x33, 0}, true},
     {"dji", {0x42, 0}}, {"dzi", {0x42, 0}},
-    {"tji", {0x42, 0}}, {"tzi", {0x42, 0}},
-    {"dsi", {0x24, 0}}, {"tsi", {0x24, 0}},
-    {"dju", {0x26, 0}}, {"tju", {0x26, 0}},
+    {"tji", {0x42, 0}, true}, {"tzi", {0x42, 0}, true},
+    {"dsi", {0x24, 0}, true}, {"tsi", {0x24, 0}, true},
+    {"dju", {0x26, 0}, true}, {"tju", {0x26, 0}, true},
 }};
 
 constexpr std::array<KanaMapping, 37> kComplexKana{{
@@ -258,6 +259,25 @@ std::optional<std::string_view> romaji_for_kana(JisCode kana) noexcept {
     return std::nullopt;
   }
   return kDirectKana[static_cast<std::size_t>(cell - 0x21U)];
+}
+
+std::vector<std::string_view> kana_input_spellings(JisCode kana) {
+  std::vector<std::string_view> result;
+  if (const auto primary = romaji_for_kana(kana)) {
+    for (const auto& mapping : kCompoundKana) {
+      if (!mapping.hidden && mapping.output[1] == 0 &&
+          mapping.output[0] == (kana & 0xffU)) {
+        result.push_back(mapping.input);
+      }
+    }
+    result.push_back(*primary);
+  } else if (kana >= 0x2574U && kana <= 0x2576U) {
+    for (const auto& mapping : kComplexKana) {
+      if (mapping.output[0] == kana && mapping.output[1] == 0)
+        result.push_back(mapping.input);
+    }
+  }
+  return result;
 }
 
 KanaInputComposer::KanaInputComposer(KanaInputOptions options)
