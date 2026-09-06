@@ -17,6 +17,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSpinBox>
+#include <QStyle>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -56,7 +57,7 @@ KanjiLookupDialog::KanjiLookupDialog(
   setObjectName(QStringLiteral("kanjiLookupDialog"));
   setWindowTitle(tr("Radical and Stroke Lookup"));
   setModal(false);
-  resize(760, 700);
+  resize(900, 540);
 
   auto* outer = new QVBoxLayout(this);
   auto* radical_group = new QGroupBox(tr("Radicals"), this);
@@ -93,7 +94,6 @@ KanjiLookupDialog::KanjiLookupDialog(
   }
   scroll->setWidget(radical_widget);
   radical_outer->addWidget(scroll);
-  outer->addWidget(radical_group, 2);
 
   auto* controls = new QHBoxLayout;
   minimum_strokes_->setObjectName(QStringLiteral("minimumStrokes"));
@@ -108,13 +108,24 @@ KanjiLookupDialog::KanjiLookupDialog(
   controls->addWidget(maximum_strokes_);
   auto* search_button = new QPushButton(tr("&Search"), this);
   search_button->setObjectName(QStringLiteral("kanjiLookupSearch"));
-  controls->addWidget(search_button);
+  search_button->setDefault(true);
   controls->addStretch();
-  outer->addLayout(controls);
 
   results_->setObjectName(QStringLiteral("kanjiLookupResults"));
   results_->setSelectionMode(QAbstractItemView::ExtendedSelection);
-  outer->addWidget(results_, 1);
+  QFont content_font = results_->font();
+  content_font.setPixelSize(16);
+  results_->setFont(content_font);
+  results_->setFlow(QListView::LeftToRight);
+  results_->setWrapping(false);
+  results_->setMovement(QListView::Static);
+  results_->setSpacing(4);
+  results_->setUniformItemSizes(true);
+  results_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  results_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+  results_->setFixedHeight(results_->fontMetrics().height() + 12 +
+                          style()->pixelMetric(QStyle::PM_ScrollBarExtent));
+  outer->addWidget(results_);
   status_->setObjectName(QStringLiteral("kanjiLookupStatus"));
   outer->addWidget(status_);
 
@@ -122,10 +133,13 @@ KanjiLookupDialog::KanjiLookupDialog(
   copy_button_->setObjectName(QStringLiteral("kanjiLookupCopy"));
   insert_button_->setObjectName(QStringLiteral("kanjiLookupInsert"));
   info_button_->setObjectName(QStringLiteral("kanjiLookupInfo"));
-  buttons->addButton(copy_button_, QDialogButtonBox::ActionRole);
-  buttons->addButton(insert_button_, QDialogButtonBox::ActionRole);
+  buttons->addButton(search_button, QDialogButtonBox::ActionRole);
   buttons->addButton(info_button_, QDialogButtonBox::ActionRole);
+  buttons->addButton(insert_button_, QDialogButtonBox::ActionRole);
+  buttons->addButton(copy_button_, QDialogButtonBox::ActionRole);
   outer->addWidget(buttons);
+  outer->addLayout(controls);
+  outer->addWidget(radical_group, 1);
 
   connect(search_button, &QPushButton::clicked, this,
           [this] { (void)search(); });
@@ -210,6 +224,7 @@ bool KanjiLookupDialog::search() {
       item->setData(Qt::UserRole, result.code);
       item->setToolTip(result.tooltip);
     }
+    if (results_->count() != 0) results_->setCurrentRow(0);
     status_->setText(report.truncated
                          ? tr("%1 matches shown (result limit reached)")
                                .arg(results_->count())

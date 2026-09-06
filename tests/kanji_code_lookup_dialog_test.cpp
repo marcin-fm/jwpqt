@@ -86,6 +86,9 @@ void test_dialog() {
           "Native SKIP dialog returned wrong results");
   auto* results =
       dialog.findChild<QListWidget*>(QStringLiteral("kanjiCodeResults"));
+  require(results->flow() == QListView::LeftToRight && !results->isWrapping() &&
+              results->font().pixelSize() == 16 && results->item(0)->isSelected(),
+          "Code lookup results are not a readable selected character strip");
   results->item(0)->setSelected(true);
   dialog.findChild<QPushButton*>(QStringLiteral("kanjiCodeInsert"))->click();
   dialog.findChild<QPushButton*>(QStringLiteral("kanjiCodeInfo"))->click();

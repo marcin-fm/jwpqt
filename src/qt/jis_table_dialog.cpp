@@ -9,6 +9,8 @@
 #include <QClipboard>
 #include <QDialogButtonBox>
 #include <QFormLayout>
+#include <QGroupBox>
+#include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QLineEdit>
@@ -73,41 +75,48 @@ JisTableDialog::JisTableDialog(InsertHandler insert_handler,
       insert_button_(new QPushButton(tr("&Insert"), this)),
       info_button_(new QPushButton(tr("&Information"), this)) {
   setObjectName(QStringLiteral("jisTableDialog"));
-  setWindowTitle(tr("JIS Table"));
+  setWindowTitle(tr("Character Table"));
   setModal(false);
-  resize(720, 470);
+  resize(760, 310);
 
   auto* outer = new QVBoxLayout(this);
+  auto* content = new QHBoxLayout;
+  auto* code_group = new QGroupBox(tr("Character codes"), this);
+  auto* codes = new QFormLayout(code_group);
   page_->setObjectName(QStringLiteral("jisTablePage"));
   page_->setRange(0x21, 0x74);
   page_->setDisplayIntegerBase(16);
   page_->setPrefix(QStringLiteral("0x"));
-  outer->addWidget(page_);
+  codes->addRow(tr("JIS page"), page_);
 
   table_->setObjectName(QStringLiteral("jisTableGrid"));
   table_->setSelectionMode(QAbstractItemView::SingleSelection);
   table_->setSelectionBehavior(QAbstractItemView::SelectItems);
   table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-  QStringList columns;
-  for (int cell = 0x21; cell <= 0x30; ++cell)
-    columns.push_back(hex_value(static_cast<std::uint32_t>(cell), 2));
-  table_->setHorizontalHeaderLabels(columns);
+  QFont content_font = table_->font();
+  content_font.setPixelSize(16);
+  table_->setFont(content_font);
+  table_->horizontalHeader()->hide();
+  table_->verticalHeader()->hide();
   table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
   table_->verticalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-  outer->addWidget(table_, 1);
+  table_->setMinimumSize(16 * 24, 6 * 24);
 
-  auto* codes = new QFormLayout;
   jis_->setObjectName(QStringLiteral("jisTableJis"));
   euc_->setObjectName(QStringLiteral("jisTableEuc"));
   shift_jis_->setObjectName(QStringLiteral("jisTableShiftJis"));
   unicode_->setObjectName(QStringLiteral("jisTableUnicode"));
-  for (QLineEdit* field : {jis_, euc_, shift_jis_, unicode_})
+  for (QLineEdit* field : {jis_, euc_, shift_jis_, unicode_}) {
     field->setMaxLength(6);
+    field->setMaximumWidth(110);
+  }
   codes->addRow(tr("JIS"), jis_);
   codes->addRow(tr("EUC-JP"), euc_);
   codes->addRow(tr("Shift-JIS"), shift_jis_);
   codes->addRow(tr("Unicode"), unicode_);
-  outer->addLayout(codes);
+  content->addWidget(code_group);
+  content->addWidget(table_, 1);
+  outer->addLayout(content, 1);
 
   status_->setObjectName(QStringLiteral("jisTableStatus"));
   outer->addWidget(status_);

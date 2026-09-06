@@ -101,6 +101,9 @@ void test_dialog() {
       dialog.findChild<QListWidget*>(QStringLiteral("kanjiLookupResults"));
   require(list != nullptr && list->count() == 1,
           "Native radical dialog result list is unavailable");
+  require(list->flow() == QListView::LeftToRight && !list->isWrapping() &&
+              list->font().pixelSize() == 16 && list->item(0)->isSelected(),
+          "Radical results are not a readable selected character strip");
   list->item(0)->setSelected(true);
   auto* insert =
       dialog.findChild<QPushButton*>(QStringLiteral("kanjiLookupInsert"));

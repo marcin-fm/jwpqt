@@ -17,6 +17,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSpinBox>
+#include <QStyle>
 #include <QTabWidget>
 #include <QVBoxLayout>
 
@@ -107,7 +108,7 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
   setObjectName(QStringLiteral("kanjiCodeLookupDialog"));
   setWindowTitle(tr("Kanji Code Lookup"));
   setModal(false);
-  resize(580, 520);
+  resize(880, 520);
 
   auto* outer = new QVBoxLayout(this);
   auto* skip_page = new QWidget(tabs_);
@@ -248,15 +249,25 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
     index_value_->setFocus();
   });
   tabs_->addTab(index_page, tr("Index"));
-  outer->addWidget(tabs_);
 
   auto* search_button = new QPushButton(tr("&Search"), this);
   search_button->setObjectName(QStringLiteral("kanjiCodeSearch"));
   search_button->setDefault(true);
-  outer->addWidget(search_button);
   results_->setObjectName(QStringLiteral("kanjiCodeResults"));
   results_->setSelectionMode(QAbstractItemView::ExtendedSelection);
-  outer->addWidget(results_, 1);
+  QFont content_font = results_->font();
+  content_font.setPixelSize(16);
+  results_->setFont(content_font);
+  results_->setFlow(QListView::LeftToRight);
+  results_->setWrapping(false);
+  results_->setMovement(QListView::Static);
+  results_->setSpacing(4);
+  results_->setUniformItemSizes(true);
+  results_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  results_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+  results_->setFixedHeight(results_->fontMetrics().height() + 12 +
+                          style()->pixelMetric(QStyle::PM_ScrollBarExtent));
+  outer->addWidget(results_);
   status_->setObjectName(QStringLiteral("kanjiCodeStatus"));
   outer->addWidget(status_);
 
@@ -264,10 +275,12 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
   copy_button_->setObjectName(QStringLiteral("kanjiCodeCopy"));
   insert_button_->setObjectName(QStringLiteral("kanjiCodeInsert"));
   info_button_->setObjectName(QStringLiteral("kanjiCodeInfo"));
-  buttons->addButton(copy_button_, QDialogButtonBox::ActionRole);
-  buttons->addButton(insert_button_, QDialogButtonBox::ActionRole);
+  buttons->addButton(search_button, QDialogButtonBox::ActionRole);
   buttons->addButton(info_button_, QDialogButtonBox::ActionRole);
+  buttons->addButton(insert_button_, QDialogButtonBox::ActionRole);
+  buttons->addButton(copy_button_, QDialogButtonBox::ActionRole);
   outer->addWidget(buttons);
+  outer->addWidget(tabs_, 1);
 
   connect(search_button, &QPushButton::clicked, this, [this] {
     switch (tabs_->currentIndex()) {
@@ -558,6 +571,7 @@ bool KanjiCodeLookupDialog::publish(core::KanjiCodeSearchReport report) {
     item->setData(Qt::UserRole, value.match.code);
     item->setData(Qt::UserRole + 1, value.match.alternate);
   }
+  if (results_->count() != 0) results_->setCurrentRow(0);
   status_->setText(report.truncated
                        ? tr("%1 matches shown (result limit reached)")
                              .arg(results_->count())

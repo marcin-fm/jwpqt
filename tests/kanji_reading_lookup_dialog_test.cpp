@@ -105,6 +105,9 @@ void test_dialog() {
       dialog.findChild<QListWidget*>(QStringLiteral("kanjiReadingResults"));
   require(results != nullptr && results->count() == 1,
           "Native reading dialog did not render results");
+  require(results->flow() == QListView::LeftToRight && !results->isWrapping() &&
+              results->font().pixelSize() == 16 && results->item(0)->isSelected(),
+          "Reading results are not a readable selected character strip");
   results->item(0)->setSelected(true);
   dialog.findChild<QPushButton*>(QStringLiteral("kanjiReadingInsert"))->click();
   dialog.findChild<QPushButton*>(QStringLiteral("kanjiReadingInfo"))->click();

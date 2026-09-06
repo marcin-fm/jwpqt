@@ -17,6 +17,7 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QStyle>
 #include <QVBoxLayout>
 
 #include "jwpqt/core/jwp_text_codec.h"
@@ -58,7 +59,7 @@ KanjiReadingLookupDialog::KanjiReadingLookupDialog(
   setObjectName(QStringLiteral("kanjiReadingLookupDialog"));
   setWindowTitle(tr("Reading Lookup"));
   setModal(false);
-  resize(580, 520);
+  resize(800, 360);
 
   kind_->setObjectName(QStringLiteral("kanjiReadingKind"));
   const auto add_kind = [this](const QString& label,
@@ -92,15 +93,25 @@ KanjiReadingLookupDialog::KanjiReadingLookupDialog(
   form->addRow(tr("Strokes"), strokes);
   form->addRow(flexible_kun_);
   form->addRow(partial_words_);
-  outer->addLayout(form);
 
   auto* search_button = new QPushButton(tr("&Search"), this);
   search_button->setObjectName(QStringLiteral("kanjiReadingSearch"));
   search_button->setDefault(true);
-  outer->addWidget(search_button);
   results_->setObjectName(QStringLiteral("kanjiReadingResults"));
   results_->setSelectionMode(QAbstractItemView::ExtendedSelection);
-  outer->addWidget(results_, 1);
+  QFont content_font = results_->font();
+  content_font.setPixelSize(16);
+  results_->setFont(content_font);
+  results_->setFlow(QListView::LeftToRight);
+  results_->setWrapping(false);
+  results_->setMovement(QListView::Static);
+  results_->setSpacing(4);
+  results_->setUniformItemSizes(true);
+  results_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+  results_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+  results_->setFixedHeight(results_->fontMetrics().height() + 12 +
+                          style()->pixelMetric(QStyle::PM_ScrollBarExtent));
+  outer->addWidget(results_);
   status_->setObjectName(QStringLiteral("kanjiReadingStatus"));
   outer->addWidget(status_);
 
@@ -108,10 +119,13 @@ KanjiReadingLookupDialog::KanjiReadingLookupDialog(
   copy_button_->setObjectName(QStringLiteral("kanjiReadingCopy"));
   insert_button_->setObjectName(QStringLiteral("kanjiReadingInsert"));
   info_button_->setObjectName(QStringLiteral("kanjiReadingInfo"));
-  buttons->addButton(copy_button_, QDialogButtonBox::ActionRole);
-  buttons->addButton(insert_button_, QDialogButtonBox::ActionRole);
+  buttons->addButton(search_button, QDialogButtonBox::ActionRole);
   buttons->addButton(info_button_, QDialogButtonBox::ActionRole);
+  buttons->addButton(insert_button_, QDialogButtonBox::ActionRole);
+  buttons->addButton(copy_button_, QDialogButtonBox::ActionRole);
   outer->addWidget(buttons);
+  outer->addLayout(form);
+  outer->addStretch();
 
   connect(kind_, &QComboBox::currentIndexChanged, this,
           [this] { update_mode(); });
@@ -185,6 +199,7 @@ bool KanjiReadingLookupDialog::publish(core::KanjiCodeSearchReport report) {
     auto* item = new QListWidgetItem(rendered[index], results_);
     item->setData(Qt::UserRole, report.matches[index].code);
   }
+  if (results_->count() != 0) results_->setCurrentRow(0);
   status_->setText(report.truncated
                        ? tr("%1 matches shown (result limit reached)")
                              .arg(results_->count())

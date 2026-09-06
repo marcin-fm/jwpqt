@@ -58,6 +58,11 @@ void test_grid_and_invalid_input() {
   require(table != nullptr && table->rowCount() == 6 &&
               table->columnCount() == 16 && table->item(0, 1) != nullptr,
           "Native JIS table grid has the wrong geometry or content");
+  dialog.show();
+  QApplication::processEvents();
+  require(table->font().pixelSize() == 16 &&
+              table->mapTo(&dialog, QPoint()).x() > jis->mapTo(&dialog, QPoint()).x(),
+          "Character table does not place its readable grid beside the codes");
   const auto before = dialog.current();
   jis->setText(QStringLiteral("FFFF"));
   QMetaObject::invokeMethod(jis, "editingFinished", Qt::DirectConnection);
