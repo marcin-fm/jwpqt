@@ -42,6 +42,7 @@
 #include <QPrintDialog>
 #include <QPrinter>
 #include <QTextEdit>
+#include <QToolButton>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QScopedValueRollback>
@@ -277,7 +278,8 @@ MainWindow::MainWindow(QWidget* parent)
       encoding_label_(new QLabel(this)),
       undo_action_(nullptr),
       redo_action_(nullptr),
-      input_mode_label_(new QLabel(this)),
+      input_mode_button_(new QToolButton(this)),
+      input_mode_actions_(new QActionGroup(this)),
       encoding_actions_(new QActionGroup(this)),
       jwp_code_page_menu_(nullptr) {
   setCentralWidget(editor_);
@@ -287,9 +289,21 @@ MainWindow::MainWindow(QWidget* parent)
 
   create_actions();
   encoding_label_->setObjectName(QStringLiteral("documentEncoding"));
-  input_mode_label_->setObjectName(QStringLiteral("inputMode"));
+  input_mode_button_->setObjectName(QStringLiteral("inputMode"));
+  input_mode_button_->setAutoRaise(true);
+  input_mode_button_->setAccessibleName(tr("Input mode"));
+  input_mode_button_->setToolTip(
+      tr("Click to cycle Kanji, ASCII and JASCII. F4 switches Kanji/ASCII."));
+  connect(input_mode_button_, &QToolButton::clicked, this, [this] {
+    switch (input_mode_) {
+      case InputMode::kKanji: set_input_mode(InputMode::kAscii); break;
+      case InputMode::kAscii: set_input_mode(InputMode::kJascii); break;
+      case InputMode::kJascii: set_input_mode(InputMode::kKanji); break;
+    }
+    editor_->setFocus();
+  });
   statusBar()->addPermanentWidget(encoding_label_);
-  statusBar()->addPermanentWidget(input_mode_label_);
+  statusBar()->addPermanentWidget(input_mode_button_);
   update_encoding_display();
   resize(900, 680);
 
@@ -844,7 +858,7 @@ void MainWindow::create_actions() {
 
   QAction* close_action = file_menu->addAction(tr("&Close"));
   close_action->setObjectName(QStringLiteral("closeDocumentAction"));
-  close_action->setShortcut(QKeySequence::Close);
+  close_action->setShortcut(QKeySequence(QStringLiteral("Ctrl+F4")));
   connect(close_action, &QAction::triggered, this,
           [this] { new_document(); });
 
@@ -978,6 +992,37 @@ void MainWindow::create_actions() {
   connect(replace_action, &QAction::triggered, this,
           [this] { replace_document(); });
 
+  QMenu* input_menu = edit_menu->addMenu(tr("Input &Mode"));
+  const auto add_input_mode = [&](InputMode mode, const QString& title,
+                                  const char* name, const QString& shortcut) {
+    QAction* action = input_menu->addAction(title);
+    action->setObjectName(QString::fromLatin1(name));
+    action->setCheckable(true);
+    action->setData(static_cast<int>(mode));
+    action->setShortcut(QKeySequence(shortcut));
+    input_mode_actions_->addAction(action);
+    return action;
+  };
+  kana_input_action_ = add_input_mode(InputMode::kKanji, tr("&Kanji"),
+                                      "kanaInputAction", QStringLiteral("Ctrl+K"));
+  kana_input_action_->setStatusTip(tr("Compose hiragana and katakana from romaji"));
+  add_input_mode(InputMode::kAscii, tr("&ASCII"), "asciiInputAction",
+                 QStringLiteral("Ctrl+Alt+A"));
+  add_input_mode(InputMode::kJascii, tr("&JASCII"), "jasciiInputAction",
+                 QStringLiteral("Ctrl+J"));
+  connect(input_mode_actions_, &QActionGroup::triggered, this,
+          [this](QAction* action) {
+            set_input_mode(static_cast<InputMode>(action->data().toInt()));
+          });
+  input_menu->addSeparator();
+  toggle_input_mode_action_ = input_menu->addAction(tr("Switch Kanji/ASCII"));
+  toggle_input_mode_action_->setObjectName(QStringLiteral("toggleInputModeAction"));
+  toggle_input_mode_action_->setShortcut(QKeySequence(Qt::Key_F4));
+  connect(toggle_input_mode_action_, &QAction::triggered, this, [this] {
+    set_input_mode(input_mode_ == InputMode::kKanji ? InputMode::kAscii
+                                                   : InputMode::kKanji);
+  });
+
   QMenu* format_menu = menuBar()->addMenu(tr("F&ormat"));
   format_file_action_ = format_menu->addAction(tr("Format &File..."));
   format_file_action_->setObjectName(QStringLiteral("formatFileAction"));
@@ -1049,7 +1094,7 @@ void MainWindow::create_actions() {
   skip_lookup_action_ = tools_menu->addAction(tr("&SKIP Lookup"));
   skip_lookup_action_->setObjectName(QStringLiteral("skipLookupAction"));
   skip_lookup_action_->setShortcut(
-      QKeySequence(QStringLiteral("Ctrl+Shift+S")));
+      QKeySequence(QStringLiteral("Ctrl+Alt+S")));
   connect(skip_lookup_action_, &QAction::triggered, this,
           [this] { show_kanji_code_lookup_dialog(KanjiCodeLookupMode::kSkip); });
 
@@ -1084,7 +1129,7 @@ void MainWindow::create_actions() {
   spahn_lookup_action_ =
       tools_menu->addAction(tr("Spahn-&Hadamitzky Lookup"));
   spahn_lookup_action_->setObjectName(QStringLiteral("spahnLookupAction"));
-  spahn_lookup_action_->setShortcut(QKeySequence(QStringLiteral("Ctrl+H")));
+  spahn_lookup_action_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Alt+H")));
   connect(spahn_lookup_action_, &QAction::triggered, this,
           [this] { show_kanji_code_lookup_dialog(KanjiCodeLookupMode::kSpahn); });
 
@@ -1185,15 +1230,6 @@ void MainWindow::create_actions() {
        QKeySequence(Qt::Key_Escape)});
   connect(accept_candidate_action_, &QAction::triggered, this,
           [this] { accept_conversion(); });
-
-  convert_menu->addSeparator();
-  kana_input_action_ = convert_menu->addAction(tr("&Kana Input"));
-  kana_input_action_->setObjectName(QStringLiteral("kanaInputAction"));
-  kana_input_action_->setCheckable(true);
-  kana_input_action_->setShortcut(
-      QKeySequence(QStringLiteral("Ctrl+Shift+K")));
-  connect(kana_input_action_, &QAction::toggled, this,
-          [this](bool enabled) { set_kana_input_enabled(enabled); });
 
   convert_menu->addSeparator();
   user_dictionary_action_ =
@@ -1469,35 +1505,51 @@ void MainWindow::update_kanji_color_actions() {
 }
 
 bool MainWindow::kana_input_enabled() const noexcept {
-  return kana_input_enabled_;
+  return jwp_document_.has_value() && input_mode_ == InputMode::kKanji;
 }
 
-void MainWindow::set_kana_input_enabled(bool enabled) {
-  if (enabled && !jwp_document_.has_value()) {
-    enabled = false;
+void MainWindow::set_input_mode(InputMode mode) {
+  if (!jwp_document_.has_value()) {
+    return;
   }
-  if (kana_input_enabled_ != enabled) {
-    if (!enabled) {
-      finish_kana_input();
+  if (input_mode_ != mode) {
+    if (conversion_active() && !accept_conversion()) {
+      update_kana_input_state();
+      return;
+    }
+    finish_kana_input();
+    if (conversion_active() && !accept_conversion()) {
+      update_kana_input_state();
+      return;
     }
     reset_kana_input(false);
-    kana_input_enabled_ = enabled;
-  }
-  if (kana_input_action_ != nullptr &&
-      kana_input_action_->isChecked() != kana_input_enabled_) {
-    const QSignalBlocker blocker(kana_input_action_);
-    kana_input_action_->setChecked(kana_input_enabled_);
+    input_mode_ = mode;
+    jwp_history_.break_coalescing();
   }
   update_kana_input_state();
 }
 
 void MainWindow::update_kana_input_state() {
-  if (kana_input_action_ == nullptr || input_mode_label_ == nullptr) {
+  if (kana_input_action_ == nullptr || input_mode_button_ == nullptr) {
     return;
   }
-  kana_input_action_->setEnabled(jwp_document_.has_value() &&
-                                 !conversion_active());
-  input_mode_label_->setText(kana_input_enabled_ ? tr("Kana") : tr("Direct"));
+  const bool enabled = jwp_document_.has_value();
+  input_mode_actions_->setEnabled(enabled);
+  toggle_input_mode_action_->setEnabled(enabled);
+  input_mode_button_->setEnabled(enabled);
+  for (QAction* action : input_mode_actions_->actions()) {
+    action->setChecked(enabled &&
+                       action->data().toInt() == static_cast<int>(input_mode_));
+  }
+  if (!enabled) {
+    input_mode_button_->setText(tr("Unicode Text"));
+    return;
+  }
+  switch (input_mode_) {
+    case InputMode::kKanji: input_mode_button_->setText(tr("Kanji")); break;
+    case InputMode::kAscii: input_mode_button_->setText(tr("ASCII")); break;
+    case InputMode::kJascii: input_mode_button_->setText(tr("JASCII")); break;
+  }
 }
 
 void MainWindow::apply_kana_input_events(
@@ -1589,11 +1641,7 @@ void MainWindow::reset_kana_input(bool disable_mode) {
   kana_input_.discard();
   clear_automatic_conversion_range();
   if (disable_mode) {
-    kana_input_enabled_ = false;
-    if (kana_input_action_ != nullptr) {
-      const QSignalBlocker blocker(kana_input_action_);
-      kana_input_action_->setChecked(false);
-    }
+    input_mode_ = InputMode::kAscii;
   }
   update_kana_input_state();
 }
@@ -1728,8 +1776,26 @@ void MainWindow::show_automatic_conversion_range() {
 }
 
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
-  if (watched != editor_ || !kana_input_enabled_ ||
-      !jwp_document_.has_value() || conversion_active()) {
+  if (watched != editor_ || !jwp_document_.has_value() || conversion_active()) {
+    return QMainWindow::eventFilter(watched, event);
+  }
+  if (input_mode_ == InputMode::kJascii && event->type() == QEvent::KeyPress) {
+    const auto* key = static_cast<QKeyEvent*>(event);
+    const QString text = key->text();
+    if (!(key->modifiers() &
+          (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier)) &&
+        text.size() == 1 && text.front().unicode() >= 0x20 &&
+        text.front().unicode() <= 0xff && text.front().unicode() != 0x7f) {
+      const auto code = core::ascii_to_jascii(
+          static_cast<char>(text.front().unicode()), true);
+      if (code.has_value()) {
+        editor_->insertPlainText(
+            to_qstring(core::decode_jwp_text({*code}, jwp_code_page_)));
+      }
+      return true;
+    }
+  }
+  if (!kana_input_enabled()) {
     return QMainWindow::eventFilter(watched, event);
   }
   if (event->type() == QEvent::MouseButtonPress) {

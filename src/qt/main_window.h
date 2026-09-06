@@ -38,6 +38,7 @@ class QMenu;
 class QPrinter;
 class QTextCursor;
 class QTextEdit;
+class QToolButton;
 
 namespace jwpqt::qt {
 
@@ -57,6 +58,12 @@ class WnnUserDictionaryDialog;
 enum class OpenMode {
   kInteractive,
   kNonInteractive,
+};
+
+enum class InputMode {
+  kKanji,
+  kAscii,
+  kJascii,
 };
 
 enum class KanjiCodeLookupMode {
@@ -217,7 +224,7 @@ class MainWindow : public QMainWindow {
   void show_edict_results_window();
   void update_kanji_color_actions();
   void update_kana_input_state();
-  void set_kana_input_enabled(bool enabled);
+  void set_input_mode(InputMode mode);
   void apply_kana_input_events(
       const std::vector<core::KanaInputEvent>& events);
   void finish_kana_input();
@@ -295,6 +302,7 @@ class MainWindow : public QMainWindow {
   QAction* next_candidate_action_ = nullptr;
   QAction* accept_candidate_action_ = nullptr;
   QAction* kana_input_action_ = nullptr;
+  QAction* toggle_input_mode_action_ = nullptr;
   QAction* user_dictionary_action_ = nullptr;
   QAction* edict_lookup_action_ = nullptr;
   QAction* edict_results_action_ = nullptr;
@@ -319,7 +327,8 @@ class MainWindow : public QMainWindow {
   QAction* edit_kanji_color_list_action_ = nullptr;
   QAction* view_kanji_color_list_action_ = nullptr;
   QAction* clear_kanji_color_list_action_ = nullptr;
-  QLabel* input_mode_label_;
+  QToolButton* input_mode_button_;
+  QActionGroup* input_mode_actions_;
   QActionGroup* encoding_actions_;
   QMenu* jwp_code_page_menu_;
   std::vector<QAction*> jwp_code_page_actions_;
@@ -361,7 +370,7 @@ class MainWindow : public QMainWindow {
   std::optional<core::WnnPreferences> conversion_preferences_before_;
   core::KanaInputComposer kana_input_;
   std::optional<core::JwpRange> automatic_conversion_range_;
-  bool kana_input_enabled_ = false;
+  InputMode input_mode_ = InputMode::kKanji;
   bool applying_kana_input_ = false;
   QString search_text_;
   QString replacement_text_;

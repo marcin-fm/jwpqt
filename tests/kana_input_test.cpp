@@ -183,6 +183,29 @@ void test_discard_and_options() {
   composer.set_options({true});
 }
 
+void test_jascii_mode_mapping() {
+  using jwpqt::core::ascii_to_jascii;
+  for (int value = 0; value <= 0xff; ++value) {
+    require(ascii_to_jascii(static_cast<char>(value), true).has_value() ==
+                (value >= 0x20 && value <= 0x7e),
+            "JASCII mapping must cover exactly printable ASCII");
+  }
+  for (char input = 'a'; input <= 'z'; ++input) {
+    require(ascii_to_jascii(input, true) == 0x2361 + input - 'a' &&
+                ascii_to_jascii(input - 'a' + 'A', true) == 0x2341 + input - 'a',
+            "JASCII alphabet mapping differs from the recovered table");
+  }
+  require(ascii_to_jascii(' ', true) == 0x2121 &&
+              ascii_to_jascii('9', true) == 0x2339 &&
+              ascii_to_jascii(',', true) == 0x2124 &&
+              ascii_to_jascii('.', true) == 0x2125 &&
+              ascii_to_jascii('-', true) == 0x213d &&
+              ascii_to_jascii(',') == 0x2122 &&
+              ascii_to_jascii('.') == 0x2123 &&
+              ascii_to_jascii('-') == 0x213c,
+          "JASCII-specific punctuation changed kana-mode punctuation");
+}
+
 }  // namespace
 
 int main() {
@@ -195,6 +218,7 @@ int main() {
     test_symbols_and_invalid_input();
     test_state_replay_and_rejection();
     test_discard_and_options();
+    test_jascii_mode_mapping();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return EXIT_FAILURE;

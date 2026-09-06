@@ -180,7 +180,17 @@ std::optional<JisCode> direct_offset(std::string_view input) {
                               std::distance(kDirectKana.begin(), found));
 }
 
-std::optional<JisCode> ascii_to_jascii(char input) {
+}  // namespace
+
+std::optional<JisCode> ascii_to_jascii(char input, bool jascii_mode) {
+  if (jascii_mode) {
+    switch (input) {
+      case ',': return 0x2124;
+      case '.': return 0x2125;
+      case '-': return 0x213d;
+      default: break;
+    }
+  }
   if (input >= 'A' && input <= 'Z') {
     return static_cast<JisCode>(0x2341 + input - 'A');
   }
@@ -209,6 +219,8 @@ std::optional<JisCode> ascii_to_jascii(char input) {
              ? std::nullopt
              : std::optional<JisCode>(found->second);
 }
+
+namespace {
 
 bool is_hiragana(JisCode code) {
   return (code & 0xff00U) == kHiraganaBase;

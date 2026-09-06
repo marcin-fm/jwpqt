@@ -53,7 +53,7 @@ conversion transactions. With `--wnn-data-dir`, the native JWP editor converts
 selected kana, cycles candidates with Space or Shift+Space, accepts with Enter
 or Escape, and loads editable `user.cnv` entries beside learned choices in the
 XDG user-data directory. Its
-explicit Kana Input mode converts printable desktop romaji to recovered JWP
+default Kanji input mode converts printable desktop romaji to recovered JWP
 hiragana and katakana while preserving portable document history. Kana Input
 tracks automatic conversion spans, waits for extendable WNN keys, applies
 terminal or longest-prefix candidates, and leaves unmatched suffixes at the
@@ -70,6 +70,19 @@ ordered indexed or unindexed resources from `dict.cfg`, searches with the
 portable direct, adaptive, wildcard, contingent, and name filters, and inserts
 selected rows into JWP with portable undo. Editable EDICT `user.dct`, kanji
 lookup tools, remaining configuration, and printing remain in progress.
+
+### Input modes and shortcuts
+
+**Edit > Input Mode** selects Kanji (`Ctrl+K`), ASCII (`Ctrl+Alt+A`), or JASCII
+(`Ctrl+J`). Kanji composes romaji; ASCII inserts characters directly; JASCII
+inserts recovered full-width characters with Western comma/period and a dash.
+`F4` switches Kanji/ASCII, including JASCII to Kanji. Clicking the status-bar
+mode button cycles all three. Switching commits pending kana and accepts the
+displayed conversion candidate. Plain Unicode text retains direct input.
+
+`Ctrl+A` remains Select All. Close uses `Ctrl+F4`, leaving `Ctrl+W` for conversion.
+SKIP uses `Ctrl+Alt+S` and Spahn-Hadamitzky uses `Ctrl+Alt+H`, avoiding native
+Save As and Replace shortcuts. Count Kanji remains `Ctrl+Shift+K`.
 
 JWPce/JWPxp copyright and licensing notices remain in `_cpright.txt`,
 `_readme.txt`, and `gnugpl.txt`.

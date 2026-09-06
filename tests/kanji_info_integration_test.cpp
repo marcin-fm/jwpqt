@@ -157,7 +157,7 @@ void test_integration(const QString& directory) {
       window.findChild<QAction*>(QStringLiteral("kanjiCountAction"));
   require(skip_action != nullptr && skip_action->isEnabled() &&
               skip_action->shortcut() ==
-                  QKeySequence(QStringLiteral("Ctrl+Shift+S")) &&
+                   QKeySequence(QStringLiteral("Ctrl+Alt+S")) &&
               four_corner_action != nullptr &&
               four_corner_action->isEnabled() &&
               four_corner_action->shortcut() ==
@@ -167,7 +167,7 @@ void test_integration(const QString& directory) {
                   QKeySequence(QStringLiteral("Ctrl+Shift+L")) &&
               spahn_action != nullptr && spahn_action->isEnabled() &&
                spahn_action->shortcut() ==
-                   QKeySequence(QStringLiteral("Ctrl+H")) &&
+                    QKeySequence(QStringLiteral("Ctrl+Alt+H")) &&
                stroke_bushu_action != nullptr &&
                stroke_bushu_action->isEnabled() &&
                stroke_bushu_action->shortcut() ==

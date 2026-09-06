@@ -31,6 +31,7 @@
 #include <QTextDocument>
 #include <QTextBlockFormat>
 #include <QTimer>
+#include <QToolButton>
 
 #include "file_io.h"
 #include "edict_lookup_dialog.h"
@@ -2302,15 +2303,16 @@ void test_jwp_kana_input_mode(const QString& directory) {
           "Could not open kana-input fixture");
   QTextEdit* editor = window.findChild<QTextEdit*>();
   QAction* kana = find_action(window, "kanaInputAction");
-  QLabel* input_mode = window.findChild<QLabel*>(QStringLiteral("inputMode"));
+  QToolButton* input_mode =
+      window.findChild<QToolButton*>(QStringLiteral("inputMode"));
   require(editor != nullptr && kana != nullptr && input_mode != nullptr &&
-              kana->isEnabled() && !window.kana_input_enabled() &&
-              input_mode->text() == QStringLiteral("Direct"),
-          "Kana-input controls did not start in direct mode");
+              kana->isEnabled() && window.kana_input_enabled() &&
+              input_mode->text() == QStringLiteral("Kanji"),
+          "Input controls did not start in Kanji mode");
 
   kana->trigger();
   require(window.kana_input_enabled() && kana->isChecked() &&
-              input_mode->text() == QStringLiteral("Kana"),
+              input_mode->text() == QStringLiteral("Kanji"),
           "Kana-input action did not enable composition");
   send_text_key(editor, Qt::Key_K, QStringLiteral("k"));
   send_text_key(editor, Qt::Key_A, QStringLiteral("a"));
@@ -2332,7 +2334,7 @@ void test_jwp_kana_input_mode(const QString& directory) {
   require(editor->toPlainText() == QStringLiteral("\u304b\u3042\u30ab"),
           "Uppercase romaji did not insert katakana");
 
-  kana->trigger();
+  find_action(window, "asciiInputAction")->trigger();
   send_text_key(editor, Qt::Key_K, QStringLiteral("k"));
   send_text_key(editor, Qt::Key_A, QStringLiteral("a"));
   require(!window.kana_input_enabled() &&
@@ -2365,6 +2367,84 @@ void test_jwp_kana_input_mode(const QString& directory) {
               !kana->isEnabled() && !kana->isChecked() &&
               !window.kana_input_enabled(),
           "Plain text document did not disable JWP kana input");
+}
+
+void test_input_mode_workflow(const QString& directory) {
+  jwpqt::qt::MainWindow window;
+  QTextEdit* editor = window.findChild<QTextEdit*>();
+  auto* mode = window.findChild<QToolButton*>(QStringLiteral("inputMode"));
+  require(editor != nullptr && mode != nullptr && mode->isEnabled() &&
+              mode->text() == QStringLiteral("Kanji") &&
+              find_action(window, "kanaInputAction")->isChecked(),
+          "Fresh editor did not expose its default input mode");
+  std::vector<QKeySequence> shortcuts;
+  for (const QAction* action : window.findChildren<QAction*>()) {
+    for (const QKeySequence& shortcut : action->shortcuts()) {
+      if (shortcut.isEmpty()) continue;
+      require(std::find(shortcuts.begin(), shortcuts.end(), shortcut) == shortcuts.end(),
+              "Duplicate native shortcut " + shortcut.toString().toStdString() +
+                  " on " + action->text().toStdString());
+      shortcuts.push_back(shortcut);
+    }
+  }
+  window.show();
+  editor->setFocus();
+  QApplication::processEvents();
+  send_text_key(editor, Qt::Key_N, QStringLiteral("n"));
+  send_text_key(editor, Qt::Key_F4, {});
+  require(mode->text() == QStringLiteral("ASCII") &&
+              editor->toPlainText() == QStringLiteral("\u3093") &&
+              find_action(window, "asciiInputAction")->isChecked(),
+          "F4 did not commit pending kana and switch to ASCII");
+  send_text_key(editor, Qt::Key_A, QStringLiteral("a"));
+  require(editor->toPlainText() == QStringLiteral("\u3093a"),
+          "ASCII mode composed input instead of inserting it directly");
+  mode->click();
+  require(mode->text() == QStringLiteral("JASCII") &&
+              find_action(window, "jasciiInputAction")->isChecked(),
+          "Status button did not cycle ASCII to JASCII");
+  for (const char value : std::string("Ax9 ,.-")) {
+    send_text_key(editor, Qt::Key_unknown, QString(QChar::fromLatin1(value)));
+  }
+  const jwpqt::core::JwpText expected{
+      0x2473, 'a', 0x2341, 0x2378, 0x2339, 0x2121, 0x2124, 0x2125, 0x213d};
+  require(window.current_jwp_document()->paragraphs[0].text == expected,
+          "JASCII input did not use recovered full-width letters and punctuation");
+  const QString path = directory + QStringLiteral("/input-modes.jwp");
+  require(window.save_path(path) &&
+              jwpqt::qt::read_jwp_file(path).paragraphs[0].text == expected,
+          "JASCII input did not survive a native save");
+  send_text_key(editor, Qt::Key_F4, {});
+  require(mode->text() == QStringLiteral("Kanji"),
+          "F4 from JASCII must switch to Kanji rather than ASCII");
+  mode->click();
+  require(mode->text() == QStringLiteral("ASCII"),
+          "Status button did not cycle Kanji to ASCII");
+  mode->click();
+  mode->click();
+  require(mode->text() == QStringLiteral("Kanji"),
+          "Status button did not cycle JASCII to Kanji");
+
+  const WnnFixture fixture = write_wnn_fixture(directory);
+  require(window.load_wnn_resources(fixture.index_path, fixture.data_path,
+                                   directory + QStringLiteral("/input-mode-user.sel")),
+          "Could not load mode-switch conversion fixture");
+  find_action(window, "newDocumentAction")->trigger();
+  editor->insertPlainText(QStringLiteral("\u3042"));
+  editor->selectAll();
+  require(window.convert_selection(), "Could not start mode-switch conversion");
+  const auto candidate = window.current_jwp_document()->paragraphs[0].text;
+  require(candidate != jwpqt::core::JwpText{0x2422},
+          "Mode-switch fixture did not choose a distinct candidate");
+  send_text_key(editor, Qt::Key_F4, {});
+  require(!window.conversion_active() && !editor->isReadOnly() &&
+              window.current_jwp_document()->paragraphs[0].text == candidate &&
+              mode->text() == QStringLiteral("ASCII"),
+          "Mode switch did not accept the displayed conversion candidate");
+  find_action(window, "undoAction")->trigger();
+  require(editor->toPlainText() == QStringLiteral("\u3042"),
+          "Conversion accepted by a mode switch lost its undo boundary: " +
+              editor->toPlainText().toUtf8().toHex().toStdString());
 }
 
 void test_jwp_automatic_wnn_conversion(const QString& directory) {
@@ -3166,6 +3246,7 @@ int main(int argc, char* argv[]) {
     test_edict_user_dictionary_integration(directory.path());
     test_jwp_wnn_preference_write_failure(directory.path());
     test_jwp_kana_input_mode(directory.path());
+    test_input_mode_workflow(directory.path());
     test_jwp_automatic_wnn_conversion(directory.path());
     test_kanji_color_configuration(directory.path());
     test_kanji_color_options(directory.path());
