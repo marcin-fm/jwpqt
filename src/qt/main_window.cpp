@@ -331,10 +331,7 @@ MainWindow::MainWindow(QWidget* parent)
   });
   connect(editor_, &QTextEdit::selectionChanged, this,
           [this] { update_conversion_actions(); });
-  update_undo_actions();
-  update_conversion_actions();
-  update_kana_input_state();
-  update_title();
+  new_document();
 }
 
 MainWindow::~MainWindow() {
@@ -818,10 +815,21 @@ bool MainWindow::clear_kanji_color_list(OpenMode mode) {
 void MainWindow::create_actions() {
   QMenu* file_menu = menuBar()->addMenu(tr("&File"));
 
-  QAction* new_action = file_menu->addAction(tr("&New"));
+  QAction* new_action = file_menu->addAction(tr("&New Japanese Document"));
+  new_action->setObjectName(QStringLiteral("newDocumentAction"));
   new_action->setShortcut(QKeySequence::New);
   connect(new_action, &QAction::triggered, this,
           [this] { new_document(); });
+
+  QAction* new_text_action = file_menu->addAction(tr("New &Text Document"));
+  new_text_action->setObjectName(QStringLiteral("newTextDocumentAction"));
+  new_text_action->setStatusTip(
+      tr("Create unrestricted Unicode text without JWP formatting"));
+  connect(new_text_action, &QAction::triggered, this, [this] {
+    if (maybe_save()) {
+      load_document({}, core::TextFile{});
+    }
+  });
 
   QAction* open_action = file_menu->addAction(tr("&Open..."));
   open_action->setShortcut(QKeySequence::Open);
@@ -2658,26 +2666,10 @@ void MainWindow::new_document() {
   if (!maybe_save()) {
     return;
   }
-  reset_kana_input(true);
-  jwp_document_.reset();
-  saved_jwp_document_.reset();
-  pristine_jwp_document_.reset();
-  jwp_history_.clear();
-  jwp_caret_.reset();
-  expected_jwp_caret_.reset();
-  rendered_jwp_text_.clear();
-  updating_editor_ = true;
-  editor_->clear();
-  clear_jwp_presentation();
-  updating_editor_ = false;
-  editor_->document()->setModified(false);
-  current_path_.clear();
-  has_byte_order_mark_ = false;
-  set_text_encoding(core::TextEncoding::kUtf8, false);
-  update_encoding_display();
-  update_undo_actions();
-  update_conversion_actions();
-  update_title();
+  core::JwpDocument document;
+  document.margins.fill(1.0F);  // Recovered default_config: one-inch margins.
+  document.paragraphs.emplace_back();
+  load_jwp_document({}, std::move(document), jwp_code_page_);
 }
 
 void MainWindow::open_document() {

@@ -32,6 +32,12 @@ Run the editor, optionally opening a UTF-8 file:
 
 ## Current scope
 
+Startup and **File > New Japanese Document** create a native JWP document with
+Japanese editing, conversion, formatting, and lookup insertion available without
+opening an existing file first. **File > New Text Document** creates unrestricted
+Unicode plain text instead; JWP-only tools are unavailable in that mode. Imported
+text files currently use this plain-text mode as well.
+
 The native editor opens and atomically saves UTF-8, UTF-7, JFC, EUC-JP, Shift-JIS,
 New/Old/NEC JIS, and JWP B1/B2/J1.20 documents. JFC files are plain text:
 opening prefers UTF-8, with a strict fallback for the recovered old-EUC

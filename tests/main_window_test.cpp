@@ -19,6 +19,7 @@
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QPageLayout>
 #include <QPushButton>
 #include <QPrinter>
@@ -322,6 +323,80 @@ void require_jwp_layout(QTextEdit* editor,
     follows_page_break = paragraph.page_break;
     block = block.next();
   }
+}
+
+void test_new_document_workflow(const QString& directory) {
+  jwpqt::qt::MainWindow window;
+  QTextEdit* editor = window.findChild<QTextEdit*>();
+  require(editor != nullptr && window.is_jwp_document() &&
+              window.current_path().isEmpty() && !window.document_modified() &&
+              window.current_jwp_document()->paragraphs.size() == 1 &&
+              window.current_jwp_document()->margins[0] == 1.0F,
+          "Startup did not create a clean native Japanese document");
+  for (const char* name : {"kanaInputAction", "formatFileAction",
+                           "formatParagraphAction", "pageLayoutAction",
+                           "insertPageBreakAction", "jisTableAction",
+                           "kanjiCountAction"}) {
+    const QAction* action = find_action(window, name);
+    require(action != nullptr && action->isEnabled(),
+            "A document-only command is unavailable at startup");
+  }
+  require(!find_action(window, "undoAction")->isEnabled(),
+          "New document started with stale undo history");
+
+  find_action(window, "kanaInputAction")->setChecked(true);
+  send_text_key(editor, Qt::Key_A, QStringLiteral("a"));
+  require(editor->toPlainText() == QStringLiteral("\u3042") &&
+              window.document_modified(),
+          "Fresh document cannot compose kana");
+  const WnnFixture fixture = write_wnn_fixture(directory);
+  require(window.load_wnn_resources(fixture.index_path, fixture.data_path,
+                                   fixture.preferences_path),
+          "Could not load startup conversion fixture");
+  editor->selectAll();
+  require(window.convert_selection() && window.accept_conversion(),
+          "Fresh document cannot convert kana");
+  require(window.insert_edict_text(U"\u65e5"),
+          "Fresh document cannot insert dictionary text");
+  const auto saved = *window.current_jwp_document();
+  find_action(window, "undoAction")->trigger();
+  require(*window.current_jwp_document() != saved,
+          "Fresh document insertion did not support undo");
+  find_action(window, "redoAction")->trigger();
+  require(*window.current_jwp_document() == saved,
+          "Fresh document insertion did not support redo");
+  const QString path = directory + QStringLiteral("/new-document.jwp");
+  require(window.save_path(path) && !window.document_modified() &&
+              jwpqt::qt::read_jwp_file(path) == saved,
+          "Fresh Japanese document did not save correctly");
+
+  find_action(window, "newTextDocumentAction")->trigger();
+  require(!window.is_jwp_document() && !window.document_modified() &&
+              window.current_path().isEmpty() &&
+              !find_action(window, "kanaInputAction")->isEnabled(),
+          "Explicit New Text did not create an independent Unicode document");
+  const QString unicode = QString::fromUtf8("\xf0\x9f\x98\x80");
+  editor->insertPlainText(unicode);
+  const QString text_path = directory + QStringLiteral("/new-text.txt");
+  require(window.save_path(text_path) && read_bytes(text_path) == unicode.toUtf8(),
+          "Explicit New Text lost supplementary Unicode");
+  editor->insertPlainText(QStringLiteral("unsaved"));
+  QTimer::singleShot(0, [] {
+    auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    if (prompt != nullptr) prompt->done(QMessageBox::Cancel);
+  });
+  find_action(window, "newDocumentAction")->trigger();
+  require(!window.is_jwp_document() && window.document_modified() &&
+              editor->toPlainText() == unicode + QStringLiteral("unsaved"),
+          "Cancelled New discarded unsaved Unicode text");
+  require(window.save_path(text_path), "Could not save before New");
+  find_action(window, "newDocumentAction")->trigger();
+  require(window.is_jwp_document() && window.current_path().isEmpty() &&
+              !window.document_modified() && editor->toPlainText().isEmpty() &&
+              !find_action(window, "undoAction")->isEnabled(),
+          "New did not reset the document and history");
+  require(window.open_jwp_path(path) && *window.current_jwp_document() == saved,
+          "Could not reopen a document created through New");
 }
 
 void test_explicit_open_and_encoding_action(const QString& directory) {
@@ -3060,6 +3135,7 @@ int main(int argc, char* argv[]) {
     QTemporaryDir directory(QDir::tempPath() +
                             QStringLiteral("/jwpqt-window-test-XXXXXX"));
     require(directory.isValid(), "Could not create temporary test directory");
+    test_new_document_workflow(directory.path());
     test_explicit_open_and_encoding_action(directory.path());
     test_jfc_open_save_and_revert(directory.path());
     test_jfc_file_dialogs(directory.path());
