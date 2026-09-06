@@ -13,11 +13,13 @@
 #include <QTextEdit>
 #include <QTextLayout>
 
+#include "jwp_editor.h"
+
 namespace jwpqt::qt {
 
 std::optional<CharacterTarget> character_target(
     const QTextEdit& editor, std::optional<QPoint> viewport_position) {
-  const QString text = editor.toPlainText();
+  const QString text = document_plain_text(*editor.document());
   int position;
   if (viewport_position.has_value()) {
     if (!editor.viewport()->rect().contains(*viewport_position)) return {};

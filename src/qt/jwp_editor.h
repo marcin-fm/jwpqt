@@ -12,8 +12,11 @@
 #include "jwpqt/core/legacy_code_page.h"
 
 class QPaintEvent;
+class QTextDocument;
 
 namespace jwpqt::qt {
+
+QString document_plain_text(const QTextDocument& document);
 
 class JwpEditor final : public QTextEdit {
  public:

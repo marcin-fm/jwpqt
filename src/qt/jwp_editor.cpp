@@ -78,6 +78,13 @@ QString to_qstring(std::u32string_view text) {
 
 }  // namespace
 
+QString document_plain_text(const QTextDocument& document) {
+  // Qt's toPlainText also changes NBSP to space; only normalize line separators.
+  return document.toRawText()
+      .replace(QChar(QChar::ParagraphSeparator), QLatin1Char('\n'))
+      .replace(QChar(QChar::LineSeparator), QLatin1Char('\n'));
+}
+
 JwpEditor::JwpEditor(QWidget* parent) : QTextEdit(parent) {
   setAcceptRichText(false);
 }

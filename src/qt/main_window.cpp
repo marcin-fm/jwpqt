@@ -383,7 +383,7 @@ MainWindow::MainWindow(QWidget* parent)
     }
     try {
       const std::size_t offset = utf32_offset_for_utf16(
-          editor_->toPlainText(), editor_->textCursor().position());
+          document_plain_text(*editor_->document()), editor_->textCursor().position());
       const core::JwpPosition caret =
           core::jwp_plain_text_position(*jwp_document_, offset);
       if (expected_jwp_caret_.has_value() &&
@@ -1061,7 +1061,7 @@ void MainWindow::create_actions() {
       tr("Create unrestricted Unicode text without JWP formatting"));
   connect(new_text_action, &QAction::triggered, this, [this] {
     if (maybe_save()) {
-      load_document({}, core::TextFile{});
+      load_document({}, core::TextFile{}, false);
     }
   });
 
@@ -1093,6 +1093,11 @@ void MainWindow::create_actions() {
   save_as_action->setShortcut(QKeySequence::SaveAs);
   connect(save_as_action, &QAction::triggered, this,
           [this] { save_document_as(); });
+
+  QAction* export_action = file_menu->addAction(tr("Export &Copy..."));
+  export_action->setObjectName(QStringLiteral("exportCopyAction"));
+  connect(export_action, &QAction::triggered, this,
+          [this] { save_document_as(true); });
 
   delete_action_ = file_menu->addAction(tr("&Delete File"));
   delete_action_->setObjectName(QStringLiteral("deleteDocumentAction"));
@@ -1246,6 +1251,24 @@ void MainWindow::create_actions() {
   connect(toggle_input_mode_action_, &QAction::triggered, this, [this] {
     set_input_mode(input_mode_ == InputMode::kKanji ? InputMode::kAscii
                                                    : InputMode::kKanji);
+  });
+  input_menu->addSeparator();
+  japanese_editing_action_ = input_menu->addAction(tr("Japanese &Editing"));
+  japanese_editing_action_->setObjectName(QStringLiteral("japaneseEditingAction"));
+  japanese_editing_action_->setCheckable(true);
+  japanese_editing_action_->setStatusTip(
+      tr("Disable for unrestricted Unicode; the saved file format stays unchanged"));
+  connect(japanese_editing_action_, &QAction::triggered, this, [this](bool enabled) {
+    japanese_editing_action_->setChecked(is_jwp_document());
+    if (QMessageBox::warning(
+            this, tr("Change editing mode"),
+            tr("Changing editing mode clears Undo/Redo. Unicode editing also "
+               "removes JWP layout, hard page breaks and document metadata. "
+               "The saved file format stays unchanged. Continue?"),
+            QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) ==
+        QMessageBox::Yes) {
+      set_japanese_editing(enabled, true, OpenMode::kInteractive);
+    }
   });
 
   QMenu* format_menu = menuBar()->addMenu(tr("F&ormat"));
@@ -1774,7 +1797,7 @@ void MainWindow::update_conversion_actions() {
     const QTextCursor cursor = editor_->textCursor();
     if (cursor.hasSelection()) {
       try {
-        const QString text = editor_->toPlainText();
+        const QString text = document_plain_text(*editor_->document());
         const core::JwpPosition begin = core::jwp_plain_text_position(
             *jwp_document_,
             utf32_offset_for_utf16(text, cursor.selectionStart()));
@@ -1944,6 +1967,8 @@ void MainWindow::update_kana_input_state() {
     return;
   }
   const bool enabled = jwp_document_.has_value();
+  japanese_editing_action_->setChecked(enabled);
+  japanese_editing_action_->setEnabled(!conversion_active() && !kana_input_.pending());
   input_mode_actions_->setEnabled(enabled);
   toggle_input_mode_action_->setEnabled(enabled);
   input_mode_button_->setEnabled(enabled);
@@ -1984,7 +2009,7 @@ void MainWindow::apply_kana_input_events(
     }
 
     QTextCursor cursor = editor_->textCursor();
-    const QString before = editor_->toPlainText();
+    const QString before = document_plain_text(*editor_->document());
     core::JwpPosition insertion_begin = core::jwp_plain_text_position(
         *jwp_document_,
         utf32_offset_for_utf16(before, cursor.selectionStart()));
@@ -1997,7 +2022,7 @@ void MainWindow::apply_kana_input_events(
       }
       clear_automatic_conversion_range();
       cursor = editor_->textCursor();
-      const QString current = editor_->toPlainText();
+      const QString current = document_plain_text(*editor_->document());
       insertion_begin = core::jwp_plain_text_position(
           *jwp_document_,
           utf32_offset_for_utf16(current, cursor.selectionStart()));
@@ -2460,7 +2485,7 @@ void MainWindow::show_kanji_info_dialog(std::optional<CharacterTarget> target,
     return;
   }
   if (!code && target && jwp_document_) {
-    const QString current = editor_->toPlainText();
+    const QString current = document_plain_text(*editor_->document());
     const int width = target->character > 0xffff ? 2 : 1;
     if (target->position >= 0 &&
         static_cast<qsizetype>(target->position) + width <= current.size() &&
@@ -2686,7 +2711,7 @@ std::optional<core::JisCode> MainWindow::jwp_character_target() const {
                                                 : cursor.position();
     const core::JwpPosition position = core::jwp_plain_text_position(
         *jwp_document_,
-        utf32_offset_for_utf16(editor_->toPlainText(), qt_offset));
+        utf32_offset_for_utf16(document_plain_text(*editor_->document()), qt_offset));
     if (position.paragraph >= jwp_document_->paragraph_count()) {
       return std::nullopt;
     }
@@ -2732,7 +2757,7 @@ bool MainWindow::insert_wnn_user_entry(const core::WnnUserEntry& entry) {
 
   try {
     const core::JwpText inserted = core::render_wnn_user_entry(entry);
-    const QString original_text = editor_->toPlainText();
+    const QString original_text = document_plain_text(*editor_->document());
     const QTextCursor original_cursor = editor_->textCursor();
     const bool original_modified = editor_->document()->isModified();
     const core::JwpPosition caret = core::jwp_plain_text_position(
@@ -2909,7 +2934,7 @@ bool MainWindow::insert_edict_text(std::u32string_view text) {
   }
 
   try {
-    const QString original_text = editor_->toPlainText();
+    const QString original_text = document_plain_text(*editor_->document());
     const QTextCursor original_cursor = editor_->textCursor();
     const bool original_modified = editor_->document()->isModified();
     const std::size_t caret_offset = utf32_offset_for_utf16(
@@ -2997,7 +3022,7 @@ bool MainWindow::convert_selection() {
       statusBar()->showMessage(tr("Select kana to convert"), 3000);
       return false;
     }
-    const QString text = editor_->toPlainText();
+    const QString text = document_plain_text(*editor_->document());
     const core::JwpPosition begin = core::jwp_plain_text_position(
         *jwp_document_,
         utf32_offset_for_utf16(text, cursor.selectionStart()));
@@ -3246,8 +3271,8 @@ bool MainWindow::revert_current_document(OpenMode mode) {
     return false;
   }
   const QString path = current_path_;
-  return is_jwp_document() ? open_jwp_path(path, jwp_code_page_, mode)
-                           : open_path(path, encoding_, mode);
+  return jwp_format_ ? open_jwp_path(path, jwp_code_page_, mode)
+                     : open_path(path, encoding_, mode);
 }
 
 bool MainWindow::delete_current_document(OpenMode mode) {
@@ -3270,6 +3295,7 @@ bool MainWindow::delete_current_document(OpenMode mode) {
     return false;
   }
   editor_->document()->setModified(false);
+  saved_text_file_.reset();
   new_document();
   statusBar()->showMessage(tr("Deleted %1").arg(path), 3000);
   return true;
@@ -3365,7 +3391,29 @@ bool MainWindow::open_path_detected(const QString& path, OpenMode mode) {
 }
 
 void MainWindow::load_document(const QString& path,
-                               const core::TextFile& file) {
+                               const core::TextFile& file,
+                               bool japanese_editing) {
+  QTextDocument staged_text;
+  staged_text.setPlainText(to_qstring(file.text));
+  core::TextFile normalized = file;
+  normalized.text = from_qstring(document_plain_text(staged_text));
+  std::optional<core::JwpDocumentModel> model;
+  if (japanese_editing) {
+    try {
+      model = core::import_jwp_plain_text(normalized.text, jwp_code_page_);
+    } catch (const core::JwpPlainTextError&) {
+      // Unrestricted Unicode stays editable; no replacement or truncation.
+    }
+  }
+  if (model) {
+    load_jwp_document(path, model->document(), jwp_code_page_);
+    jwp_format_ = false;
+    encoding_ = file.encoding;
+    has_byte_order_mark_ = file.has_byte_order_mark;
+    saved_text_file_ = std::move(normalized);
+    update_encoding_display();
+    return;
+  }
   reset_kana_input(true);
   jwp_document_.reset();
   saved_jwp_document_.reset();
@@ -3374,14 +3422,17 @@ void MainWindow::load_document(const QString& path,
   jwp_caret_.reset();
   expected_jwp_caret_.reset();
   rendered_jwp_text_.clear();
-  updating_editor_ = true;
-  editor_->setPlainText(to_qstring(file.text));
-  clear_jwp_presentation();
-  updating_editor_ = false;
-  editor_->document()->setModified(false);
+  jwp_format_ = false;
   current_path_ = path;
   encoding_ = file.encoding;
   has_byte_order_mark_ = file.has_byte_order_mark;
+  saved_text_file_ = std::move(normalized);
+  {
+    QScopedValueRollback<bool> guard(updating_editor_, true);
+    editor_->setPlainText(document_plain_text(staged_text));
+    clear_jwp_presentation();
+    editor_->document()->setModified(false);
+  }
   update_encoding_display();
   update_undo_actions();
   update_conversion_actions();
@@ -3389,9 +3440,8 @@ void MainWindow::load_document(const QString& path,
 }
 
 void MainWindow::load_jwp_document(const QString& path,
-                                    core::JwpDocument document,
-                                    core::LegacyCodePage code_page) {
-  reset_kana_input(false);
+                                     core::JwpDocument document,
+                                     core::LegacyCodePage code_page) {
   std::optional<core::JwpDocument> pristine_document;
   if (document.paragraphs.empty()) {
     pristine_document = document;
@@ -3406,8 +3456,9 @@ void MainWindow::load_jwp_document(const QString& path,
   staged_editor.setPlainText(to_qstring(text));
   staged_editor.apply_jwp_layout(model.document());
   staged_editor.prepare_kanji_colors(model.document(), kanji_color_list_,
-                                     kanji_color_policy_, code_page);
+                                      kanji_color_policy_, code_page);
 
+  reset_kana_input(false);
   {
     QScopedValueRollback<bool> update_guard(updating_editor_, true);
     editor_->setPlainText(to_qstring(text));
@@ -3423,6 +3474,8 @@ void MainWindow::load_jwp_document(const QString& path,
   jwp_code_page_ = code_page;
   current_path_ = path;
   has_byte_order_mark_ = false;
+  jwp_format_ = true;
+  saved_text_file_.reset();
   editor_->document()->setModified(false);
   update_encoding_display();
   update_undo_actions();
@@ -3431,79 +3484,137 @@ void MainWindow::load_jwp_document(const QString& path,
 }
 
 bool MainWindow::save_document() {
-  return current_path_.isEmpty() ? save_document_as()
-                                 : save_path(current_path_);
+  if (current_path_.isEmpty()) return save_document_as();
+  if (!jwp_format_ && !confirm_text_export()) return false;
+  return save_as_path(current_path_, jwp_format_ ? std::nullopt
+                                               : std::optional{encoding_},
+                      true, false, OpenMode::kInteractive);
 }
 
-bool MainWindow::save_document_as() {
-  if (is_jwp_document()) {
-    QString selected_filter = jwp_filter();
-    const QString filters = jwp_filter() + QStringLiteral(";;") +
-                            all_files_filter();
-    const QString path = QFileDialog::getSaveFileName(
-        this, tr("Save JWP document"), current_path_, filters,
-        &selected_filter);
-    return !path.isEmpty() && save_path(path);
-  }
+bool MainWindow::confirm_text_export() {
+  if (!jwp_document_) return true;
+  const auto report = core::export_jwp_plain_text(*jwp_document_, jwp_code_page_);
+  if (report.lossless()) return true;
+  QStringList losses;
+  if (report.loses_formatting) losses << tr("paragraph and page layout");
+  if (report.loses_metadata) losses << tr("headers, footers and summary metadata");
+  if (report.loses_page_breaks) losses << tr("hard page breaks");
+  return QMessageBox::warning(
+      this, tr("Text format loses document information"),
+      tr("The text file will not preserve %1. Continue?")
+          .arg(losses.join(QStringLiteral(", "))),
+      QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) ==
+      QMessageBox::Yes;
+}
 
-  QString selected_filter = encoding_filter(encoding_);
+bool MainWindow::save_document_as(bool export_copy) {
+  if (export_copy && (conversion_active() || kana_input_.pending())) {
+    statusBar()->showMessage(tr("Finish input or conversion before exporting a copy"), 5000);
+    return false;
+  }
+  QString selected_filter = jwp_format_ ? jwp_filter() : encoding_filter(encoding_);
   const QString path = QFileDialog::getSaveFileName(
-      this, tr("Save text file"), current_path_, file_filters(),
+      this, export_copy ? tr("Export document copy") : tr("Save document"),
+      export_copy ? QString() : current_path_, file_filters(),
       &selected_filter);
   if (path.isEmpty()) {
     return false;
   }
-  std::optional<core::TextEncoding> encoding =
-      encoding_from_filter(selected_filter);
-  if (!encoding.has_value()) {
-    encoding = choose_encoding();
+  std::optional<core::TextEncoding> encoding;
+  if (selected_filter != jwp_filter()) {
+    encoding = encoding_from_filter(selected_filter);
+    if (!encoding) encoding = choose_encoding();
+    if (!encoding || !confirm_text_export()) return false;
   }
-  if (!encoding.has_value()) {
-    return false;
-  }
-  set_text_encoding(*encoding, true);
-  return save_path(path);
+  return save_as_path(path, encoding, true, export_copy, OpenMode::kInteractive);
 }
 
 bool MainWindow::save_path(const QString& path) {
-  if (conversion_active() && !accept_conversion()) {
-    return false;
+  return save_as_path(path, jwp_format_ ? std::nullopt : std::optional{encoding_},
+                      false, false, OpenMode::kInteractive);
+}
+
+bool MainWindow::save_as_path(const QString& path,
+                              std::optional<core::TextEncoding> encoding,
+                              bool allow_format_loss, bool export_copy,
+                              OpenMode mode) {
+  if (export_copy) {
+    if (conversion_active() || kana_input_.pending()) return false;
+    if (!current_path_.isEmpty() &&
+        (QFileInfo(path).absoluteFilePath() == QFileInfo(current_path_).absoluteFilePath() ||
+         (!QFileInfo(path).canonicalFilePath().isEmpty() &&
+          QFileInfo(path).canonicalFilePath() == QFileInfo(current_path_).canonicalFilePath()))) {
+      return false;
+    }
+  } else {
+    if (conversion_active() && !accept_conversion()) return false;
+    finish_kana_input();
   }
-  finish_kana_input();
   try {
-    if (jwp_document_.has_value()) {
-      const bool unedited_pristine =
+    std::optional<core::TextFile> text_file;
+    std::optional<core::JwpDocument> saved_document;
+    if (!export_copy && jwp_document_) saved_document = jwp_document_->document();
+    if (!encoding) {
+      const bool unedited_pristine = jwp_document_ &&
           pristine_jwp_document_.has_value() &&
           saved_jwp_document_.has_value() &&
           jwp_document_->document() == *saved_jwp_document_;
-      write_jwp_file(path, unedited_pristine ? *pristine_jwp_document_
-                                              : jwp_document_->document());
-      if (!unedited_pristine) {
+      if (jwp_document_) {
+        write_jwp_file(path, unedited_pristine ? *pristine_jwp_document_
+                                             : jwp_document_->document());
+      } else {
+        const auto model = core::import_jwp_plain_text(
+            from_qstring(document_plain_text(*editor_->document())), jwp_code_page_);
+        if (!export_copy) saved_document = model.document();
+        write_jwp_file(path, model.document());
+      }
+    } else {
+      auto report = jwp_document_ ? core::export_jwp_plain_text(*jwp_document_, jwp_code_page_)
+                                  : core::JwpPlainTextExport{from_qstring(document_plain_text(*editor_->document()))};
+      if (!allow_format_loss && !report.lossless()) {
+        throw std::runtime_error("Text export would lose formatting, metadata or page breaks; explicit approval is required");
+      }
+      bool bom = !jwp_format_ && *encoding == encoding_ ? has_byte_order_mark_ :
+          *encoding == core::TextEncoding::kUtf16Le ||
+          *encoding == core::TextEncoding::kUtf16Be ||
+          (*encoding == core::TextEncoding::kUtf8 && has_byte_order_mark_);
+      const bool utf16 = *encoding == core::TextEncoding::kUtf16Le ||
+                         *encoding == core::TextEncoding::kUtf16Be;
+      if (!report.text.empty() &&
+          ((report.text.front() == U'\ufeff' &&
+            (*encoding == core::TextEncoding::kUtf8 || utf16)) ||
+           (report.text.front() == U'\ufffe' && utf16))) {
+        // Distinguish a leading text character from the file's signature.
+        bom = true;
+      }
+      text_file = core::TextFile{std::move(report.text), *encoding, bom};
+      write_text_file(path, *text_file);
+    }
+    if (!export_copy) {
+      if (pristine_jwp_document_ && jwp_document_ &&
+          (!saved_jwp_document_ || jwp_document_->document() != *saved_jwp_document_)) {
         pristine_jwp_document_.reset();
       }
-      saved_jwp_document_ = jwp_document_->document();
+      saved_jwp_document_ = std::move(saved_document);
+      jwp_format_ = !encoding.has_value();
+      if (text_file) {
+        encoding_ = text_file->encoding;
+        has_byte_order_mark_ = text_file->has_byte_order_mark;
+      }
+      saved_text_file_ = std::move(text_file);
       current_path_ = path;
       editor_->document()->setModified(false);
+      update_encoding_display();
       update_title();
-      statusBar()->showMessage(
-          tr("Saved %1 as JWP (%2)")
-              .arg(path, code_page_name(jwp_code_page_)),
-          3000);
-      return true;
     }
-
-    write_text_file(path, core::TextFile{
-                              from_qstring(editor_->toPlainText()), encoding_,
-                              has_byte_order_mark_,
-                          });
-    current_path_ = path;
-    editor_->document()->setModified(false);
-    update_title();
     statusBar()->showMessage(
-        tr("Saved %1 as %2").arg(path, encoding_name(encoding_)), 3000);
+        (export_copy ? tr("Exported %1 as %2") : tr("Saved %1 as %2"))
+            .arg(path, encoding ? encoding_name(*encoding) : tr("JWP")), 3000);
     return true;
   } catch (const std::exception& error) {
-    show_error(tr("Could not save %1").arg(path), error);
+    if (mode == OpenMode::kInteractive) {
+      show_error(tr("Could not save %1").arg(path), error);
+    }
     return false;
   }
 }
@@ -3849,8 +3960,8 @@ MainWindow::prompt_for_kanji_color_list_edit() {
 }
 
 void MainWindow::set_text_encoding(core::TextEncoding encoding,
-                                   bool mark_modified) {
-  if (jwp_document_.has_value() || encoding_ == encoding) {
+                                    bool mark_modified) {
+  if (jwp_format_ || encoding_ == encoding) {
     return;
   }
   encoding_ = encoding;
@@ -3862,8 +3973,12 @@ void MainWindow::set_text_encoding(core::TextEncoding encoding,
   }
   update_encoding_display();
   if (mark_modified) {
-    editor_->document()->setModified(true);
+    editor_->document()->setModified(jwp_document_ ? native_document_modified() :
+        !saved_text_file_ || document_plain_text(*editor_->document()) != to_qstring(saved_text_file_->text) ||
+        encoding_ != saved_text_file_->encoding ||
+        has_byte_order_mark_ != saved_text_file_->has_byte_order_mark);
   }
+  update_title();
 }
 
 void MainWindow::set_jwp_code_page(core::LegacyCodePage code_page) {
@@ -3936,7 +4051,7 @@ void MainWindow::format_document_paragraphs() {
     return;
   }
   try {
-    const QString text = editor_->toPlainText();
+    const QString text = document_plain_text(*editor_->document());
     const QTextCursor cursor = editor_->textCursor();
     const core::JwpPosition caret = core::jwp_plain_text_position(
         *jwp_document_,
@@ -3962,7 +4077,7 @@ void MainWindow::format_file_paragraphs() {
     return;
   }
   try {
-    const QString text = editor_->toPlainText();
+    const QString text = document_plain_text(*editor_->document());
     const QTextCursor cursor = editor_->textCursor();
     const core::JwpPosition caret = core::jwp_plain_text_position(
         *jwp_document_, utf32_offset_for_utf16(text, cursor.position()));
@@ -4005,7 +4120,7 @@ bool MainWindow::apply_page_layout(const core::JwpDocument& requested) {
   const QTextCursor cursor = editor_->textCursor();
   const core::JwpPosition caret = core::jwp_plain_text_position(
       *jwp_document_,
-      utf32_offset_for_utf16(editor_->toPlainText(), cursor.position()));
+      utf32_offset_for_utf16(document_plain_text(*editor_->document()), cursor.position()));
   core::JwpDocumentModel candidate(requested);
   core::JwpDocumentHistory history = jwp_history_;
   history.begin(*jwp_document_, caret);
@@ -4131,7 +4246,7 @@ bool MainWindow::find_jwp_text(const QString& text,
   const int start_utf16 = original.hasSelection() ? original.selectionStart()
                                                   : original.position();
   const std::size_t start_offset =
-      utf32_offset_for_utf16(editor_->toPlainText(), start_utf16);
+      utf32_offset_for_utf16(document_plain_text(*editor_->document()), start_utf16);
   const core::JwpSearchResult result = core::find_next(
       *jwp_document_, pattern,
       core::jwp_plain_text_position(*jwp_document_, start_offset), options);
@@ -4159,8 +4274,8 @@ bool MainWindow::find_plain_text(const QString& text,
                                  core::JwpSearchOptions options) {
   const QTextCursor original = editor_->textCursor();
   const QString source = options.ignore_ascii_case
-                             ? fold_ascii_case(editor_->toPlainText())
-                             : editor_->toPlainText();
+                             ? fold_ascii_case(document_plain_text(*editor_->document()))
+                             : document_plain_text(*editor_->document());
   const QString pattern =
       options.ignore_ascii_case ? fold_ascii_case(text) : text;
   const bool backward =
@@ -4227,7 +4342,7 @@ bool MainWindow::replace_next(const QString& text,
     QTextCursor match = editor_->textCursor();
     std::optional<core::JwpDocument> expected_jwp;
     if (is_jwp_document()) {
-      const QString current = editor_->toPlainText();
+      const QString current = document_plain_text(*editor_->document());
       const std::size_t begin =
           utf32_offset_for_utf16(current, match.selectionStart());
       const std::size_t end =
@@ -4312,8 +4427,8 @@ std::size_t MainWindow::replace_all(const QString& text,
           core::decode_jwp_plain_text(*candidate_jwp, jwp_code_page_);
     } else {
       const QString source = options.ignore_ascii_case
-                                 ? fold_ascii_case(editor_->toPlainText())
-                                 : editor_->toPlainText();
+                                 ? fold_ascii_case(document_plain_text(*editor_->document()))
+                                 : document_plain_text(*editor_->document());
       const QString pattern =
           options.ignore_ascii_case ? fold_ascii_case(text) : text;
       qsizetype offset = 0;
@@ -4333,7 +4448,7 @@ std::size_t MainWindow::replace_all(const QString& text,
       statusBar()->showMessage(tr("Text not found"), 3000);
       return 0;
     }
-    const QString original_text = editor_->toPlainText();
+    const QString original_text = document_plain_text(*editor_->document());
     const QTextCursor original_cursor = editor_->textCursor();
     const bool original_modified = editor_->document()->isModified();
     {
@@ -4346,7 +4461,7 @@ std::size_t MainWindow::replace_all(const QString& text,
         edit.insertText(replacement);
       }
       if (candidate_jwp.has_value() &&
-          editor_->toPlainText() != to_qstring(expected_jwp_text)) {
+          document_plain_text(*editor_->document()) != to_qstring(expected_jwp_text)) {
         editor_->setPlainText(original_text);
         apply_jwp_presentation(jwp_document_->document(), jwp_code_page_);
         editor_->setTextCursor(original_cursor);
@@ -4399,7 +4514,7 @@ bool MainWindow::format_paragraphs(
   }
 
   try {
-    const QString text = editor_->toPlainText();
+    const QString text = document_plain_text(*editor_->document());
     const QTextCursor cursor = editor_->textCursor();
     const core::JwpPosition caret = core::jwp_plain_text_position(
         *jwp_document_,
@@ -4468,7 +4583,7 @@ bool MainWindow::insert_page_break() {
   }
 
   try {
-    const QString original_text = editor_->toPlainText();
+    const QString original_text = document_plain_text(*editor_->document());
     const QTextCursor original_cursor = editor_->textCursor();
     const bool original_modified = editor_->document()->isModified();
     const core::JwpPosition caret = core::jwp_plain_text_position(
@@ -4552,7 +4667,7 @@ void MainWindow::synchronize_jwp_document(int position, int chars_removed,
   int rejected_selection_start = -1;
   int rejected_selection_end = -1;
   try {
-    const QString current_qt = editor_->toPlainText();
+    const QString current_qt = document_plain_text(*editor_->document());
     std::u32string current = from_qstring(current_qt);
     if (current == rendered_jwp_text_) {
       return;
@@ -4630,7 +4745,7 @@ void MainWindow::restore_jwp_editor_text(int cursor_position,
                         jwp_document_->document() != *saved_jwp_document_;
   updating_editor_ = true;
   editor_->undo();
-  if (from_qstring(editor_->toPlainText()) != rendered_jwp_text_) {
+  if (from_qstring(document_plain_text(*editor_->document())) != rendered_jwp_text_) {
     editor_->setPlainText(to_qstring(rendered_jwp_text_));
     apply_jwp_presentation(jwp_document_->document(), jwp_code_page_);
     QTextCursor cursor = editor_->textCursor();
@@ -4653,7 +4768,7 @@ void MainWindow::restore_jwp_editor_text(int cursor_position,
 }
 
 void MainWindow::update_encoding_display() {
-  const bool jwp = jwp_document_.has_value();
+  const bool jwp = jwp_format_;
   encoding_label_->setText(
       jwp ? tr("JWP / %1").arg(code_page_name(jwp_code_page_))
           : encoding_name(encoding_));
@@ -4663,7 +4778,7 @@ void MainWindow::update_encoding_display() {
                                    static_cast<int>(encoding_));
   }
   if (jwp_code_page_menu_ != nullptr) {
-    jwp_code_page_menu_->setEnabled(true);
+    jwp_code_page_menu_->setEnabled(jwp || !jwp_document_);
   }
   for (QAction* action : jwp_code_page_actions_) {
     action->setChecked(action->data().toInt() ==
@@ -4679,6 +4794,77 @@ bool MainWindow::is_jwp_document() const noexcept {
   return jwp_document_.has_value();
 }
 
+bool MainWindow::uses_jwp_format() const noexcept { return jwp_format_; }
+
+bool MainWindow::set_japanese_editing(bool enabled, bool allow_information_loss,
+                                     OpenMode mode) {
+  if (enabled == is_jwp_document()) return true;
+  if (conversion_active() || kana_input_.pending()) return false;
+  try {
+    const auto report = jwp_document_
+        ? core::export_jwp_plain_text(*jwp_document_, jwp_code_page_)
+        : core::JwpPlainTextExport{
+              from_qstring(document_plain_text(*editor_->document()))};
+    const bool has_history = jwp_document_
+        ? jwp_history_.can_undo() || jwp_history_.can_redo()
+        : editor_->document()->isUndoAvailable() || editor_->document()->isRedoAvailable();
+    if (!allow_information_loss && (has_history || !report.lossless())) return false;
+
+    std::optional<core::JwpDocumentModel> model;
+    if (enabled) model = core::import_jwp_plain_text(report.text, jwp_code_page_);
+    auto saved_jwp = saved_jwp_document_;
+    if (enabled && !saved_jwp && saved_text_file_) {
+      try {
+        saved_jwp = core::import_jwp_plain_text(saved_text_file_->text, jwp_code_page_)
+                        .document();
+      } catch (const core::JwpPlainTextError&) {
+        // An unrepresentable saved version cannot be an unchanged native model.
+      }
+    }
+    auto saved_text = saved_text_file_;
+    auto pristine = pristine_jwp_document_;
+    const bool modified = document_modified() || !report.lossless();
+    const bool format = jwp_format_;
+    const auto encoding = encoding_;
+    const bool bom = has_byte_order_mark_;
+    const int anchor = editor_->textCursor().anchor();
+    const int position = editor_->textCursor().position();
+    if (model) {
+      load_jwp_document(current_path_, model->document(), jwp_code_page_);
+    } else {
+      load_document(current_path_, core::TextFile{report.text, encoding, bom}, false);
+    }
+    jwp_format_ = format;
+    encoding_ = encoding;
+    has_byte_order_mark_ = bom;
+    saved_jwp_document_ = std::move(saved_jwp);
+    saved_text_file_ = std::move(saved_text);
+    pristine_jwp_document_ = std::move(pristine);
+    {
+      const QScopedValueRollback<bool> guard(updating_editor_, true);
+      QTextCursor restored(editor_->document());
+      restored.setPosition(anchor);
+      restored.setPosition(position, QTextCursor::KeepAnchor);
+      editor_->setTextCursor(restored);
+      editor_->document()->setModified(modified);
+    }
+    update_encoding_display();
+    update_title();
+    return true;
+  } catch (const std::exception& error) {
+    if (mode == OpenMode::kInteractive) show_error(tr("Could not change editing mode"), error);
+    return false;
+  }
+}
+
+bool MainWindow::native_document_modified() const {
+  return !saved_jwp_document_ ||
+      jwp_document_->document() != *saved_jwp_document_ ||
+      (!jwp_format_ && saved_text_file_ &&
+       (encoding_ != saved_text_file_->encoding ||
+        has_byte_order_mark_ != saved_text_file_->has_byte_order_mark));
+}
+
 core::LegacyCodePage MainWindow::jwp_code_page() const noexcept {
   return jwp_code_page_;
 }
@@ -4690,7 +4876,10 @@ const core::JwpDocument* MainWindow::current_jwp_document() const noexcept {
 QString MainWindow::current_path() const { return current_path_; }
 
 bool MainWindow::document_modified() const noexcept {
-  return editor_->document()->isModified();
+  return editor_->document()->isModified() ||
+      (!jwp_format_ && saved_text_file_ &&
+       (encoding_ != saved_text_file_->encoding ||
+        has_byte_order_mark_ != saved_text_file_->has_byte_order_mark));
 }
 
 bool MainWindow::prompt_to_revert(const QString& path) {
@@ -4714,7 +4903,7 @@ bool MainWindow::maybe_save() {
     return false;
   }
   finish_kana_input();
-  if (!editor_->document()->isModified()) {
+  if (!document_modified()) {
     return true;
   }
 
@@ -4734,7 +4923,7 @@ void MainWindow::update_title() {
                            ? tr("Untitled")
                            : QFileInfo(current_path_).fileName();
   setWindowTitle(tr("%1[*] - jwpqt").arg(name));
-  setWindowModified(editor_->document()->isModified());
+  setWindowModified(document_modified());
   const bool has_path = !current_path_.isEmpty();
   if (revert_action_ != nullptr)
     revert_action_->setEnabled(has_path && !conversion_active());

@@ -550,7 +550,8 @@ void test_jfc_open_save_and_revert(const QString& directory) {
   const QString text = QStringLiteral("\u65e5\t\u00a6\u00e9\n");
   require(editor != nullptr && editor->toPlainText() == text &&
               window.text_encoding() == TextEncoding::kJfc &&
-              !window.is_jwp_document() && !window.document_modified() &&
+              window.is_jwp_document() && !window.uses_jwp_format() &&
+              !window.document_modified() &&
               label != nullptr && label->text() == QStringLiteral("JFC") &&
               jfc_action != nullptr && jfc_action->isChecked(),
           "JFC open did not retain native text and format state");
@@ -820,10 +821,11 @@ void test_ascii_and_unknown_prompts(const QString& directory) {
           "Unknown detection unexpectedly constrained encoding choices");
 }
 
-void test_plain_text_find_actions(const QString& directory) {
+void test_plain_text_find_actions(const QString& directory, bool unicode = false) {
   const QString path = directory + QStringLiteral("/find.txt");
   jwpqt::qt::write_text_file(
-      path, jwpqt::core::TextFile{U"x Alpha alpha \u00c9 \u00e9",
+      path, jwpqt::core::TextFile{std::u32string(U"x Alpha alpha \u00c9 \u00e9") +
+                                     (unicode ? U"\U0001f600" : U""),
                                  jwpqt::core::TextEncoding::kUtf8, false});
 
   PromptingWindow window;
@@ -862,7 +864,8 @@ void test_plain_text_find_actions(const QString& directory) {
   require(!window.find_text(QStringLiteral("\u00c9")),
           "ASCII-only case folding matched a non-ASCII case variant");
 
-  editor->setPlainText(QStringLiteral("x aaa"));
+  editor->selectAll();
+  editor->insertPlainText(QStringLiteral("x aaa"));
   QTextCursor overlap = editor->textCursor();
   overlap.setPosition(1);
   editor->setTextCursor(overlap);
@@ -873,7 +876,8 @@ void test_plain_text_find_actions(const QString& directory) {
   require(editor->textCursor().selectionStart() == 3,
           "Find Next skipped an overlapping plain-text match");
 
-  editor->setPlainText(QStringLiteral("x only"));
+  editor->selectAll();
+  editor->insertPlainText(QStringLiteral("x only"));
   QTextCursor before_only = editor->textCursor();
   before_only.setPosition(1);
   editor->setTextCursor(before_only);
@@ -952,10 +956,11 @@ void test_jwp_find_uses_legacy_comparison(const QString& directory) {
           "Searching changed the JWP source model");
 }
 
-void test_plain_text_replace_actions(const QString& directory) {
+void test_plain_text_replace_actions(const QString& directory, bool unicode = false) {
   const QString path = directory + QStringLiteral("/replace.txt");
+  const QString suffix = unicode ? QString::fromStdU32String(U"\U0001f600") : QString();
   jwpqt::qt::write_text_file(
-      path, jwpqt::core::TextFile{U"aa AA \u00e9 \u00c9",
+      path, jwpqt::core::TextFile{std::u32string(U"aa AA \u00e9 \u00c9") + suffix.toStdU32String(),
                                  jwpqt::core::TextEncoding::kUtf8, false});
 
   PromptingWindow window;
@@ -970,22 +975,24 @@ void test_plain_text_replace_actions(const QString& directory) {
 
   QTextEdit* editor = window.findChild<QTextEdit*>();
   require(window.replace_prompt_count == 1 && editor != nullptr &&
-              editor->toPlainText() == QStringLiteral("xx xx \u00e9 \u00c9"),
+              editor->toPlainText() == QStringLiteral("xx xx \u00e9 \u00c9") + suffix,
           "Replace All action did not use ASCII-only comparison");
-  editor->undo();
-  require(editor->toPlainText() == QStringLiteral("ax xx \u00e9 \u00c9"),
+  find_action(window, "undoAction")->trigger();
+  require(editor->toPlainText() ==
+              (unicode ? QStringLiteral("ax xx \u00e9 \u00c9")
+                       : QStringLiteral("xx xA \u00e9 \u00c9")) + suffix,
           "Replace All merged independent occurrences into one undo");
   for (int count = 0; count < 3; ++count) {
-    editor->undo();
+    find_action(window, "undoAction")->trigger();
   }
-  require(editor->toPlainText() == QStringLiteral("aa AA \u00e9 \u00c9"),
+  require(editor->toPlainText() == QStringLiteral("aa AA \u00e9 \u00c9") + suffix,
           "Replace All occurrences were not separately undoable");
 
   QTextCursor cursor = editor->textCursor();
   cursor.setPosition(0);
   editor->setTextCursor(cursor);
   require(window.replace_next(QStringLiteral("a"), QStringLiteral("z")) &&
-              editor->toPlainText() == QStringLiteral("az AA \u00e9 \u00c9"),
+              editor->toPlainText() == QStringLiteral("az AA \u00e9 \u00c9") + suffix,
           "Replace Next did not replace the next candidate");
 }
 
@@ -1514,9 +1521,9 @@ void test_jwp_paragraph_formatting(const QString& directory) {
   const QString text_path = directory + QStringLiteral("/paragraph-format.txt");
   write_bytes(text_path, QByteArray("plain"));
   require(window.open_path(text_path, jwpqt::core::TextEncoding::kUtf8) &&
-              !format->isEnabled() && !format_file->isEnabled() &&
-              !window.format_paragraphs(applied),
-          "Plain text did not disable JWP paragraph formatting");
+              format->isEnabled() && format_file->isEnabled() &&
+              window.format_paragraphs(applied) && !window.uses_jwp_format(),
+          "Native text editing did not support paragraph formatting");
 
   PromptingWindow mismatched;
   require(mismatched.open_jwp_path(source_path),
@@ -1611,8 +1618,9 @@ void test_jwp_page_break_insertion(const QString& directory) {
   const QString plain_path = directory + QStringLiteral("/page-break.txt");
   write_bytes(plain_path, QByteArray("plain"));
   require(window.open_path(plain_path, jwpqt::core::TextEncoding::kUtf8) &&
-              !insert->isEnabled() && !window.insert_page_break(),
-          "Plain text did not disable JWP page-break insertion");
+              insert->isEnabled() && window.insert_page_break() &&
+              !window.uses_jwp_format(),
+          "Native text editing did not support structural page breaks");
 }
 
 void test_jwp_rejects_non_bmp_edit(const QString& directory) {
@@ -2116,11 +2124,11 @@ void test_jwp_wnn_user_dictionary_dialog(const QString& directory) {
   const QString plain_path = directory + QStringLiteral("/dialog-plain.txt");
   jwpqt::qt::write_text_file(
       plain_path,
-      jwpqt::core::TextFile{U"plain", jwpqt::core::TextEncoding::kUtf8,
+      jwpqt::core::TextFile{U"plain \U0001f600", jwpqt::core::TextEncoding::kUtf8,
                            false});
   require(plain.open_path(plain_path, jwpqt::core::TextEncoding::kUtf8) &&
               !plain.insert_wnn_user_entry(entry),
-          "Insert to File unexpectedly mutated a plain-text document");
+          "Insert to File unexpectedly mutated unrestricted Unicode");
 }
 
 void test_edict_lookup_integration(const QString& directory) {
@@ -2257,13 +2265,13 @@ void test_edict_lookup_integration(const QString& directory) {
   const QString plain_path = directory + QStringLiteral("/lookup.txt");
   jwpqt::qt::write_text_file(
       plain_path,
-      jwpqt::core::TextFile{U"plain", jwpqt::core::TextEncoding::kUtf8,
+      jwpqt::core::TextFile{U"plain \U0001f600", jwpqt::core::TextEncoding::kUtf8,
                            false});
   require(plain.open_path(plain_path, jwpqt::core::TextEncoding::kUtf8) &&
               !plain.insert_edict_text(U"dictionary") &&
               plain.findChild<QTextEdit*>()->toPlainText() ==
-                  QStringLiteral("plain"),
-          "Dictionary insertion unexpectedly mutated plain text");
+                  QString::fromStdU32String(U"plain \U0001f600"),
+          "Dictionary insertion unexpectedly mutated unrestricted Unicode");
 
   auto owner = std::make_unique<jwpqt::qt::MainWindow>();
   require(owner->load_edict_configuration(
@@ -2550,9 +2558,25 @@ void test_jwp_kana_input_mode(const QString& directory) {
   const QString text_path = directory + QStringLiteral("/plain-kana.txt");
   write_bytes(text_path, QByteArray("plain"));
   require(window.open_path(text_path, jwpqt::core::TextEncoding::kUtf8) &&
-              !kana->isEnabled() && !kana->isChecked() &&
-              !window.kana_input_enabled(),
-          "Plain text document did not disable JWP kana input");
+              kana->isEnabled() && kana->isChecked() &&
+              window.kana_input_enabled() && !window.uses_jwp_format(),
+          "Representable text did not retain native kana input");
+  auto invalid = source;
+  invalid.paragraphs.front().text = {0x2921};
+  const QString invalid_path = directory + QStringLiteral("/unmapped-kana.jwp");
+  jwpqt::qt::write_jwp_file(invalid_path, invalid);
+  editor->moveCursor(QTextCursor::End);
+  send_text_key(editor, Qt::Key_K, QStringLiteral("k"));
+  require(!window.set_japanese_editing(false, true) &&
+              !find_action(window, "japaneseEditingAction")->isEnabled(),
+          "Editing-mode switch discarded pending kana input");
+  require(!window.open_jwp_path(invalid_path, jwpqt::core::kDefaultLegacyCodePage,
+                                jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.current_path() == text_path,
+          "Unmapped JWP document replaced the active text file");
+  send_text_key(editor, Qt::Key_A, QStringLiteral("a"));
+  require(editor->toPlainText() == QStringLiteral("plain\u304b"),
+          "Failed JWP open discarded the previous pending composition");
 }
 
 void test_input_mode_workflow(const QString& directory) {
@@ -3373,10 +3397,10 @@ void test_jwp_page_layout(const QString& directory) {
 
   const QString text_path = directory + QStringLiteral("/page-layout.txt");
   jwpqt::qt::write_text_file(
-      text_path, {U"plain", jwpqt::core::TextEncoding::kUtf8, false});
+      text_path, {U"plain \U0001f600", jwpqt::core::TextEncoding::kUtf8, false});
   require(window.open_path(text_path, jwpqt::core::TextEncoding::kUtf8) &&
               !action->isEnabled(),
-          "Page Layout action stayed enabled for plain text");
+          "Page Layout action stayed enabled for unrestricted Unicode");
 }
 
 void test_native_print_commands(const QString& directory) {
@@ -3472,11 +3496,231 @@ void test_jis_table_integration(const QString& directory) {
 
   const QString text_path = directory + QStringLiteral("/jis-table.txt");
   jwpqt::qt::write_text_file(
-      text_path, {U"plain", jwpqt::core::TextEncoding::kUtf8, false});
+      text_path, {U"plain \U0001f600", jwpqt::core::TextEncoding::kUtf8, false});
   require(window.open_path(text_path, jwpqt::core::TextEncoding::kUtf8),
           "Could not switch JIS table fixture to plain text");
   require(!action->isEnabled(),
-          "JIS table action stayed enabled for a plain-text document");
+          "JIS table action stayed enabled for unrestricted Unicode");
+}
+
+void test_document_format_separation(const QString& directory) {
+  using jwpqt::core::TextEncoding;
+  const QString text_path = directory + QStringLiteral("/native-text.txt");
+  const QString destination = directory + QStringLiteral("/transfer-output");
+  jwpqt::qt::write_text_file(text_path, {U"\u3042", TextEncoding::kUtf8, false});
+  PromptingWindow window;
+  require(window.open_path(text_path, TextEncoding::kUtf8) &&
+              window.is_jwp_document() && !window.uses_jwp_format() &&
+              find_action(window, "kanaInputAction")->isEnabled() &&
+              find_action(window, "jisTableAction")->isEnabled(),
+          "Representable text did not enable native Japanese editing");
+  auto* editor = window.findChild<QTextEdit*>();
+  find_encoding_action(window, QStringLiteral("EUC-JP"))->trigger();
+  editor->insertPlainText(QStringLiteral("X"));
+  find_action(window, "undoAction")->trigger();
+  require(editor->toPlainText() == QStringLiteral("\u3042") &&
+              window.document_modified() && window.isWindowModified(),
+          "Native undo lost an unsaved text-encoding change");
+  find_encoding_action(window, QStringLiteral("UTF-8"))->trigger();
+  require(!window.document_modified() && !window.isWindowModified(),
+          "Restoring the original text encoding retained a false dirty flag");
+  const auto fixture = write_wnn_fixture(directory);
+  require(window.load_wnn_resources(fixture.index_path, fixture.data_path,
+                                    fixture.preferences_path),
+          "Could not load native-text conversion resources");
+  editor->selectAll();
+  require(window.convert_selection() && window.accept_conversion(),
+          "Imported text could not use kana-to-kanji conversion");
+  const auto converted = editor->toPlainText();
+  require(window.save_path(text_path) &&
+              jwpqt::qt::read_text_file(text_path, TextEncoding::kUtf8).text ==
+                  converted.toStdU32String() && !window.uses_jwp_format(),
+          "Japanese editing caused a text file to be saved as a JWP container");
+  require(window.save_as_path(destination, std::nullopt) &&
+              window.uses_jwp_format() && window.is_jwp_document() &&
+              jwpqt::qt::read_jwp_file(destination) == *window.current_jwp_document(),
+          "Save As could not turn native text into a JWP file");
+  const auto source = sample_jwp_document();
+  const QString rich_path = directory + QStringLiteral("/transfer-source.jwp");
+  jwpqt::qt::write_jwp_file(rich_path, source);
+  require(window.open_jwp_path(rich_path), "Could not open rich transfer fixture");
+  editor->insertPlainText(QStringLiteral("Z"));
+  const auto before = *window.current_jwp_document();
+  const auto text_before = editor->toPlainText();
+  write_bytes(destination, QByteArray("keep"));
+  require(!window.save_as_path(destination, TextEncoding::kUtf8) &&
+              read_bytes(destination) == QByteArray("keep") &&
+              window.current_path() == rich_path && window.uses_jwp_format() &&
+              window.document_modified() && *window.current_jwp_document() == before,
+          "Rejected lossy export damaged the source or destination");
+  require(window.save_as_path(destination, TextEncoding::kUtf8, true, true) &&
+              jwpqt::qt::read_text_file(destination, TextEncoding::kUtf8).text ==
+                  text_before.toStdU32String() && window.current_path() == rich_path &&
+              window.uses_jwp_format() && window.document_modified() &&
+              *window.current_jwp_document() == before &&
+              find_action(window, "undoAction")->isEnabled(),
+          "Export Copy changed the source storage, content, baseline or history");
+  require(!window.save_as_path(rich_path, TextEncoding::kUtf8, true, true) &&
+              jwpqt::qt::read_jwp_file(rich_path) == source,
+          "Export Copy overwrote its own source file");
+  find_action(window, "undoAction")->trigger();
+  require(*window.current_jwp_document() == source && !window.document_modified(),
+          "Export Copy disturbed native undo or the saved baseline");
+  for (const bool approve : {false, true}) {
+    const QString copy_path = directory +
+        (approve ? QStringLiteral("/approved-copy.txt") : QStringLiteral("/cancelled-copy.txt"));
+    bool offered = false;
+    bool warned = false;
+    QTimer warning_timer;
+    warning_timer.setInterval(1);
+    QObject::connect(&warning_timer, &QTimer::timeout, &window, [&] {
+      if (auto* warning = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
+        warned = warning->text().contains(QStringLiteral("metadata"));
+        warning->button(approve ? QMessageBox::Yes : QMessageBox::Cancel)->click();
+        warning_timer.stop();
+      }
+    });
+    QTimer::singleShot(0, &window, [&] {
+      if (auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget())) {
+        const QString filter = QStringLiteral("UTF-16BE text (*.txt *.utf16)");
+        offered = dialog->nameFilters().contains(filter);
+        dialog->selectNameFilter(filter);
+        dialog->selectFile(copy_path);
+        warning_timer.start();
+        QMetaObject::invokeMethod(dialog, "accept", Qt::DirectConnection);
+      }
+    });
+    find_action(window, "exportCopyAction")->trigger();
+    require(offered, "Export Copy did not offer the UTF-16BE filter");
+    require(warned, "Export Copy did not ask about metadata loss");
+    require(QFile::exists(copy_path) == approve,
+            "Export Copy did not honor its approval result");
+    require(window.current_path() == rich_path && window.uses_jwp_format() &&
+                !window.document_modified() && *window.current_jwp_document() == source,
+            "Export Copy dialog lost format choice, consent or source state");
+    if (approve) {
+      const auto copy = jwpqt::qt::read_text_file(copy_path, TextEncoding::kUtf16Be);
+      require(copy.has_byte_order_mark && copy.text == editor->toPlainText().toStdU32String(),
+              "Approved export copy did not preserve text and UTF-16 BOM");
+    }
+  }
+  const QString unicode = QString::fromStdU32String(U"\u65e5\U0001f600");
+  jwpqt::qt::write_text_file(text_path, {unicode.toStdU32String(), TextEncoding::kUtf8, false});
+  require(window.open_path(text_path, TextEncoding::kUtf8) &&
+              !window.is_jwp_document() && !window.uses_jwp_format() &&
+              editor->toPlainText() == unicode,
+          "Unrepresentable Unicode did not remain intact and editable");
+  const auto previous_bytes = read_bytes(destination);
+  require(!window.save_as_path(destination, std::nullopt) &&
+              !window.save_as_path(destination, TextEncoding::kShiftJis) &&
+              read_bytes(destination) == previous_bytes &&
+              editor->toPlainText() == unicode && window.current_path() == text_path &&
+              !window.document_modified() && window.text_encoding() == TextEncoding::kUtf8,
+          "Unrepresentable Save As mutated live format or existing disk content");
+  find_action(window, "newTextDocumentAction")->trigger();
+  const std::u32string signature_text = U"\ufeff\U0001f600";
+  const QString signature = QString(QChar(0xfeff)) +
+                            QString::fromStdU32String(U"\U0001f600");
+  editor->insertPlainText(signature);
+  require(editor->toPlainText() == signature, "Editor lost the explicit signature character");
+  require(window.save_as_path(destination, TextEncoding::kUtf8) &&
+              jwpqt::qt::read_text_file(destination, TextEncoding::kUtf8).text == signature_text &&
+              jwpqt::qt::read_text_file(destination, TextEncoding::kUtf8).has_byte_order_mark,
+          "Leading Unicode signature character disappeared on save/reopen");
+  require(window.open_path(destination, TextEncoding::kUtf8) &&
+              editor->toPlainText() == signature,
+          "Text import lost a leading Unicode signature character");
+  for (const auto& text : {std::u32string(U"A\u00a0B"),
+                           std::u32string(U"A\u00a0B\U0001f600")}) {
+    jwpqt::qt::write_text_file(destination, {text, TextEncoding::kUtf8, false});
+    require(window.open_path(destination, TextEncoding::kUtf8),
+            "Could not import nonbreaking spaces");
+    editor->moveCursor(QTextCursor::End);
+    editor->insertPlainText(QStringLiteral("!"));
+    require(window.save_as_path(destination, TextEncoding::kUtf8) &&
+                jwpqt::qt::read_text_file(destination, TextEncoding::kUtf8).text == text + U"!",
+            "Text editing changed a nonbreaking space into a regular space");
+  }
+  find_encoding_action(window, QStringLiteral("UTF-16LE"))->trigger();
+  require(window.document_modified() &&
+              window.delete_current_document(jwpqt::qt::OpenMode::kNonInteractive) &&
+              window.current_path().isEmpty() && !window.document_modified() &&
+              editor->toPlainText().isEmpty() && !QFile::exists(destination),
+          "Delete did not clear an unrestricted document with an encoding change");
+}
+
+void test_editing_mode_switch(const QString& directory) {
+  using jwpqt::core::TextEncoding;
+  const QString path = directory + QStringLiteral("/editing-mode.txt");
+  jwpqt::qt::write_text_file(path, {U"abc", TextEncoding::kUtf8, false});
+  PromptingWindow window;
+  require(window.open_path(path, TextEncoding::kUtf8), "Could not open editing-mode fixture");
+  auto* editor = window.findChild<QTextEdit*>();
+  auto* mode = find_action(window, "japaneseEditingAction");
+  QTextCursor cursor(editor->document());
+  cursor.setPosition(1);
+  cursor.setPosition(2, QTextCursor::KeepAnchor);
+  editor->setTextCursor(cursor);
+  require(mode->isChecked() && window.set_japanese_editing(false) &&
+              !mode->isChecked() && !window.is_jwp_document() &&
+              !window.uses_jwp_format() && window.current_path() == path &&
+              !window.document_modified() && editor->textCursor().anchor() == 1 &&
+              editor->textCursor().position() == 2,
+          "Clean Unicode switch changed storage, selection or saved state");
+  editor->moveCursor(QTextCursor::End);
+  editor->insertPlainText(QString::fromStdU32String(U"\U0001f600"));
+  require(!window.set_japanese_editing(true, true) && !mode->isChecked() &&
+              editor->toPlainText() == QString::fromStdU32String(U"abc\U0001f600") &&
+              window.document_modified() && find_action(window, "undoAction")->isEnabled(),
+          "Rejected Japanese editing damaged unrestricted Unicode or undo");
+  find_action(window, "undoAction")->trigger();
+  require(!window.set_japanese_editing(true) && !mode->isChecked(),
+          "Editing switch silently discarded redo history");
+  require(window.set_japanese_editing(true, true) && mode->isChecked() &&
+              !window.document_modified() && !find_action(window, "redoAction")->isEnabled(),
+          "Approved Japanese switch lost the original saved baseline");
+  editor->insertPlainText(QStringLiteral("X"));
+  find_action(window, "undoAction")->trigger();
+  require(!window.document_modified(), "Native undo after switching lost clean state");
+  require(window.set_japanese_editing(false, true), "Could not return to Unicode editing");
+  editor->insertPlainText(QStringLiteral("Y"));
+  require(window.save_as_path(path, TextEncoding::kUtf8) &&
+              window.set_japanese_editing(true, true),
+          "Could not save and resume Japanese editing");
+  editor->insertPlainText(QStringLiteral("Z"));
+  find_action(window, "undoAction")->trigger();
+  require(!window.document_modified() &&
+              editor->toPlainText().toStdU32String() ==
+                  jwpqt::qt::read_text_file(path, TextEncoding::kUtf8).text,
+          "Saved Unicode baseline was not adopted by Japanese undo");
+
+  const QString rich_path = directory + QStringLiteral("/editing-mode.jwp");
+  const auto original = sample_jwp_document();
+  jwpqt::qt::write_jwp_file(rich_path, original);
+  require(window.open_jwp_path(rich_path) && !window.set_japanese_editing(false) &&
+              *window.current_jwp_document() == original && !window.document_modified(),
+          "Unapproved mode switch discarded JWP metadata");
+  for (const bool approve : {false, true}) {
+    bool warned = false;
+    QTimer::singleShot(0, &window, [&] {
+      if (auto* warning = qobject_cast<QMessageBox*>(QApplication::activeModalWidget())) {
+        warned = warning->text().contains(QStringLiteral("Undo/Redo"));
+        warning->button(approve ? QMessageBox::Yes : QMessageBox::Cancel)->click();
+      }
+    });
+    mode->trigger();
+    require(warned && window.is_jwp_document() != approve &&
+                mode->isChecked() != approve && window.document_modified() == approve &&
+                window.uses_jwp_format() && window.current_path() == rich_path &&
+                jwpqt::qt::read_jwp_file(rich_path) == original,
+            "Editing-mode dialog ignored consent or changed the saved file");
+  }
+  require(window.save_as_path(rich_path, std::nullopt) &&
+              window.set_japanese_editing(true, true) && !window.document_modified(),
+          "Unicode-to-JWP save did not establish a clean Japanese baseline");
+  editor->insertPlainText(QStringLiteral("X"));
+  find_action(window, "undoAction")->trigger();
+  require(!window.document_modified(), "Unicode-to-JWP baseline retained discarded metadata");
 }
 
 }  // namespace
@@ -3492,6 +3736,8 @@ int main(int argc, char* argv[]) {
     test_explicit_open_and_encoding_action(directory.path());
     test_jfc_open_save_and_revert(directory.path());
     test_utf16_workflow(directory.path());
+    test_document_format_separation(directory.path());
+    test_editing_mode_switch(directory.path());
     test_jfc_file_dialogs(directory.path());
     test_local_file_lifecycle_actions(directory.path());
     test_leaving_utf8_drops_bom(directory.path());
@@ -3500,8 +3746,10 @@ int main(int argc, char* argv[]) {
     test_detection_prompt_and_cancellation(directory.path());
     test_ascii_and_unknown_prompts(directory.path());
     test_plain_text_find_actions(directory.path());
+    test_plain_text_find_actions(directory.path(), true);
     test_jwp_find_uses_legacy_comparison(directory.path());
     test_plain_text_replace_actions(directory.path());
+    test_plain_text_replace_actions(directory.path(), true);
     test_jwp_replace_preserves_structure(directory.path());
     test_jwp_open_edit_and_save(directory.path());
     test_jwp_clipboard_changes(directory.path());

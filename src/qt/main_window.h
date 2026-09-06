@@ -110,6 +110,14 @@ class MainWindow : public QMainWindow {
   bool open_path_detected(const QString& path,
                           OpenMode mode = OpenMode::kInteractive);
   bool save_path(const QString& path);
+  // An absent encoding selects the JWP container; text losses require consent.
+  bool save_as_path(const QString& path,
+                    std::optional<core::TextEncoding> encoding,
+                    bool allow_format_loss = false, bool export_copy = false,
+                    OpenMode mode = OpenMode::kNonInteractive);
+  bool uses_jwp_format() const noexcept;
+  bool set_japanese_editing(bool enabled, bool allow_information_loss = false,
+                            OpenMode mode = OpenMode::kNonInteractive);
   bool revert_current_document(OpenMode mode = OpenMode::kInteractive);
   bool delete_current_document(OpenMode mode = OpenMode::kInteractive);
   QString current_path() const;
@@ -255,10 +263,13 @@ class MainWindow : public QMainWindow {
   void new_document();
   void open_document();
   bool save_document();
-  bool save_document_as();
+  bool save_document_as(bool export_copy = false);
   bool maybe_save();
   std::optional<core::TextEncoding> choose_encoding();
-  void load_document(const QString& path, const core::TextFile& file);
+  void load_document(const QString& path, const core::TextFile& file,
+                     bool japanese_editing = true);
+  bool native_document_modified() const;
+  bool confirm_text_export();
   void load_jwp_document(const QString& path, core::JwpDocument document,
                          core::LegacyCodePage code_page);
   void set_text_encoding(core::TextEncoding encoding, bool mark_modified);
@@ -308,6 +319,7 @@ class MainWindow : public QMainWindow {
   QAction* accept_candidate_action_ = nullptr;
   QAction* kana_input_action_ = nullptr;
   QAction* toggle_input_mode_action_ = nullptr;
+  QAction* japanese_editing_action_ = nullptr;
   QAction* user_dictionary_action_ = nullptr;
   QAction* edict_lookup_action_ = nullptr;
   QAction* edict_results_action_ = nullptr;
@@ -345,6 +357,8 @@ class MainWindow : public QMainWindow {
   QString current_path_;
   core::TextEncoding encoding_ = core::TextEncoding::kUtf8;
   bool has_byte_order_mark_ = false;
+  bool jwp_format_ = true;
+  std::optional<core::TextFile> saved_text_file_;
   std::optional<core::JwpDocumentModel> jwp_document_;
   core::JwpDocumentHistory jwp_history_;
   core::KanjiColorPolicy kanji_color_policy_;

@@ -88,7 +88,19 @@ Startup and **File > New Japanese Document** create a native JWP document with
 Japanese editing, conversion, formatting, and lookup insertion available without
 opening an existing file first. **File > New Text Document** creates unrestricted
 Unicode plain text instead; JWP-only tools are unavailable in that mode. Imported
-text files currently use this plain-text mode as well.
+text files use Japanese editing when all their characters are representable in
+JWP, but keep their text encoding and file format. Other Unicode stays intact in
+unrestricted editing. **Edit > Input Mode > Japanese Editing** switches engines
+without changing the saved format; it asks before clearing Undo/Redo or dropping
+JWP layout/metadata. A switch into Japanese editing rejects unsupported characters
+rather than substituting them.
+
+**Save As** offers JWP and every supported text format regardless of editing
+engine. Text output asks before losing paragraph/page layout, headers, footers,
+summary metadata, or hard page breaks. Unsupported characters fail before the
+destination is changed. **File > Export Copy** writes another format without
+changing the current path, saved baseline, dirty state, or undo history; finish
+pending input/conversion first. A copy cannot overwrite its own source.
 
 The native editor opens and atomically saves UTF-8, UTF-7, UTF-16LE/BE, JFC,
 EUC-JP, Shift-JIS, New/Old/NEC JIS, and JWP B1/B2/J1.20 documents. JFC files are plain text:
