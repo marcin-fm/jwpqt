@@ -17,6 +17,25 @@ class JwpPlainTextError : public JwpDocumentEditError {
   using JwpDocumentEditError::JwpDocumentEditError;
 };
 
+struct JwpPlainTextExport {
+  std::u32string text;
+  bool loses_formatting = false;
+  bool loses_metadata = false;
+  bool loses_page_breaks = false;
+
+  bool lossless() const noexcept {
+    return !loses_formatting && !loses_metadata && !loses_page_breaks;
+  }
+};
+
+// Import expects LF-normalized text and never replaces unmappable characters.
+JwpDocumentModel import_jwp_plain_text(
+    std::u32string_view text,
+    LegacyCodePage code_page = kDefaultLegacyCodePage);
+JwpPlainTextExport export_jwp_plain_text(
+    const JwpDocumentModel& model,
+    LegacyCodePage code_page = kDefaultLegacyCodePage);
+
 std::size_t jwp_plain_text_size(const JwpDocumentModel& model);
 JwpPosition jwp_plain_text_position(const JwpDocumentModel& model,
                                     std::size_t offset);

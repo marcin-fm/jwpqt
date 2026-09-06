@@ -174,6 +174,57 @@ void test_embedded_newline_is_rejected() {
                     "edit accepted embedded paragraph newline");
 }
 
+void test_loss_aware_text_transfer() {
+  using jwpqt::core::import_jwp_plain_text;
+  using jwpqt::core::export_jwp_plain_text;
+  for (const auto text : {U"", U"one\n two\n", U"\n\n", U"\u65e5\u672c\tA"}) {
+    const auto model = import_jwp_plain_text(text);
+    const auto before = model.document();
+    const auto result = export_jwp_plain_text(model);
+    expect(result.text == text && result.lossless(),
+           "Plain import/export changed text or reported spurious losses");
+    expect(model.document() == before, "Text export modified the source model");
+  }
+  const auto cyrillic = import_jwp_plain_text(U"\u0402\u0403", LegacyCodePage::k1251);
+  expect(cyrillic.paragraph(0).text == JwpText({0x80, 0x81}) &&
+             export_jwp_plain_text(cyrillic, LegacyCodePage::k1251).text == U"\u0402\u0403",
+         "Text transfer ignored the selected code page");
+  for (const std::u32string& text : {
+           std::u32string(U"\r\n"), std::u32string(U"\u2028"),
+           std::u32string(U"\u2029"), std::u32string(U"\U0001f600"),
+           std::u32string{U'A', U'\0'}, std::u32string{0xd800},
+           std::u32string{0x110000}}) {
+    expect_edit_error([&] { import_jwp_plain_text(text); },
+                      "Unrepresentable or unnormalized import was accepted");
+  }
+  auto document = import_jwp_plain_text(U"source").document();
+  document.paragraphs[0].line_spacing = 120;
+  auto result = export_jwp_plain_text(JwpDocumentModel(document));
+  expect(result.loses_formatting && !result.loses_metadata &&
+             !result.loses_page_breaks && !result.lossless(),
+         "Paragraph formatting loss was not isolated");
+  document.paragraphs[0].line_spacing = 100;
+  document.margins[0] = 0.5F;
+  expect(export_jwp_plain_text(JwpDocumentModel(document)).loses_formatting,
+         "Page layout loss was not reported");
+  document.margins[0] = 1.0F;
+  document.summary[0] = {'A'};
+  result = export_jwp_plain_text(JwpDocumentModel(document));
+  expect(result.loses_metadata && !result.loses_formatting &&
+             !result.loses_page_breaks, "Summary loss was not isolated");
+  document.summary[0].clear();
+  document.headers[3][2] = {'B'};
+  expect(export_jwp_plain_text(JwpDocumentModel(document)).loses_metadata,
+         "Header text loss was not reported");
+  document.headers[3][2].clear();
+  document.paragraphs.emplace_back();
+  document.paragraphs.back().page_break = true;
+  result = export_jwp_plain_text(JwpDocumentModel(document));
+  expect(result.text == U"source\n" && result.loses_page_breaks &&
+             !result.loses_metadata && !result.loses_formatting,
+         "Hard-page-break loss was not isolated");
+}
+
 }  // namespace
 
 int main() {
@@ -183,6 +234,7 @@ int main() {
     test_code_page_and_page_break_behavior();
     test_failure_is_strong_and_bounds_are_checked();
     test_embedded_newline_is_rejected();
+    test_loss_aware_text_transfer();
     std::cout << "All JWP plain-text tests passed\n";
     return 0;
   } catch (const std::exception& error) {
