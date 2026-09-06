@@ -81,9 +81,9 @@
 namespace jwpqt::qt {
 namespace {
 
-constexpr std::array<core::TextEncoding, 7> kTextEncodings{
+constexpr std::array<core::TextEncoding, 8> kTextEncodings{
     core::TextEncoding::kUtf8,      core::TextEncoding::kUtf7,
-    core::TextEncoding::kEucJp,
+    core::TextEncoding::kJfc,       core::TextEncoding::kEucJp,
     core::TextEncoding::kShiftJis,  core::TextEncoding::kNewJis,
     core::TextEncoding::kOldJis,    core::TextEncoding::kNecJis,
 };
@@ -112,6 +112,8 @@ QString encoding_filter(core::TextEncoding encoding) {
       return MainWindow::tr("UTF-8 text (*.txt *.utf8)");
     case core::TextEncoding::kUtf7:
       return MainWindow::tr("UTF-7 text (*.txt *.utf)");
+    case core::TextEncoding::kJfc:
+      return MainWindow::tr("JFC text (*.jfc)");
     case core::TextEncoding::kEucJp:
       return MainWindow::tr("EUC-JP text (*.euc)");
     case core::TextEncoding::kShiftJis:
@@ -2793,6 +2795,14 @@ bool MainWindow::open_path_detected(const QString& path, OpenMode mode) {
           tr("Opened %1 as JWP (%2)")
               .arg(path, code_page_name(jwp_code_page_)),
           3000);
+      return true;
+    }
+
+    if (QFileInfo(path).suffix().compare(QStringLiteral("jfc"),
+                                        Qt::CaseInsensitive) == 0) {
+      load_document(path, core::decode_text_file(bytes, core::TextEncoding::kJfc));
+      statusBar()->showMessage(
+          tr("Opened %1 as %2").arg(path, encoding_name(encoding_)), 3000);
       return true;
     }
 

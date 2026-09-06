@@ -354,8 +354,16 @@ legacy file structures.
     explicit text-file, native filter, and CLI selection; automatic detection
     deliberately retains JWPxp's UTF-8 default for the shared ASCII `.utf`
     payload space.
+78. JFC plain-text compatibility tries strict UTF-8 before the recovered
+    old-EUC repertoire: JIS X 0208 pairs, `0x8e` code-page bytes, and the shared
+    77-entry `0x8f` JIS X 0212 mapping. Undefined recovered code-page bytes,
+    unmapped pairs, and incomplete sequences fail rather than being replaced.
+    Native extension routing, Open/Save As filters, the encoding menu, and
+    `--encoding jfc` preserve this file policy; saves always produce UTF-8
+    without a BOM. Core, atomic I/O, editor lifecycle, dialogs, and application
+    tests cover the complete path.
 
-The legacy codecs intentionally reject JIS X 0201 halfwidth kana, JIS X 0212,
+The generic EUC-JP/Shift-JIS codecs reject JIS X 0201 halfwidth kana, JIS X 0212,
 vendor extensions, malformed byte sequences, unassigned table cells, and
 Unicode characters outside the recovered repertoire. Supporting any of these
 requires a separate fixture-backed change rather than silent substitution.

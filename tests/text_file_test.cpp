@@ -46,6 +46,8 @@ void test_encoding_names() {
           "Wrong UTF-8 display name");
   require(jwpqt::core::text_encoding_name(TextEncoding::kUtf7) == "UTF-7",
           "Wrong UTF-7 display name");
+  require(jwpqt::core::text_encoding_name(TextEncoding::kJfc) == "JFC",
+          "Wrong JFC display name");
   require(jwpqt::core::text_encoding_name(TextEncoding::kEucJp) == "EUC-JP",
           "Wrong EUC-JP display name");
   require(jwpqt::core::text_encoding_name(TextEncoding::kShiftJis) ==
@@ -62,6 +64,8 @@ void test_encoding_names() {
           "Could not parse utf-8");
   require(jwpqt::core::parse_text_encoding("utf-7") == TextEncoding::kUtf7,
           "Could not parse utf-7");
+  require(jwpqt::core::parse_text_encoding("jfc") == TextEncoding::kJfc,
+          "Could not parse jfc");
   require(jwpqt::core::parse_text_encoding("euc-jp") == TextEncoding::kEucJp,
           "Could not parse euc-jp");
   require(jwpqt::core::parse_text_encoding("shift-jis") ==
@@ -104,6 +108,29 @@ void test_legacy_file(TextEncoding encoding, std::string_view expected_bytes) {
   require(!actual.has_byte_order_mark, "Legacy file acquired a BOM");
 }
 
+void test_jfc_file() {
+  const TextFile old_euc = jwpqt::core::decode_text_file(
+      "\xc6\xfc\t\x8e\x26\x8f\xab\xb1\n", TextEncoding::kJfc);
+  require(old_euc.text == U"\u65e5\t\u00a6\u00e9\n" &&
+              old_euc.encoding == TextEncoding::kJfc &&
+              !old_euc.has_byte_order_mark,
+          "JFC old-EUC decoding lost text or format metadata");
+  require(jwpqt::core::encode_text_file(old_euc) ==
+              "\xe6\x97\xa5\t\xc2\xa6\xc3\xa9\n",
+          "JFC old-EUC file was not saved as UTF-8");
+  const TextFile with_bom = jwpqt::core::decode_text_file(
+      "\xef\xbb\xbf\xc3\xa9", TextEncoding::kJfc);
+  require(with_bom.text == U"\u00e9" && !with_bom.has_byte_order_mark &&
+              jwpqt::core::encode_text_file(with_bom) == "\xc3\xa9",
+          "JFC preserved an input BOM or did not prefer UTF-8");
+  require_text_file_error(
+      [] { jwpqt::core::encode_text_file({U"text", TextEncoding::kJfc, true}); },
+      "JFC file accepted BOM metadata");
+  require_error(
+      [] { jwpqt::core::decode_text_file("\x8f\xb0\xa1", TextEncoding::kJfc); },
+      "JFC accepted an unsupported extension through TextFile");
+}
+
 void test_invalid_metadata() {
   require_error(
       [] {
@@ -139,6 +166,7 @@ int main() {
   try {
     test_encoding_names();
     test_utf8_file();
+    test_jfc_file();
     test_legacy_file(TextEncoding::kEucJp,
                      "ASCII \xc6\xfc\xcb\xdc\xb8\xec\n");
     test_legacy_file(TextEncoding::kShiftJis,

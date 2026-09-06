@@ -29,7 +29,7 @@ int main(int argc, char* argv[]) {
   parser.addOption(smoke_test);
   const QCommandLineOption encoding_option(
       {QStringLiteral("e"), QStringLiteral("encoding")},
-      QStringLiteral("Text encoding: utf-8, utf-7, euc-jp, shift-jis, "
+      QStringLiteral("Text encoding: utf-8, utf-7, jfc, euc-jp, shift-jis, "
                       "new-jis, old-jis, or nec-jis."),
       QStringLiteral("encoding"));
   parser.addOption(encoding_option);

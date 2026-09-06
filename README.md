@@ -32,8 +32,12 @@ Run the editor, optionally opening a UTF-8 file:
 
 ## Current scope
 
-The native editor opens and atomically saves UTF-8, UTF-7, EUC-JP, Shift-JIS,
-New/Old/NEC JIS, and JWP B1/B2/J1.20 documents. JWP editing preserves metadata,
+The native editor opens and atomically saves UTF-8, UTF-7, JFC, EUC-JP, Shift-JIS,
+New/Old/NEC JIS, and JWP B1/B2/J1.20 documents. JFC files are plain text:
+opening prefers UTF-8, with a strict fallback for the recovered old-EUC
+extensions, and saving always writes UTF-8 without a BOM. The `.jfc` extension,
+JFC file-dialog filter, or `--encoding jfc` selects that policy.
+JWP editing preserves metadata,
 paragraph formatting, hard page breaks, code-page interpretation, native
 search/replace, and portable transaction history. The portable core also
 contains the recovered desktop romaji-to-kana composer plus bounded WNN

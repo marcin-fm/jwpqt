@@ -13,6 +13,7 @@ namespace jwpqt::core {
 enum class TextEncoding {
   kUtf8,
   kUtf7,
+  kJfc,
   kEucJp,
   kShiftJis,
   kNewJis,

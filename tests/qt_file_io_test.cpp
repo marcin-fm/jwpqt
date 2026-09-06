@@ -13,6 +13,7 @@
 
 #include "file_io.h"
 #include "jwpqt/core/edict_registry.h"
+#include "jwpqt/core/jfc_text.h"
 #include "jwpqt/core/jwp_document.h"
 #include "jwpqt/core/kanji_color_list.h"
 #include "jwpqt/core/kanji_info.h"
@@ -75,6 +76,34 @@ void test_encoding_failure_preserves_file(const QString& directory) {
 
   require(read_bytes(path) == original,
           "Failed save changed the existing file");
+}
+
+void test_jfc_file_io(const QString& directory) {
+  const QString path = directory + QStringLiteral("/cards.jfc");
+  QFile output(path);
+  const QByteArray old_euc = QByteArray::fromHex("c6fc098e268fabb10a");
+  require(output.open(QIODevice::WriteOnly) &&
+              output.write(old_euc) == old_euc.size(),
+          "Could not create old-EUC JFC fixture");
+  output.close();
+  const auto file =
+      jwpqt::qt::read_text_file(path, jwpqt::core::TextEncoding::kJfc);
+  require(file.text == U"\u65e5\t\u00a6\u00e9\n" &&
+              file.encoding == jwpqt::core::TextEncoding::kJfc,
+          "JFC I/O did not decode old-EUC text");
+  jwpqt::qt::write_text_file(path, file);
+  const QByteArray canonical = QByteArray::fromHex("e697a509c2a6c3a90a");
+  require(read_bytes(path) == canonical,
+          "JFC I/O did not replace old EUC with UTF-8");
+  try {
+    jwpqt::qt::write_text_file(
+        path, {std::u32string(1, char32_t{0xd800}),
+               jwpqt::core::TextEncoding::kJfc, false});
+    throw std::runtime_error("Invalid JFC document was saved");
+  } catch (const jwpqt::core::JfcTextError&) {
+  }
+  require(read_bytes(path) == canonical,
+          "Failed JFC save changed the existing file");
 }
 
 void test_jwp_file_round_trip(const QString& directory) {
@@ -659,6 +688,9 @@ int main(int argc, char* argv[]) {
     test_file_round_trip(directory.path(),
                          jwpqt::core::TextEncoding::kShiftJis, false);
     test_encoding_failure_preserves_file(directory.path());
+    test_file_round_trip(directory.path(),
+                         jwpqt::core::TextEncoding::kJfc, false);
+    test_jfc_file_io(directory.path());
     test_jwp_file_round_trip(directory.path());
     test_jwp_encoding_failure_preserves_file(directory.path());
     test_jwp_project_file_round_trip(directory.path());

@@ -547,6 +547,12 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/sample-nec-jis.txt"
   "${sample_nec_jis}")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/sample-utf7.txt"
   "ASCII +ZeVnLIqe-\n")
+string(ASCII 198 252 9 142 38 143 171 177 10 sample_jfc_euc)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/sample-jfc-euc.txt" "${sample_jfc_euc}")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/sample-euc.jfc" "${sample_jfc_euc}")
+string(ASCII 195 169 9 240 159 152 128 10 sample_jfc_utf8)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/sample-utf8.jfc" "${sample_jfc_utf8}")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/sample-ascii.JFC" "question\tanswer\n")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/sample-ascii.txt" "ASCII only\n")
 add_test(NAME application_encoding_euc_jp
   COMMAND jwpqt --smoke-test --encoding euc-jp
@@ -571,6 +577,19 @@ add_test(NAME application_encoding_nec_jis
 add_test(NAME application_encoding_utf7
   COMMAND jwpqt --smoke-test --encoding utf-7
           "${CMAKE_CURRENT_BINARY_DIR}/sample-utf7.txt"
+)
+add_test(NAME application_encoding_jfc
+  COMMAND jwpqt --smoke-test --encoding jfc
+          "${CMAKE_CURRENT_BINARY_DIR}/sample-jfc-euc.txt"
+)
+add_test(NAME application_detect_jfc_euc
+  COMMAND jwpqt --smoke-test "${CMAKE_CURRENT_BINARY_DIR}/sample-euc.jfc"
+)
+add_test(NAME application_detect_jfc_utf8
+  COMMAND jwpqt --smoke-test "${CMAKE_CURRENT_BINARY_DIR}/sample-utf8.jfc"
+)
+add_test(NAME application_detect_jfc_ascii
+  COMMAND jwpqt --smoke-test "${CMAKE_CURRENT_BINARY_DIR}/sample-ascii.JFC"
 )
 add_test(NAME application_detect_euc_jp
   COMMAND jwpqt --smoke-test
@@ -611,6 +630,10 @@ set_tests_properties(
   application_encoding_old_jis
   application_encoding_nec_jis
   application_encoding_utf7
+  application_encoding_jfc
+  application_detect_jfc_euc
+  application_detect_jfc_utf8
+  application_detect_jfc_ascii
   application_detect_euc_jp
   application_detect_shift_jis
   application_detect_new_jis
@@ -622,7 +645,7 @@ set_tests_properties(
   TIMEOUT 10
 )
 set_tests_properties(qt_main_window PROPERTIES
-  ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/xdg-config"
   TIMEOUT 10
 )
 set_tests_properties(

@@ -4,6 +4,7 @@
 
 #include <utility>
 
+#include "jwpqt/core/jfc_text.h"
 #include "jwpqt/core/jis_text.h"
 #include "jwpqt/core/legacy_text.h"
 #include "jwpqt/core/utf7.h"
@@ -20,6 +21,7 @@ LegacyEncoding legacy_encoding(TextEncoding encoding) {
       return LegacyEncoding::kShiftJis;
     case TextEncoding::kUtf8:
     case TextEncoding::kUtf7:
+    case TextEncoding::kJfc:
     case TextEncoding::kNewJis:
     case TextEncoding::kOldJis:
     case TextEncoding::kNecJis:
@@ -38,6 +40,7 @@ JisTextEncoding jis_text_encoding(TextEncoding encoding) {
       return JisTextEncoding::kNecJis;
     case TextEncoding::kUtf8:
     case TextEncoding::kUtf7:
+    case TextEncoding::kJfc:
     case TextEncoding::kEucJp:
     case TextEncoding::kShiftJis:
       throw TextFileError("Encoding is not a JIS escape format");
@@ -53,6 +56,8 @@ std::string_view text_encoding_name(TextEncoding encoding) {
       return "UTF-8";
     case TextEncoding::kUtf7:
       return "UTF-7";
+    case TextEncoding::kJfc:
+      return "JFC";
     case TextEncoding::kEucJp:
       return "EUC-JP";
     case TextEncoding::kShiftJis:
@@ -73,6 +78,9 @@ std::optional<TextEncoding> parse_text_encoding(std::string_view name) noexcept 
   }
   if (name == "utf-7") {
     return TextEncoding::kUtf7;
+  }
+  if (name == "jfc") {
+    return TextEncoding::kJfc;
   }
   if (name == "euc-jp") {
     return TextEncoding::kEucJp;
@@ -100,6 +108,8 @@ TextFile decode_text_file(std::string_view bytes, TextEncoding encoding) {
     }
     case TextEncoding::kUtf7:
       return {decode_utf7(bytes), encoding, false};
+    case TextEncoding::kJfc:
+      return {decode_jfc_text(bytes), encoding, false};
     case TextEncoding::kEucJp:
     case TextEncoding::kShiftJis:
       return {decode_legacy_text(bytes, legacy_encoding(encoding)), encoding,
@@ -123,6 +133,12 @@ std::string encode_text_file(const TextFile& file) {
             "A byte-order mark is only valid for UTF-8 documents");
       }
       return encode_utf7(file.text);
+    case TextEncoding::kJfc:
+      if (file.has_byte_order_mark) {
+        throw TextFileError(
+            "A byte-order mark is only valid for UTF-8 documents");
+      }
+      return encode_jfc_text(file.text);
     case TextEncoding::kEucJp:
     case TextEncoding::kShiftJis:
       if (file.has_byte_order_mark) {

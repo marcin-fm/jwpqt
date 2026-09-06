@@ -13,6 +13,7 @@
 #include <QDialog>
 #include <QDir>
 #include <QFile>
+#include <QFileDialog>
 #include <QFontMetricsF>
 #include <QLabel>
 #include <QKeyEvent>
@@ -28,6 +29,7 @@
 #include <QTextBlock>
 #include <QTextDocument>
 #include <QTextBlockFormat>
+#include <QTimer>
 
 #include "file_io.h"
 #include "edict_lookup_dialog.h"
@@ -375,6 +377,116 @@ void test_explicit_open_and_encoding_action(const QString& directory) {
               QByteArray::fromHex(
                   "4153434949201b2440467c4b5c386c1b284a0a"),
           "Old JIS action did not control saved bytes");
+}
+
+void test_jfc_open_save_and_revert(const QString& directory) {
+  using jwpqt::core::TextEncoding;
+  using jwpqt::qt::OpenMode;
+  const QString path = directory + QStringLiteral("/cards.JfC");
+  const QByteArray old_euc = QByteArray::fromHex("c6fc098e268fabb10a");
+  write_bytes(path, old_euc);
+  PromptingWindow window;
+  require(window.open_path_detected(path, OpenMode::kNonInteractive),
+          "JFC extension did not select the old-EUC decoder noninteractively");
+  QTextEdit* editor = window.findChild<QTextEdit*>();
+  QLabel* label = window.findChild<QLabel*>(QStringLiteral("documentEncoding"));
+  QAction* jfc_action = find_encoding_action(window, QStringLiteral("JFC"));
+  const QString text = QStringLiteral("\u65e5\t\u00a6\u00e9\n");
+  require(editor != nullptr && editor->toPlainText() == text &&
+              window.text_encoding() == TextEncoding::kJfc &&
+              !window.is_jwp_document() && !window.document_modified() &&
+              label != nullptr && label->text() == QStringLiteral("JFC") &&
+              jfc_action != nullptr && jfc_action->isChecked(),
+          "JFC open did not retain native text and format state");
+  editor->selectAll();
+  editor->insertPlainText(QStringLiteral("changed"));
+  require(window.revert_current_document(OpenMode::kNonInteractive) &&
+              editor->toPlainText() == text && !window.document_modified() &&
+              window.text_encoding() == TextEncoding::kJfc,
+          "JFC Revert did not restore old-EUC text and save policy");
+  require(window.save_path(path) &&
+              read_bytes(path) == QByteArray::fromHex("e697a509c2a6c3a90a") &&
+              !window.document_modified(),
+          "JFC save did not replace old EUC with canonical UTF-8");
+  require(window.open_path_detected(path, OpenMode::kNonInteractive) &&
+              editor->toPlainText() == text &&
+              window.text_encoding() == TextEncoding::kJfc,
+          "JFC UTF-8 reopen lost its format");
+
+  const QString ascii_path = directory + QStringLiteral("/ascii.JFC");
+  write_bytes(ascii_path, QByteArray("question\tanswer\n"));
+  require(window.open_path_detected(ascii_path) && window.explanation.isEmpty() &&
+              window.text_encoding() == TextEncoding::kJfc,
+          "ASCII JFC prompted for a save encoding");
+  const QString invalid_path = directory + QStringLiteral("/invalid.jfc");
+  write_bytes(invalid_path, QByteArray::fromHex("8fb0a1"));
+  editor->insertPlainText(QStringLiteral("unsaved"));
+  const QString unsaved = editor->toPlainText();
+  require(!window.open_path_detected(invalid_path, OpenMode::kNonInteractive) &&
+              window.current_path() == ascii_path && window.document_modified() &&
+              editor->toPlainText() == unsaved &&
+              window.text_encoding() == TextEncoding::kJfc,
+          "Failed JFC open changed the live document");
+
+  write_bytes(path, QByteArray::fromHex("c6fc"));
+  require(window.open_path(path, TextEncoding::kEucJp, OpenMode::kNonInteractive) &&
+              window.text_encoding() == TextEncoding::kEucJp,
+          "JFC extension overrode an explicit encoding selection");
+  const QString bom_path = directory + QStringLiteral("/jfc-bom.txt");
+  write_bytes(bom_path, QByteArray::fromHex("efbbbfc3a9"));
+  require(window.open_path(bom_path, TextEncoding::kUtf8, OpenMode::kNonInteractive),
+          "Could not open JFC encoding-action fixture");
+  jfc_action->trigger();
+  require(window.text_encoding() == TextEncoding::kJfc &&
+              window.document_modified() && window.save_path(path) &&
+              read_bytes(path) == QByteArray::fromHex("c3a9"),
+          "JFC encoding action did not select UTF-8 output without a BOM");
+}
+
+void test_jfc_file_dialogs(const QString& directory) {
+  const QString source_path = directory + QStringLiteral("/cards-without-suffix.txt");
+  const QString saved_path = directory + QStringLiteral("/dialog-saved.jfc");
+  const QString filter = QStringLiteral("JFC text (*.jfc)");
+  write_bytes(source_path, QByteArray::fromHex("8e268fabb1"));
+  PromptingWindow window;
+  QAction* open = find_encoding_action(window, QStringLiteral("&Open..."));
+  QAction* save_as = find_encoding_action(window, QStringLiteral("Save &As..."));
+  require(open != nullptr && save_as != nullptr, "File dialog actions are missing");
+  bool open_filter_present = false;
+  QTimer::singleShot(0, &window, [&] {
+    auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+    if (dialog != nullptr) {
+      open_filter_present = dialog->nameFilters().contains(filter);
+      dialog->selectNameFilter(filter);
+      dialog->selectFile(source_path);
+      QMetaObject::invokeMethod(dialog, "accept", Qt::DirectConnection);
+    } else if (auto* modal =
+                   qobject_cast<QDialog*>(QApplication::activeModalWidget())) {
+      modal->reject();
+    }
+  });
+  open->trigger();
+  require(open_filter_present && window.current_path() == source_path &&
+              window.text_encoding() == jwpqt::core::TextEncoding::kJfc,
+          "JFC Open filter did not select the codec without a .jfc suffix");
+
+  bool save_filter_selected = false;
+  QTimer::singleShot(0, &window, [&] {
+    auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+    if (dialog != nullptr) {
+      save_filter_selected = dialog->selectedNameFilter() == filter;
+      dialog->selectFile(saved_path);
+      QMetaObject::invokeMethod(dialog, "accept", Qt::DirectConnection);
+    } else if (auto* modal =
+                   qobject_cast<QDialog*>(QApplication::activeModalWidget())) {
+      modal->reject();
+    }
+  });
+  save_as->trigger();
+  require(save_filter_selected && window.current_path() == saved_path &&
+              window.text_encoding() == jwpqt::core::TextEncoding::kJfc &&
+              read_bytes(saved_path) == QByteArray::fromHex("c2a6c3a9"),
+          "JFC Save As filter did not preserve the format and write UTF-8");
 }
 
 void test_local_file_lifecycle_actions(const QString& directory) {
@@ -2942,12 +3054,15 @@ void test_jis_table_integration(const QString& directory) {
 }  // namespace
 
 int main(int argc, char* argv[]) {
+  QCoreApplication::setAttribute(Qt::AA_DontUseNativeDialogs);
   QApplication application(argc, argv);
   try {
     QTemporaryDir directory(QDir::tempPath() +
                             QStringLiteral("/jwpqt-window-test-XXXXXX"));
     require(directory.isValid(), "Could not create temporary test directory");
     test_explicit_open_and_encoding_action(directory.path());
+    test_jfc_open_save_and_revert(directory.path());
+    test_jfc_file_dialogs(directory.path());
     test_local_file_lifecycle_actions(directory.path());
     test_leaving_utf8_drops_bom(directory.path());
     test_detected_open(directory.path());
