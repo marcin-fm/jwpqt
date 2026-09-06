@@ -23,6 +23,7 @@ class EdictParseLimitError : public EdictDictionaryError {
 template <typename Error = EdictDictionaryError>
 [[noreturn]] void fail(std::size_t byte_offset, std::string_view reason) {
   std::ostringstream message;
+  message.exceptions(std::ios::badbit | std::ios::failbit);
   message << "Invalid EDICT record at byte " << byte_offset << ": " << reason;
   throw Error(message.str());
 }
@@ -277,9 +278,9 @@ std::u32string decode_line(std::string_view bytes, EdictEncoding encoding,
     if (encoding == EdictEncoding::kEucJp) {
       return decode_edict_euc(bytes, byte_offset);
     }
-  } catch (const EdictDictionaryError&) {
-    throw;
-  } catch (const std::exception& error) {
+  } catch (const Utf8Error& error) {
+    fail(byte_offset, error.what());
+  } catch (const LegacyTextError& error) {
     fail(byte_offset, error.what());
   }
   fail(byte_offset, "dictionary encoding is unsupported");

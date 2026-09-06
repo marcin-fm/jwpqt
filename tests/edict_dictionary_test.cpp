@@ -4,10 +4,35 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <new>
 #include <string>
 
 #include "jwpqt/core/legacy_text.h"
 #include "jwpqt/core/utf8.h"
+
+namespace {
+
+// Fail once so exception reporting can allocate after the injected failure.
+bool inject_allocation_failure = false;
+bool allocation_failed = false;
+std::size_t allocations_before_failure = 0;
+
+}  // namespace
+
+void* operator new(std::size_t size) {
+  if (inject_allocation_failure && allocations_before_failure-- == 0) {
+    inject_allocation_failure = false;
+    allocation_failed = true;
+    throw std::bad_alloc();
+  }
+  if (void* memory = std::malloc(size == 0 ? 1 : size)) {
+    return memory;
+  }
+  throw std::bad_alloc();
+}
+
+void operator delete(void* memory) noexcept { std::free(memory); }
+void operator delete(void* memory, std::size_t) noexcept { std::free(memory); }
 
 namespace {
 
@@ -400,6 +425,34 @@ void test_resource_limits() {
       "decoded code-point limit");
 }
 
+void test_recovery_allocation_failures() {
+  const std::string bytes = std::string(80, 'w') +
+      " /valid definition/\ninvalid [reading /broken reading/\n";
+  for (std::size_t allocation = 0; allocation < 512; ++allocation) {
+    allocations_before_failure = allocation;
+    allocation_failed = false;
+    inject_allocation_failure = true;
+    bool out_of_memory = false;
+    try {
+      EdictDictionary::parse(bytes, EdictEncoding::kEucJp, EdictParseLimits{},
+                             jwpqt::core::kDefaultLegacyCodePage, true);
+    } catch (const std::bad_alloc&) {
+      out_of_memory = true;
+    } catch (...) {
+      inject_allocation_failure = false;
+      throw;
+    }
+    inject_allocation_failure = false;
+    if (!allocation_failed) {
+      require(!out_of_memory, "Unexpected allocation failure without injection");
+      return;
+    }
+    require(out_of_memory,
+            "Record recovery swallowed an allocation failure as malformed data");
+  }
+  throw std::runtime_error("Allocation-failure sweep did not finish");
+}
+
 }  // namespace
 
 int main() {
@@ -414,6 +467,7 @@ int main() {
     test_invalid_records();
     test_delimiter_and_line_break_boundaries();
     test_resource_limits();
+    test_recovery_allocation_failures();
   } catch (const std::exception& error) {
     std::cerr << "edict_dictionary_test: " << error.what() << '\n';
     return EXIT_FAILURE;
