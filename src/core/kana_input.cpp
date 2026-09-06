@@ -426,6 +426,13 @@ bool KanaInputComposer::discard() noexcept {
   return had_input;
 }
 
+std::vector<KanaInputEvent> KanaInputComposer::force_conversion() {
+  if (!pending_ambiguous()) return {};
+  auto events = push_ascii('n');
+  discard();
+  return events;
+}
+
 bool KanaInputComposer::pending() const noexcept { return !buffer_.empty(); }
 
 bool KanaInputComposer::pending_ambiguous() const noexcept {

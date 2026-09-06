@@ -34,6 +34,7 @@
 #include <QTextDocument>
 #include <QTextBlockFormat>
 #include <QTimer>
+#include <QToolBar>
 #include <QToolButton>
 
 #include "file_io.h"
@@ -2557,6 +2558,93 @@ void test_input_mode_workflow(const QString& directory) {
               editor->toPlainText().toUtf8().toHex().toStdString());
 }
 
+void test_forced_wnn_conversion(const QString& directory) {
+  const auto fixture = write_automatic_wnn_fixture(directory);
+  jwpqt::core::JwpDocument blank;
+  blank.paragraphs = {jwpqt::core::JwpParagraph{}};
+  const QString blank_path = directory + QStringLiteral("/forced-blank.jwp");
+  jwpqt::qt::write_jwp_file(blank_path, blank);
+  jwpqt::qt::MainWindow window;
+  require(window.load_wnn_resources(fixture.index_path, fixture.data_path,
+              directory + QStringLiteral("/forced-range.sel")),
+          "Could not load forced-conversion fixture");
+  auto* editor = window.findChild<QTextEdit*>();
+  auto* convert = find_action(window, "convertSelectionAction");
+  auto* candidates = window.findChild<QListWidget*>(QStringLiteral("conversionCandidates"));
+  auto* convert_button = qobject_cast<QToolButton*>(
+      window.findChild<QToolBar*>(QStringLiteral("mainToolBar"))->widgetForAction(convert));
+  require(convert_button != nullptr, "Forced conversion toolbar button is missing");
+  window.show();
+  editor->setFocus();
+  QApplication::processEvents();
+  const auto type_ka = [&] {
+    send_text_key(editor, Qt::Key_K, QStringLiteral("K"), Qt::ShiftModifier);
+    send_text_key(editor, Qt::Key_A, QStringLiteral("a"));
+  };
+  type_ka();
+  require(!window.conversion_active() && !editor->textCursor().hasSelection() &&
+              editor->extraSelections().size() == 1 && convert->isEnabled(),
+          "Convert is disabled for a waiting automatic kana range");
+  convert_button->click();
+  require(window.conversion_active() && candidates->isVisible() && candidates->count() == 3 &&
+              editor->toPlainText() == QStringLiteral("\u4e9c"),
+          "Forced conversion did not leave candidates open");
+  send_text_key(editor, Qt::Key_Escape, QString());
+  find_action(window, "undoAction")->trigger();
+  require(editor->toPlainText() == QStringLiteral("\u304b"),
+          "Forced conversion undo did not restore the reading");
+
+  require(window.open_jwp_path(blank_path), "Could not reset forced conversion");
+  type_ka();
+  send_text_key(editor, Qt::Key_N, QStringLiteral("n"));
+  convert->trigger();
+  require(window.conversion_active() &&
+              editor->toPlainText() == QStringLiteral("\u4e9c\u3093"),
+          "Forced pending n lost the conversion suffix");
+  window.accept_conversion();
+  find_action(window, "undoAction")->trigger();
+  require(editor->toPlainText() == QStringLiteral("\u304b\u3093"),
+          "Pending-n conversion did not retain one conversion undo step");
+
+  require(window.open_jwp_path(blank_path), "Could not reset selection conversion");
+  editor->insertPlainText(QStringLiteral("\u3042"));
+  type_ka();
+  editor->selectAll();
+  convert->trigger();
+  require(!window.conversion_active() &&
+              editor->toPlainText() == QStringLiteral("\u3042\u304b"),
+          "An automatic range took precedence over the explicit selection");
+
+  const auto single = write_wnn_fixture(directory);
+  jwpqt::qt::MainWindow vowel;
+  require(vowel.load_wnn_resources(single.index_path, single.data_path,
+              directory + QStringLiteral("/forced-vowel.sel")),
+          "Could not load forced-vowel fixture");
+  auto* vowel_edit = vowel.findChild<QTextEdit*>();
+  auto* vowel_convert = find_action(vowel, "convertSelectionAction");
+  auto* vowel_button = qobject_cast<QToolButton*>(
+      vowel.findChild<QToolBar*>(QStringLiteral("mainToolBar"))->widgetForAction(vowel_convert));
+  require(vowel_button != nullptr, "Forced-vowel toolbar button is missing");
+  vowel.show();
+  vowel_edit->setFocus();
+  send_text_key(vowel_edit, Qt::Key_A, QStringLiteral("A"), Qt::ShiftModifier);
+  require(vowel_edit->toPlainText().isEmpty() && vowel_convert->isEnabled(),
+          "A pending uppercase vowel cannot be forced from Convert");
+  vowel_button->click();
+  require(vowel.conversion_active() && vowel_edit->toPlainText() == QStringLiteral("\u4e9c"),
+          "Forcing A emitted katakana or accepted the candidate prematurely");
+  vowel.accept_conversion();
+  find_action(vowel, "undoAction")->trigger();
+  require(vowel_edit->toPlainText() == QStringLiteral("\u3042"),
+          "Forced-vowel conversion lost its kana undo state");
+  require(vowel.open_jwp_path(blank_path), "Could not reset forced vowel");
+  send_text_key(vowel_edit, Qt::Key_U, QStringLiteral("U"), Qt::ShiftModifier);
+  vowel_convert->trigger();
+  require(!vowel.conversion_active() && !vowel_edit->isReadOnly() &&
+              vowel_edit->toPlainText() == QStringLiteral("\u3046"),
+          "A failed forced conversion lost the composed vowel");
+}
+
 void test_jwp_automatic_wnn_conversion(const QString& directory) {
   const WnnFixture fixture = write_automatic_wnn_fixture(directory);
   jwpqt::core::JwpDocument source;
@@ -3359,6 +3447,7 @@ int main(int argc, char* argv[]) {
     test_jwp_kana_input_mode(directory.path());
     test_input_mode_workflow(directory.path());
     test_jwp_automatic_wnn_conversion(directory.path());
+    test_forced_wnn_conversion(directory.path());
     test_kanji_color_configuration(directory.path());
     test_kanji_color_options(directory.path());
     test_kanji_color_list_commands(directory.path());

@@ -102,6 +102,27 @@ void test_vowel_quote_modes() {
           "old katakana-vowel quote mismatch");
 }
 
+void test_forced_conversion() {
+  KanaInputComposer composer;
+  const std::string inputs = "AIUEONn";
+  const JisCode codes[]{0x2422, 0x2424, 0x2426, 0x2428, 0x242a, 0x2573, 0x2473};
+  require(composer.force_conversion().empty(), "Empty conversion force emitted text");
+  for (std::size_t i = 0; i < inputs.size(); ++i) {
+    require(composer.push_ascii(inputs[i]).empty() && composer.pending_ambiguous(),
+            "Forced conversion input did not remain ambiguous");
+    const auto kind = inputs[i] == 'N' ? KanaInputKind::kText :
+        inputs[i] == 'n' ? KanaInputKind::kKanaContinue : KanaInputKind::kKanaStart;
+    require(composer.force_conversion() == std::vector{event(kind, {codes[i]})} &&
+                !composer.pending(),
+            std::string("Forced conversion did not match the legacy temporary-n path: ") + inputs[i]);
+  }
+  composer.push_ascii('k');
+  require(composer.force_conversion().empty() && composer.pending() &&
+              composer.push_ascii('a') ==
+                  std::vector{event(KanaInputKind::kKanaContinue, {0x242b})},
+          "Forcing non-ambiguous input changed the composer");
+}
+
 void test_doubled_consonants_and_assimilation() {
   KanaInputComposer composer;
   require(type(composer, "kka") ==
@@ -240,6 +261,7 @@ int main() {
     test_compounds_and_aliases();
     test_pending_input();
     test_vowel_quote_modes();
+    test_forced_conversion();
     test_doubled_consonants_and_assimilation();
     test_symbols_and_invalid_input();
     test_state_replay_and_rejection();

@@ -1779,6 +1779,9 @@ void MainWindow::update_conversion_actions() {
         can_convert = begin.paragraph == end.paragraph && begin != end;
       } catch (const std::exception&) {
       }
+    } else {
+      can_convert = automatic_conversion_range_.has_value() ||
+                    kana_input_.pending_ambiguous();
     }
   }
   convert_action_->setEnabled(active || can_convert);
@@ -2151,6 +2154,7 @@ void MainWindow::clear_automatic_conversion_range() {
   if (!conversion_active()) {
     editor_->set_transient_extra_selections({});
   }
+  update_conversion_actions();
 }
 
 void MainWindow::show_automatic_conversion_range() {
@@ -2225,6 +2229,7 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
        key_event->key() == Qt::Key_Escape)) {
     kana_input_.discard();
     statusBar()->showMessage(tr("Discarded pending kana input"), 1500);
+    update_conversion_actions();
     return true;
   }
 
@@ -2245,6 +2250,7 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
                 .arg(QString::fromUtf8(error.what())),
             5000);
       }
+      update_conversion_actions();
       return true;
     }
   }
@@ -2973,9 +2979,14 @@ bool MainWindow::convert_selection() {
     statusBar()->showMessage(tr("WNN conversion is not available"), 3000);
     return false;
   }
-  finish_kana_input();
-
   try {
+    apply_kana_input_events(kana_input_.force_conversion());
+    kana_input_.discard();
+    if (conversion_active()) return true;
+    if (automatic_conversion_range_.has_value()) {
+      if (!editor_->textCursor().hasSelection()) return attempt_automatic_conversion(true);
+      clear_automatic_conversion_range();
+    }
     const QTextCursor cursor = editor_->textCursor();
     if (!cursor.hasSelection()) {
       statusBar()->showMessage(tr("Select kana to convert"), 3000);

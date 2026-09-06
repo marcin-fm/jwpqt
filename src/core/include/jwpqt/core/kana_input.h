@@ -52,6 +52,8 @@ class KanaInputComposer {
   std::vector<KanaInputEvent> push_ascii(char input);
   // Resolves buffered input. Incomplete input is retained and reported.
   std::vector<KanaInputEvent> flush();
+  // Resolves pending vowels for an explicit kana-to-kanji conversion.
+  std::vector<KanaInputEvent> force_conversion();
   // Drops buffered input and reports whether anything was dropped.
   bool discard() noexcept;
 
