@@ -4,23 +4,28 @@
 
 #include <algorithm>
 #include <exception>
+#include <memory>
 #include <utility>
 
 #include <QAction>
-#include <QApplication>
 #include <QCheckBox>
-#include <QClipboard>
+#include <QContextMenuEvent>
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
 #include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
-#include <QListWidget>
+#include <QMouseEvent>
+#include <QPointer>
 #include <QPushButton>
 #include <QStringList>
+#include <QTextBlockFormat>
+#include <QTextDocument>
+#include <QTextEdit>
 #include <QVBoxLayout>
 
 #include "jwpqt/core/jwp_text_codec.h"
+#include "character_context_menu.h"
 #include "kana_input_field.h"
 #include "text_bridge.h"
 
@@ -57,17 +62,18 @@ QString pluralized(std::size_t value, const QString& singular,
 }  // namespace
 
 EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
-                                     InsertHandler insert_handler,
-                                     QWidget* parent)
+                                      InsertHandler insert_handler,
+                                      QWidget* parent, InfoHandler info_handler)
     : QDialog(parent),
       search_handler_(std::move(search_handler)),
       insert_handler_(std::move(insert_handler)),
+      info_handler_(std::move(info_handler)),
       query_field_(new KanaInputField(QStringLiteral("edictQuery"), this)),
       query_edit_(query_field_->edit()),
       personal_names_(new QCheckBox(tr("Personal &names"), this)),
       place_names_(new QCheckBox(tr("Place na&mes"), this)),
       classical_(new QCheckBox(tr("&Classical"), this)),
-      results_(new QListWidget(this)),
+      results_(new QTextEdit(this)),
       status_(new QLabel(this)),
       insert_button_(new QPushButton(tr("&Insert in Document"), this)) {
   setObjectName(QStringLiteral("edictLookupDialog"));
@@ -97,8 +103,13 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   outer->addLayout(options);
 
   results_->setObjectName(QStringLiteral("edictResults"));
-  results_->setAlternatingRowColors(true);
-  results_->setSelectionMode(QAbstractItemView::ExtendedSelection);
+  results_->setReadOnly(true);
+  results_->setUndoRedoEnabled(false);
+  QFont content_font = results_->font();
+  content_font.setPixelSize(16);
+  results_->setFont(content_font);
+  results_->installEventFilter(this);
+  results_->viewport()->installEventFilter(this);
   outer->addWidget(results_, 1);
 
   status_->setObjectName(QStringLiteral("edictStatus"));
@@ -120,10 +131,8 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
           [this] { search(); });
   connect(insert_button_, &QPushButton::clicked, this,
           [this] { insert_selected(); });
-  connect(results_, &QListWidget::itemSelectionChanged, this,
+  connect(results_, &QTextEdit::selectionChanged, this,
           [this] { update_actions(); });
-  connect(results_, &QListWidget::itemActivated, this,
-          [this] { insert_selected(); });
   connect(copy_action, &QAction::triggered, this,
           [this] { copy_selected(); });
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -167,15 +176,47 @@ bool EdictLookupDialog::search() {
       rows.push_back(render_row(result.result.record));
     }
 
-    results_->clear();
+    auto document = std::make_unique<QTextDocument>();
+    document->setDefaultFont(results_->font());
+    document->setUndoRedoEnabled(false);
+    QTextCursor cursor(document.get());
+    std::vector<std::pair<int, int>> ranges;
+    ranges.reserve(rows.size());
+    for (const auto& result : candidate.results) {
+      if (!ranges.empty()) cursor.insertBlock();
+      const int start = cursor.position();
+      QTextBlockFormat heading;
+      cursor.setBlockFormat(heading);
+      QTextCharFormat format;
+      format.setToolTip(result.label);
+      const auto& record = result.result.record;
+      QString headword = to_qstring(record.headword);
+      if (!record.readings.empty()) {
+        QStringList readings;
+        for (const auto& reading : record.readings) readings.push_back(to_qstring(reading));
+        headword += QStringLiteral(" [%1]").arg(readings.join(QStringLiteral("; ")));
+      }
+      cursor.insertText(headword, format);
+      cursor.insertBlock();
+      QTextBlockFormat definition;
+      definition.setLeftMargin(16);
+      cursor.setBlockFormat(definition);
+      QStringList meanings;
+      for (const auto& meaning : record.definitions) meanings.push_back(to_qstring(meaning));
+      cursor.insertText(meanings.join(QStringLiteral("; ")), format);
+      ranges.emplace_back(start, cursor.position());
+    }
     report_ = std::move(candidate);
     rendered_rows_ = std::move(rows);
-    for (std::size_t i = 0; i < rendered_rows_.size(); ++i) {
-      auto* item = new QListWidgetItem(to_qstring(rendered_rows_[i]), results_);
-      item->setToolTip(report_.results[i].label);
-    }
+    row_ranges_ = std::move(ranges);
+    const QPointer<QTextDocument> previous = results_->document();
+    document->setParent(results_);
+    results_->setDocument(document.release());
+    if (previous && previous->parent() == results_) delete previous.data();
     if (!rendered_rows_.empty()) {
-      results_->setCurrentRow(0);
+      QTextCursor selected(results_->document());
+      selected.setPosition(row_ranges_.front().second, QTextCursor::KeepAnchor);
+      results_->setTextCursor(selected);
       results_->setFocus();
     } else {
       query_edit_->setFocus();
@@ -216,16 +257,7 @@ bool EdictLookupDialog::insert_selected() {
 }
 
 void EdictLookupDialog::copy_selected() {
-  const QList<QListWidgetItem*> selected = results_->selectedItems();
-  if (selected.empty()) {
-    return;
-  }
-  QStringList rows;
-  rows.reserve(selected.size());
-  for (QListWidgetItem* item : selected) {
-    rows.push_back(item->text());
-  }
-  QApplication::clipboard()->setText(rows.join(QLatin1Char('\n')));
+  results_->copy();
 }
 
 const EdictResourceSearchReport& EdictLookupDialog::report() const noexcept {
@@ -234,8 +266,11 @@ const EdictResourceSearchReport& EdictLookupDialog::report() const noexcept {
 
 std::u32string EdictLookupDialog::selected_rows() const {
   std::u32string rows;
-  for (int row = 0; row < results_->count(); ++row) {
-    if (!results_->item(row)->isSelected()) {
+  const QTextCursor cursor = results_->textCursor();
+  if (!cursor.hasSelection()) return rows;
+  for (std::size_t row = 0; row < row_ranges_.size(); ++row) {
+    if (cursor.selectionEnd() <= row_ranges_[row].first ||
+        cursor.selectionStart() >= row_ranges_[row].second) {
       continue;
     }
     if (!rows.empty()) {
@@ -247,8 +282,20 @@ std::u32string EdictLookupDialog::selected_rows() const {
 }
 
 void EdictLookupDialog::update_actions() {
-  insert_button_->setEnabled(insert_handler_ &&
-                             !results_->selectedItems().empty());
+  insert_button_->setEnabled(insert_handler_ && results_->textCursor().hasSelection());
+}
+
+bool EdictLookupDialog::eventFilter(QObject* watched, QEvent* event) {
+  if (watched == results_ || watched == results_->viewport()) {
+    if (event->type() == QEvent::MouseButtonPress &&
+        static_cast<QMouseEvent*>(event)->button() == Qt::RightButton) return true;
+    if (event->type() == QEvent::ContextMenu && info_handler_) {
+      show_character_context_menu(*results_, *static_cast<QContextMenuEvent*>(event),
+          [this](CharacterTarget target) { info_handler_(target.character); });
+      return true;
+    }
+  }
+  return QDialog::eventFilter(watched, event);
 }
 
 void EdictLookupDialog::show_status() {

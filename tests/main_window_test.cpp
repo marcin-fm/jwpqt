@@ -11,6 +11,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QClipboard>
+#include <QContextMenuEvent>
 #include <QDialog>
 #include <QDir>
 #include <QFile>
@@ -44,6 +45,7 @@
 #include "jwpqt/core/jis_unicode.h"
 #include "jwpqt/core/jwp_text_codec.h"
 #include "kanji_color_settings.h"
+#include "kanji_info_dialog.h"
 #include "jis_table_dialog.h"
 #include "main_window.h"
 #include "wnn_user_dictionary_dialog.h"
@@ -2099,9 +2101,9 @@ void test_edict_lookup_integration(const QString& directory) {
   dialog->set_query(U"cat");
   require(dialog->search(),
           "Native EDICT dialog could not search the configured resource");
-  QListWidget* results =
-      dialog->findChild<QListWidget*>(QStringLiteral("edictResults"));
-  require(results != nullptr && results->count() == 1,
+  QTextEdit* results =
+      dialog->findChild<QTextEdit*>(QStringLiteral("edictResults"));
+  require(results != nullptr && results->toPlainText() == QStringLiteral("cat\nfeline"),
           "Native EDICT lookup did not expose the configured result");
   auto* accumulated =
       dynamic_cast<jwpqt::qt::EdictResultsWindow*>(window.findChild<QWidget*>(
@@ -2109,12 +2111,33 @@ void test_edict_lookup_integration(const QString& directory) {
   QAction* accumulated_action = find_action(window, "edictResultsAction");
   require(accumulated != nullptr && accumulated_action != nullptr &&
               accumulated_action->isEnabled() &&
-              accumulated->result_count() == 1,
-          "Native EDICT lookup did not append to accumulated results");
+              accumulated->result_count() == 1 && !accumulated->isVisible(),
+          "Dictionary search opened a second window instead of updating in place");
+  const QTextCursor saved_selection = editor->textCursor();
+  for (const int position : {0, 4}) {
+    QTextCursor cursor(results->document());
+    cursor.setPosition(position);
+    const QRect first = results->cursorRect(cursor);
+    cursor.setPosition(position + 1);
+    const QPoint point((first.left() + results->cursorRect(cursor).left()) / 2, first.center().y());
+    QContextMenuEvent context(QContextMenuEvent::Mouse, point,
+                             results->viewport()->mapToGlobal(point), Qt::ShiftModifier);
+    QApplication::sendEvent(results->viewport(), &context);
+  }
+  const auto information = window.findChildren<QDialog*>(QStringLiteral("kanjiInfoDialog"));
+  require(information.size() == 2 &&
+              dynamic_cast<jwpqt::qt::KanjiInfoDialog*>(information[0])->code() == 'c' &&
+              dynamic_cast<jwpqt::qt::KanjiInfoDialog*>(information[1])->code() == 'f' &&
+              *window.current_jwp_document() == source &&
+              editor->textCursor().position() == saved_selection.position() &&
+              editor->textCursor().anchor() == saved_selection.anchor(),
+          "Dictionary context navigation did not create independent character windows safely");
+  require(dialog->search() && !accumulated->isVisible() && accumulated->result_count() == 2,
+          "Repeated search raised the accumulated-results window");
   accumulated_action->trigger();
   require(accumulated->isVisible(),
           "Dictionary Results action did not reopen accumulated results");
-  results->setCurrentRow(0);
+  results->selectAll();
   require(dialog->insert_selected(),
           "Native EDICT result could not be inserted into JWP");
   const jwpqt::core::JwpText expected =

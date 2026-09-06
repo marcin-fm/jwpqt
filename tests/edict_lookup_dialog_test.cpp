@@ -10,11 +10,16 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
+#include <QContextMenuEvent>
 #include <QLabel>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
 #include <QLineEdit>
-#include <QListWidget>
+#include <QMenu>
+#include <QPointer>
+#include <QTextDocument>
+#include <QTextEdit>
+#include <QTimer>
 #include <QToolButton>
 
 #include "jwpqt/core/jwp_text_codec.h"
@@ -82,12 +87,11 @@ void test_search_render_status_copy_and_insert() {
               received_options.classical,
           "Dictionary search did not validate its query or options");
 
-  auto* list = dialog.findChild<QListWidget*>(QStringLiteral("edictResults"));
+  auto* list = dialog.findChild<QTextEdit*>(QStringLiteral("edictResults"));
   auto* status = dialog.findChild<QLabel*>(QStringLiteral("edictStatus"));
-  require(list != nullptr && status != nullptr && list->count() == 2 &&
-              list->item(0)->text() ==
-                  QStringLiteral("\u3042 [\u3044] /cat/feline/") &&
-              list->item(0)->toolTip() == QStringLiteral("Main"),
+  require(list != nullptr && status != nullptr && list->isReadOnly() &&
+              list->font().pixelSize() == 16 && list->toPlainText() ==
+                  QStringLiteral("\u3042 [\u3044]\ncat; feline\nAlice\nname"),
           "Dictionary results were not rendered in search order");
   require(status->text().contains(QStringLiteral("2 matches")) &&
               status->text().contains(QStringLiteral("3 rejected")) &&
@@ -95,11 +99,11 @@ void test_search_render_status_copy_and_insert() {
               !status->text().contains(QStringLiteral("hidden")),
           "Dictionary status did not expose the bounded visible diagnostics");
 
-  list->item(1)->setSelected(true);
+  list->selectAll();
   dialog.copy_selected();
   require(QApplication::clipboard()->text() ==
-              QStringLiteral("\u3042 [\u3044] /cat/feline/\nAlice /name/"),
-          "Dictionary result copy did not preserve selected row order");
+              list->toPlainText(),
+          "Dictionary result copy did not preserve selected text");
   require(dialog.insert_selected() &&
               inserted == U"\u3042 [\u3044] /cat/feline/\nAlice /name/",
           "Dictionary insertion callback did not receive every selected row");
@@ -244,6 +248,65 @@ void test_query_input_modes() {
   require(mode->text() == QStringLiteral("K"), "Read-only field changed input mode");
 }
 
+void test_result_character_navigation() {
+  std::vector<char32_t> inspected;
+  int searches = 0;
+  jwpqt::qt::EdictLookupDialog dialog(
+      [&](const jwpqt::core::JwpText&, const jwpqt::qt::EdictLookupOptions&) {
+        if (++searches == 2) throw std::runtime_error("failed replacement");
+        jwpqt::qt::EdictResourceSearchReport report;
+        report.results = {result(0, QStringLiteral("Main"), U"\u611b", {U"\u3042\u3044"},
+                                 {U"love <&> \U0001f600"})};
+        return report;
+      }, {}, nullptr, [&](char32_t character) { inspected.push_back(character); });
+  dialog.set_query(U"\u3042\u3044");
+  dialog.show();
+  require(dialog.search(), "Could not prepare character navigation results");
+  auto* results = dialog.findChild<QTextEdit*>(QStringLiteral("edictResults"));
+  QApplication::processEvents();
+  require(results && results->toPlainText().contains(QStringLiteral("love <&>")),
+          "Dictionary text was interpreted as markup");
+  const QTextCursor original = results->textCursor();
+  const QString original_text = results->toPlainText();
+  for (const QString& character : {QStringLiteral("\u611b"), QStringLiteral("\u3042"),
+                                  QString::fromUcs4(U"\U0001f600")}) {
+    QTextCursor cursor(results->document());
+    const int position = original_text.indexOf(character);
+    cursor.setPosition(position);
+    const QRect first = results->cursorRect(cursor);
+    cursor.setPosition(position + character.size());
+    const QPoint point((first.left() + results->cursorRect(cursor).left()) / 2, first.center().y());
+    bool selected = false;
+    QTimer::singleShot(0, [&] {
+      auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+      if (!menu) return;
+      for (QAction* action : menu->actions()) {
+        if (action->objectName() == QStringLiteral("characterInfoContextAction") && action->isEnabled()) {
+          selected = true;
+          menu->setActiveAction(action);
+          QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+          QApplication::sendEvent(menu, &enter);
+          return;
+        }
+      }
+      menu->close();
+    });
+    QContextMenuEvent context(QContextMenuEvent::Mouse, point, results->viewport()->mapToGlobal(point));
+    QApplication::sendEvent(results->viewport(), &context);
+    require(selected && results->textCursor().position() == original.position() &&
+                results->textCursor().anchor() == original.anchor(),
+            "Character context inspection changed the result selection");
+  }
+  require(inspected == std::vector<char32_t>{U'\u611b', U'\u3042', U'\U0001f600'},
+          "Dictionary context menu inspected a row instead of the clicked character");
+  require(!dialog.search() && results->toPlainText() == original_text &&
+              results->textCursor().position() == original.position(),
+          "Failed search discarded previous results or selection");
+  const QPointer<QTextDocument> previous = results->document();
+  require(dialog.search() && previous.isNull(),
+          "Repeated search retained obsolete result documents");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -252,6 +315,7 @@ int main(int argc, char** argv) {
     test_search_render_status_copy_and_insert();
     test_empty_invalid_and_failed_search_are_contained();
     test_query_input_modes();
+    test_result_character_navigation();
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {
     std::cerr << "edict_lookup_dialog_test: " << error.what() << '\n';

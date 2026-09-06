@@ -224,7 +224,7 @@ class MainWindow : public QMainWindow {
   void update_kanji_code_lookup_actions();
   void update_kanji_reading_lookup_action();
   void update_kanji_lookup_action();
-  void show_edict_results_window();
+  void show_edict_results_window(bool show = true);
   void update_kanji_color_actions();
   void update_kana_input_state();
   void set_input_mode(InputMode mode);

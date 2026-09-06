@@ -2809,14 +2809,16 @@ void MainWindow::show_edict_lookup_dialog() {
         search.classical = options.classical;
         EdictResourceSearchReport report = search_edict_resources(
             *edict_resources_, edict_config_directory_, query, search);
-        show_edict_results_window();
+        show_edict_results_window(false);
         if (edict_results_window_ != nullptr) {
           edict_results_window_->append_report(report);
         }
         return report;
       },
       [this](const std::u32string& text) { return insert_edict_text(text); },
-      this);
+      this, [this](char32_t character) {
+        show_kanji_info_dialog(CharacterTarget{character, -1});
+      });
   if (!seed.empty()) {
     dialog->set_query(seed);
   }
@@ -2827,11 +2829,13 @@ void MainWindow::show_edict_lookup_dialog() {
   dialog->show();
 }
 
-void MainWindow::show_edict_results_window() {
+void MainWindow::show_edict_results_window(bool show) {
   if (edict_results_window_ != nullptr) {
-    edict_results_window_->show();
-    edict_results_window_->raise();
-    edict_results_window_->activateWindow();
+    if (show) {
+      edict_results_window_->show();
+      edict_results_window_->raise();
+      edict_results_window_->activateWindow();
+    }
     return;
   }
 
@@ -2849,7 +2853,7 @@ void MainWindow::show_edict_results_window() {
   if (edict_results_action_ != nullptr) {
     edict_results_action_->setEnabled(true);
   }
-  results->show();
+  if (show) results->show();
 }
 
 std::u32string MainWindow::edict_query_seed() const {
