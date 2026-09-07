@@ -346,6 +346,55 @@ void test_integration(const QString& directory) {
   require(window.current_jwp_document()->paragraphs[0].text.size() == 4,
           "Radical lookup insertion did not mutate the JWP document");
 
+  require(window.new_document_tab(false) == 1, "Could not create Unicode lookup target");
+  auto* unicode = window.active_editor();
+  unicode->insertPlainText(QString::fromStdU32String(U"\U0001f600X"));
+  require(window.save_as_path(directory + QStringLiteral("/unicode-lookups.txt"),
+                              jwpqt::core::TextEncoding::kUtf8),
+          "Could not establish Unicode lookup baseline");
+  const auto before_lookup = unicode->toPlainText();
+  for (auto* lookup_action : {skip_action, four_corner_action, bushu_action,
+                             stroke_bushu_action, spahn_action, index_action,
+                             reading_action, radical_action, count_action})
+    require(lookup_action->isEnabled(), "Unicode text disabled an available lookup action");
+  code_results->item(0)->setSelected(true);
+  for (auto* button : {
+           code_dialog->findChild<QPushButton*>(QStringLiteral("kanjiCodeInsert")),
+           reading_dialog->findChild<QPushButton*>(QStringLiteral("kanjiReadingInsert")),
+           radical_dialog->findChild<QPushButton*>(QStringLiteral("kanjiLookupInsert")),
+           count_dialog->findChild<QPushButton*>(QStringLiteral("kanjiCountInsert"))}) {
+    QTextCursor selected = unicode->textCursor();
+    selected.setPosition(2); selected.setPosition(3, QTextCursor::KeepAnchor);
+    unicode->setTextCursor(selected);
+    require(button != nullptr && button->isEnabled(), "Lookup has no available insert control");
+    button->click();
+    require(!window.is_jwp_document() && unicode->toPlainText() ==
+                QString::fromStdU32String(U"\U0001f600\u4e9c"),
+            "A modeless lookup inserted into its old document instead of the Unicode selection");
+    undo->trigger();
+    require(unicode->toPlainText() == before_lookup && !window.document_modified(),
+            "Lookup insertion did not preserve Unicode undo and saved state");
+  }
+  jwpqt::qt::MainWindow unicode_lookup;
+  require(unicode_lookup.new_document_tab(false) == 1 &&
+              unicode_lookup.load_kanji_info(info_path) &&
+              unicode_lookup.load_kanji_lookup(radical_path, stroke_path,
+                  directory + QStringLiteral("/missing-radicals.bmp")),
+          "Could not initialize lookup resources for Unicode-only editing");
+  for (const char* name : {"skipLookupAction", "fourCornerLookupAction", "bushuLookupAction",
+                           "strokeBushuLookupAction", "spahnLookupAction", "indexLookupAction",
+                           "kanjiReadingLookupAction", "radicalLookupAction", "jisTableAction"}) {
+    auto* lookup_action = unicode_lookup.findChild<QAction*>(QString::fromLatin1(name));
+    require(lookup_action != nullptr && lookup_action->isEnabled(),
+            "A fresh Unicode document disabled lookup");
+    lookup_action->trigger();
+  }
+  for (const char* name : {"kanjiCodeLookupDialog", "kanjiReadingLookupDialog",
+                           "kanjiLookupDialog", "jisTableDialog"})
+    require(unicode_lookup.findChild<QDialog*>(QString::fromLatin1(name)) != nullptr,
+            "A lookup command did not open in Unicode-only editing");
+  require(window.activate_document(0), "Could not restore original metadata fixture");
+
   write_bytes(radical_path, QByteArray("bad"));
   require(!window.load_kanji_lookup(
               radical_path, stroke_path,

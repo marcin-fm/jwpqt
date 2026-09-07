@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include <QAction>
 #include <QApplication>
@@ -61,6 +62,7 @@
 #include "kana_input_field.h"
 #include "jis_table_dialog.h"
 #include "main_window.h"
+#include "text_bridge.h"
 #include "wnn_user_dictionary_dialog.h"
 
 namespace {
@@ -2880,9 +2882,18 @@ void test_jwp_wnn_user_dictionary_dialog(const QString& directory) {
       plain_path,
       jwpqt::core::TextFile{U"plain \U0001f600", jwpqt::core::TextEncoding::kUtf8,
                            false});
-  require(plain.open_path(plain_path, jwpqt::core::TextEncoding::kUtf8) &&
-              !plain.insert_wnn_user_entry(entry),
-          "Insert to File unexpectedly mutated unrestricted Unicode");
+  require(plain.open_path(plain_path, jwpqt::core::TextEncoding::kUtf8),
+          "Could not open unrestricted user-conversion target");
+  plain.active_editor()->moveCursor(QTextCursor::End);
+  const auto plain_before = plain.active_editor()->toPlainText();
+  require(plain.insert_wnn_user_entry(entry) && !plain.is_jwp_document() &&
+              plain.active_editor()->toPlainText() == plain_before +
+                  jwpqt::qt::to_qstring(jwpqt::core::decode_jwp_text(
+                      jwpqt::core::render_wnn_user_entry(entry))),
+          "User-conversion insertion did not preserve unrestricted Unicode");
+  find_action(plain, "undoAction")->trigger();
+  require(plain.active_editor()->toPlainText() == plain_before && !plain.document_modified(),
+          "Unicode user-conversion insertion lost its saved undo baseline");
 }
 
 void test_edict_lookup_integration(const QString& directory) {
@@ -3022,10 +3033,22 @@ void test_edict_lookup_integration(const QString& directory) {
       jwpqt::core::TextFile{U"plain \U0001f600", jwpqt::core::TextEncoding::kUtf8,
                            false});
   require(plain.open_path(plain_path, jwpqt::core::TextEncoding::kUtf8) &&
-              !plain.insert_edict_text(U"dictionary") &&
-              plain.findChild<QTextEdit*>()->toPlainText() ==
-                  QString::fromStdU32String(U"plain \U0001f600"),
-          "Dictionary insertion unexpectedly mutated unrestricted Unicode");
+              plain.load_edict_configuration(registry_path),
+          "Could not prepare unrestricted dictionary target");
+  plain.active_editor()->moveCursor(QTextCursor::End);
+  find_action(plain, "edictLookupAction")->trigger();
+  auto* plain_dialog = dynamic_cast<jwpqt::qt::EdictLookupDialog*>(
+      plain.findChild<QDialog*>(QStringLiteral("edictLookupDialog")));
+  require(plain_dialog != nullptr, "Unicode dictionary lookup did not open");
+  plain_dialog->set_query(U"cat");
+  require(plain_dialog->search() && plain_dialog->insert_selected() &&
+              !plain.is_jwp_document() && plain.active_editor()->toPlainText() ==
+                  QString::fromStdU32String(U"plain \U0001f600cat /feline/"),
+          "Dictionary result did not reach the unrestricted Unicode target");
+  find_action(plain, "undoAction")->trigger();
+  require(!plain.document_modified() && plain.active_editor()->toPlainText() ==
+              QString::fromStdU32String(U"plain \U0001f600"),
+          "Unicode dictionary insertion did not preserve Qt undo");
 
   auto owner = std::make_unique<jwpqt::qt::MainWindow>();
   require(owner->load_edict_configuration(
@@ -4251,11 +4274,75 @@ void test_jis_table_integration(const QString& directory) {
 
   const QString text_path = directory + QStringLiteral("/jis-table.txt");
   jwpqt::qt::write_text_file(
-      text_path, {U"plain \U0001f600", jwpqt::core::TextEncoding::kUtf8, false});
+      text_path, {U"plain \U0001f600\u3042", jwpqt::core::TextEncoding::kUtf8, false});
   require(window.open_path(text_path, jwpqt::core::TextEncoding::kUtf8),
           "Could not switch JIS table fixture to plain text");
-  require(!action->isEnabled(),
-          "JIS table action stayed enabled for unrestricted Unicode");
+  require(action->isEnabled(), "Unicode document disabled the JIS table");
+  window.active_editor()->moveCursor(QTextCursor::End);
+  action->trigger();
+  require(dialog->current()->jis == 0x2422U && dialog->set_jis(0x2424U),
+          "Unicode character did not seed the JIS table");
+  dialog->findChild<QPushButton*>(QStringLiteral("jisTableInsert"))->click();
+  require(!window.is_jwp_document() && window.active_editor()->toPlainText() ==
+              QString::fromStdU32String(U"plain \U0001f600\u3042\u3044"),
+          "JIS table insertion changed the Unicode editing engine or content");
+  find_action(window, "undoAction")->trigger();
+  require(!window.document_modified(), "Unicode JIS insertion lost its undo baseline");
+}
+
+void test_unicode_lookup_insertion(const QString& directory) {
+  using namespace jwpqt;
+  const QString path = directory + QStringLiteral("/unicode-insertion.txt");
+  const std::u32string original = U"\ufeff\U0001f600X\u00a0tail";
+  qt::write_text_file(path, {original, core::TextEncoding::kUtf16Be, true});
+  qt::MainWindow window;
+  require(window.open_path(path, core::TextEncoding::kUtf16Be) && !window.is_jwp_document(),
+          "Could not load Unicode insertion fixture");
+  auto* editor = window.active_editor();
+  require(qt::from_qstring(qt::document_plain_text(*editor->document())) == original,
+          "Unicode insertion fixture lost its literal signature");
+  QTextCursor selection = editor->textCursor();
+  selection.setPosition(1);
+  selection.setPosition(4, QTextCursor::KeepAnchor);
+  editor->setTextCursor(selection);
+  const std::u32string inserted = U"\ufeff\u00a0\U0001f680\n\u65e5";
+  for (const char32_t invalid : {char32_t(0xd800), char32_t(0x110000)}) {
+    require(!window.insert_edict_text(std::u32string{invalid}) &&
+                qt::from_qstring(qt::document_plain_text(*editor->document())) == original &&
+                editor->textCursor().position() == 4 && editor->textCursor().anchor() == 1 &&
+                !window.document_modified() && !find_action(window, "undoAction")->isEnabled(),
+            "Invalid Unicode insertion changed content, selection or history");
+  }
+  for (const auto range : {std::pair<int, int>{2, 4}, {1, 2}}) {
+    QTextCursor split = editor->textCursor();
+    split.setPosition(range.first); split.setPosition(range.second, QTextCursor::KeepAnchor);
+    editor->setTextCursor(split);
+    require(!window.insert_edict_text(inserted) && !window.document_modified() &&
+                qt::from_qstring(qt::document_plain_text(*editor->document())) == original,
+            "Lookup insertion split an existing Unicode surrogate pair");
+  }
+  editor->setTextCursor(selection);
+  editor->setReadOnly(true);
+  require(!window.insert_edict_text(inserted) && !window.document_modified(),
+          "Lookup insertion bypassed the read-only target");
+  editor->setReadOnly(false);
+  const auto expected = std::u32string(U"\ufeff") + inserted + U"\u00a0tail";
+  require(window.insert_edict_text(inserted) && !window.is_jwp_document() &&
+              !window.uses_jwp_format() && window.current_path() == path &&
+              window.text_encoding() == core::TextEncoding::kUtf16Be &&
+              qt::from_qstring(qt::document_plain_text(*editor->document())) == expected &&
+              editor->textCursor().position() == 7 && !editor->textCursor().hasSelection(),
+          "Unicode lookup replacement lost scalars, selection, caret or storage policy");
+  find_action(window, "undoAction")->trigger();
+  require(qt::from_qstring(qt::document_plain_text(*editor->document())) == original &&
+              !window.document_modified() && !find_action(window, "undoAction")->isEnabled(),
+          "Unicode lookup replacement was not one undo transaction");
+  find_action(window, "redoAction")->trigger();
+  require(qt::from_qstring(qt::document_plain_text(*editor->document())) == expected &&
+              window.save_path(path) && qt::read_text_file(path, core::TextEncoding::kUtf16Be).text == expected,
+          "Unicode lookup redo/save did not preserve content");
+  require(!window.insert_edict_text(U"") && !window.document_modified(),
+          "Empty lookup insertion changed the saved baseline");
 }
 
 void test_document_format_separation(const QString& directory) {
@@ -4531,6 +4618,7 @@ int main(int argc, char* argv[]) {
     test_jwp_wnn_user_dictionary(directory.path());
     test_jwp_wnn_user_dictionary_dialog(directory.path());
     test_edict_lookup_integration(directory.path());
+    test_unicode_lookup_insertion(directory.path());
     test_edict_user_dictionary_integration(directory.path());
     test_jwp_wnn_preference_write_failure(directory.path());
     test_jwp_kana_input_mode(directory.path());

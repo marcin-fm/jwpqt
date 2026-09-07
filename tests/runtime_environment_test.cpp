@@ -493,9 +493,13 @@ void test_toolbar(const QString& root) {
   button("newDocumentAction")->click();
   window.findChild<QAction*>(QStringLiteral("newTextDocumentAction"))->trigger();
   require(!button("kanaInputAction")->isEnabled() &&
-              !button("jisTableAction")->isEnabled() &&
+              button("jisTableAction")->isEnabled() &&
               !button("pageLayoutAction")->isEnabled(),
           QStringLiteral("Toolbar state diverged in Unicode text mode"));
+  button("jisTableAction")->click();
+  auto* unicode_table = window.findChild<QDialog*>(QStringLiteral("jisTableDialog"));
+  require(unicode_table != nullptr, QStringLiteral("Unicode toolbar did not open the JIS table"));
+  unicode_table->close();
   button("newDocumentAction")->click();
   require(button("jisTableAction")->isEnabled() &&
               button("pageLayoutAction")->isEnabled(),

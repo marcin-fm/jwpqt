@@ -151,7 +151,8 @@ history and selection, including an active conversion preview.
 Startup and **File > New Japanese Document** create a native JWP document with
 Japanese editing, conversion, formatting, and lookup insertion available without
 opening an existing file first. **File > New Text Document** creates unrestricted
-Unicode plain text instead; JWP-only tools are unavailable in that mode. Imported
+Unicode plain text instead; JWP paragraph formatting and WNN conversion are
+unavailable in that mode, but dictionary and character lookup/insertion work. Imported
 text files use Japanese editing when all their characters are representable in
 JWP, but keep their text encoding and file format. Other Unicode stays intact in
 unrestricted editing. **Edit > Input Mode > Japanese Editing** switches engines
@@ -243,6 +244,13 @@ raising the separate result history. Headwords/readings and definitions are
 selectable text; right-clicking an exact character opens its context menu and
 independent Character Information window. Copy uses the selected display text;
 Insert uses the full dictionary entries touched by that selection.
+
+Dictionary, user-conversion, character-table and kanji lookup results can be
+inserted into either editing engine. They replace the active document's current
+selection as one undo step, preserving its encoding, Unicode characters and
+saved-state tracking. Modeless windows follow the active tab, even after project
+restoration. Insertion refuses active conversion, read-only targets, invalid
+Unicode and selections that split a surrogate pair rather than damaging text.
 
 Dictionary and Reading query fields have their own **K / A / J** mode button
 and `F4` toggle. Kanji mode composes romaji into kana; ASCII and JASCII work

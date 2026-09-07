@@ -2794,8 +2794,7 @@ void MainWindow::update_kanji_info_action() {
 
 void MainWindow::update_jis_table_action() {
   if (jis_table_action_ != nullptr) {
-    jis_table_action_->setEnabled(document_->jwp_document_.has_value() &&
-                                  !conversion_active());
+    jis_table_action_->setEnabled(!conversion_active());
   }
 }
 
@@ -2807,7 +2806,7 @@ void MainWindow::update_kanji_count_action() {
 
 void MainWindow::update_kanji_code_lookup_actions() {
   const bool enabled = kanji_info_database_ != nullptr &&
-                       document_->jwp_document_.has_value() && !conversion_active();
+                       !conversion_active();
   if (skip_lookup_action_ != nullptr) skip_lookup_action_->setEnabled(enabled);
   if (four_corner_lookup_action_ != nullptr)
     four_corner_lookup_action_->setEnabled(enabled);
@@ -2824,15 +2823,13 @@ void MainWindow::update_kanji_code_lookup_actions() {
 void MainWindow::update_kanji_reading_lookup_action() {
   if (kanji_reading_lookup_action_ != nullptr) {
     kanji_reading_lookup_action_->setEnabled(
-        kanji_info_database_ != nullptr && document_->jwp_document_.has_value() &&
-        !conversion_active());
+        kanji_info_database_ != nullptr && !conversion_active());
   }
 }
 
 void MainWindow::update_kanji_lookup_action() {
   if (kanji_lookup_action_ != nullptr) {
     kanji_lookup_action_->setEnabled(has_kanji_lookup() &&
-                                     document_->jwp_document_.has_value() &&
                                      !conversion_active());
   }
 }
@@ -3449,7 +3446,7 @@ void MainWindow::show_kanji_info_code(core::JisCode code) {
 }
 
 void MainWindow::show_jis_table_dialog() {
-  if (!document_->jwp_document_.has_value() || conversion_active()) {
+  if (conversion_active()) {
     statusBar()->showMessage(tr("JIS table is not available"), 3000);
     return;
   }
@@ -3550,8 +3547,7 @@ void MainWindow::show_kanji_count_dialog() {
 }
 
 void MainWindow::show_kanji_code_lookup_dialog(KanjiCodeLookupMode mode) {
-  if (kanji_info_database_ == nullptr || !document_->jwp_document_.has_value() ||
-      conversion_active()) {
+  if (kanji_info_database_ == nullptr || conversion_active()) {
     statusBar()->showMessage(tr("Kanji code lookup is not available"), 3000);
     return;
   }
@@ -3603,8 +3599,7 @@ void MainWindow::show_kanji_code_lookup_dialog(KanjiCodeLookupMode mode) {
 }
 
 void MainWindow::show_kanji_reading_lookup_dialog() {
-  if (kanji_info_database_ == nullptr || !document_->jwp_document_.has_value() ||
-      conversion_active()) {
+  if (kanji_info_database_ == nullptr || conversion_active()) {
     statusBar()->showMessage(tr("Kanji reading lookup is not available"),
                              3000);
     return;
@@ -3635,8 +3630,7 @@ void MainWindow::show_kanji_reading_lookup_dialog() {
 }
 
 void MainWindow::show_kanji_lookup_dialog() {
-  if (!has_kanji_lookup() || !document_->jwp_document_.has_value() ||
-      conversion_active()) {
+  if (!has_kanji_lookup() || conversion_active()) {
     statusBar()->showMessage(tr("Radical lookup is not available"), 3000);
     return;
   }
@@ -3664,7 +3658,8 @@ void MainWindow::show_kanji_lookup_dialog() {
 
 std::optional<core::JisCode> MainWindow::jwp_character_target() const {
   if (!document_->jwp_document_.has_value()) {
-    return std::nullopt;
+    const auto target = character_target(*document_->editor_);
+    return target ? core::unicode_to_jis_x0208(target->character) : std::nullopt;
   }
   try {
     const QTextCursor cursor = document_->editor_->textCursor();
@@ -3708,16 +3703,20 @@ bool MainWindow::insert_edict_user_entry(const core::EdictUserEntry& entry) {
 }
 
 bool MainWindow::insert_wnn_user_entry(const core::WnnUserEntry& entry) {
-  if (conversion_active() || !document_->jwp_document_.has_value()) {
+  if (conversion_active() || document_->updating_editor_ ||
+      document_->applying_kana_input_ || document_->editor_->isReadOnly()) {
     return false;
   }
   finish_kana_input();
-  if (conversion_active() || !document_->jwp_document_.has_value()) {
+  if (conversion_active()) {
     return false;
   }
 
   try {
     const core::JwpText inserted = core::render_wnn_user_entry(entry);
+    if (!document_->jwp_document_) {
+      return insert_edict_text(core::decode_jwp_text(inserted, document_->jwp_code_page_));
+    }
     const QString original_text = document_plain_text(*document_->editor_->document());
     const QTextCursor original_cursor = document_->editor_->textCursor();
     const bool original_modified = document_->editor_->document()->isModified();
@@ -3886,15 +3885,36 @@ std::u32string MainWindow::edict_query_seed() const {
 }
 
 bool MainWindow::insert_edict_text(std::u32string_view text) {
-  if (text.empty() || conversion_active() || !document_->jwp_document_.has_value()) {
+  if (text.empty() || conversion_active() || document_->updating_editor_ ||
+      document_->applying_kana_input_ || document_->editor_->isReadOnly()) {
     return false;
   }
   finish_kana_input();
-  if (conversion_active() || !document_->jwp_document_.has_value()) {
+  if (conversion_active()) {
     return false;
   }
 
   try {
+    if (!document_->jwp_document_) {
+      const QString inserted = to_qstring(text);
+      QTextCursor cursor = document_->editor_->textCursor();
+      for (const int offset : {cursor.selectionStart(), cursor.selectionEnd()}) {
+        if (offset > 0 && document_->editor_->document()->characterAt(offset).isLowSurrogate() &&
+            document_->editor_->document()->characterAt(offset - 1).isHighSurrogate())
+          throw std::runtime_error("Lookup insertion splits a Unicode surrogate pair");
+      }
+      const int retained = document_->editor_->document()->characterCount() -
+                           (cursor.selectionEnd() - cursor.selectionStart());
+      if (inserted.size() > std::numeric_limits<int>::max() - retained)
+        throw std::runtime_error("Inserted text exceeds the Qt document limit");
+      cursor.beginEditBlock();
+      cursor.insertText(inserted);
+      cursor.endEditBlock();
+      document_->editor_->setTextCursor(cursor);
+      document_->editor_->ensureCursorVisible();
+      statusBar()->showMessage(tr("Inserted lookup result"), 2000);
+      return true;
+    }
     const QString original_text = document_plain_text(*document_->editor_->document());
     const QTextCursor original_cursor = document_->editor_->textCursor();
     const bool original_modified = document_->editor_->document()->isModified();

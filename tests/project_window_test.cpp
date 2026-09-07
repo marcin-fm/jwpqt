@@ -321,18 +321,21 @@ void conversion_and_transfer(const QString& directory) {
   require(!window.document_modified() && origin->toPlainText() == qt::to_qstring(U"\u3042"), "Existing conversion history was lost");
   require(window.open_project_path(path) && origin.isNull() && information && window.document_count() == 2,
           "Workspace replacement lost an independent character viewer");
-  require(window.activate_document(0), "Cannot select the Japanese insertion target");
-  auto* target = window.active_editor(); target->moveCursor(QTextCursor::End);
-  const auto before = target->toPlainText();
   auto* character = information->findChild<QLabel*>("kanjiInfoCharacter");
   require(character, "Information viewer lost its glyph");
   const auto center = character->rect().center();
-  QMouseEvent insert(QEvent::MouseButtonDblClick, QPointF(center), QPointF(character->mapToGlobal(center)),
-                     Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
-  QApplication::sendEvent(character, &insert);
-  require(target->toPlainText() == before + glyph, "Information insertion used a retired workspace");
-  window.findChild<QAction*>("undoAction")->trigger();
-  require(target->toPlainText() == before && !window.document_modified(), "Information insertion lost transferred undo");
+  for (const int index : {0, 1}) {
+    require(window.activate_document(index), "Cannot select the information insertion target");
+    auto* target = window.active_editor(); target->moveCursor(QTextCursor::End);
+    const auto before = target->toPlainText();
+    QMouseEvent insert(QEvent::MouseButtonDblClick, QPointF(center), QPointF(character->mapToGlobal(center)),
+                       Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(character, &insert);
+    require(target->toPlainText() == before + glyph && window.is_jwp_document() == (index == 0),
+            "Information insertion used a retired workspace or changed the editing engine");
+    window.findChild<QAction*>("undoAction")->trigger();
+    require(target->toPlainText() == before && !window.document_modified(), "Information insertion lost transferred undo");
+  }
   require(window.activate_document(0), "Cannot return to restored Japanese editor");
   window.active_editor()->selectAll();
   require(window.convert_selection(), "Restored Japanese editor lost access to shared WNN resources");
