@@ -406,6 +406,11 @@ target_link_libraries(jwpqt_jwp_project_tests PRIVATE jwpqt_core)
 target_compile_options(jwpqt_jwp_project_tests
   PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME core_jwp_project COMMAND jwpqt_jwp_project_tests)
+add_executable(jwpqt_jwp_configuration_tests jwp_configuration_test.cpp)
+target_link_libraries(jwpqt_jwp_configuration_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_jwp_configuration_tests
+  PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME core_jwp_configuration COMMAND jwpqt_jwp_configuration_tests)
 add_test(NAME core_jwp_search COMMAND jwpqt_jwp_search_tests)
 add_test(NAME core_plain_text_change COMMAND jwpqt_plain_text_change_tests)
 add_test(NAME core_legacy_code_page COMMAND jwpqt_legacy_code_page_tests)

@@ -26,6 +26,7 @@ add_library(jwpqt_core STATIC
   kanji_color.cpp
   kanji_color_list.cpp
   kana_input.cpp
+  jwp_configuration.cpp
   jwp_conversion.cpp
   jwp_document.cpp
   jwp_document_history.cpp
