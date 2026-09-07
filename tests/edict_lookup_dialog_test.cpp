@@ -13,13 +13,16 @@
 #include <QCheckBox>
 #include <QClipboard>
 #include <QContextMenuEvent>
+#include <QDialogButtonBox>
 #include <QLabel>
 #include <QInputMethodEvent>
 #include <QIntValidator>
 #include <QKeyEvent>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QMenu>
 #include <QPointer>
+#include <QPushButton>
 #include <QTextDocument>
 #include <QTextEdit>
 #include <QTimer>
@@ -27,6 +30,7 @@
 
 #include "jwpqt/core/jwp_text_codec.h"
 #include "kana_input_field.h"
+#include "text_bridge.h"
 
 namespace {
 
@@ -484,6 +488,232 @@ void test_query_overwrite() {
           "Standalone query fallback did not retain independent runtime mode");
 }
 
+void test_query_history() {
+  using namespace jwpqt;
+  auto history = std::make_shared<core::QueryHistory>();
+  int searches = 0;
+  bool fail = false;
+  qt::EdictLookupDialog dialog([&](const core::JwpText&, const qt::EdictLookupOptions&) {
+    ++searches;
+    if (fail) throw std::runtime_error("history search failure");
+    qt::EdictResourceSearchReport report;
+    report.results = {result(0, QStringLiteral("Main"), U"cat", {}, {U"feline"})};
+    return report;
+  }, {}, nullptr, {}, {}, history);
+  dialog.show();
+  auto* query = dialog.findChild<QLineEdit*>(QStringLiteral("edictQuery"));
+  auto* field = dynamic_cast<qt::KanaInputField*>(query->parentWidget());
+  auto* history_button = dialog.findChild<QPushButton*>(QStringLiteral("edictHistory"));
+  auto* results = dialog.findChild<QTextEdit*>(QStringLiteral("edictResults"));
+  auto* status = dialog.findChild<QLabel*>(QStringLiteral("edictStatus"));
+  const auto key = [&](int code, QString text = {}) {
+    QKeyEvent event(QEvent::KeyPress, code, Qt::NoModifier, text);
+    QApplication::sendEvent(query, &event);
+  };
+  for (const auto& text : {U"cat", U"dog", U"bird"}) {
+    dialog.set_query(text);
+    require(dialog.search(), "History fixture search failed");
+  }
+  require(history->entries() == std::vector<std::u32string>{U"bird", U"dog", U"cat"},
+          "Successful queries were not retained newest-first");
+  const QPointer<QTextDocument> report = results->document();
+  const int result_position = results->textCursor().position();
+  const int result_anchor = results->textCursor().anchor();
+  key(Qt::Key_Up);
+  require(query->text() == QStringLiteral("dog"), "Up did not skip the current top query");
+  key(Qt::Key_Up);
+  key(Qt::Key_Up);
+  require(query->text() == QStringLiteral("cat"), "Older navigation did not clamp at the oldest entry");
+  key(Qt::Key_Down);
+  key(Qt::Key_Down);
+  require(query->text() == QStringLiteral("bird"), "Newer navigation did not return to the first entry");
+  key(Qt::Key_Down);
+  require(query->text().isEmpty(), "Newer navigation did not produce an empty draft");
+  dialog.set_query(U"fresh");
+  key(Qt::Key_Up);
+  require(query->text() == QStringLiteral("bird") && history->entries().front() == U"fresh",
+          "History navigation lost an edited draft");
+  key(Qt::Key_Down);
+  require(query->text() == QStringLiteral("fresh"), "The retained draft could not be recalled");
+  query->clear();
+  key(Qt::Key_N, QStringLiteral("n"));
+  key(Qt::Key_Up);
+  require(query->text() == QStringLiteral("fresh") && history->entries().front() == U"\u3093" &&
+              searches == 3 && results->document() == report &&
+              results->textCursor().position() == result_position && results->textCursor().anchor() == result_anchor,
+          "History navigation searched, lost pending kana, or changed existing results");
+  const auto before_failure = history->entries();
+  query->setText(QString(268, QLatin1Char('q')));
+  key(Qt::Key_Up);
+  require(query->text() == QString(268, QLatin1Char('q')) && history->entries() == before_failure &&
+              status->text().contains(QStringLiteral("not replaced")),
+          "An oversized edited query was silently lost during history navigation");
+  fail = true;
+  dialog.set_query(U"fail");
+  require(!dialog.search() && history->entries() == before_failure && results->document() == report &&
+              results->textCursor().position() == result_position && results->textCursor().anchor() == result_anchor,
+          "A failed search replaced history or previous results");
+  fail = false;
+  dialog.set_query(std::u32string(268, U'q'));
+  require(dialog.search() && history->entries() == before_failure &&
+              status->text().contains(QStringLiteral("not retained")),
+          "A valid oversized query was truncated into history or prevented from searching");
+
+  history->remember(U"long");
+  query->setMaxLength(3);
+  query->clear();
+  const auto bounded = history->entries();
+  key(Qt::Key_Up);
+  require(query->text().isEmpty() && history->entries() == bounded,
+          "History recall bypassed the field length limit");
+  query->setMaxLength(32767);
+  QIntValidator validator(0, 9, &dialog);
+  query->setValidator(&validator);
+  key(Qt::Key_Up);
+  require(query->text().isEmpty() && history->entries() == bounded,
+          "History recall bypassed the field validator");
+  query->setValidator(nullptr);
+  class EditingValidator : public QValidator {
+   public:
+    QLineEdit* target = nullptr;
+    mutable bool armed = false;
+    State validate(QString&, int&) const override {
+      if (armed) { armed = false; target->setText(QStringLiteral("safe")); }
+      return Acceptable;
+    }
+  } editing_validator;
+  editing_validator.target = query;
+  query->setValidator(&editing_validator);
+  editing_validator.armed = true;
+  key(Qt::Key_Up);
+  require(query->text() == QStringLiteral("safe") && history->entries() == bounded,
+          "History recall clobbered an edit made during validation");
+  query->setValidator(nullptr);
+  query->clear();
+  const std::u32string special = U"\ufeff\U0001f600\u00a0\tquery";
+  history->remember(special);
+  key(Qt::Key_Up);
+  require(query->text() == qt::to_qstring(special) && !query->isUndoAvailable(),
+          "History recall lost Unicode scalars or retained unrelated query undo");
+  query->setReadOnly(true);
+  QKeyEvent override_event(QEvent::ShortcutOverride, Qt::Key_Up, Qt::NoModifier);
+  override_event.ignore();
+  QApplication::sendEvent(query, &override_event);
+  key(Qt::Key_Up);
+  require(override_event.isAccepted() && query->text() == qt::to_qstring(special),
+          "Read-only history navigation changed text or leaked a shortcut");
+  query->setReadOnly(false);
+  query->clear();
+  bool replaced = false;
+  const auto connection = QObject::connect(query, &QLineEdit::textChanged, &dialog, [&] {
+    if (!replaced) { replaced = true; query->setText(QStringLiteral("safe")); }
+  });
+  key(Qt::Key_Up);
+  QObject::disconnect(connection);
+  require(query->text() == QStringLiteral("safe"), "History recall clobbered a reentrant edit");
+
+  const int completed_searches = searches;
+  query->setText(QStringLiteral("draft"));
+  query->setSelection(1, 2);
+  bool handled = false;
+  QTimer::singleShot(0, &dialog, [&] {
+    auto* chooser = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+    if (!chooser) return;
+    auto* list = chooser->findChild<QListWidget*>(QStringLiteral("edictHistoryList"));
+    auto* buttons = chooser->findChild<QDialogButtonBox*>();
+    handled = list && list->font().pixelSize() == 16 &&
+        list->count() == static_cast<int>(history->entries().size());
+    if (handled) {
+      handled = chooser->grab().save(QCoreApplication::applicationDirPath() + QStringLiteral("/dictionary-history.png"));
+    }
+    buttons->button(QDialogButtonBox::Cancel)->click();
+  });
+  history_button->click();
+  require(handled && query->text() == QStringLiteral("draft") && query->selectionStart() == 1 &&
+              query->selectedText() == QStringLiteral("ra") && searches == completed_searches,
+          "History Cancel changed the query, selection, or search count");
+  handled = false;
+  const auto deleted_first = history->entries()[0];
+  const auto deleted_second = history->entries()[1];
+  QTimer::singleShot(0, &dialog, [&] {
+    auto* chooser = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+    if (!chooser) return;
+    auto* list = chooser->findChild<QListWidget*>(QStringLiteral("edictHistoryList"));
+    list->setCurrentRow(0);
+    list->item(1)->setSelected(true);
+    chooser->findChild<QAction*>(QStringLiteral("edictHistoryCopy"))->trigger();
+    handled = QApplication::clipboard()->text() == qt::to_qstring(deleted_first) +
+        QLatin1Char('\n') + qt::to_qstring(deleted_second);
+    chooser->findChild<QPushButton*>(QStringLiteral("edictHistoryDelete"))->click();
+    chooser->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Cancel)->click();
+  });
+  key(Qt::Key_Down);
+  require(handled && !history->find(deleted_first) && !history->find(deleted_second) &&
+              query->text() == QStringLiteral("draft") && searches == completed_searches,
+          "History copy/delete/Cancel did not preserve the query and immediate deletion semantics");
+  const auto chosen = history->entries().back();
+  QTimer::singleShot(0, &dialog, [&] {
+    auto* chooser = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+    if (!chooser) return;
+    auto* list = chooser->findChild<QListWidget*>(QStringLiteral("edictHistoryList"));
+    list->setCurrentRow(list->count() - 1);
+    chooser->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+  });
+  history_button->click();
+  require(query->text() == qt::to_qstring(chosen) && searches == completed_searches &&
+              field->input_mode() == qt::InputMode::kKanji,
+          "Choosing history searched automatically or changed the local input mode");
+
+  qt::EdictLookupDialog reopened({}, {}, nullptr, {}, {}, history);
+  auto* reopened_query = reopened.findChild<QLineEdit*>(QStringLiteral("edictQuery"));
+  QKeyEvent older(QEvent::KeyPress, Qt::Key_Up, Qt::NoModifier);
+  QApplication::sendEvent(reopened_query, &older);
+  require(reopened_query->text() == qt::to_qstring(history->entries().front()),
+          "A replacement dialog did not inherit the shared history");
+  QPointer<qt::EdictLookupDialog> dying = new qt::EdictLookupDialog({}, {}, nullptr, {}, {}, history);
+  QPointer<QDialog> popup;
+  QTimer::singleShot(0, &dialog, [&] {
+    popup = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+    delete dying.data();
+  });
+  dying->findChild<QPushButton*>(QStringLiteral("edictHistory"))->click();
+  require(!dying && !popup, "History chooser retained a deleted resource owner");
+  dying = new qt::EdictLookupDialog([&](const core::JwpText&, const qt::EdictLookupOptions&) {
+    delete dying.data();
+    return qt::EdictResourceSearchReport{};
+  }, {}, nullptr, {}, {}, history);
+  dying->set_query(U"cat");
+  const auto previous_history = history->entries();
+  require(!dying->search() && !dying && history->entries() == previous_history,
+          "Search used a deleted dialog or published history after owner deletion");
+
+  auto separate_history = std::make_shared<core::QueryHistory>();
+  QPointer<qt::EdictLookupDialog> changing;
+  int callbacks = 0;
+  bool recursive_blocked = false;
+  changing = new qt::EdictLookupDialog([&](const core::JwpText&, const qt::EdictLookupOptions&) {
+    if (++callbacks == 2) {
+      recursive_blocked = !changing->search();
+      changing->set_query(U"other");
+    }
+    return qt::EdictResourceSearchReport{};
+  }, {}, nullptr, {}, {}, separate_history);
+  changing->set_query(U"cat");
+  require(changing->search() && separate_history->entries() == std::vector<std::u32string>{U"cat"},
+          "A zero-match query was not retained");
+  const QPointer<QTextDocument> old_results = changing->findChild<QTextEdit*>(QStringLiteral("edictResults"))->document();
+  changing->set_query(U"dog");
+  require(!changing->search() && recursive_blocked && callbacks == 2 &&
+              separate_history->entries() == std::vector<std::u32string>{U"cat"} && old_results &&
+              changing->findChild<QLineEdit*>(QStringLiteral("edictQuery"))->text() == QStringLiteral("other") &&
+              changing->findChild<QTextEdit*>(QStringLiteral("edictResults"))->document() == old_results,
+          "A reentrant search or changed query published stale results/history");
+  separate_history->set_storage_cells(0);
+  require(changing->search() && separate_history->entries().empty(),
+          "Disabled history prevented a valid query from completing");
+  delete changing.data();
+}
+
 void test_result_character_navigation() {
   std::vector<char32_t> inspected;
   int searches = 0;
@@ -553,6 +783,7 @@ int main(int argc, char** argv) {
     test_search_controls();
     test_query_input_modes();
     test_query_overwrite();
+    test_query_history();
     test_result_character_navigation();
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {

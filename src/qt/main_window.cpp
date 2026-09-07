@@ -3859,6 +3859,9 @@ void MainWindow::show_edict_lookup_dialog() {
   if (!edict_lookup_options_) {
     edict_lookup_options_ = std::make_shared<EdictLookupOptions>();
   }
+  if (!edict_query_history_) {
+    edict_query_history_ = std::make_shared<core::QueryHistory>();
+  }
   auto* dialog = new EdictLookupDialog(
       [this](const core::JwpText& query, const EdictLookupOptions& options) {
         if (edict_resources_ == nullptr) {
@@ -3887,7 +3890,7 @@ void MainWindow::show_edict_lookup_dialog() {
       [this](const std::u32string& text) { return insert_edict_text(text); },
       this, [this](char32_t character) {
         show_kanji_info_dialog(CharacterTarget{character, -1});
-      }, edict_lookup_options_);
+      }, edict_lookup_options_, edict_query_history_);
   dialog->set_overwrite_action(overwrite_action_);
   if (!seed.empty()) {
     dialog->set_query(seed);

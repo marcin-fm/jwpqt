@@ -8,21 +8,28 @@
 #include <utility>
 
 #include <QAction>
+#include <QApplication>
 #include <QCheckBox>
+#include <QClipboard>
 #include <QContextMenuEvent>
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
+#include <QKeyEvent>
 #include <QKeySequence>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QMouseEvent>
 #include <QPointer>
 #include <QPushButton>
+#include <QScopeGuard>
+#include <QSignalBlocker>
 #include <QStringList>
 #include <QTextBlockFormat>
 #include <QTextDocument>
 #include <QTextEdit>
 #include <QVBoxLayout>
+#include <QValidator>
 
 #include "jwpqt/core/jwp_text_codec.h"
 #include "character_context_menu.h"
@@ -65,13 +72,16 @@ QString pluralized(std::size_t value, const QString& singular,
 EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
                                       InsertHandler insert_handler,
                                       QWidget* parent, InfoHandler info_handler,
-                                      std::shared_ptr<EdictLookupOptions> shared_options)
+                                      std::shared_ptr<EdictLookupOptions> shared_options,
+                                      std::shared_ptr<core::QueryHistory> shared_history)
     : QDialog(parent),
       search_handler_(std::move(search_handler)),
       insert_handler_(std::move(insert_handler)),
       info_handler_(std::move(info_handler)),
       options_(shared_options ? std::move(shared_options)
                               : std::make_shared<EdictLookupOptions>()),
+      history_(shared_history ? std::move(shared_history)
+                              : std::make_shared<core::QueryHistory>()),
       query_field_(new KanaInputField(QStringLiteral("edictQuery"), this)),
       query_edit_(query_field_->edit()),
       personal_names_(new QCheckBox(tr("Personal &names"), this)),
@@ -97,10 +107,20 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   auto* query_row = new QHBoxLayout();
   query_edit_->setObjectName(QStringLiteral("edictQuery"));
   query_edit_->setClearButtonEnabled(true);
+  query_edit_->installEventFilter(this);
+  connect(query_edit_, &QLineEdit::textChanged, this, [this] {
+    if (!history_loading_) history_changed_ = true;
+  });
+  auto* history_button = new QPushButton(tr("&History"), this);
+  history_button->setObjectName(QStringLiteral("edictHistory"));
+  history_button->setToolTip(tr("Recall a query without searching. Up/Down navigate query history."));
+  connect(history_button, &QPushButton::clicked, this,
+          [this] { history_command(HistoryCommand::kList); });
   auto* search_button = new QPushButton(tr("&Search"), this);
   search_button->setObjectName(QStringLiteral("edictSearch"));
   search_button->setDefault(true);
   query_row->addWidget(query_field_, 1);
+  query_row->addWidget(history_button);
   query_row->addWidget(search_button);
   outer->addLayout(query_row);
 
@@ -211,7 +231,12 @@ void EdictLookupDialog::set_query(std::u32string_view query) {
 }
 
 bool EdictLookupDialog::search() {
+  if (query_busy_) return false;
+  const QPointer<EdictLookupDialog> self(this);
+  query_busy_ = true;
+  const auto idle = qScopeGuard([self] { if (self) self->query_busy_ = false; });
   query_field_->finish_input();
+  if (!self) return false;
   if (!search_handler_) {
     status_->setText(tr("Dictionary resources are unavailable."));
     return false;
@@ -223,10 +248,19 @@ bool EdictLookupDialog::search() {
   }
 
   try {
-    const core::JwpText query =
-        core::encode_jwp_text(from_qstring(query_edit_->text()));
+    const QString original_query = query_edit_->text();
+    const std::u32string history_text = from_qstring(original_query);
+    if (to_qstring(history_text) != original_query) {
+      throw core::QueryHistoryError("The query contains invalid Unicode");
+    }
+    const core::JwpText query = core::encode_jwp_text(history_text);
     const EdictLookupOptions options = *options_;
-    EdictResourceSearchReport candidate = search_handler_(query, options);
+    const auto handler = search_handler_;
+    EdictResourceSearchReport candidate = handler(query, options);
+    if (!self) return false;
+    if (query_edit_->text() != original_query) {
+      throw core::EdictSearchError("The query changed during the search");
+    }
     if (candidate.results.size() > kMaximumVisibleResults) {
       throw core::EdictSearchError(
           "Dictionary search returned too many interactive results");
@@ -268,32 +302,232 @@ bool EdictLookupDialog::search() {
       cursor.insertText(meanings.join(QStringLiteral("; ")), format);
       ranges.emplace_back(start, cursor.position());
     }
+    core::QueryHistory history = *history_;
+    history.remember(history_text);
     report_ = std::move(candidate);
     rendered_rows_ = std::move(rows);
     row_ranges_ = std::move(ranges);
+    *history_ = std::move(history);
+    history_index_ = -1;
+    history_changed_ = true;
     const QPointer<QTextDocument> previous = results_->document();
     document->setParent(results_);
     results_->setDocument(document.release());
+    if (!self) return false;
     if (previous && previous->parent() == results_) delete previous.data();
+    if (!self) return false;
     if (!rendered_rows_.empty()) {
       QTextCursor selected(results_->document());
       selected.setPosition(row_ranges_.front().second, QTextCursor::KeepAnchor);
       results_->setTextCursor(selected);
+      if (!self) return false;
       results_->setFocus();
     } else {
       query_edit_->setFocus();
     }
+    if (!self) return false;
     show_status();
+    if (!history_->find(history_text)) {
+      status_->setText(status_->text() + tr("; query was not retained in bounded history"));
+    }
     update_actions();
     return true;
   } catch (const std::exception& error) {
+    if (!self) return false;
     status_->setText(tr("Search failed: %1").arg(QString::fromUtf8(error.what())));
     query_edit_->setFocus();
     return false;
   } catch (...) {
+    if (!self) return false;
     status_->setText(tr("Search failed with an unknown error."));
     query_edit_->setFocus();
     return false;
+  }
+}
+
+bool EdictLookupDialog::recall_history(std::u32string_view text, int index,
+                                     bool changed) {
+  if (query_edit_->isReadOnly()) return false;
+  const QPointer<EdictLookupDialog> self(this);
+  const QString original = query_edit_->text();
+  const int original_cursor = query_edit_->cursorPosition();
+  const int original_selection = query_edit_->selectionStart();
+  const int original_length = static_cast<int>(query_edit_->selectedText().size());
+  const QString recalled = to_qstring(text);
+  if (recalled.size() > query_edit_->maxLength()) {
+    throw core::QueryHistoryError("The history query exceeds this field's length limit");
+  }
+  if (const auto* validator = query_edit_->validator()) {
+    QString checked = recalled;
+    int position = static_cast<int>(checked.size());
+    if (validator->validate(checked, position) == QValidator::Invalid) {
+      throw core::QueryHistoryError("The history query is not valid for this field");
+    }
+  }
+  if (!self) return false;
+  if (query_edit_->isReadOnly() || query_edit_->text() != original ||
+      query_edit_->cursorPosition() != original_cursor ||
+      query_edit_->selectionStart() != original_selection ||
+      query_edit_->selectedText().size() != original_length ||
+      recalled.size() > query_edit_->maxLength()) {
+    history_index_ = -1;
+    history_changed_ = true;
+    status_->setText(tr("The input field changed during history validation."));
+    return false;
+  }
+  history_loading_ = true;
+  const auto loaded = qScopeGuard([self] { if (self) self->history_loading_ = false; });
+  query_edit_->setText(recalled);
+  if (!self) return false;
+  if (query_edit_->text() != recalled || query_edit_->isReadOnly()) {
+    history_changed_ = true;
+    history_index_ = -1;
+    status_->setText(tr("History recall was changed by the input field."));
+    return false;
+  }
+  query_edit_->setCursorPosition(static_cast<int>(recalled.size()));
+  if (!self) return false;
+  if (query_edit_->text() != recalled || query_edit_->isReadOnly()) {
+    history_changed_ = true;
+    history_index_ = -1;
+    return false;
+  }
+  history_index_ = index;
+  history_changed_ = changed;
+  query_edit_->setFocus();
+  return self != nullptr;
+}
+
+void EdictLookupDialog::history_command(HistoryCommand command) {
+  if (query_busy_ || query_edit_->isReadOnly()) return;
+  const QPointer<EdictLookupDialog> self(this);
+  query_busy_ = true;
+  const auto idle = qScopeGuard([self] { if (self) self->query_busy_ = false; });
+  query_field_->finish_input();
+  if (!self) return;
+  try {
+    if (history_->entries().empty()) {
+      status_->setText(tr("Query history is empty."));
+      return;
+    }
+    if (command == HistoryCommand::kOlder) {
+      const core::QueryHistory before = *history_;
+      core::QueryHistory candidate = before;
+      int index = history_index_ + 1;
+      if (history_changed_) {
+        const QString current = query_edit_->text();
+        const std::u32string draft = from_qstring(current);
+        if (to_qstring(draft) != current) {
+          throw core::QueryHistoryError("The edited query contains invalid Unicode");
+        }
+        if (!draft.empty()) {
+          if (draft.size() > candidate.maximum_text_cells()) {
+            throw core::QueryHistoryError("The edited query is too long to retain; it was not replaced");
+          }
+          candidate.remember(draft);
+          index = 1;
+        } else {
+          index = 0;
+        }
+      }
+      index = std::clamp(index, 0, static_cast<int>(candidate.entries().size()) - 1);
+      if (!recall_history(candidate.entries()[static_cast<std::size_t>(index)], index, false)) return;
+      if (history_->entries() == before.entries() &&
+          history_->storage_cells() == before.storage_cells()) {
+        *history_ = std::move(candidate);
+      } else {
+        history_index_ = -1;
+        history_changed_ = true;
+      }
+      return;
+    }
+    if (command == HistoryCommand::kNewer && !history_changed_ && history_index_ >= 0) {
+      const int index = std::min(history_index_, static_cast<int>(history_->entries().size())) - 1;
+      const std::u32string text = index < 0 ? std::u32string{} :
+          history_->entries()[static_cast<std::size_t>(index)];
+      recall_history(text, index, index < 0);
+      return;
+    }
+
+    // The resource owner may close this dialog while the chooser's event loop runs.
+    QPointer<QDialog> chooser = new QDialog(this);
+    const auto dispose = qScopeGuard([chooser] { delete chooser.data(); });
+    chooser->setObjectName(QStringLiteral("edictHistoryDialog"));
+    chooser->setWindowTitle(tr("Dictionary Query History"));
+    chooser->resize(620, 420);
+    auto* layout = new QVBoxLayout(chooser);
+    auto* list = new QListWidget(chooser);
+    list->setObjectName(QStringLiteral("edictHistoryList"));
+    list->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    QFont font = list->font();
+    font.setPixelSize(16);
+    list->setFont(font);
+    assign_japanese_font(*list, JapaneseFontRole::kList);
+    layout->addWidget(list, 1);
+    auto* note = new QLabel(tr("Choose a query without searching. Deletions take effect immediately, even on Cancel."), chooser);
+    note->setWordWrap(true);
+    layout->addWidget(note);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, chooser);
+    auto* remove = buttons->addButton(tr("&Delete"), QDialogButtonBox::ActionRole);
+    remove->setObjectName(QStringLiteral("edictHistoryDelete"));
+    layout->addWidget(buttons);
+    const auto history = history_;
+    const auto populate = [history, list, buttons, remove] {
+      const int row = std::max(0, list->currentRow());
+      const QSignalBlocker blocked(list);
+      list->clear();
+      for (const auto& entry : history->entries()) list->addItem(to_qstring(entry));
+      if (list->count() != 0) list->setCurrentRow(std::min(row, list->count() - 1));
+      buttons->button(QDialogButtonBox::Ok)->setEnabled(list->count() != 0);
+      remove->setEnabled(list->count() != 0);
+    };
+    populate();
+    auto* copy = new QAction(tr("&Copy"), chooser);
+    copy->setObjectName(QStringLiteral("edictHistoryCopy"));
+    copy->setShortcut(QKeySequence::Copy);
+    copy->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    list->addAction(copy);
+    list->setContextMenuPolicy(Qt::ActionsContextMenu);
+    connect(copy, &QAction::triggered, list, [list] {
+      QStringList text;
+      for (int row = 0; row < list->count(); ++row) {
+        if (list->item(row)->isSelected()) text.push_back(list->item(row)->text());
+      }
+      if (!text.empty()) QApplication::clipboard()->setText(text.join(QLatin1Char('\n')));
+    });
+    auto* erase = new QAction(tr("&Delete"), chooser);
+    erase->setShortcut(QKeySequence(Qt::Key_Delete));
+    erase->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    list->addAction(erase);
+    connect(remove, &QPushButton::clicked, erase, &QAction::trigger);
+    connect(erase, &QAction::triggered, list, [history, list, note, populate] {
+      try {
+        core::QueryHistory candidate = *history;
+        auto selected = list->selectedItems();
+        if (selected.empty() && list->currentItem()) selected.push_back(list->currentItem());
+        for (auto* item : selected) {
+          if (const auto index = candidate.find(from_qstring(item->text()))) candidate.remove(*index);
+        }
+        *history = std::move(candidate);
+        populate();
+      } catch (const std::exception& error) {
+        note->setText(QString::fromUtf8(error.what()));
+      }
+    });
+    connect(buttons, &QDialogButtonBox::accepted, chooser, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, chooser, &QDialog::reject);
+    connect(list, &QListWidget::itemDoubleClicked, chooser, &QDialog::accept);
+    const int result = chooser->exec();
+    if (!self || !chooser) return;
+    const QString selected = list->currentItem() ? list->currentItem()->text() : QString{};
+    delete chooser.data();
+    history_index_ = -1;
+    history_changed_ = true;
+    if (result == QDialog::Accepted && !selected.isEmpty()) {
+      recall_history(from_qstring(selected), -1, true);
+    }
+  } catch (const std::exception& error) {
+    if (self) status_->setText(tr("History: %1").arg(QString::fromUtf8(error.what())));
   }
 }
 
@@ -348,6 +582,18 @@ void EdictLookupDialog::update_actions() {
 }
 
 bool EdictLookupDialog::eventFilter(QObject* watched, QEvent* event) {
+  if (watched == query_edit_ && (event->type() == QEvent::ShortcutOverride ||
+                                event->type() == QEvent::KeyPress)) {
+    auto* key = static_cast<QKeyEvent*>(event);
+    if (key->modifiers() == Qt::NoModifier &&
+        (key->key() == Qt::Key_Up || key->key() == Qt::Key_Down)) {
+      if (event->type() == QEvent::KeyPress) {
+        history_command(key->key() == Qt::Key_Up ? HistoryCommand::kOlder : HistoryCommand::kNewer);
+      }
+      event->accept();
+      return true;
+    }
+  }
   if (watched == results_ || watched == results_->viewport()) {
     if (event->type() == QEvent::MouseButtonPress &&
         static_cast<QMouseEvent*>(event)->button() == Qt::RightButton) return true;

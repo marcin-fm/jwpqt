@@ -134,7 +134,7 @@ or the explicit project API options. Recent project entries reopen as projects.
 
 **Tools > Options** configures Japanese document/query/list/candidate fonts,
 font inheritance, toolbar/status/candidate visibility, scrollbar policies,
-candidate-bar position, default JWP code page and exit/history persistence.
+candidate-bar position, default JWP code page and exit/recent-file persistence.
 Desktop menu fonts are unchanged. Character Table stays at 16 logical pixels;
 the large character keeps its default glyph size. Unavailable or legacy bitmap
 font families use native fallbacks, with their original names retained.
@@ -300,6 +300,23 @@ controls. These choices survive closing the lookup or replacing its resources
 within the same application window. Their cross-session settings migration is
 still pending. Changing a checkbox does not discard results or start a search.
 
+Dictionary **History** opens a selectable query list; `Up` recalls older queries,
+and `Down` moves toward newer entries and a blank draft, or opens the list when
+the query has been edited. Recall resolves pending kana once, never starts a
+search, and leaves the current results and document untouched. The chooser
+supports Copy, Delete, OK and Cancel. Deletion takes effect immediately, including
+when the chooser is subsequently cancelled; Cancel otherwise preserves the
+query and its selection.
+
+Completed searches, including zero-match queries, are remembered; failed searches
+do not replace history or prior results. Exact duplicates move to the front.
+The default source-sized budget permits at most 31 entries and 267 total Unicode
+scalars. Oversized queries are not truncated, and an edited draft that cannot
+be retained is not discarded by older-query navigation. History survives closing
+the lookup and replacing its resources within the same window. Disk persistence,
+legacy history-file import, history-size settings and other history consumers
+remain separate work.
+
 Character Table places its code fields beside the full character grid. Lookup
 results use horizontal character strips with Information, Insert and Copy
 actions. Bushu, Stroke/Bushu, SKIP, Spahn-Hadamitzky, Four Corner and Index Lookup
@@ -312,10 +329,10 @@ In dark palettes, radical strokes use light ink on dark paper and stroke-count
 headings stay readable. Switching back restores the original light artwork
 without changing queries, selections or results.
 
-This is not complete dialog parity: dictionary query history, sort/options
+This is not complete dialog parity: persisted query history, sort/options
 integration, radical automatic stroke estimation and stroke-tolerance shortcuts
-remain open. Existing numeric ranges
-and portable dictionary search algorithms do not substitute for those controls.
+remain open. Existing numeric ranges and portable dictionary search algorithms
+do not substitute for those controls.
 
 ### Character information
 

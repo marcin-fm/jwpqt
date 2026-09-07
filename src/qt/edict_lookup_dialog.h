@@ -12,6 +12,7 @@
 #include <QDialog>
 
 #include "edict_resource_search.h"
+#include "jwpqt/core/query_history.h"
 
 class QAction;
 class QCheckBox;
@@ -49,7 +50,8 @@ class EdictLookupDialog : public QDialog {
                              InsertHandler insert_handler = {},
                              QWidget* parent = nullptr,
                              InfoHandler info_handler = {},
-                             std::shared_ptr<EdictLookupOptions> shared_options = {});
+                             std::shared_ptr<EdictLookupOptions> shared_options = {},
+                             std::shared_ptr<core::QueryHistory> shared_history = {});
 
   void set_query(std::u32string_view query);
   void set_overwrite_action(QAction* action);
@@ -64,8 +66,11 @@ class EdictLookupDialog : public QDialog {
 
  private:
   static constexpr std::size_t kMaximumVisibleResults = 100'000;
+  enum class HistoryCommand { kOlder, kNewer, kList };
 
   std::u32string selected_rows() const;
+  void history_command(HistoryCommand command);
+  bool recall_history(std::u32string_view text, int index, bool changed);
   void update_actions();
   void show_status();
 
@@ -73,6 +78,11 @@ class EdictLookupDialog : public QDialog {
   InsertHandler insert_handler_;
   InfoHandler info_handler_;
   std::shared_ptr<EdictLookupOptions> options_;
+  std::shared_ptr<core::QueryHistory> history_;
+  int history_index_ = -1;
+  bool history_changed_ = false;
+  bool history_loading_ = false;
+  bool query_busy_ = false;
   KanaInputField* query_field_;
   QLineEdit* query_edit_;
   QCheckBox* personal_names_;

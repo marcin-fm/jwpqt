@@ -32,6 +32,7 @@
 #include "jwpqt/core/kana_input.h"
 #include "jwpqt/core/edict_user_dictionary.h"
 #include "jwpqt/core/legacy_code_page.h"
+#include "jwpqt/core/query_history.h"
 #include "jwpqt/core/text_file.h"
 #include "jwpqt/core/wnn_dictionary.h"
 #include "jwpqt/core/wnn_preferences.h"
@@ -443,6 +444,7 @@ class MainWindow : public QMainWindow {
   std::unique_ptr<EdictUserResources> edict_user_resources_;
   QString edict_config_directory_;
   std::shared_ptr<EdictLookupOptions> edict_lookup_options_;
+  std::shared_ptr<core::QueryHistory> edict_query_history_;
   EdictLookupDialog* edict_lookup_dialog_ = nullptr;
   EdictResultsWindow* edict_results_window_ = nullptr;
   EdictUserDictionaryDialog* edict_user_dictionary_dialog_ = nullptr;

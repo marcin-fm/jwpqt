@@ -3332,6 +3332,13 @@ void test_edict_search_controls(const QString& directory) {
   action->trigger();
   dialog = dynamic_cast<qt::EdictLookupDialog*>(
       window.findChild<QDialog*>(QStringLiteral("edictLookupDialog")));
+  require(dialog != nullptr, "Dictionary history owner was not recreated");
+  auto* history_query = dialog->findChild<QLineEdit*>(QStringLiteral("edictQuery"));
+  QKeyEvent older_query(QEvent::KeyPress, Qt::Key_Up, Qt::NoModifier);
+  QApplication::sendEvent(history_query, &older_query);
+  require(history_query->text() == QStringLiteral("\u4e9c\u304b") &&
+              dialog->report().results.empty() && !window.document_modified(),
+          "Reopened history lost the last valid query, remembered a failure, or searched automatically");
   require(dialog && count(U"cat") == 1 &&
               dialog->findChild<QCheckBox*>(QStringLiteral("edictJasciiToAscii"))->isChecked(),
           "Dictionary policies did not survive close/reopen");
@@ -3340,8 +3347,30 @@ void test_edict_search_controls(const QString& directory) {
   action->trigger();
   dialog = dynamic_cast<qt::EdictLookupDialog*>(
       window.findChild<QDialog*>(QStringLiteral("edictLookupDialog")));
+  require(dialog != nullptr, "Dictionary history owner was not recreated after reload");
+  history_query = dialog->findChild<QLineEdit*>(QStringLiteral("edictQuery"));
+  QApplication::sendEvent(history_query, &older_query);
+  require(history_query->text() == QStringLiteral("cat") && dialog->report().results.empty(),
+          "Resource replacement discarded query history or submitted a recall");
   require(dialog && count(U"cat") == 1,
           "Resource replacement discarded the window's dictionary policies");
+  QPointer<QDialog> history_owner = dialog;
+  QPointer<QDialog> history_popup;
+  bool reloaded = false;
+  QTimer::singleShot(0, &window, [&] {
+    history_popup = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+    reloaded = history_popup && window.load_edict_configuration(registry_path, qt::OpenMode::kNonInteractive);
+  });
+  dialog->findChild<QPushButton*>(QStringLiteral("edictHistory"))->click();
+  require(reloaded && !history_owner && !history_popup && !window.document_modified(),
+          "Resource replacement retained a modal history owner or changed the document");
+  action->trigger();
+  dialog = dynamic_cast<qt::EdictLookupDialog*>(
+      window.findChild<QDialog*>(QStringLiteral("edictLookupDialog")));
+  require(dialog != nullptr, "Dictionary could not reopen after history chooser teardown");
+  QApplication::sendEvent(dialog->findChild<QLineEdit*>(QStringLiteral("edictQuery")), &older_query);
+  require(dialog->findChild<QLineEdit*>(QStringLiteral("edictQuery"))->text() == QStringLiteral("cat"),
+          "Closing a modal history chooser discarded the shared query cache");
 }
 
 void test_edict_user_dictionary_integration(const QString& directory) {
