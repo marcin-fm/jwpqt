@@ -14,11 +14,13 @@
 #include <QLabel>
 #include <QMessageBox>
 #include <QPlainTextEdit>
+#include <QPushButton>
 #include <QSpinBox>
 #include <QTabWidget>
 #include <QVBoxLayout>
 
 #include "jwpqt/core/jwp_configuration.h"
+#include "kanji_info_options_dialog.h"
 
 namespace jwpqt::qt {
 
@@ -56,6 +58,13 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   for (int page = 1250; page <= 1258; ++page) code_page->addItem(QStringLiteral("CP%1").arg(page), page);
   code_page->setCurrentIndex(code_page->findData(settings_.translation_code_page));
   form->addRow(tr("Default JWP code page"), code_page);
+  auto* information = new QPushButton(tr("Character Info Setup..."), display);
+  information->setObjectName(QStringLiteral("settingsCharacterInfo"));
+  connect(information, &QPushButton::clicked, this, [this] {
+    KanjiInfoOptionsDialog dialog(settings_.kanji_info, this);
+    if (dialog.exec() == QDialog::Accepted) settings_.kanji_info = dialog.options();
+  });
+  form->addRow(information);
   tabs->addTab(display, tr("Display And Files"));
 
   auto* fonts = new QWidget(tabs);

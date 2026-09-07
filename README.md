@@ -283,5 +283,20 @@ Both use the editor's normal history. Inspecting characters does not change
 the editor's selection or commit an active conversion. Closing one information
 window does not close the others.
 
+**Tools > Character Info Setup**, also available inside Options, configures the
+26 legacy information fields, their order and blank spacers. Duplicate choices
+are repaired using the first missing field, as in the original setup dialog.
+The scrollable main panel shows all configured rows; rows 14-26 also appear in
+More Info. Bushu and cross-references remain available independently. Compact
+readings use comma-space for meanings and Japanese commas for kana; headings
+can be hidden. Accepted changes update existing and new information windows.
+Cancel, including cancellation of the enclosing Options dialog, leaves the
+effective settings unchanged.
+
+These preferences persist in `jwpqt.cfg` and JPR workspaces. The full 60-byte
+legacy field array is preserved, including the unused tail; Setup defaults reset
+only the visible choices and flags. `CharInfo_SingleDialog` is retained but not
+applied: native information windows remain independent.
+
 JWPce/JWPxp copyright and licensing notices remain in `_cpright.txt`,
 `_readme.txt`, and `gnugpl.txt`.

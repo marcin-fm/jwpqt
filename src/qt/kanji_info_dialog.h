@@ -10,6 +10,7 @@
 
 #include <QDialog>
 
+#include "kanji_info_options.h"
 #include "jwpqt/core/kanji_info.h"
 #include "jwpqt/core/legacy_code_page.h"
 
@@ -34,6 +35,8 @@ class KanjiInfoDialog : public QDialog {
       core::LegacyCodePage code_page = core::kDefaultLegacyCodePage);
   core::JisCode code() const noexcept;
   char32_t character() const noexcept;
+  void set_options(const KanjiInfoOptions& options);
+  static QString field_name(std::uint8_t field);
 
  protected:
   bool eventFilter(QObject* watched, QEvent* event) override;
@@ -51,6 +54,8 @@ class KanjiInfoDialog : public QDialog {
   std::function<void(char32_t)> show_information_;
   std::function<bool(std::u32string)> insert_;
   core::LegacyCodePage code_page_ = core::kDefaultLegacyCodePage;
+  KanjiInfoOptions options_;
+  std::optional<core::KanjiInfoRecord> record_;
   core::JisCode code_ = 0;
   char32_t unicode_ = 0;
   QLabel* character_;

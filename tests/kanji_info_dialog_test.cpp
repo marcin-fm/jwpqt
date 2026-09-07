@@ -3,12 +3,17 @@
 #include <algorithm>
 #include <cstdlib>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 
 #include <QApplication>
 #include <QAbstractTextDocumentLayout>
 #include <QClipboard>
+#include <QCheckBox>
+#include <QComboBox>
 #include <QContextMenuEvent>
+#include <QDialogButtonBox>
+#include <QAction>
 #include <QInputMethodEvent>
 #include <QGlyphRun>
 #include <QKeyEvent>
@@ -16,16 +21,22 @@
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPushButton>
+#include <QPointer>
 #include <QScrollBar>
 #include <QTableWidget>
 #include <QTextEdit>
 #include <QTextBlock>
 #include <QTextLayout>
 #include <QTimer>
+#include <QTemporaryDir>
 
 #include "character_context_menu.h"
 #include "jwpqt/core/kanji_info.h"
 #include "kanji_info_dialog.h"
+#include "kanji_info_options_dialog.h"
+#include "jwp_editor.h"
+#include "main_window.h"
+#include "project_workspace.h"
 
 namespace {
 
@@ -56,7 +67,7 @@ void put_u32(std::string& bytes, std::size_t offset, std::uint32_t value) {
     bytes[offset + shift / 8] = static_cast<char>((value >> shift) & 0xffU);
 }
 
-jwpqt::core::KanjiInfoDatabase database() {
+jwpqt::core::KanjiInfoDatabase database(bool multiple_readings = false) {
   constexpr std::size_t variable = 28;
   std::string bytes;
   append_u32(bytes, jwpqt::core::kKanjiInfoMagic);
@@ -64,7 +75,7 @@ jwpqt::core::KanjiInfoDatabase database() {
   append_u16(bytes, 1U);
   append_u16(bytes, 0x3021U);
   bytes.resize(variable, '\0');
-  put_u16(bytes, 12, 87U | (13U << 8U) | (1U << 13U));
+  put_u16(bytes, 12, 87U | (13U << 8U) | ((multiple_readings ? 2U : 1U) << 13U));
   put_u16(bytes, 14, 4U | (2U << 4U) | (2U << 8U) | (4U << 11U));
   put_u16(bytes, 16, 9U | (1U << 5U) | (1U << 6U) | (1U << 11U));
   put_u16(bytes, 18, (2492U << 1U) | 1U);
@@ -76,6 +87,7 @@ jwpqt::core::KanjiInfoDatabase database() {
     bytes.push_back('\0');
   }
   bytes.append("\x22\0", 2);
+  if (multiple_readings) bytes.append("\x24\0", 2);
   bytes.append("\x23\0", 2);
   bytes.append("\x22\0", 2);
   append_u16(bytes, 10947U);
@@ -83,12 +95,149 @@ jwpqt::core::KanjiInfoDatabase database() {
   append_u32(bytes, 1U | (2044U << 6U) | (7U << 20U) | (6U << 24U));
   for (const auto reference : {
            jwpqt::core::KanjiInfoCode{'F', 640}, {'I', 259}, {'Q', 1234},
+           {'E', 123}, {'L', 77}, {'O', 13}, {'N', 99}, {'B', 0x020c},
            {'k', 0x3021}, {'j', 0x3445}, {'z', (2U << 13U) | (2U << 10U) | 67U}}) {
     bytes.push_back(reference.kind);
     append_u16(bytes, reference.value);
   }
   bytes.push_back('\0');
   return jwpqt::core::KanjiInfoDatabase::parse(bytes);
+}
+
+void test_information_options() {
+  using namespace jwpqt::qt;
+  const auto source = database(true);
+  KanjiInfoDialog dialog(&source, [](char32_t) {});
+  require(dialog.set_code(0x3021), "Could not open configurable information record");
+  dialog.show();
+  dialog.findChild<QPushButton*>(QStringLiteral("kanjiInfoMore"))->click();
+  auto* fields = dialog.findChild<QTableWidget*>(QStringLiteral("kanjiInfoFields"));
+  auto* readings = dialog.findChild<QTextEdit*>(QStringLiteral("kanjiInfoReadings"));
+  auto* extra = dialog.findChild<QTextEdit*>(QStringLiteral("kanjiInfoReferences"));
+  KanjiInfoOptions options;
+  select_kanji_info_field(options, 0, 17);
+  options.fields[13] = 17;  // Imported layouts may intentionally repeat a field.
+  options.compact = true;
+  options.headings = false;
+  dialog.set_options(options);
+  require(fields->item(0, 0)->text() == QStringLiteral("Heisig") &&
+          fields->item(0, 1)->text() == QStringLiteral("77") &&
+          readings->toPlainText() == QStringLiteral("love, affection <&>\n\u30a2\u3001\u30a4\n\u3043\n\u3042") &&
+          extra->isVisible() && extra->toPlainText().contains(QStringLiteral("Heisig: 77")) &&
+          extra->toPlainText().contains(QStringLiteral("JIS X 0208 reference: 3021")),
+          "Live field order, compact readings or More Info references are wrong");
+  QTextCursor selection(readings->document());
+  selection.setPosition(0);
+  selection.setPosition(4, QTextCursor::KeepAnchor);
+  readings->setTextCursor(selection);
+  dialog.set_options(options);
+  require(readings->textCursor().selectedText() == QStringLiteral("love"),
+          "Unchanged information preferences reset a selected reading");
+  auto unused_tail = options;
+  unused_tail.fields[59] = 255;
+  dialog.set_options(unused_tail);
+  require(readings->textCursor().selectedText() == QStringLiteral("love"),
+          "A reserved settings byte changed the rendered information");
+  select_kanji_info_field(unused_tail, 1, 4);
+  dialog.set_options(unused_tail);
+  require(readings->textCursor().selectedText() == QStringLiteral("love"),
+          "Reordering metadata reset an unrelated reading selection");
+  auto invalid = options;
+  invalid.fields[0] = 255;
+  bool rejected = false;
+  try { dialog.set_options(invalid); } catch (const std::runtime_error&) { rejected = true; }
+  require(rejected && fields->item(0, 0)->text() == QStringLiteral("Heisig"),
+          "Invalid information preferences changed the viewer");
+  dialog.set_options(KanjiInfoOptions{});
+  require(fields->item(0, 0)->text() == QStringLiteral("Type") &&
+          readings->toPlainText().startsWith(QStringLiteral("-- meanings --\nlove\naffection <&>")),
+          "Default information preferences did not restore expanded headings");
+
+  MainWindow window;
+  window.active_editor()->insertPlainText(QStringLiteral("\u65e5"));
+  auto* information = window.findChild<QAction*>(QStringLiteral("kanjiInfoAction"));
+  auto* setup = window.findChild<QAction*>(QStringLiteral("kanjiInfoSetupAction"));
+  require(information && setup, "Character Info Setup action is unavailable");
+  information->trigger();
+  information->trigger();
+  auto viewers = window.findChildren<QDialog*>(QStringLiteral("kanjiInfoDialog"), Qt::FindDirectChildrenOnly);
+  require(viewers.size() == 2, "Information requests stopped opening independent windows");
+  const QPointer<QDialog> first = viewers.front();
+  const QString body = document_plain_text(*window.active_editor()->document());
+  const auto change_dialog = [](bool accept) {
+    auto* modal = dynamic_cast<KanjiInfoOptionsDialog*>(QApplication::activeModalWidget());
+    require(modal != nullptr, "Character Info Setup did not open its native dialog");
+    auto* first_field = modal->findChild<QComboBox*>(QStringLiteral("kanjiInfoField0"));
+    first_field->setCurrentIndex(4);
+    require(modal->findChild<QComboBox*>(QStringLiteral("kanjiInfoField3"))->currentIndex() == 1,
+            "Setup did not repair a duplicate selection");
+    modal->findChild<QCheckBox*>(QStringLiteral("kanjiInfoHeadings"))->setChecked(false);
+    auto* buttons = modal->findChild<QDialogButtonBox*>();
+    buttons->button(accept ? QDialogButtonBox::Ok : QDialogButtonBox::Cancel)->click();
+  };
+  QTimer::singleShot(0, [&] { change_dialog(false); });
+  setup->trigger();
+  require(window.application_settings().kanji_info == KanjiInfoOptions{}, "Cancelled setup changed preferences");
+  QTimer::singleShot(0, [&] { change_dialog(true); });
+  setup->trigger();
+  const auto configured = window.application_settings().kanji_info;
+  require(first && first->isVisible() && configured.fields[0] == 4 && !configured.headings &&
+          document_plain_text(*window.active_editor()->document()) == body && window.document_modified(),
+          "Accepted setup replaced a viewer or changed the document");
+  for (auto* viewer : viewers)
+    require(viewer->findChild<QTableWidget*>(QStringLiteral("kanjiInfoFields"))->item(0, 0)->text() ==
+                QStringLiteral("Unicode"), "Setup did not update every independent viewer");
+  information->trigger();
+  viewers = window.findChildren<QDialog*>(QStringLiteral("kanjiInfoDialog"), Qt::FindDirectChildrenOnly);
+  require(viewers.size() == 3 && first, "Setup enabled singleton information behavior");
+  for (auto* viewer : viewers)
+    require(viewer->findChild<QTableWidget*>(QStringLiteral("kanjiInfoFields"))->item(0, 0)->text() ==
+                QStringLiteral("Unicode"), "A newly opened viewer ignored saved preferences");
+  QTemporaryDir directory;
+  require(directory.isValid() && window.save_application_settings(directory.filePath("info.cfg")),
+          "Could not save character information settings");
+  require(read_application_settings_file(directory.filePath("info.cfg")).kanji_info == configured,
+          "Character information settings did not persist");
+  ProjectWorkspace workspace;
+  workspace.detect_formats = false;
+  workspace.settings = window.application_settings();
+  const auto project = encode_project_workspace(workspace);
+  require(decode_project_workspace(project, directory.filePath("info.jpr")).settings.kanji_info == configured,
+          "Character information settings did not survive a JPR workspace");
+  auto reserved = window.application_settings();
+  reserved.kanji_info.fields[59] = 255;
+  require(window.apply_application_settings(reserved), "Could not prepare reserved field-tail test");
+  QTimer::singleShot(0, [&] {
+    auto* modal = dynamic_cast<KanjiInfoOptionsDialog*>(QApplication::activeModalWidget());
+    require(modal != nullptr, "Could not reopen setup for defaults");
+    modal->findChild<QPushButton*>(QStringLiteral("kanjiInfoDefaults"))->click();
+    modal->grab().save(QStringLiteral("character-info-setup.png"));
+    modal->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+  });
+  setup->trigger();
+  auto defaults = KanjiInfoOptions{};
+  defaults.fields[59] = 255;
+  require(window.application_settings().kanji_info == defaults && first,
+          "Setup defaults did not preserve independent viewers");
+  for (const bool accept_parent : {false, true}) {
+    QTimer::singleShot(0, [&] {
+      auto* parent = QApplication::activeModalWidget();
+      require(parent && parent->objectName() == QStringLiteral("applicationSettingsDialog"),
+              "Could not open Options for nested information setup");
+      auto* open = parent->findChild<QPushButton*>(QStringLiteral("settingsCharacterInfo"));
+      require(open != nullptr, "Options has no Character Info Setup control");
+      QTimer::singleShot(0, [&] { change_dialog(true); });
+      open->click();
+      parent->findChild<QDialogButtonBox*>()->button(
+          accept_parent ? QDialogButtonBox::Ok : QDialogButtonBox::Cancel)->click();
+    });
+    window.findChild<QAction*>(QStringLiteral("applicationOptionsAction"))->trigger();
+    require(window.application_settings().kanji_info.fields[0] == (accept_parent ? 4 : 1),
+            "Nested information setup escaped its parent Options transaction");
+  }
+  window.findChild<QAction*>(QStringLiteral("undoAction"))->trigger();
+  require(document_plain_text(*window.active_editor()->document()).isEmpty(),
+          "Character information setup replaced native undo history");
 }
 
 void test_dialog() {
@@ -111,7 +260,7 @@ void test_dialog() {
   auto* more = dialog.findChild<QPushButton*>(QStringLiteral("kanjiInfoMore"));
   auto* clipboard = dialog.findChild<QPushButton*>(QStringLiteral("kanjiInfoClipboard"));
   require(character != nullptr && character->text() == QStringLiteral("\u4e9c") &&
-              fields != nullptr && fields->rowCount() == 15 &&
+              fields != nullptr && fields->rowCount() == 27 &&
               readings != nullptr && readings->isReadOnly() &&
               readings->toPlainText() == QStringLiteral(
                   "-- meanings --\nlove\naffection <&>\n-- on-yomi --\n\u30a2\n"
@@ -359,6 +508,7 @@ void test_character_targeting() {
 int main(int argc, char* argv[]) {
   QApplication application(argc, argv);
   test_dialog();
+  test_information_options();
   test_character_targeting();
   return EXIT_SUCCESS;
 }

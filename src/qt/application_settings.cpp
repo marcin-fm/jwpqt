@@ -2,6 +2,7 @@
 
 #include "application_settings.h"
 
+#include <algorithm>
 #include <iterator>
 #include <utility>
 #include <vector>
@@ -88,6 +89,20 @@ ApplicationSettings read_application_settings(std::string_view text,
         if (value != 0 && value < 1250) throw core::JwpConfigurationError("Unknown code page");
         result.translation_code_page = static_cast<int>(value);
       }
+      if (name.empty() && core::JwpConfigurationKey{"CharInfo_Fields", "kanji_info"}.matches(entry.name)) {
+        name = "CharInfo_Fields";
+        const auto bytes = core::parse_jwp_setting_bytes(entry.value, result.kanji_info.fields.size());
+        std::copy(bytes.begin(), bytes.end(), result.kanji_info.fields.begin());
+        validate_kanji_info_options(result.kanji_info);
+      }
+      if (name.empty() && core::JwpConfigurationKey{"CharInfo_Compact", "info_compress"}.matches(entry.name)) {
+        name = "CharInfo_Compact";
+        result.kanji_info.compact = core::parse_jwp_setting_bool(entry.value);
+      }
+      if (name.empty() && core::JwpConfigurationKey{"CharInfo_ShowHeadings", "info_titles"}.matches(entry.name)) {
+        name = "CharInfo_ShowHeadings";
+        result.kanji_info.headings = core::parse_jwp_setting_bool(entry.value);
+      }
     } catch (const core::JwpConfigurationError& error) {
       throw core::JwpConfigurationError("Configuration line " + std::to_string(entry.line) +
           ", " + name + ": " + error.what());
@@ -120,6 +135,16 @@ std::string write_application_settings(const ApplicationSettings& settings) {
     updates.push_back({{setting.name, setting.alias}, settings.*(setting.member) ? "true" : "false"});
   }
   updates.push_back({{"TranslationCodePage", "code_page"}, std::to_string(settings.translation_code_page)});
+  validate_kanji_info_options(settings.kanji_info);
+  std::string fields;
+  constexpr char hex[] = "0123456789ABCDEF";
+  for (const auto field : settings.kanji_info.fields) {
+    fields.push_back(hex[field >> 4U]);
+    fields.push_back(hex[field & 15U]);
+  }
+  updates.push_back({{"CharInfo_Fields", "kanji_info"}, fields});
+  updates.push_back({{"CharInfo_Compact", "info_compress"}, settings.kanji_info.compact ? "true" : "false"});
+  updates.push_back({{"CharInfo_ShowHeadings", "info_titles"}, settings.kanji_info.headings ? "true" : "false"});
   return core::rewrite_jwp_configuration(settings.source, updates);
 }
 

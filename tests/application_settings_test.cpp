@@ -101,6 +101,42 @@ void test_files(const QString& directory) {
   require(bytes_at(path) == data, "Invalid settings input was rewritten");
 }
 
+void test_information_settings() {
+  using namespace jwpqt::qt;
+  ApplicationSettings settings;
+  require(settings.kanji_info.fields[6] == 14 && settings.kanji_info.fields[13] == 7 &&
+          settings.kanji_info.fields[59] == 60, "Character information defaults differ from desktop source");
+  select_kanji_info_field(settings.kanji_info, 0, 17);
+  require(settings.kanji_info.fields[0] == 17 && settings.kanji_info.fields[16] == 1,
+          "A duplicate field was not replaced with the first missing field");
+  select_kanji_info_field(settings.kanji_info, 1, 0);
+  select_kanji_info_field(settings.kanji_info, 2, 0);
+  select_kanji_info_field(settings.kanji_info, 1, 17);
+  require(settings.kanji_info.fields[0] == 2 && settings.kanji_info.fields[1] == 17 &&
+          settings.kanji_info.fields[2] == 0, "Blank fields or source duplicate repair changed");
+  settings.kanji_info.fields[59] = 255;
+  settings.kanji_info.compact = true;
+  settings.kanji_info.headings = false;
+  const auto before = settings.kanji_info;
+  rejects([&] { select_kanji_info_field(settings.kanji_info, 26, 1); });
+  rejects([&] { select_kanji_info_field(settings.kanji_info, 1, 27); });
+  require(settings.kanji_info == before, "Invalid field selection mutated information settings");
+  const auto bytes = write_application_settings(settings);
+  const auto restored = read_application_settings(bytes);
+  require(restored.kanji_info == before && write_application_settings(restored) == bytes,
+          "Information settings or reserved tail did not round-trip");
+  const auto alias = read_application_settings("info_compress=no\ninfo_titles=yes\nCharInfo_SingleDialog=true", settings);
+  require(!alias.kanji_info.compact && alias.kanji_info.headings &&
+          alias.unapplied == QStringList{QStringLiteral("CharInfo_SingleDialog")} &&
+          settings.kanji_info == before, "Information overlay changed its base or applied singleton behavior");
+  rejects([&] { (void)read_application_settings("CharInfo_Fields=00", settings); });
+  rejects([&] { (void)read_application_settings("CharInfo_Compact=bad\nCharInfo_Compact=true", settings); });
+  const std::string invalid = "1B" + std::string(118, '0');
+  rejects([&] { (void)read_application_settings("kanji_info=" + invalid + "\n" + bytes, settings); });
+  settings.kanji_info.fields[25] = 27;
+  rejects([&] { (void)write_application_settings(settings); });
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -109,6 +145,7 @@ int main(int argc, char** argv) {
     QTemporaryDir directory;
     require(directory.isValid(), "Could not create temporary settings directory");
     test_model();
+    test_information_settings();
     test_files(directory.path());
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

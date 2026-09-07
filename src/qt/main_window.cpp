@@ -81,6 +81,7 @@
 #include "kanji_code_lookup_dialog.h"
 #include "kanji_count_dialog.h"
 #include "kanji_info_dialog.h"
+#include "kanji_info_options_dialog.h"
 #include "kanji_lookup_dialog.h"
 #include "kanji_reading_lookup_dialog.h"
 #include "kanji_color_settings.h"
@@ -1010,6 +1011,10 @@ bool MainWindow::apply_application_settings(const ApplicationSettings& settings,
     conversion_candidates_->setFixedHeight(conversion_candidates_->fontMetrics().height() + 12 +
         (application_settings_.kanji_bar_scrollbar ? style()->pixelMetric(QStyle::PM_ScrollBarExtent) : 0));
     application_settings_warning_.clear();
+    for (auto* child : findChildren<QDialog*>(QStringLiteral("kanjiInfoDialog"),
+                                             Qt::FindDirectChildrenOnly))
+      if (auto* info = dynamic_cast<KanjiInfoDialog*>(child))
+        info->set_options(application_settings_.kanji_info);
     update_encoding_display();
     update_conversion_actions();
     update_undo_actions();
@@ -2172,6 +2177,16 @@ void MainWindow::create_actions() {
   kanji_info_action_->setShortcut(QKeySequence(QStringLiteral("Ctrl+I")));
   connect(kanji_info_action_, &QAction::triggered, this,
           [this] { show_kanji_info_dialog(); });
+
+  auto* info_setup = tools_menu->addAction(tr("Character Info &Setup..."));
+  info_setup->setObjectName(QStringLiteral("kanjiInfoSetupAction"));
+  connect(info_setup, &QAction::triggered, this, [this] {
+    KanjiInfoOptionsDialog dialog(application_settings_.kanji_info, this);
+    if (dialog.exec() != QDialog::Accepted) return;
+    auto next = application_settings_;
+    next.kanji_info = dialog.options();
+    apply_application_settings(next, OpenMode::kInteractive);
+  });
 
   jis_table_action_ = tools_menu->addAction(tr("&JIS Table"));
   jis_table_action_->setObjectName(QStringLiteral("jisTableAction"));
@@ -3405,6 +3420,7 @@ void MainWindow::show_kanji_info_dialog(std::optional<CharacterTarget> target,
   auto* dialog = new KanjiInfoDialog(kanji_info_database_.get(),
       [this](char32_t character) { show_kanji_info_dialog(CharacterTarget{character, -1}); },
       this, [this](std::u32string text) { return insert_edict_text(std::move(text)); });
+  dialog->set_options(application_settings_.kanji_info);
   if (!(code ? dialog->set_code(*code, document_->jwp_code_page_)
              : dialog->set_character(target->character, document_->jwp_code_page_))) {
     delete dialog;

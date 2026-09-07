@@ -10,6 +10,8 @@
 #include <QString>
 #include <QStringList>
 
+#include "kanji_info_options.h"
+
 namespace jwpqt::qt {
 
 enum class JapaneseFontRole { kSystem, kEdit, kList, kKanjiBar, kFile, kBig, kTable, kCount };
@@ -34,6 +36,7 @@ struct ApplicationSettings {
   bool save_settings_on_exit = true;
   bool save_recent_files = true;
   int translation_code_page = 1252;
+  KanjiInfoOptions kanji_info;
   std::string source;
   QStringList unapplied;
 };

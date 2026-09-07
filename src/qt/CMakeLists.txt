@@ -11,6 +11,8 @@ add_library(jwpqt_qt_support STATIC
   file_io.h
   kanji_color_settings.cpp
   kanji_color_settings.h
+  kanji_info_options.cpp
+  kanji_info_options.h
   project_workspace.cpp
   project_workspace.h
   recent_files.cpp
@@ -63,6 +65,8 @@ add_library(jwpqt_qt_ui STATIC
   kanji_count_dialog.h
   kanji_info_dialog.cpp
   kanji_info_dialog.h
+  kanji_info_options_dialog.cpp
+  kanji_info_options_dialog.h
   kanji_lookup_dialog.cpp
   kanji_lookup_dialog.h
   kanji_reading_lookup_dialog.cpp

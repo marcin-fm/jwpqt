@@ -208,14 +208,15 @@ bool KanjiInfoDialog::populate(char32_t character, std::optional<core::JisCode> 
   unicode_ = character;
   code_ = code.value_or(0);
   code_page_ = code_page;
+  record_ = std::move(record);
   character_->setText(to_qstring(std::u32string{character}));
-  populate_fields(record ? &*record : nullptr);
-  populate_readings(record ? &*record : nullptr);
-  more_button_->setEnabled(record.has_value());
+  populate_fields(record_ ? &*record_ : nullptr);
+  populate_readings(record_ ? &*record_ : nullptr);
+  more_button_->setEnabled(record_.has_value());
   status_->setText(!metadata_error.isEmpty()
       ? tr("Could not read kanji metadata: %1. Basic character codes are shown.")
             .arg(metadata_error)
-      : !record && code_ >= 0x3021
+      : !record_ && code_ >= 0x3021
       ? tr("Kanji metadata is unavailable; basic character codes are shown.")
       : tr("Right-click a character for information. Select reading text to insert it."));
   setWindowTitle(tr("Character Information - %1").arg(character_->text()));
@@ -224,6 +225,30 @@ bool KanjiInfoDialog::populate(char32_t character, std::optional<core::JisCode> 
 
 core::JisCode KanjiInfoDialog::code() const noexcept { return code_; }
 char32_t KanjiInfoDialog::character() const noexcept { return unicode_; }
+
+void KanjiInfoDialog::set_options(const KanjiInfoOptions& options) {
+  validate_kanji_info_options(options);
+  if (options_ == options) return;
+  const bool readings_changed = options_.compact != options.compact || options_.headings != options.headings;
+  const bool fields_changed = !std::equal(options_.fields.begin(),
+      options_.fields.begin() + kKanjiInfoFieldCount, options.fields.begin());
+  options_ = options;
+  if (unicode_ == 0) return;
+  if (fields_changed) {
+    populate_fields(record_ ? &*record_ : nullptr);
+    if (more_text_ != nullptr) more_text_->setPlainText(more_info_);
+  }
+  if (readings_changed) populate_readings(record_ ? &*record_ : nullptr);
+}
+
+QString KanjiInfoDialog::field_name(std::uint8_t field) {
+  static const char* names[]{"Blank", "Type", "JIS Code", "Shift-JIS", "Unicode",
+      "Strokes", "Grade", "Nelson", "Halpern / SKIP", "Spahn", "Four Corners",
+      "Morohashi", "Pinyin", "Korean", "Frequency", "Henshall", "Gakken", "Heisig",
+      "O'Neill", "De Roo", "Kanji Learners", "Read / Write", "Tuttle Cards", "Kanji Way",
+      "Kanji in Context", "Busy People", "Compact Guide"};
+  return field <= kKanjiInfoFieldCount ? tr(names[field]) : QString();
+}
 
 void KanjiInfoDialog::populate_fields(const core::KanjiInfoRecord* record) {
   QString type = tr("Unicode character");
@@ -242,37 +267,36 @@ void KanjiInfoDialog::populate_fields(const core::KanjiInfoRecord* record) {
       case 0x28: type = tr("Box drawing"); break;
     }
   }
-  std::vector<std::pair<QString, QString>> rows{{tr("Type"), type}};
+  std::array<QString, kKanjiInfoFieldCount + 1> values;
+  values[1] = type;
   if (const auto entry = core::describe_jis_character(code_)) {
-    rows.emplace_back(tr("JIS Code"), QStringLiteral("%1 (%2)")
-        .arg(hex_value(code_), hex_value(code_ | 0x8080U)));
-    rows.emplace_back(tr("Shift-JIS"), hex_value(
-        (entry->shift_jis.lead << 8U) | entry->shift_jis.trail));
+    values[2] = QStringLiteral("%1 (%2)").arg(hex_value(code_), hex_value(code_ | 0x8080U));
+    values[3] = hex_value((entry->shift_jis.lead << 8U) | entry->shift_jis.trail);
   } else if (code_ != 0) {
-    rows.emplace_back(tr("Byte code"), hex_value(code_, 2));
+    values[2] = hex_value(code_, 2);
+    if (code_ < 0x80) values[3] = hex_value(code_, 2);
   }
-  rows.emplace_back(tr("Unicode"), QStringLiteral("U+%1").arg(hex_value(unicode_)));
+  values[4] = QStringLiteral("U+%1").arg(hex_value(unicode_));
+  QString bushu;
   more_info_.clear();
   if (record != nullptr) {
     const auto& fixed = record->fixed;
     const auto& extended = record->extended;
-    rows.emplace_back(tr("Strokes"), decimal(fixed.strokes));
-    QString bushu = decimal(fixed.bushu);
+    values[5] = decimal(fixed.strokes);
+    bushu = decimal(fixed.bushu);
     if (fixed.classical_bushu != 0)
       bushu += QStringLiteral(" (%1)").arg(fixed.classical_bushu);
-    rows.emplace_back(tr("Bushu"), paired(bushu,
-        paired(radical_symbol(fixed.bushu), radical_symbol(fixed.classical_bushu))));
-    rows.emplace_back(tr("Grade"), decimal(fixed.grade));
-    rows.emplace_back(tr("Frequency"), decimal(reference_value(*record, 'F')));
-    rows.emplace_back(tr("Halpern / SKIP"), paired(decimal(fixed.halpern),
-                                                  skip_code(fixed.skip)));
+    bushu = paired(bushu, paired(radical_symbol(fixed.bushu), radical_symbol(fixed.classical_bushu)));
+    values[6] = decimal(fixed.grade);
+    values[14] = decimal(reference_value(*record, 'F'));
+    values[8] = paired(decimal(fixed.halpern), skip_code(fixed.skip));
     QString spahn;
     if (record->has_extended &&
         (extended.spahn_radical_strokes != 0 || extended.spahn_other_strokes != 0))
       spahn = QStringLiteral("%1%2%3.%4").arg(extended.spahn_radical_strokes)
           .arg(QChar(static_cast<char16_t>('a' + extended.spahn_radical)))
           .arg(extended.spahn_other_strokes).arg(extended.spahn_index);
-    rows.emplace_back(tr("Spahn"), paired(spahn, decimal(reference_value(*record, 'I'))));
+    values[9] = paired(spahn, decimal(reference_value(*record, 'I')));
     QString corner;
     QString morohashi;
     if (record->has_extended) {
@@ -290,36 +314,38 @@ void KanjiInfoDialog::populate_fields(const core::KanjiInfoRecord* record) {
             .arg(extended.morohashi_volume)
             .arg(extended.morohashi_index, 4, 10, QLatin1Char('0')));
     }
-    rows.emplace_back(tr("Four Corners"), corner);
-    rows.emplace_back(tr("Morohashi"), morohashi);
-    rows.emplace_back(tr("Pinyin"), to_qstring(record->pinyin));
-    rows.emplace_back(tr("Korean"), to_qstring(record->korean));
-    rows.emplace_back(tr("Nelson"), paired(decimal(fixed.nelson), decimal(fixed.haig)));
+    values[10] = corner;
+    values[11] = morohashi;
+    values[12] = to_qstring(record->pinyin);
+    values[13] = to_qstring(record->korean);
+    values[7] = paired(decimal(fixed.nelson), decimal(fixed.haig));
+    values[15] = decimal(reference_value(*record, 'E'));
+    values[16] = decimal(reference_value(*record, 'K'));
+    values[17] = decimal(reference_value(*record, 'L'));
+    values[18] = paired(decimal(reference_value(*record, 'O')), decimal(reference_value(*record, 'N')));
+    values[19] = decimal(reference_value(*record, 'D'));
+    values[20] = decimal(reference_value(*record, 'H'));
+    values[21] = decimal(reference_value(*record, 'S'));
+    values[22] = decimal(reference_value(*record, 'T'));
+    values[23] = decimal(reference_value(*record, 'C'));
+    values[24] = decimal(reference_value(*record, 'J'));
+    const auto busy = reference_value(*record, 'B');
+    if (busy != 0) values[25] = QStringLiteral("%1.%2").arg(busy >> 8U).arg(busy & 0xffU);
+    values[26] = decimal(reference_value(*record, 'G'));
 
     QStringList extra;
+    for (std::size_t slot = 13; slot < kKanjiInfoFieldCount; ++slot) {
+      const auto field = options_.fields[slot];
+      if (field == 0) extra.append(QString());
+      else extra.append(field_name(field) + QStringLiteral(": ") + values[field]);
+    }
     for (const auto& reference : record->references) {
+      // Primary references are represented by the configurable fields above.
+      if (QStringLiteral("FIBCDEGHJKLNOSTQ")
+              .contains(QChar::fromLatin1(reference.kind))) continue;
       QString label;
       QString value = QString::number(reference.value);
       switch (reference.kind) {
-        case 'F': label = tr("Frequency"); break;
-        case 'I': label = tr("Spahn kana index"); break;
-        case 'B': label = tr("Japanese for Busy People");
-          value = QStringLiteral("%1.%2").arg(reference.value >> 8U)
-              .arg(reference.value & 0xffU); break;
-        case 'C': label = tr("The Kanji Way"); break;
-        case 'D': label = tr("De Roo"); break;
-        case 'E': label = tr("Henshall"); break;
-        case 'G': label = tr("Kodansha Compact Kanji Guide"); break;
-        case 'H': label = tr("Halpern Kanji Learners Dictionary"); break;
-        case 'J': label = tr("Kanji in Context"); break;
-        case 'K': label = tr("Gakken"); break;
-        case 'L': label = tr("Heisig"); break;
-        case 'N': label = tr("O'Neill Essential Kanji"); break;
-        case 'O': label = tr("O'Neill Japanese Names"); break;
-        case 'S': label = tr("A Guide to Reading and Writing Japanese"); break;
-        case 'T': label = tr("Tuttle Kanji Cards"); break;
-        case 'Q': label = tr("Secondary Four Corners");
-          value = four_corner(reference.value, extended.four_corner_second_index); break;
         case 'n': label = tr("Alternate Nelson"); break;
         case 'h': label = tr("Alternate Halpern"); break;
         case 'o': label = tr("Alternate O'Neill"); break;
@@ -349,6 +375,20 @@ void KanjiInfoDialog::populate_fields(const core::KanjiInfoRecord* record) {
     more_info_ = extra.isEmpty() ? tr("No additional references are recorded.")
                                  : extra.join(QLatin1Char('\n'));
   }
+  std::vector<std::pair<QString, QString>> rows;
+  bool bushu_added = false;
+  for (std::size_t slot = 0; slot < kKanjiInfoFieldCount; ++slot) {
+    const auto field = options_.fields[slot];
+    if (record == nullptr && field > 4) continue;
+    if (field == 0) rows.emplace_back(QString(), QString());
+    else rows.emplace_back(field == 2 && code_ > 0 && code_ <= 0xff ? tr("Byte code")
+                                                                 : field_name(field), values[field]);
+    if (record != nullptr && field == 5 && !bushu_added) {
+      rows.emplace_back(tr("Bushu"), bushu);
+      bushu_added = true;
+    }
+  }
+  if (record != nullptr && !bushu_added) rows.emplace_back(tr("Bushu"), bushu);
   fields_->setRowCount(static_cast<int>(rows.size()));
   for (std::size_t row = 0; row < rows.size(); ++row) {
     fields_->setItem(static_cast<int>(row), 0, new QTableWidgetItem(rows[row].first));
@@ -373,8 +413,15 @@ void KanjiInfoDialog::populate_readings(const core::KanjiInfoRecord* record) {
     const auto section = [&](const QString& title,
                              const std::vector<std::u32string>& entries) {
       if (entries.empty()) return;
-      append(title, true);
-      for (const auto& text : entries) append(to_qstring(text));
+      if (options_.headings) append(title, true);
+      if (options_.compact) {
+        QStringList texts;
+        for (const auto& text : entries) texts.append(to_qstring(text));
+        append(texts.join(&entries == &record->meanings ? QStringLiteral(", ")
+                                                       : QString(QChar(0x3001))));
+      } else {
+        for (const auto& text : entries) append(to_qstring(text));
+      }
     };
     section(tr("-- meanings --"), record->meanings);
     section(tr("-- on-yomi --"), record->on_readings);
@@ -383,7 +430,7 @@ void KanjiInfoDialog::populate_readings(const core::KanjiInfoRecord* record) {
   } else {
     const auto spellings = core::kana_input_spellings(code_);
     if (!spellings.empty()) {
-      append(tr("-- romaji --"), true);
+      if (options_.headings) append(tr("-- romaji --"), true);
       for (const auto spelling : spellings)
         append(QString::fromLatin1(spelling.data(), static_cast<qsizetype>(spelling.size())));
     } else if ((code_ >= 0x2621 && code_ <= 0x2638) ||
@@ -463,6 +510,7 @@ void KanjiInfoDialog::show_more_info() {
     more_text_->setObjectName(QStringLiteral("kanjiInfoReferences"));
     more_text_->setReadOnly(true);
     more_text_->setUndoRedoEnabled(false);
+    assign_japanese_font(*more_text_, JapaneseFontRole::kList);
     more_text_->viewport()->installEventFilter(this);
     more_text_->installEventFilter(this);
     layout->addWidget(more_text_);
