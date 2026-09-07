@@ -291,6 +291,15 @@ Dictionary and Reading query fields have their own **K / A / J** mode button
 and `F4` toggle. Kanji mode composes romaji into kana; ASCII and JASCII work
 without changing the main editor's mode. Search resolves pending kana once.
 
+Dictionary **Begin With** and **End With** control word boundaries; Begin With
+starts enabled, matching the legacy default. **Full ASCII** applies those
+boundaries to complete definitions, and **JASCII to ASCII** explicitly normalizes
+full-width query text. **Advanced** enables adaptive deinflection, independently
+of wildcard syntax, with **Always Search**, **Show All** and **I-adjectives**
+controls. These choices survive closing the lookup or replacing its resources
+within the same application window. Their cross-session settings migration is
+still pending. Changing a checkbox does not discard results or start a search.
+
 Character Table places its code fields beside the full character grid. Lookup
 results use horizontal character strips with Information, Insert and Copy
 actions. Bushu, Stroke/Bushu, SKIP, Spahn-Hadamitzky, Four Corner and Index Lookup
@@ -303,9 +312,9 @@ In dark palettes, radical strokes use light ink on dark paper and stroke-count
 headings stay readable. Switching back restores the original light artwork
 without changing queries, selections or results.
 
-This is not complete dialog parity: dictionary query history, explicit
-begin/end/advanced controls, sort/options integration, radical automatic stroke
-estimation and stroke-tolerance shortcuts remain open. Existing numeric ranges
+This is not complete dialog parity: dictionary query history, sort/options
+integration, radical automatic stroke estimation and stroke-tolerance shortcuts
+remain open. Existing numeric ranges
 and portable dictionary search algorithms do not substitute for those controls.
 
 ### Character information

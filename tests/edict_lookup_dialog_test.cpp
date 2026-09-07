@@ -170,6 +170,64 @@ void test_empty_invalid_and_failed_search_are_contained() {
           "Unknown dictionary insertion failure escaped the dialog");
 }
 
+void test_search_controls() {
+  using namespace jwpqt::qt;
+  auto settings = std::make_shared<EdictLookupOptions>();
+  EdictLookupOptions received;
+  int searches = 0;
+  const auto search = [&](const jwpqt::core::JwpText&, const EdictLookupOptions& options) {
+    received = options;
+    ++searches;
+    return EdictResourceSearchReport{};
+  };
+  {
+    EdictLookupDialog dialog(search, {}, nullptr, {}, settings);
+    const auto box = [&](const char* name) {
+      auto* found = dialog.findChild<QCheckBox*>(QString::fromLatin1(name));
+      require(found != nullptr, "A dictionary search control is missing");
+      return found;
+    };
+    require(box("edictBeginning")->isChecked() && !box("edictEnd")->isChecked() &&
+                !box("edictAdvanced")->isChecked() &&
+                box("edictAdvancedAlways")->isChecked() && box("edictIAdjectives")->isChecked() &&
+                !box("edictAdvancedShowAll")->isChecked() &&
+                !box("edictAdvancedAlways")->isEnabled() && !box("edictIAdjectives")->isEnabled(),
+            "Dictionary controls do not use the source defaults and advanced dependencies");
+    dialog.set_query(U"cat");
+    box("edictBeginning")->click();
+    box("edictEnd")->click();
+    box("edictAdvanced")->click();
+    require(searches == 0 && box("edictAdvancedAlways")->isEnabled() &&
+                box("edictIAdjectives")->isEnabled(),
+            "Changing dictionary policies started a search or left controls disabled");
+    box("edictAdvancedAlways")->click();
+    box("edictAdvancedShowAll")->click();
+    box("edictIAdjectives")->click();
+    box("edictFullAscii")->click();
+    box("edictJasciiToAscii")->click();
+    require(dialog.search() && !received.require_beginning && received.require_end &&
+                received.advanced && !received.advanced_always && received.advanced_show_all &&
+                !received.i_adjectives && received.full_ascii && received.jascii_to_ascii,
+            "Dictionary controls were not forwarded as a complete search snapshot");
+    box("edictAdvanced")->click();
+    require(!box("edictAdvancedShowAll")->isEnabled() && settings->advanced_show_all &&
+                !settings->advanced && searches == 1,
+            "Disabling Advanced discarded its options or searched unexpectedly");
+  }
+  EdictLookupDialog reopened(search, {}, nullptr, {}, settings);
+  reopened.set_query(U"cat");
+  require(reopened.findChild<QCheckBox*>(QStringLiteral("edictEnd"))->isChecked() &&
+              !reopened.findChild<QCheckBox*>(QStringLiteral("edictBeginning"))->isChecked() &&
+              reopened.search() && received.full_ascii && received.jascii_to_ascii &&
+              received.advanced_show_all && !received.advanced && !received.advanced_always,
+          "Closing the dictionary discarded its retained search policies");
+  EdictLookupDialog independent(search);
+  independent.set_query(U"cat");
+  require(independent.search() && received.require_beginning && !received.require_end &&
+              !received.full_ascii && !received.jascii_to_ascii,
+          "Independent dictionary state inherited another owner's settings");
+}
+
 void test_query_input_modes() {
   int searches = 0;
   jwpqt::core::JwpText received;
@@ -492,6 +550,7 @@ int main(int argc, char** argv) {
   try {
     test_search_render_status_copy_and_insert();
     test_empty_invalid_and_failed_search_are_contained();
+    test_search_controls();
     test_query_input_modes();
     test_query_overwrite();
     test_result_character_navigation();

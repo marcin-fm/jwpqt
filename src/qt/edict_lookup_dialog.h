@@ -4,6 +4,7 @@
 #define JWPQT_QT_EDICT_LOOKUP_DIALOG_H
 
 #include <functional>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -27,6 +28,14 @@ struct EdictLookupOptions {
   bool personal_names = false;
   bool place_names = false;
   bool classical = false;
+  bool require_beginning = true;
+  bool require_end = false;
+  bool advanced = false;
+  bool advanced_always = true;
+  bool advanced_show_all = false;
+  bool i_adjectives = true;
+  bool full_ascii = false;
+  bool jascii_to_ascii = false;
 };
 
 class EdictLookupDialog : public QDialog {
@@ -39,7 +48,8 @@ class EdictLookupDialog : public QDialog {
   explicit EdictLookupDialog(SearchHandler search_handler,
                              InsertHandler insert_handler = {},
                              QWidget* parent = nullptr,
-                             InfoHandler info_handler = {});
+                             InfoHandler info_handler = {},
+                             std::shared_ptr<EdictLookupOptions> shared_options = {});
 
   void set_query(std::u32string_view query);
   void set_overwrite_action(QAction* action);
@@ -62,11 +72,20 @@ class EdictLookupDialog : public QDialog {
   SearchHandler search_handler_;
   InsertHandler insert_handler_;
   InfoHandler info_handler_;
+  std::shared_ptr<EdictLookupOptions> options_;
   KanaInputField* query_field_;
   QLineEdit* query_edit_;
   QCheckBox* personal_names_;
   QCheckBox* place_names_;
   QCheckBox* classical_;
+  QCheckBox* beginning_;
+  QCheckBox* end_;
+  QCheckBox* advanced_;
+  QCheckBox* always_;
+  QCheckBox* show_all_;
+  QCheckBox* i_adjectives_;
+  QCheckBox* full_ascii_;
+  QCheckBox* jascii_to_ascii_;
   QTextEdit* results_;
   QLabel* status_;
   QPushButton* insert_button_;

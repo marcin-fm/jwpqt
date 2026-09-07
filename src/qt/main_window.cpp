@@ -3856,6 +3856,9 @@ void MainWindow::show_edict_lookup_dialog() {
     return;
   }
 
+  if (!edict_lookup_options_) {
+    edict_lookup_options_ = std::make_shared<EdictLookupOptions>();
+  }
   auto* dialog = new EdictLookupDialog(
       [this](const core::JwpText& query, const EdictLookupOptions& options) {
         if (edict_resources_ == nullptr) {
@@ -3865,6 +3868,14 @@ void MainWindow::show_edict_lookup_dialog() {
         search.personal_names = options.personal_names;
         search.place_names = options.place_names;
         search.classical = options.classical;
+        search.search.direct.require_beginning = options.require_beginning;
+        search.search.direct.require_end = options.require_end;
+        search.search.direct.full_ascii_boundaries = options.full_ascii;
+        search.search.adaptive = options.advanced;
+        search.search.adaptive_always = options.advanced_always;
+        search.search.adaptive_show_all = options.advanced_show_all;
+        search.search.deinflection.include_i_adjectives = options.i_adjectives;
+        search.pattern.jascii_to_ascii = options.jascii_to_ascii;
         EdictResourceSearchReport report = search_edict_resources(
             *edict_resources_, edict_config_directory_, query, search);
         show_edict_results_window(false);
@@ -3876,7 +3887,7 @@ void MainWindow::show_edict_lookup_dialog() {
       [this](const std::u32string& text) { return insert_edict_text(text); },
       this, [this](char32_t character) {
         show_kanji_info_dialog(CharacterTarget{character, -1});
-      });
+      }, edict_lookup_options_);
   dialog->set_overwrite_action(overwrite_action_);
   if (!seed.empty()) {
     dialog->set_query(seed);

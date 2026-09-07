@@ -54,6 +54,7 @@ class QToolButton;
 namespace jwpqt::qt {
 
 class EdictLookupDialog;
+struct EdictLookupOptions;
 class EdictResultsWindow;
 class EdictUserDictionaryDialog;
 struct EdictResourceSet;
@@ -441,6 +442,7 @@ class MainWindow : public QMainWindow {
   std::unique_ptr<EdictResourceSet> edict_resources_;
   std::unique_ptr<EdictUserResources> edict_user_resources_;
   QString edict_config_directory_;
+  std::shared_ptr<EdictLookupOptions> edict_lookup_options_;
   EdictLookupDialog* edict_lookup_dialog_ = nullptr;
   EdictResultsWindow* edict_results_window_ = nullptr;
   EdictUserDictionaryDialog* edict_user_dictionary_dialog_ = nullptr;

@@ -3250,6 +3250,100 @@ void test_edict_lookup_integration(const QString& directory) {
   QApplication::processEvents();
 }
 
+void test_edict_search_controls(const QString& directory) {
+  using namespace jwpqt;
+  const QString base = directory + QStringLiteral("/edict-controls");
+  require(QDir().mkpath(base), "Could not prepare dictionary controls directory");
+  write_bytes(base + QStringLiteral("/edict"), QStringLiteral(
+      "\u3042 /cat/\n\u3044 /wild cat/\n\u3046 /cattle/\n"
+      "\u3048 /bobcat/\n\u3055 /cat food/\n"
+      "\u3042\u3044 /direct/\n\u3042\u304f /first/\n\u3042\u308b /later/\n"
+      "\u4e9c\u304b\u3044 /adjective/\n").toUtf8());
+  core::EdictRegistry registry;
+  core::EdictRegistryEntry resource;
+  resource.label = u"Controls";
+  resource.path = u"edict";
+  resource.encoding = core::EdictRegistryEncoding::kUtf8;
+  resource.searched = true;
+  resource.keep = true;
+  registry.entries.push_back(resource);
+  const QString registry_path = base + QStringLiteral("/dict.cfg");
+  qt::write_edict_registry_file(registry_path, registry);
+  qt::MainWindow window;
+  require(window.load_edict_configuration(registry_path, qt::OpenMode::kNonInteractive),
+          "Could not load dictionary controls fixture");
+  auto* action = find_action(window, "edictLookupAction");
+  action->trigger();
+  auto* dialog = dynamic_cast<qt::EdictLookupDialog*>(
+      window.findChild<QDialog*>(QStringLiteral("edictLookupDialog")));
+  require(dialog != nullptr, "Could not open dictionary controls");
+  const auto check = [&](const char* name, bool checked) {
+    auto* box = dialog->findChild<QCheckBox*>(QString::fromLatin1(name));
+    require(box && box->isEnabled(), "Dictionary policy control is missing or unavailable");
+    if (box->isChecked() != checked) box->click();
+  };
+  const auto count = [&](std::u32string_view query) {
+    dialog->set_query(query);
+    require(dialog->search(), "Dictionary policy search failed");
+    return dialog->report().results.size();
+  };
+  require(count(U"cat") == 4, "Default Begin With did not reject an embedded ASCII match");
+  check("edictBeginning", false);
+  require(count(U"cat") == 5, "Open beginning did not include the embedded match");
+  check("edictEnd", true);
+  require(count(U"cat") == 4, "End With did not reject a trailing ASCII suffix");
+  check("edictBeginning", true);
+  require(count(U"cat") == 3, "Combined boundaries did not match complete words");
+  check("edictFullAscii", true);
+  require(count(U"cat") == 1, "Full ASCII did not require a complete definition");
+  require(count(U"\uff43\uff41\uff54") == 0, "JASCII query was normalized without permission");
+  check("edictJasciiToAscii", true);
+  require(count(U"\uff43\uff41\uff54") == 1, "JASCII-to-ASCII policy did not reach preprocessing");
+  require(count(U"\u3042\u3044") == 1, "Advanced-off search did not stay direct");
+  check("edictAdvanced", true);
+  check("edictAdvancedAlways", false);
+  require(count(U"\u3042\u3044") == 1 && dialog->report().queries == 1,
+          "Disabled Always policy did not stop after a direct result");
+  check("edictAdvancedAlways", true);
+  require(count(U"\u3042\u3044") == 2, "Advanced Always did not search sibling ending variants");
+  check("edictAdvancedShowAll", true);
+  require(count(U"\u3042\u3044") >= 3, "Advanced Show All did not continue after its first pass");
+  check("edictAdvancedShowAll", false);
+  check("edictIAdjectives", false);
+  require(count(U"\u4e9c\u304b") == 0, "Disabled i-adjectives still generated the adjective match");
+  check("edictIAdjectives", true);
+  require(count(U"\u4e9c\u304b") == 1, "I-adjective policy was not forwarded to deinflection");
+  auto* results = dialog->findChild<QTextEdit*>(QStringLiteral("edictResults"));
+  const QPointer<QTextDocument> old_document = results->document();
+  const int position = results->textCursor().position();
+  const int anchor = results->textCursor().anchor();
+  dialog->set_query(U"ca");
+  require(!dialog->search() && old_document && results->document() == old_document &&
+              results->textCursor().position() == position && results->textCursor().anchor() == anchor,
+          "Invalid controlled search discarded its previous results or selection");
+  check("edictAdvanced", false);
+  require(dialog->insert_selected(), "Controlled dictionary result lost insertion ownership");
+  find_action(window, "undoAction")->trigger();
+  require(!window.document_modified(), "Controlled dictionary insertion did not undo to its baseline");
+  const QPointer<QDialog> old_dialog = dialog;
+  dialog->close();
+  QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+  require(!old_dialog, "Closed dictionary control dialog was not deleted");
+  action->trigger();
+  dialog = dynamic_cast<qt::EdictLookupDialog*>(
+      window.findChild<QDialog*>(QStringLiteral("edictLookupDialog")));
+  require(dialog && count(U"cat") == 1 &&
+              dialog->findChild<QCheckBox*>(QStringLiteral("edictJasciiToAscii"))->isChecked(),
+          "Dictionary policies did not survive close/reopen");
+  require(window.load_edict_configuration(registry_path, qt::OpenMode::kNonInteractive),
+          "Could not reload resources after a controlled query");
+  action->trigger();
+  dialog = dynamic_cast<qt::EdictLookupDialog*>(
+      window.findChild<QDialog*>(QStringLiteral("edictLookupDialog")));
+  require(dialog && count(U"cat") == 1,
+          "Resource replacement discarded the window's dictionary policies");
+}
+
 void test_edict_user_dictionary_integration(const QString& directory) {
   const QString case_directory = directory + QStringLiteral("/edict-user");
   require(QDir().mkpath(case_directory),
@@ -4952,6 +5046,7 @@ int main(int argc, char* argv[]) {
     test_jwp_wnn_user_dictionary(directory.path());
     test_jwp_wnn_user_dictionary_dialog(directory.path());
     test_edict_lookup_integration(directory.path());
+    test_edict_search_controls(directory.path());
     test_unicode_lookup_insertion(directory.path());
     test_edict_user_dictionary_integration(directory.path());
     test_jwp_wnn_preference_write_failure(directory.path());

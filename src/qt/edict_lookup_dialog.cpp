@@ -64,23 +64,34 @@ QString pluralized(std::size_t value, const QString& singular,
 
 EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
                                       InsertHandler insert_handler,
-                                      QWidget* parent, InfoHandler info_handler)
+                                      QWidget* parent, InfoHandler info_handler,
+                                      std::shared_ptr<EdictLookupOptions> shared_options)
     : QDialog(parent),
       search_handler_(std::move(search_handler)),
       insert_handler_(std::move(insert_handler)),
       info_handler_(std::move(info_handler)),
+      options_(shared_options ? std::move(shared_options)
+                              : std::make_shared<EdictLookupOptions>()),
       query_field_(new KanaInputField(QStringLiteral("edictQuery"), this)),
       query_edit_(query_field_->edit()),
       personal_names_(new QCheckBox(tr("Personal &names"), this)),
       place_names_(new QCheckBox(tr("Place na&mes"), this)),
       classical_(new QCheckBox(tr("&Classical"), this)),
+      beginning_(new QCheckBox(tr("&Begin With"), this)),
+      end_(new QCheckBox(tr("&End With"), this)),
+      advanced_(new QCheckBox(tr("&Advanced"), this)),
+      always_(new QCheckBox(tr("Always Search"), this)),
+      show_all_(new QCheckBox(tr("Show All"), this)),
+      i_adjectives_(new QCheckBox(tr("I-adjectives"), this)),
+      full_ascii_(new QCheckBox(tr("&Full ASCII"), this)),
+      jascii_to_ascii_(new QCheckBox(tr("JASCII to ASCII"), this)),
       results_(new QTextEdit(this)),
       status_(new QLabel(this)),
       insert_button_(new QPushButton(tr("&Insert in Document"), this)) {
   setObjectName(QStringLiteral("edictLookupDialog"));
   setWindowTitle(tr("Dictionary Lookup"));
   setModal(false);
-  resize(780, 520);
+  resize(780, 560);
 
   auto* outer = new QVBoxLayout(this);
   auto* query_row = new QHBoxLayout();
@@ -93,6 +104,25 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   query_row->addWidget(search_button);
   outer->addLayout(query_row);
 
+  beginning_->setObjectName(QStringLiteral("edictBeginning"));
+  end_->setObjectName(QStringLiteral("edictEnd"));
+  advanced_->setObjectName(QStringLiteral("edictAdvanced"));
+  always_->setObjectName(QStringLiteral("edictAdvancedAlways"));
+  show_all_->setObjectName(QStringLiteral("edictAdvancedShowAll"));
+  i_adjectives_->setObjectName(QStringLiteral("edictIAdjectives"));
+  full_ascii_->setObjectName(QStringLiteral("edictFullAscii"));
+  jascii_to_ascii_->setObjectName(QStringLiteral("edictJasciiToAscii"));
+  advanced_->setToolTip(tr("Search inflected forms using adaptive deinflection. Wildcard syntax is independent."));
+  full_ascii_->setToolTip(tr("Apply Begin/End With to the complete definition, not individual ASCII words."));
+  auto* boundaries = new QHBoxLayout();
+  boundaries->addWidget(beginning_);
+  boundaries->addWidget(end_);
+  boundaries->addWidget(advanced_);
+  boundaries->addStretch();
+  boundaries->addWidget(full_ascii_);
+  boundaries->addWidget(jascii_to_ascii_);
+  outer->addLayout(boundaries);
+
   auto* options = new QHBoxLayout();
   personal_names_->setObjectName(QStringLiteral("edictPersonalNames"));
   place_names_->setObjectName(QStringLiteral("edictPlaceNames"));
@@ -101,7 +131,35 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   options->addWidget(place_names_);
   options->addWidget(classical_);
   options->addStretch();
+  auto* advanced_controls = new QWidget(this);
+  auto* advanced_row = new QHBoxLayout(advanced_controls);
+  advanced_row->setContentsMargins(0, 0, 0, 0);
+  advanced_row->addWidget(always_);
+  advanced_row->addWidget(show_all_);
+  advanced_row->addWidget(i_adjectives_);
+  options->addWidget(advanced_controls);
   outer->addLayout(options);
+
+  const std::pair<QCheckBox*, bool EdictLookupOptions::*> bindings[] = {
+      {personal_names_, &EdictLookupOptions::personal_names},
+      {place_names_, &EdictLookupOptions::place_names},
+      {classical_, &EdictLookupOptions::classical},
+      {beginning_, &EdictLookupOptions::require_beginning},
+      {end_, &EdictLookupOptions::require_end},
+      {advanced_, &EdictLookupOptions::advanced},
+      {always_, &EdictLookupOptions::advanced_always},
+      {show_all_, &EdictLookupOptions::advanced_show_all},
+      {i_adjectives_, &EdictLookupOptions::i_adjectives},
+      {full_ascii_, &EdictLookupOptions::full_ascii},
+      {jascii_to_ascii_, &EdictLookupOptions::jascii_to_ascii}};
+  for (const auto& binding : bindings) {
+    auto* checkbox = binding.first;
+    checkbox->setChecked((*options_).*binding.second);
+    connect(checkbox, &QCheckBox::toggled, this,
+            [this, member = binding.second](bool checked) { (*options_).*member = checked; });
+  }
+  advanced_controls->setEnabled(advanced_->isChecked());
+  connect(advanced_, &QCheckBox::toggled, advanced_controls, &QWidget::setEnabled);
 
   results_->setObjectName(QStringLiteral("edictResults"));
   results_->setReadOnly(true);
@@ -167,9 +225,7 @@ bool EdictLookupDialog::search() {
   try {
     const core::JwpText query =
         core::encode_jwp_text(from_qstring(query_edit_->text()));
-    const EdictLookupOptions options{personal_names_->isChecked(),
-                                     place_names_->isChecked(),
-                                     classical_->isChecked()};
+    const EdictLookupOptions options = *options_;
     EdictResourceSearchReport candidate = search_handler_(query, options);
     if (candidate.results.size() > kMaximumVisibleResults) {
       throw core::EdictSearchError(
