@@ -40,6 +40,7 @@ add_library(jwpqt_core STATIC
   legacy_text.cpp
   plain_text_change.cpp
   query_history.cpp
+  query_history_file.cpp
   romaji_conversion.cpp
   text_detection.cpp
   text_file.cpp
