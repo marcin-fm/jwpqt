@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <string_view>
+
 #include <QList>
 #include <QTextEdit>
 #include <QTextFormat>
@@ -11,6 +13,8 @@
 #include "jwpqt/core/kanji_color_list.h"
 #include "jwpqt/core/legacy_code_page.h"
 
+class QKeyEvent;
+class QInputMethodEvent;
 class QPaintEvent;
 class QTextDocument;
 
@@ -24,6 +28,7 @@ class JwpEditor final : public QTextEdit {
 
   explicit JwpEditor(QWidget* parent = nullptr);
 
+  void insert_composed_text(std::u32string_view text, bool allow_overwrite = true);
   int character_page_width() const;
   void apply_jwp_layout(const core::JwpDocument& document);
   void clear_jwp_layout();
@@ -44,9 +49,12 @@ class JwpEditor final : public QTextEdit {
       const QList<QTextEdit::ExtraSelection>& selections);
 
  protected:
+  void inputMethodEvent(QInputMethodEvent* event) override;
+  void keyPressEvent(QKeyEvent* event) override;
   void paintEvent(QPaintEvent* event) override;
 
  private:
+  QTextCursor input_cursor(std::u32string_view text, bool allow_overwrite) const;
   qreal indent_unit() const;
   void update_extra_selections();
 

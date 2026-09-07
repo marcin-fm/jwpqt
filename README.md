@@ -216,6 +216,19 @@ inserts recovered full-width characters with Western comma/period and a dash.
 mode button cycles all three. Switching commits pending kana and accepts the
 displayed conversion candidate. Plain Unicode text retains direct input.
 
+`Insert`, **Edit > Input Mode > Overwrite Mode**, or the status-bar `INS`/`OVR`
+button switches document typing between insert and overwrite. The mode is shared
+by this window's tabs, including newly opened/project-restored documents, but is
+not saved in settings or projects. Toggling does not commit pending kana or a
+conversion preview. ASCII, composed kana/JASCII and ordinary IME commits honor
+the mode with one-step undo; explicit IME replacement ranges remain authoritative.
+Overwrite replaces complete Unicode scalars without consuming a paragraph break.
+Typing over a selection replaces only the selection, deliberately avoiding the
+legacy behavior that also overwrote following text. Clipboard and lookup insertion
+remain insert operations: `Ctrl+Insert` copies, while `Shift+Insert` and
+`Ctrl+Shift+Insert` paste. Query-field overwrite and remaining clipboard formats
+are separate unfinished input-parity work.
+
 `Ctrl+A` remains Select All. Close uses `Ctrl+F4`, leaving `Ctrl+W` for conversion.
 SKIP uses `Ctrl+Alt+S` and Spahn-Hadamitzky uses `Ctrl+Alt+H`, avoiding native
 Save As and Replace shortcuts. Index Lookup uses `Ctrl+Shift+I`; Count Kanji

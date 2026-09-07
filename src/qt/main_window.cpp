@@ -354,6 +354,7 @@ MainWindow::MainWindow(QWidget* parent)
       undo_action_(nullptr),
       redo_action_(nullptr),
       input_mode_button_(new QToolButton(this)),
+      overwrite_button_(new QToolButton(this)),
       resource_status_button_(new QToolButton(this)),
       input_mode_actions_(new QActionGroup(this)),
       encoding_actions_(new QActionGroup(this)),
@@ -433,6 +434,15 @@ MainWindow::MainWindow(QWidget* parent)
   });
   statusBar()->addPermanentWidget(encoding_label_);
   statusBar()->addPermanentWidget(input_mode_button_);
+  overwrite_button_->setObjectName(QStringLiteral("overwriteMode"));
+  overwrite_button_->setAutoRaise(true);
+  overwrite_button_->setCheckable(true);
+  overwrite_button_->setFocusPolicy(Qt::NoFocus);
+  overwrite_button_->setText(tr("INS"));
+  overwrite_button_->setAccessibleName(tr("Insert or overwrite mode"));
+  overwrite_button_->setToolTip(tr("Insert: click or press Insert to toggle overwrite"));
+  connect(overwrite_button_, &QToolButton::clicked, overwrite_action_, &QAction::trigger);
+  statusBar()->addPermanentWidget(overwrite_button_);
   resource_status_button_->setObjectName(QStringLiteral("resourceStatus"));
   resource_status_button_->setAutoRaise(true);
   resource_status_button_->setAccessibleName(tr("Runtime resources"));
@@ -445,6 +455,7 @@ MainWindow::MainWindow(QWidget* parent)
 }
 
 void MainWindow::connect_editor(JwpEditor* editor) {
+  editor->setOverwriteMode(overwrite_action_->isChecked());
   editor->installEventFilter(this);
   editor->viewport()->installEventFilter(this);
   // Shared actions route through the active state, never a retired editor.
@@ -1988,7 +1999,7 @@ void MainWindow::create_actions() {
   QAction* copy_action = edit_menu->addAction(tr("&Copy"));
   copy_action_ = copy_action;
   copy_action->setObjectName(QStringLiteral("copyAction"));
-  copy_action->setShortcut(QKeySequence::Copy);
+  copy_action->setShortcuts({QKeySequence::Copy, QKeySequence(QStringLiteral("Ctrl+Insert"))});
   copy_action->setEnabled(false);
   connect(copy_action, &QAction::triggered, this, [this] {
     finish_kana_input();
@@ -1997,7 +2008,8 @@ void MainWindow::create_actions() {
 
   QAction* paste_action = edit_menu->addAction(tr("&Paste"));
   paste_action->setObjectName(QStringLiteral("pasteAction"));
-  paste_action->setShortcut(QKeySequence::Paste);
+  paste_action->setShortcuts({QKeySequence::Paste, QKeySequence(QStringLiteral("Shift+Insert")),
+                             QKeySequence(QStringLiteral("Ctrl+Shift+Insert"))});
   connect(paste_action, &QAction::triggered, this, [this] {
     finish_kana_input();
     document_->editor_->paste();
@@ -2089,6 +2101,20 @@ void MainWindow::create_actions() {
         QMessageBox::Yes) {
       set_japanese_editing(enabled, true, OpenMode::kInteractive);
     }
+  });
+
+  input_menu->addSeparator();
+  overwrite_action_ = input_menu->addAction(tr("&Overwrite Mode"));
+  overwrite_action_->setObjectName(QStringLiteral("overwriteModeAction"));
+  overwrite_action_->setCheckable(true);
+  overwrite_action_->setShortcut(QKeySequence(Qt::Key_Insert));
+  connect(overwrite_action_, &QAction::toggled, this, [this](bool overwrite) {
+    for (const auto& state : documents_) state->editor_->setOverwriteMode(overwrite);
+    overwrite_button_->setChecked(overwrite);
+    overwrite_button_->setText(overwrite ? tr("OVR") : tr("INS"));
+    overwrite_button_->setToolTip(overwrite
+        ? tr("Overwrite: click or press Insert to switch to insertion")
+        : tr("Insert: click or press Insert to toggle overwrite"));
   });
 
   QMenu* format_menu = menuBar()->addMenu(tr("F&ormat"));
@@ -2904,13 +2930,26 @@ void MainWindow::update_kana_input_state() {
 
 void MainWindow::apply_kana_input_events(
     const std::vector<core::KanaInputEvent>& events) {
-  if (events.empty() || !document_->jwp_document_.has_value()) {
+  if (events.empty() || !document_->jwp_document_.has_value() || document_->editor_->isReadOnly()) {
     return;
   }
 
   const QScopedValueRollback<bool> applying(document_->applying_kana_input_, true);
+  const bool replace_selection = document_->editor_->textCursor().hasSelection();
   bool force_after_events = false;
-  for (const core::KanaInputEvent& event : events) {
+  for (std::size_t index = 0; index < events.size(); ++index) {
+    core::KanaInputEvent event = events[index];
+    // Compound kana is emitted one character at a time. Keep one syllable's
+    // replacement in one undo step without merging conversion-start boundaries.
+    while (index + 1 < events.size() &&
+           ((event.kind != core::KanaInputKind::kText &&
+             events[index + 1].kind == core::KanaInputKind::kKanaContinue) ||
+            (event.kind == core::KanaInputKind::kText &&
+             events[index + 1].kind == core::KanaInputKind::kText &&
+             !document_->automatic_conversion_range_))) {
+      const auto& following = events[++index].text;
+      event.text.insert(event.text.end(), following.begin(), following.end());
+    }
     if (event.text.empty()) {
       continue;
     }
@@ -2944,8 +2983,8 @@ void MainWindow::apply_kana_input_events(
       extends_automatic = false;
     }
 
-    document_->editor_->insertPlainText(
-        to_qstring(core::decode_jwp_text(event.text, document_->jwp_code_page_)));
+    document_->editor_->insert_composed_text(
+        core::decode_jwp_text(event.text, document_->jwp_code_page_), !replace_selection);
     if (!document_->jwp_caret_.has_value() ||
         document_->jwp_caret_->paragraph != insertion_begin.paragraph ||
         document_->jwp_caret_->offset < insertion_begin.offset) {
@@ -3137,7 +3176,8 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
         static_cast<QMouseEvent*>(event)->button() == Qt::RightButton)
       return true;
   }
-  if (watched != document_->editor_ || !document_->jwp_document_.has_value() || conversion_active()) {
+  if (watched != document_->editor_ || !document_->jwp_document_.has_value() ||
+      conversion_active() || document_->editor_->isReadOnly()) {
     return QMainWindow::eventFilter(watched, event);
   }
   if (document_->input_mode_ == InputMode::kJascii && event->type() == QEvent::KeyPress) {
@@ -3150,8 +3190,8 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
       const auto code = core::ascii_to_jascii(
           static_cast<char>(text.front().unicode()), true);
       if (code.has_value()) {
-        document_->editor_->insertPlainText(
-            to_qstring(core::decode_jwp_text({*code}, document_->jwp_code_page_)));
+        document_->editor_->insert_composed_text(
+            core::decode_jwp_text({*code}, document_->jwp_code_page_));
       }
       return true;
     }

@@ -296,6 +296,10 @@ void conversion_and_transfer(const QString& directory) {
   require(window.convert_selection(), "Cannot start project preview");
   QPointer<qt::JwpEditor> origin = window.active_editor();
   const auto glyph = origin->toPlainText();
+  auto* overwrite = window.findChild<QAction*>("overwriteModeAction");
+  overwrite->trigger();
+  require(window.conversion_active() && origin->toPlainText() == glyph && origin->overwriteMode(),
+          "Overwrite toggle accepted or changed a conversion preview");
   auto invalid = workspace;
   invalid.documents[1].encoding = core::TextEncoding::kUtf16Le;
   write(directory + "/invalid-project-doc.txt", QByteArray::fromHex("fffe00d8"));
@@ -313,6 +317,7 @@ void conversion_and_transfer(const QString& directory) {
           window.active_editor() == origin && window.conversion_active() && origin->toPlainText() == glyph,
           "Appending a new editor displaced the existing conversion");
   require(window.activate_document(1) && !window.conversion_active(), "Cannot activate the transferred editor");
+  require(window.active_editor()->overwriteMode(), "Appended editor did not inherit overwrite mode");
   window.active_editor()->moveCursor(QTextCursor::End); window.active_editor()->insertPlainText("!");
   window.findChild<QAction*>("undoAction")->trigger();
   require(!window.document_modified(), "Appended Unicode editor lost its undo baseline");
@@ -327,6 +332,7 @@ void conversion_and_transfer(const QString& directory) {
   for (const int index : {0, 1}) {
     require(window.activate_document(index), "Cannot select the information insertion target");
     auto* target = window.active_editor(); target->moveCursor(QTextCursor::End);
+    require(target->overwriteMode(), "Restored editor lost the window's overwrite mode");
     const auto before = target->toPlainText();
     QMouseEvent insert(QEvent::MouseButtonDblClick, QPointF(center), QPointF(character->mapToGlobal(center)),
                        Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);

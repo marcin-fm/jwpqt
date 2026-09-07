@@ -38,6 +38,7 @@
 #include <QScrollBar>
 #include <QTabWidget>
 #include <QInputDialog>
+#include <QInputMethodEvent>
 #include <QPointer>
 #include <QTextEdit>
 #include <QTemporaryDir>
@@ -3435,6 +3436,161 @@ void test_input_mode_workflow(const QString& directory) {
               editor->toPlainText().toUtf8().toHex().toStdString());
 }
 
+void test_overwrite_mode(const QString& directory) {
+  using namespace jwpqt;
+  core::JwpDocument source;
+  source.paragraphs.resize(2);
+  source.paragraphs[0].text = {'A', 'B', 'C'};
+  source.paragraphs[0].left_indent = 1;
+  source.paragraphs[1].text = {'D'};
+  source.summary[0] = {'M'};
+  const QString path = directory + QStringLiteral("/overwrite.jwp");
+  qt::write_jwp_file(path, source);
+  qt::MainWindow window;
+  require(window.open_jwp_path(path), "Could not load overwrite fixture");
+  auto* editor = window.active_editor();
+  auto* overwrite = find_action(window, "overwriteModeAction");
+  auto* status = window.findChild<QToolButton*>(QStringLiteral("overwriteMode"));
+  auto* undo = find_action(window, "undoAction");
+  auto* redo = find_action(window, "redoAction");
+  require(overwrite && status && !overwrite->isChecked() && !editor->overwriteMode() &&
+              status->text() == QStringLiteral("INS") && status->focusPolicy() == Qt::NoFocus,
+          "Document insert mode did not start with consistent controls");
+  window.show();
+  editor->setFocus();
+  QApplication::processEvents();
+  send_text_key(editor, Qt::Key_Insert, {});
+  require(overwrite->isChecked() && editor->overwriteMode() && status->isChecked() &&
+              status->isVisible() && status->text() == QStringLiteral("OVR") && !window.document_modified() &&
+              !undo->isEnabled(), "Insert did not toggle mode without changing the document");
+  require(window.grab().save(QCoreApplication::applicationDirPath() +
+                            QStringLiteral("/overwrite-mode.png")),
+          "Could not render the overwrite status control");
+  const auto select = [&](int first, int last) {
+    QTextCursor cursor(editor->document());
+    cursor.setPosition(first);
+    cursor.setPosition(last, QTextCursor::KeepAnchor);
+    editor->setTextCursor(cursor);
+  };
+  struct Mode { const char* action; const char* text; const char16_t* inserted; };
+  for (const auto& mode : {Mode{"asciiInputAction", "X", u"X"},
+                           Mode{"jasciiInputAction", "X", u"\uff38"},
+                           Mode{"kanaInputAction", "kya", u"\u304d\u3083"}}) {
+    for (bool selected : {false, true}) {
+      require(window.open_jwp_path(path), "Could not reset overwrite fixture");
+      find_action(window, mode.action)->trigger();
+      select(1, selected ? 2 : 1);
+      for (const char* letter = mode.text; *letter; ++letter)
+        send_text_key(editor, Qt::Key_unknown, QString(QChar::fromLatin1(*letter)));
+      const QString inserted = QString::fromUtf16(mode.inserted);
+      const QString expected = QStringLiteral("A") + inserted +
+          ((selected || inserted.size() == 1) ? QStringLiteral("C\nD") : QStringLiteral("\nD"));
+      require(editor->toPlainText() == expected && window.document_modified() &&
+                  window.current_jwp_document()->paragraphs[0].left_indent == 1 &&
+                  window.current_jwp_document()->summary[0] == source.summary[0],
+              "Native typing did not honor overwrite/selection or damaged metadata");
+      undo->trigger();
+      require(editor->toPlainText() == QStringLiteral("ABC\nD") && !window.document_modified(),
+              std::string("Native overwrite lost its single undo transaction or saved baseline: ") +
+                  mode.action + (selected ? " selected " : " unselected ") +
+                  editor->toPlainText().toUtf8().toHex().toStdString());
+      redo->trigger();
+      require(editor->toPlainText() == expected, "Native overwrite redo changed text");
+    }
+  }
+  const QString saved = directory + QStringLiteral("/overwritten.jwp");
+  require(window.save_as_path(saved, std::nullopt) &&
+              core::decode_jwp_text(qt::read_jwp_file(saved).paragraphs[0].text) == U"A\u304d\u3083C",
+          "Overwritten native text did not survive saving");
+
+  require(window.open_jwp_path(path), "Could not reset clipboard fixture");
+  find_action(window, "asciiInputAction")->trigger();
+  select(1, 2);
+  send_text_key(editor, Qt::Key_Insert, {}, Qt::ControlModifier);
+  require(QApplication::clipboard()->text() == QStringLiteral("B") && overwrite->isChecked() &&
+              !window.document_modified(), "Ctrl+Insert changed mode instead of copying");
+  select(0, 0);
+  QApplication::clipboard()->setText(QStringLiteral("xy"));
+  send_text_key(editor, Qt::Key_Insert, {}, Qt::ShiftModifier);
+  require(editor->toPlainText() == QStringLiteral("xyABC\nD") && overwrite->isChecked(),
+          "Shift+Insert overwrote following text or toggled the mode");
+  undo->trigger();
+  require(!window.document_modified(), "Clipboard insertion lost the saved undo baseline");
+  select(0, 0);
+  send_text_key(editor, Qt::Key_Insert, {}, Qt::ControlModifier | Qt::ShiftModifier);
+  require(editor->toPlainText() == QStringLiteral("xyABC\nD"),
+          "Ctrl+Shift+Insert did not retain legacy paste precedence");
+  undo->trigger();
+  select(3, 3);
+  find_action(window, "kanaInputAction")->trigger();
+  send_text_key(editor, Qt::Key_A, QStringLiteral("a"));
+  require(editor->toPlainText() == QStringLiteral("ABC\u3042\nD"),
+          "Kana overwrite consumed a paragraph boundary");
+  undo->trigger();
+  select(1, 1);
+  send_text_key(editor, Qt::Key_K, QStringLiteral("k"));
+  status->click();
+  require(!overwrite->isChecked() && editor->toPlainText() == QStringLiteral("ABC\nD") &&
+              !window.document_modified(), "Mode toggle flushed pending kana");
+  send_text_key(editor, Qt::Key_Insert, {});
+  send_text_key(editor, Qt::Key_Insert, {});
+  require(!overwrite->isChecked() && editor->toPlainText() == QStringLiteral("ABC\nD") &&
+              !window.document_modified(), "Insert shortcut flushed pending kana");
+  send_text_key(editor, Qt::Key_A, QStringLiteral("a"));
+  require(editor->toPlainText() == QStringLiteral("A\u304bBC\nD"),
+          "Mode toggle lost pending kana or ignored insert mode");
+  undo->trigger();
+  status->click();
+  editor->setReadOnly(true);
+  send_text_key(editor, Qt::Key_A, QStringLiteral("a"));
+  find_action(window, "jasciiInputAction")->trigger();
+  send_text_key(editor, Qt::Key_X, QStringLiteral("X"));
+  require(editor->toPlainText() == QStringLiteral("ABC\nD") && !window.document_modified(),
+          "Composed overwrite bypassed a read-only editor");
+  editor->setReadOnly(false);
+  select(1, 1);
+  send_text_key(editor, Qt::Key_unknown, QStringLiteral("\U0001f600"));
+  require(editor->toPlainText() == QStringLiteral("ABC\nD") && !window.document_modified() &&
+              !undo->isEnabled(), "Unmapped native overwrite deleted the original character");
+  select(1, 1);
+  QInputMethodEvent commit;
+  commit.setCommitString(QStringLiteral("\u65e5"));
+  QApplication::sendEvent(editor, &commit);
+  require(editor->toPlainText() == QStringLiteral("A\u65e5C\nD"),
+          "Native input method commit ignored overwrite mode");
+  undo->trigger();
+  require(editor->toPlainText() == QStringLiteral("ABC\nD") && !window.document_modified(),
+          "Native input method overwrite lost its history baseline");
+
+  const QString unicode_path = directory + QStringLiteral("/overwrite-unicode.txt");
+  qt::write_text_file(unicode_path, {U"A\U0001f600BC\nD", core::TextEncoding::kUtf16Be, true});
+  require(window.open_path(unicode_path, core::TextEncoding::kUtf16Be, qt::OpenMode::kNonInteractive, true),
+          "Could not open a Unicode overwrite tab");
+  editor = window.active_editor();
+  require(!window.is_jwp_document() && editor->overwriteMode() && overwrite->isChecked(),
+          "New Unicode tab did not inherit the runtime mode");
+  select(1, 1);
+  send_text_key(editor, Qt::Key_X, QStringLiteral("X"));
+  require(editor->toPlainText() == QStringLiteral("AXBC\nD"),
+          "Unicode overwrite split a supplementary character");
+  undo->trigger();
+  require(editor->toPlainText() == QStringLiteral("A\U0001f600BC\nD") && !window.document_modified(),
+          "Unicode overwrite lost its Qt undo baseline");
+  select(1, 3);
+  send_text_key(editor, Qt::Key_unknown, QStringLiteral("xy"));
+  require(editor->toPlainText() == QStringLiteral("AxyBC\nD"),
+          "Unicode overwrite deleted outside the selection");
+  require(window.save_path(window.current_path()) && window.text_encoding() == core::TextEncoding::kUtf16Be &&
+              qt::read_text_file(unicode_path, core::TextEncoding::kUtf16Be).text == U"AxyBC\nD",
+          "Unicode overwrite changed the saved format or content");
+  status->click();
+  require(window.activate_document(0) && !window.active_editor()->overwriteMode(),
+          "Runtime mode was not shared with the inactive native tab");
+  qt::MainWindow separate;
+  require(!find_action(separate, "overwriteModeAction")->isChecked(),
+          "Runtime overwrite mode leaked into a new application window");
+}
+
 void test_forced_wnn_conversion(const QString& directory) {
   const auto fixture = write_automatic_wnn_fixture(directory);
   jwpqt::core::JwpDocument blank;
@@ -4623,6 +4779,7 @@ int main(int argc, char* argv[]) {
     test_jwp_wnn_preference_write_failure(directory.path());
     test_jwp_kana_input_mode(directory.path());
     test_input_mode_workflow(directory.path());
+    test_overwrite_mode(directory.path());
     test_jwp_automatic_wnn_conversion(directory.path());
     test_forced_wnn_conversion(directory.path());
     test_kanji_color_configuration(directory.path());

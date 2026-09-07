@@ -396,6 +396,7 @@ class MainWindow : public QMainWindow {
   QAction* kana_input_action_ = nullptr;
   QAction* toggle_input_mode_action_ = nullptr;
   QAction* japanese_editing_action_ = nullptr;
+  QAction* overwrite_action_ = nullptr;
   QAction* user_dictionary_action_ = nullptr;
   QAction* edict_lookup_action_ = nullptr;
   QAction* edict_results_action_ = nullptr;
@@ -422,6 +423,7 @@ class MainWindow : public QMainWindow {
   QAction* view_kanji_color_list_action_ = nullptr;
   QAction* clear_kanji_color_list_action_ = nullptr;
   QToolButton* input_mode_button_;
+  QToolButton* overwrite_button_;
   QToolButton* resource_status_button_;
   QToolBar* main_toolbar_ = nullptr;
   std::vector<std::pair<QAction*, int>> toolbar_icons_;

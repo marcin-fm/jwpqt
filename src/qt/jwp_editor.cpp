@@ -8,11 +8,14 @@
 #include <limits>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
 #include <QAbstractTextDocumentLayout>
 #include <QColor>
 #include <QFontMetricsF>
+#include <QInputMethodEvent>
+#include <QKeyEvent>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QScrollBar>
@@ -76,6 +79,23 @@ QString to_qstring(std::u32string_view text) {
   return result;
 }
 
+std::u32string checked_input_text(const QString& text) {
+  std::u32string scalars;
+  for (qsizetype i = 0; i < text.size(); ++i) {
+    const QChar character = text[i];
+    if (character.isHighSurrogate()) {
+      if (++i == text.size() || !text[i].isLowSurrogate())
+        throw std::invalid_argument("Invalid Unicode input");
+      scalars.push_back(QChar::surrogateToUcs4(character, text[i]));
+    } else if (character.isLowSurrogate()) {
+      throw std::invalid_argument("Invalid Unicode input");
+    } else {
+      scalars.push_back(character.unicode());
+    }
+  }
+  return scalars;
+}
+
 }  // namespace
 
 QString document_plain_text(const QTextDocument& document) {
@@ -87,6 +107,81 @@ QString document_plain_text(const QTextDocument& document) {
 
 JwpEditor::JwpEditor(QWidget* parent) : QTextEdit(parent) {
   setAcceptRichText(false);
+}
+
+void JwpEditor::insert_composed_text(std::u32string_view text, bool allow_overwrite) {
+  if (isReadOnly() || text.empty()) return;
+  const QString inserted = to_qstring(text);
+  QTextCursor cursor = input_cursor(text, allow_overwrite);
+  cursor.insertText(inserted);
+  setTextCursor(cursor);
+  ensureCursorVisible();
+}
+
+QTextCursor JwpEditor::input_cursor(std::u32string_view text, bool allow_overwrite) const {
+  QTextCursor cursor = textCursor();
+  const auto splits_scalar = [this](int position) {
+    return position > 0 && document()->characterAt(position).isLowSurrogate() &&
+           document()->characterAt(position - 1).isHighSurrogate();
+  };
+  if (splits_scalar(cursor.selectionStart()) || splits_scalar(cursor.selectionEnd()))
+    throw std::invalid_argument("Composed input cannot split a Unicode scalar");
+  if (!overwriteMode() || !allow_overwrite || cursor.hasSelection()) return cursor;
+
+  // Composed input bypasses QTextEdit's typed-key overwrite handling. Never eat
+  // a paragraph break or half of a supplementary character.
+  int end = cursor.position();
+  const int paragraph_end = cursor.block().position() + cursor.block().length() - 1;
+  for (char32_t character : text) {
+    if (end == paragraph_end || character == U'\n' || character == U'\r' ||
+        character == U'\u2028' || character == U'\u2029') break;
+    const QChar replaced = document()->characterAt(end++);
+    if (replaced.isHighSurrogate() && end < paragraph_end &&
+        document()->characterAt(end).isLowSurrogate()) ++end;
+  }
+  cursor.setPosition(end, QTextCursor::KeepAnchor);
+  return cursor;
+}
+
+void JwpEditor::inputMethodEvent(QInputMethodEvent* event) {
+  // IME commits ignore Qt's overwrite flag. Preserve explicit IME replacement
+  // ranges and preedit attributes, supplying a range only for ordinary commits.
+  const bool selection_attribute = std::any_of(event->attributes().begin(), event->attributes().end(),
+      [](const auto& attribute) { return attribute.type == QInputMethodEvent::Selection; });
+  if (!overwriteMode() || isReadOnly() || event->commitString().isEmpty() ||
+      event->replacementStart() != 0 || event->replacementLength() != 0 ||
+      textCursor().hasSelection() || selection_attribute) {
+    QTextEdit::inputMethodEvent(event);
+    return;
+  }
+  try {
+    const QTextCursor range = input_cursor(checked_input_text(event->commitString()), true);
+    QInputMethodEvent adjusted(event->preeditString(), event->attributes());
+    adjusted.setCommitString(event->commitString(), 0, range.selectionEnd() - range.selectionStart());
+    QTextEdit::inputMethodEvent(&adjusted);
+    event->setAccepted(adjusted.isAccepted());
+  } catch (const std::exception&) {
+    event->ignore();
+  }
+}
+
+void JwpEditor::keyPressEvent(QKeyEvent* event) {
+  const QString text = event->text();
+  const bool tab = event->key() == Qt::Key_Tab && event->modifiers() == Qt::NoModifier;
+  if (!overwriteMode() || isReadOnly() || text.isEmpty() ||
+      (event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier)) ||
+      (!text.front().isPrint() && !text.front().isHighSurrogate() && !tab)) {
+    QTextEdit::keyPressEvent(event);
+    return;
+  }
+  // Qt's default overwrite exposes separate deletion/insertion undo commands.
+  // Use the same atomic replacement for ordinary keys and composed kana.
+  try {
+    insert_composed_text(checked_input_text(text));
+    event->accept();
+  } catch (const std::exception&) {
+    event->ignore();
+  }
 }
 
 int JwpEditor::character_page_width() const {

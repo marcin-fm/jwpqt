@@ -13,6 +13,7 @@
 #include <QApplication>
 #include <QAbstractTextDocumentLayout>
 #include <QImage>
+#include <QInputMethodEvent>
 #include <QPalette>
 #include <QScrollBar>
 #include <QSizeF>
@@ -331,6 +332,114 @@ void test_kanji_color_validation_is_atomic() {
           "Empty JWP document cleared unrelated transient coloring");
 }
 
+void test_composed_overwrite() {
+  jwpqt::qt::JwpEditor editor;
+  const QString original = QStringLiteral("A\U0001f600B\nC");
+  editor.setPlainText(original);
+  editor.setOverwriteMode(true);
+  const auto select = [&](int first, int last) {
+    QTextCursor cursor(editor.document());
+    cursor.setPosition(first);
+    cursor.setPosition(last, QTextCursor::KeepAnchor);
+    editor.setTextCursor(cursor);
+  };
+  select(1, 1);
+  editor.insert_composed_text(U"\u304d\u3083");
+  require(editor.toPlainText() == QStringLiteral("A\u304d\u3083\nC") &&
+              editor.textCursor().position() == 3,
+          "Composed overwrite split a scalar or lost its caret");
+  editor.undo();
+  require(editor.toPlainText() == original && !editor.document()->isModified(),
+          "Composed overwrite did not retain one-step undo and its baseline");
+  editor.redo();
+  editor.insert_composed_text(U"X");
+  require(editor.toPlainText() == QStringLiteral("A\u304d\u3083X\nC"),
+          "Composed overwrite consumed a paragraph break");
+
+  editor.setPlainText(original);
+  select(1, 3);
+  editor.insert_composed_text(U"xy");
+  require(editor.toPlainText() == QStringLiteral("AxyB\nC"),
+          "Composed selection replacement consumed following text");
+  editor.insert_composed_text(U"z", false);
+  require(editor.toPlainText() == QStringLiteral("AxyzB\nC"),
+          "Later composition events overwrote the replaced selection's suffix");
+  editor.setPlainText(QStringLiteral("e\u0300B"));
+  editor.insert_composed_text(U"X");
+  require(editor.toPlainText() == QStringLiteral("X\u0300B"),
+          "Composed overwrite replaced more than one legacy scalar");
+
+  editor.setPlainText(original);
+  select(2, 2);
+  try {
+    editor.insert_composed_text(U"X");
+    require(false, "Split-surrogate composed insertion was accepted");
+  } catch (const std::invalid_argument&) {}
+  select(1, 1);
+  try {
+    editor.insert_composed_text(std::u32string(1, static_cast<char32_t>(0xd800)));
+    require(false, "Invalid composed Unicode was accepted");
+  } catch (const std::invalid_argument&) {}
+  editor.setReadOnly(true);
+  editor.insert_composed_text(U"X");
+  require(editor.toPlainText() == original && !editor.document()->isUndoAvailable(),
+          "Rejected composed input changed the document or history");
+  editor.setReadOnly(false);
+  editor.setOverwriteMode(false);
+  editor.insert_composed_text(U"X");
+  require(editor.toPlainText() == QStringLiteral("AX\U0001f600B\nC"),
+          "Composed insert mode unexpectedly overwrote text");
+
+  editor.setPlainText(QStringLiteral("ABC"));
+  editor.setOverwriteMode(true);
+  select(1, 1);
+  QInputMethodEvent preedit(QStringLiteral("\u3042"), {});
+  QApplication::sendEvent(&editor, &preedit);
+  require(editor.toPlainText() == QStringLiteral("ABC") && !editor.document()->isModified(),
+          "Overwrite preedit changed document text");
+  QInputMethodEvent commit;
+  commit.setCommitString(QStringLiteral("\u3042"));
+  QApplication::sendEvent(&editor, &commit);
+  require(editor.toPlainText() == QStringLiteral("A\u3042C"),
+          "Input method commit ignored overwrite mode");
+  editor.undo();
+  require(editor.toPlainText() == QStringLiteral("ABC") && !editor.document()->isModified(),
+          "Input method overwrite lost one-step undo");
+  select(1, 2);
+  QInputMethodEvent selected_commit;
+  selected_commit.setCommitString(QStringLiteral("xy"));
+  QApplication::sendEvent(&editor, &selected_commit);
+  require(editor.toPlainText() == QStringLiteral("AxyC"),
+          "Input method commit overwrote outside its selection");
+  editor.undo();
+  select(2, 2);
+  QInputMethodEvent replacement;
+  replacement.setCommitString(QStringLiteral("Z"), -1, 1);
+  QApplication::sendEvent(&editor, &replacement);
+  require(editor.toPlainText() == QStringLiteral("AZC"),
+          "Overwrite mode changed an explicit input method replacement");
+  editor.undo();
+  select(1, 1);
+  QInputMethodEvent continued(QStringLiteral("\u3046"), {});
+  continued.setCommitString(QStringLiteral("\u3044"));
+  QApplication::sendEvent(&editor, &continued);
+  require(editor.toPlainText() == QStringLiteral("A\u3044C") &&
+              editor.textCursor().block().layout()->preeditAreaText() == QStringLiteral("\u3046"),
+          "Input method overwrite lost continuing preedit");
+  QInputMethodEvent finish;
+  finish.setCommitString(QStringLiteral("\u3048"));
+  QApplication::sendEvent(&editor, &finish);
+  require(editor.toPlainText() == QStringLiteral("A\u3044\u3048"),
+          "Continued input method overwrite used a stale cursor");
+  editor.setPlainText(original);
+  select(1, 1);
+  QInputMethodEvent invalid;
+  invalid.setCommitString(QString(QChar(0xd800)));
+  QApplication::sendEvent(&editor, &invalid);
+  require(editor.toPlainText() == original && !editor.document()->isUndoAvailable(),
+          "Malformed input method commit damaged the document");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -341,6 +450,7 @@ int main(int argc, char** argv) {
     test_page_break_marker_painting();
     test_kanji_colors_follow_raw_tokens();
     test_kanji_color_validation_is_atomic();
+    test_composed_overwrite();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return EXIT_FAILURE;
