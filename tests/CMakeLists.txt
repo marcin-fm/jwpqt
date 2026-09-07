@@ -107,6 +107,11 @@ add_executable(jwpqt_kana_input_tests
 target_link_libraries(jwpqt_kana_input_tests PRIVATE jwpqt_core)
 target_compile_options(jwpqt_kana_input_tests PRIVATE -Wall -Wextra -Wpedantic)
 
+add_executable(jwpqt_romaji_conversion_tests romaji_conversion_test.cpp)
+target_link_libraries(jwpqt_romaji_conversion_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_romaji_conversion_tests PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME core_romaji_conversion COMMAND jwpqt_romaji_conversion_tests)
+
 add_executable(jwpqt_wnn_dictionary_tests
   wnn_dictionary_test.cpp
 )

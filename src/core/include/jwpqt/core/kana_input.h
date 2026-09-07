@@ -27,6 +27,8 @@ struct KanaInputEvent {
 
 struct KanaInputOptions {
   bool old_katakana_input = false;
+  // Batch replay must not silently discard an unfinished prefix on a mismatch.
+  bool reject_incomplete = false;
 };
 
 // Returns the recovered desktop romaji spelling for a hiragana or katakana

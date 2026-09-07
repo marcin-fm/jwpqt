@@ -58,7 +58,8 @@ class WnnConversionSession {
 
   bool begin(const JwpText& input);
   std::optional<WnnPreparedConversion> prepare(const JwpText& input) const;
-  WnnAutomaticPreparation prepare_automatic(const JwpText& input) const;
+  WnnAutomaticPreparation prepare_automatic(const JwpText& input,
+                                            bool force = false) const;
   void activate(WnnPreparedConversion prepared);
   void clear() noexcept;
 

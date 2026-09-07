@@ -98,7 +98,7 @@ std::optional<WnnPreparedConversion> WnnConversionSession::prepare(
 }
 
 WnnAutomaticPreparation WnnConversionSession::prepare_automatic(
-    const JwpText& input) const {
+    const JwpText& input, bool force) const {
   WnnAutomaticPreparation automatic;
   if (input.empty()) {
     return automatic;
@@ -109,7 +109,7 @@ WnnAutomaticPreparation WnnConversionSession::prepare_automatic(
     prepared = prepare(input);
     if (prepared) {
       automatic.matched_length = input.size();
-      if (prepared->result().can_extend) {
+      if (prepared->result().can_extend && !force) {
         automatic.wait_for_more = true;
       } else {
         automatic.conversion.emplace(std::move(*prepared));

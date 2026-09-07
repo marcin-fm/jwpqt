@@ -3065,7 +3065,7 @@ bool MainWindow::attempt_automatic_conversion(bool force) {
         paragraph.begin() + pending_range.begin.offset,
         paragraph.begin() + pending_range.end.offset);
     core::WnnAutomaticPreparation automatic =
-        wnn_resources_->session.prepare_automatic(input);
+        wnn_resources_->session.prepare_automatic(input, force);
     if (automatic.wait_for_more && !force) {
       show_automatic_conversion_range();
       statusBar()->showMessage(tr("Waiting for more kana"));
@@ -3076,17 +3076,6 @@ bool MainWindow::attempt_automatic_conversion(bool force) {
     std::optional<core::WnnPreparedConversion> prepared;
     if (automatic.conversion.has_value()) {
       prepared.emplace(std::move(*automatic.conversion));
-    } else if (automatic.wait_for_more && force) {
-      const std::size_t maximum =
-          std::min(input.size(), core::kWnnMaximumKeySize);
-      for (std::size_t length = maximum; length > 0; --length) {
-        core::JwpText prefix(input.begin(), input.begin() + length);
-        prepared = wnn_resources_->session.prepare(prefix);
-        if (prepared.has_value()) {
-          matched_length = length;
-          break;
-        }
-      }
     }
     if (!prepared.has_value()) {
       clear_automatic_conversion_range();

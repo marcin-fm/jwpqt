@@ -442,7 +442,8 @@ bool KanaInputComposer::pending_ambiguous() const noexcept {
 }
 
 void KanaInputComposer::set_options(KanaInputOptions options) {
-  if (options.old_katakana_input == options_.old_katakana_input) {
+  if (options.old_katakana_input == options_.old_katakana_input &&
+      options.reject_incomplete == options_.reject_incomplete) {
     return;
   }
   if (pending()) {
@@ -510,6 +511,9 @@ void KanaInputComposer::clear_state() noexcept {
 
 void KanaInputComposer::flush_pending(
     std::vector<KanaInputEvent>& events) {
+  if (options_.reject_incomplete && !buffer_.empty() && !pending_output_) {
+    throw KanaInputError("incomplete kana input cannot be discarded during replay");
+  }
   if (pending_output_ && !emit_buffer(events)) {
     throw KanaInputError("pending kana input could not be converted");
   }
