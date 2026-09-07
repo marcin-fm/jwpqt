@@ -58,6 +58,11 @@ target_link_libraries(jwpqt_query_history_tests PRIVATE jwpqt_core)
 target_compile_options(jwpqt_query_history_tests PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME core_query_history COMMAND jwpqt_query_history_tests)
 
+add_executable(jwpqt_edict_sort_tests edict_sort_test.cpp)
+target_link_libraries(jwpqt_edict_sort_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_edict_sort_tests PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME core_edict_sort COMMAND jwpqt_edict_sort_tests)
+
 add_executable(jwpqt_edict_resource_search_tests
   edict_resource_search_test.cpp
 )

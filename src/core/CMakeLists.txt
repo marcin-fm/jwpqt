@@ -9,6 +9,7 @@ add_library(jwpqt_core STATIC
   edict_pattern_match.cpp
   edict_registry.cpp
   edict_search.cpp
+  edict_sort.cpp
   edict_user_dictionary.cpp
   jfc_text.cpp
   jis_encoding.cpp

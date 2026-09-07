@@ -69,38 +69,25 @@ std::u32string decode_jwp_text(const JwpText& text,
   return output;
 }
 
+std::optional<JisCode> unicode_to_jwp_code(char32_t code_point,
+                                         LegacyCodePage code_page) noexcept {
+  if (code_point == U'\0' || is_legacy_misconstrued_code_point(code_point)) return std::nullopt;
+  if (code_point <= U'\u007e') return static_cast<JisCode>(code_point);
+  const auto extended = unicode_to_legacy_byte(code_point, code_page);
+  if (prefers_extended_byte(code_point, code_page) && extended) return *extended;
+  if (const auto jis = unicode_to_jis_x0208(code_point)) return jis;
+  if (extended) return *extended;
+  return std::nullopt;
+}
+
 JwpText encode_jwp_text(std::u32string_view text,
                         LegacyCodePage code_page) {
   JwpText output;
   output.reserve(text.size());
   for (std::size_t index = 0; index < text.size(); ++index) {
-    const char32_t code_point = text[index];
-    if (code_point == U'\0' ||
-        is_legacy_misconstrued_code_point(code_point)) {
-      throw_encode_error(code_point, index);
-    }
-    if (code_point > U'\0' && code_point <= U'\u007e') {
-      output.push_back(static_cast<JisCode>(code_point));
-      continue;
-    }
-
-    const std::optional<std::uint8_t> extended =
-        unicode_to_legacy_byte(code_point, code_page);
-    if (prefers_extended_byte(code_point, code_page) &&
-        extended.has_value()) {
-      output.push_back(*extended);
-      continue;
-    }
-    if (const std::optional<JisCode> jis =
-            unicode_to_jis_x0208(code_point)) {
-      output.push_back(*jis);
-      continue;
-    }
-    if (extended.has_value()) {
-      output.push_back(*extended);
-      continue;
-    }
-    throw_encode_error(code_point, index);
+    const auto code = unicode_to_jwp_code(text[index], code_page);
+    if (!code) throw_encode_error(text[index], index);
+    output.push_back(*code);
   }
   return output;
 }
