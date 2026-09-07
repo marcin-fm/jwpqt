@@ -77,6 +77,31 @@ void test_model() {
   rejects([&] { (void)write_application_settings(settings); });
 }
 
+void test_history_settings() {
+  using namespace jwpqt::qt;
+  const auto defaults = read_application_settings("");
+  require(defaults.history_size == 300 && defaults.save_histories, "History defaults differ from source");
+  for (const int size : {0, 1, 3, 4, 12, 300, 30000}) {
+    auto value = read_application_settings("history_size=1\nHistoryBuffers_NumChars=" + std::to_string(size) +
+        "\nsave_history=no\nSAVE_HISTORY=bad\nFuture=retained\n");
+    const auto encoded = write_application_settings(value);
+    const auto restored = read_application_settings(encoded);
+    require(restored.history_size == size && !restored.save_histories &&
+                restored.unapplied == QStringList({"SAVE_HISTORY", "Future"}) &&
+                encoded.find("history_size=") == std::string::npos &&
+                write_application_settings(restored) == encoded,
+            "History settings lost bounds, aliases or unknown data");
+  }
+  for (const auto* invalid : {"HistoryBuffers_NumChars=-1", "history_size=30001", "save_history=2",
+       "history_size=bad\nHistoryBuffers_NumChars=300", "Save_Histories=bad\nsave_history=true"})
+    rejects([&] { (void)read_application_settings(invalid); });
+  auto invalid = defaults;
+  for (const int size : {-1, 30001}) {
+    invalid.history_size = size;
+    rejects([&] { (void)write_application_settings(invalid); });
+  }
+}
+
 void test_files(const QString& directory) {
   using namespace jwpqt::qt;
   const QString path = directory + QStringLiteral("/settings-\u65e5.cfg");
@@ -212,6 +237,7 @@ int main(int argc, char** argv) {
     QTemporaryDir directory;
     require(directory.isValid(), "Could not create temporary settings directory");
     test_model();
+    test_history_settings();
     test_information_settings();
     test_dictionary_settings();
     test_files(directory.path());

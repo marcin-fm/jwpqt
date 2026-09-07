@@ -113,6 +113,9 @@ int main(int argc, char* argv[]) {
   if (!window.load_application_settings(config.filePath(QStringLiteral("jwpqt.cfg")))) {
     QTextStream(stderr) << window.application_settings_warning() << '\n';
   }
+  window.load_query_history(config.filePath(QStringLiteral("query-history.bin")));
+  if (!window.query_history_warning().isEmpty())
+    QTextStream(stderr) << window.query_history_warning() << '\n';
   if (!window.load_recent_file_configuration(
           config.filePath(QStringLiteral("recent-files.json")))) {
     QTextStream(stderr) << window.recent_file_warning() << '\n';

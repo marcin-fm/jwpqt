@@ -45,6 +45,10 @@ class EdictLookupDialog : public QDialog {
   void set_query(std::u32string_view query);
   void set_overwrite_action(QAction* action);
   void set_options(const EdictLookupOptions& options);
+  void reset_history_navigation() noexcept {
+    history_index_ = -1;
+    history_changed_ = true;
+  }
   void set_options_changed_handler(OptionsHandler handler) {
     options_changed_handler_ = std::move(handler);
   }

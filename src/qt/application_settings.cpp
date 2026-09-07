@@ -45,7 +45,8 @@ constexpr BooleanDescriptor<ApplicationSettings> kBooleans[] = {
     {"ScrollBar_Horizontal", "hscroll", &ApplicationSettings::horizontal_scrollbar},
     {"ScrollBar_KanjiBar", "kscroll", &ApplicationSettings::kanji_bar_scrollbar},
     {"SaveSettingsOnExit", "save_exit", &ApplicationSettings::save_settings_on_exit},
-    {"Save_RecentFiles", "save_recent", &ApplicationSettings::save_recent_files}};
+    {"Save_RecentFiles", "save_recent", &ApplicationSettings::save_recent_files},
+    {"Save_Histories", "save_history", &ApplicationSettings::save_histories}};
 
 constexpr BooleanDescriptor<EdictLookupOptions> kDictionaryBooleans[] = {
     {"Dict_AdvancedSearches", "dict_advanced", &EdictLookupOptions::advanced},
@@ -116,6 +117,10 @@ ApplicationSettings read_application_settings(std::string_view text,
         if (value != 0 && value < 1250) throw core::JwpConfigurationError("Unknown code page");
         result.translation_code_page = static_cast<int>(value);
       }
+      if (name.empty() && core::JwpConfigurationKey{"HistoryBuffers_NumChars", "history_size"}.matches(entry.name)) {
+        name = "HistoryBuffers_NumChars";
+        result.history_size = static_cast<int>(core::parse_jwp_setting_integer(entry.value, 0, 30000));
+      }
       if (name.empty() && core::JwpConfigurationKey{"CharInfo_Fields", "kanji_info"}.matches(entry.name)) {
         name = "CharInfo_Fields";
         const auto bytes = core::parse_jwp_setting_bytes(entry.value, result.kanji_info.fields.size());
@@ -147,6 +152,8 @@ ApplicationSettings read_application_settings(std::string_view text,
 }
 
 std::string write_application_settings(const ApplicationSettings& settings) {
+  if (settings.history_size < 0 || settings.history_size > 30000)
+    throw core::JwpConfigurationError("History storage is outside 0..30000 cells");
   if (settings.translation_code_page != 0 &&
       (settings.translation_code_page < 1250 || settings.translation_code_page > 1258)) {
     throw core::JwpConfigurationError("Unknown translation code page");
@@ -177,6 +184,7 @@ std::string write_application_settings(const ApplicationSettings& settings) {
   updates.push_back({{"Dict_ExclusionFilters", "dict_bits"},
                     "0x" + QString::number(bits, 16).toStdString()});
   updates.push_back({{"TranslationCodePage", "code_page"}, std::to_string(settings.translation_code_page)});
+  updates.push_back({{"HistoryBuffers_NumChars", "history_size"}, std::to_string(settings.history_size)});
   validate_kanji_info_options(settings.kanji_info);
   std::string fields;
   constexpr char hex[] = "0123456789ABCDEF";

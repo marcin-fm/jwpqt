@@ -37,6 +37,8 @@ struct ApplicationSettings {
   bool kanji_bar_scrollbar = true;
   bool save_settings_on_exit = true;
   bool save_recent_files = true;
+  bool save_histories = true;
+  int history_size = 300;
   int translation_code_page = 1252;
   KanjiInfoOptions kanji_info;
   EdictLookupOptions dictionary;

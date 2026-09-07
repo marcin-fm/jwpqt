@@ -135,7 +135,7 @@ or the explicit project API options. Recent project entries reopen as projects.
 **Tools > Options** configures Japanese document/query/list/candidate fonts,
 font inheritance, toolbar/status/candidate visibility, scrollbar policies,
 candidate-bar position, default JWP code page, dictionary search policies and
-exit/recent-file persistence.
+exit/recent-file/query-history persistence and history capacity.
 Desktop menu fonts are unchanged. Character Table stays at 16 logical pixels;
 the large character keeps its default glyph size. Unavailable or legacy bitmap
 font families use native fallbacks, with their original names retained.
@@ -318,9 +318,31 @@ do not replace history or prior results. Exact duplicates move to the front.
 The default source-sized budget permits at most 31 entries and 267 total Unicode
 scalars. Oversized queries are not truncated, and an edited draft that cannot
 be retained is not discarded by older-query navigation. History survives closing
-the lookup and replacing its resources within the same window. Disk persistence,
-legacy history-file import, history-size settings and other history consumers
-remain separate work.
+the lookup, replacing its resources and restarting the application.
+
+**Options > History** configures a per-history limit of 0..30000 storage cells
+and saving on exit. Each history has its own budget. The application loads
+`query-history.bin` from its configuration directory. All three
+dictionary/search/replace lists round-trip;
+search/replace edit-dialog history controls are not implemented yet. Settings,
+history import and reload leave current queries, pending kana, results and
+selections intact. Turning off automatic saving leaves any existing file unchanged.
+
+**Tools > Query History** provides Save, Save As, Reload, Import and Clear.
+Import replaces memory, not its source file; explicit Clear affects all three
+lists and the configured archive, even when automatic saving is off. Legacy
+`JWPxp.his` import requires confirming its original history capacity and code
+page, which are not stored in that file. Its recent/workspace path tail is not
+imported, and the legacy file is never changed or imported automatically.
+
+History writes use atomic replacement, cooperative locking and an exact loaded
+source check. Changed, deleted, corrupt or unreadable archives are not silently
+overwritten. Save As can recover to a new file, and a failed exit save offers
+Cancel to retain the workspace. A load or settings change that reduces history
+pauses automatic saving when it might discard saved entries: increase the size
+and Reload to recover them, or explicitly Save the smaller histories. Resource
+reports disclose these warnings without writing files. Locks do not provide
+race-free protection against external tools that ignore them.
 
 Dictionary **Sort** cycles Reading, Length, Entry and Definition order. Hold
 `Shift` to cycle backwards or `Ctrl` to reverse the current order without cycling.
@@ -347,7 +369,7 @@ In dark palettes, radical strokes use light ink on dark paper and stroke-count
 headings stay readable. Switching back restores the original light artwork
 without changing queries, selections or results.
 
-This is not complete dialog parity: persisted query history, remaining dictionary
+This is not complete dialog parity: remaining history consumers and dictionary
 options, radical automatic stroke estimation and stroke-tolerance shortcuts
 remain open. Existing numeric ranges and portable dictionary search algorithms
 do not substitute for those controls.

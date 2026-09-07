@@ -28,7 +28,7 @@ void roundtrip(const QString& directory) {
   qt::ProjectWorkspace workspace;
   workspace.detect_formats = false;
   workspace.settings = qt::read_application_settings("Future_Field = raw\r\nFile.Size = 23\r\n"
-      "Dict_AdvancedSearches=true\nDict_ExclusionFilters=0x10002\n");
+      "Dict_AdvancedSearches=true\nDict_ExclusionFilters=0x10002\nHistoryBuffers_NumChars=512\nSave_Histories=false\n");
   workspace.documents = {{directory + "/first.jwp", {}, core::LegacyCodePage::k1251, true},
       {directory + "/second.txt", core::TextEncoding::kUtf16Be, core::LegacyCodePage::k1252, false},
       {directory + "/third\\name.jfc", core::TextEncoding::kJfc, core::LegacyCodePage::k1258, true}};
@@ -46,6 +46,8 @@ void roundtrip(const QString& directory) {
             !decoded.settings.dictionary.require_beginning && decoded.settings.dictionary.personal_names &&
             decoded.settings.dictionary.place_names && decoded.settings.dictionary_extra_exclusions == 0x10000U,
             "Project lost dictionary policies or retained exclusion bits");
+    require(decoded.settings.history_size == 512 && !decoded.settings.save_histories,
+            "Project lost history capacity or persistence policy");
     for (std::size_t i = 0; i < decoded.documents.size(); ++i) {
       const auto& left = decoded.documents[i];
       const auto& right = workspace.documents[i];

@@ -22,6 +22,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QMouseEvent>
+#include <QPointer>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QPushButton>
@@ -103,6 +104,11 @@ void test_runtime_paths(const QString& executable, const QString& root) {
               missing.contains(QStringLiteral("Kanji information: unavailable")) &&
               missing.contains(QStringLiteral("Qt platform/style: offscreen")),
           QStringLiteral("Missing-resource report was not actionable: ") + missing);
+  const QString queries = config + QStringLiteral("/query-history.bin");
+  require(!QFile::exists(queries), QStringLiteral("Resource report created a missing query-history archive"));
+  write_file(config + QStringLiteral("/JWPxp.his"), QByteArray("never auto-import this"));
+  require(run(options, 0).contains(QStringLiteral("Query histories: 0 dictionary, 0 search, 0 replace")) &&
+          !QFile::exists(queries), QStringLiteral("Startup guessed a legacy history format/capacity"));
   require(run({QStringLiteral("--smoke-test")}, 1)
               .contains(QStringLiteral("Could not load the kanji color configuration")),
           QStringLiteral("Explicit config did not bypass the default app settings"));
@@ -135,6 +141,35 @@ void test_runtime_paths(const QString& executable, const QString& root) {
           QStringLiteral("Native settings path, retained fields or read-only startup were lost"));
   preferences_file.close();
   require(preferences_file.remove(), QStringLiteral("Could not remove native settings fixture"));
+  write_file(queries, QByteArray("corrupt query history"));
+  QFile query_file(queries);
+  require(run(options, 0).contains(QStringLiteral("Could not load query history")) &&
+          query_file.open(QIODevice::ReadOnly) && query_file.readAll() == QByteArray("corrupt query history"),
+          QStringLiteral("Corrupt query history blocked startup or was overwritten"));
+  query_file.close();
+  jwpqt::core::QueryHistories archive(128);
+  archive.dictionary.remember(U"cat"); archive.search.remember(U"needle"); archive.replace.remember(U"replace");
+  const auto archive_bytes = QByteArray::fromStdString(jwpqt::core::encode_query_history_file(archive));
+  write_file(queries, archive_bytes);
+  write_file(preferences, QByteArray("HistoryBuffers_NumChars=32\nSave_Histories=false\n"));
+  const auto query_report = run(options, 0);
+  require(query_report.contains(QStringLiteral("Query history: ") + queries) &&
+          query_report.contains(QStringLiteral("Query histories: 1 dictionary, 1 search, 1 replace; 32 storage cells each; automatic saving off")) &&
+          query_file.open(QIODevice::ReadOnly) && query_file.readAll() == archive_bytes,
+          QStringLiteral("History startup ignored configuration, lost kinds or modified the archive"));
+  query_file.close();
+  write_file(preferences, QByteArray("HistoryBuffers_NumChars=4\n"));
+  require(run(options, 0).contains(QStringLiteral("Automatic saving is paused")) &&
+          query_file.open(QIODevice::ReadOnly) && query_file.readAll() == archive_bytes,
+          QStringLiteral("Load-time pruning was not disclosed or destroyed original history"));
+  query_file.close();
+  const QByteArray invalid_history_settings("history_size=bad\nHistoryBuffers_NumChars=300\n");
+  write_file(preferences, invalid_history_settings);
+  require(run(options, 0).contains(QStringLiteral("Could not load settings")) &&
+          preferences_file.open(QIODevice::ReadOnly) && preferences_file.readAll() == invalid_history_settings,
+          QStringLiteral("Invalid earlier history settings were accepted or replaced"));
+  preferences_file.close();
+  require(preferences_file.remove() && query_file.remove(), QStringLiteral("Could not remove history startup fixtures"));
   for (const QString& option : {QStringLiteral("--config-dir"),
                                 QStringLiteral("--user-data-dir"),
                                 QStringLiteral("--wnn-data-dir")}) {
@@ -832,6 +867,23 @@ void test_real_resources(const QString& root, const QString& source,
               window.document_modified() == before_sorted_modified,
           QStringLiteral("Sorted real dictionary insertion did not undo cleanly"));
   capture(dictionary, QStringLiteral("lookup-dictionary-sorted"));
+  const auto history_path = root + QStringLiteral("/query-history.bin");
+  const QPointer<QTextDocument> sorted_document = dictionary_results->document();
+  const int sorted_position = dictionary_results->textCursor().position();
+  const int sorted_anchor = dictionary_results->textCursor().anchor();
+  require(window.save_query_history(history_path) && window.load_query_history(history_path) &&
+              window.query_histories().dictionary.find(U"\u3042\u3044").has_value() &&
+              query_edit->text() == QStringLiteral("\u3042\u3044") &&
+              dictionary_results->document() == sorted_document &&
+              dictionary_results->textCursor().position() == sorted_position &&
+              dictionary_results->textCursor().anchor() == sorted_anchor,
+          QStringLiteral("Real query-history round trip changed the query, sorted results or selection"));
+  {
+    jwpqt::qt::MainWindow restored_history;
+    require(restored_history.load_query_history(history_path) &&
+                restored_history.query_histories().dictionary.find(U"\u3042\u3044").has_value(),
+            QStringLiteral("A new native owner could not restore the real dictionary query"));
+  }
 
   open("jisTableAction");
   auto* table = dynamic_cast<jwpqt::qt::JisTableDialog*>(
@@ -942,7 +994,7 @@ void test_real_resources(const QString& root, const QString& source,
               window.accept_conversion(),
           QStringLiteral("Real replayed kana did not enter the ordinary WNN workflow"));
   std::cout << "Real-data workflow: romanized input -> WNN Japan -> save/reopen; "
-               "EDICT indexed lookup and result sorting/insertion/undo; Love metadata and independent character navigation; "
+               "EDICT indexed lookup, sorting/insertion/undo and persisted query history; Love metadata and independent character navigation; "
                "all lookup reference modes; conversion candidate strip; selected-romaji replay and undo.\n";
 }
 

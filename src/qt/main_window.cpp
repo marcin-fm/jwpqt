@@ -48,12 +48,14 @@
 #include <QPageSetupDialog>
 #include <QPrintDialog>
 #include <QPrinter>
+#include <QPointer>
 #include <QTextEdit>
 #include <QToolButton>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QScrollBar>
 #include <QScopedValueRollback>
+#include <QScopeGuard>
 #include <QScreen>
 #include <QSettings>
 #include <QSignalBlocker>
@@ -196,7 +198,24 @@ QString absolute_document_path(const QString& path) {
 
 QString document_path_identity(const QString& path) {
   const QString canonical = QFileInfo(path).canonicalFilePath();
-  return canonical.isEmpty() ? absolute_document_path(path) : canonical;
+  if (!canonical.isEmpty()) return canonical;
+  const QString absolute = absolute_document_path(path);
+  const auto slash = absolute.lastIndexOf(QLatin1Char('/'));
+  const QString parent = QFileInfo(absolute.left(slash + 1)).canonicalFilePath();
+  if (!parent.isEmpty())
+    return parent + (parent.endsWith(QLatin1Char('/')) ? QString{} : QStringLiteral("/")) + absolute.mid(slash + 1);
+  return absolute;
+}
+
+void resize_histories(core::QueryHistories& histories, std::size_t cells) {
+  histories.dictionary.set_storage_cells(cells);
+  histories.search.set_storage_cells(cells);
+  histories.replace.set_storage_cells(cells);
+}
+
+std::size_t history_entry_count(const core::QueryHistories& histories) {
+  return histories.dictionary.entries().size() + histories.search.entries().size() +
+         histories.replace.entries().size();
 }
 
 QString decode_registry_text(const core::EdictRegistry& registry,
@@ -975,6 +994,14 @@ bool MainWindow::save_project_path(const QString& path, bool save_documents, Ope
 bool MainWindow::apply_application_settings(const ApplicationSettings& settings, OpenMode mode) {
   try {
     auto next = read_application_settings(write_application_settings(settings));
+    if (query_history_busy_ && (next.history_size != application_settings_.history_size ||
+                               next.save_histories != application_settings_.save_histories))
+      throw core::JwpConfigurationError("History settings cannot change during a history operation");
+    std::optional<core::QueryHistories> histories;
+    if (query_histories_->dictionary.storage_cells() != static_cast<std::size_t>(next.history_size)) {
+      histories = *query_histories_;
+      resize_histories(*histories, static_cast<std::size_t>(next.history_size));
+    }
     for (const auto& state : documents_)
       if (state->updating_editor_ || state->applying_kana_input_)
         throw core::JwpConfigurationError("Settings cannot change during an editor update");
@@ -1009,6 +1036,17 @@ bool MainWindow::apply_application_settings(const ApplicationSettings& settings,
         }
       } restore{views};
       application_settings_ = std::move(next);
+      if (histories) {
+        if (query_history_snapshot_ && query_history_snapshot_->source &&
+            history_entry_count(query_history_snapshot_->histories) != 0 &&
+            history_entry_count(*histories) < history_entry_count(*query_histories_)) {
+          query_history_pruned_ = true;
+          query_history_warning_ = tr("History size was reduced. Automatic saving is paused to preserve the original archive. "
+              "Increase the size and Reload, or explicitly Save.");
+        }
+        *query_histories_ = std::move(*histories);
+        if (edict_lookup_dialog_) edict_lookup_dialog_->reset_history_navigation();
+      }
       if (edict_lookup_options_) *edict_lookup_options_ = application_settings_.dictionary;
       if (edict_lookup_dialog_) edict_lookup_dialog_->set_options(application_settings_.dictionary);
       // Font/layout signals must not be interpreted as edits in any open tab.
@@ -1121,6 +1159,225 @@ void MainWindow::configure_application_settings() {
   ApplicationSettingsDialog dialog(application_settings_, this);
   if (dialog.exec() == QDialog::Accepted)
     apply_application_settings(dialog.settings(), OpenMode::kInteractive);
+}
+
+const core::QueryHistories& MainWindow::query_histories() const noexcept { return *query_histories_; }
+
+QString MainWindow::query_history_warning() const { return query_history_warning_; }
+
+bool MainWindow::query_history_error(const QString& action, const std::exception& error, OpenMode mode) {
+  const QPointer<MainWindow> self(this);
+  const QString message = action + QStringLiteral(": ") + QString::fromUtf8(error.what());
+  query_history_warning_ = message;
+  update_resource_status();
+  if (self && mode == OpenMode::kInteractive) QMessageBox::warning(this, tr("Query History"), message);
+  return false;
+}
+
+bool MainWindow::confirm_query_history_change(const QString& message, OpenMode mode) {
+  if (mode == OpenMode::kNonInteractive) return true;
+  const auto before = core::encode_query_history_file(*query_histories_);
+  const QPointer<MainWindow> self(this);
+  if (QMessageBox::question(this, tr("Query History"), message,
+      QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Yes || !self) return false;
+  if (core::encode_query_history_file(*query_histories_) != before)
+    throw core::QueryHistoryError("History changed while confirming; try the operation again");
+  return true;
+}
+
+void MainWindow::check_history_destination(const QString& path) const {
+  if (find_document_path(path) >= 0)
+    throw core::QueryHistoryError("History cannot overwrite an open document");
+  for (const auto& other : {application_settings_path_, recent_files_path_, project_path_})
+    if (!other.isEmpty() && document_path_identity(other) == document_path_identity(path))
+      throw core::QueryHistoryError("History cannot overwrite settings, recent files or the current project");
+}
+
+bool MainWindow::load_query_history(const QString& path, OpenMode mode) {
+  if (query_history_busy_) return false;
+  const QPointer<MainWindow> self(this);
+  query_history_busy_ = true;
+  const auto idle = qScopeGuard([self] { if (self) self->query_history_busy_ = false; });
+  const QString destination = absolute_document_path(path);
+  bool read_succeeded = false;
+  try {
+    auto snapshot = read_query_histories(destination);
+    read_succeeded = true;
+    auto next = snapshot.histories;
+    resize_histories(next, static_cast<std::size_t>(application_settings_.history_size));
+    const auto omitted = history_entry_count(snapshot.histories) - history_entry_count(next);
+    if (!confirm_query_history_change(tr("Replace all three in-memory histories from %1? "
+        "Current queries and results will stay unchanged. %2 entries will be omitted by the configured limit.")
+        .arg(destination).arg(omitted), mode)) return false;
+    *query_histories_ = std::move(next);
+    query_history_snapshot_ = std::move(snapshot);
+    query_history_path_ = destination;
+    query_history_pruned_ = omitted != 0;
+    query_history_warning_ = omitted == 0 ? QString{} : tr("%1 history entries were not loaded because of the size limit. "
+        "Automatic saving is paused to preserve the original. Increase the size and Reload, or explicitly Save.").arg(omitted);
+    if (edict_lookup_dialog_) edict_lookup_dialog_->reset_history_navigation();
+    update_resource_status();
+    return true;
+  } catch (const std::exception& error) {
+    if (!read_succeeded && (query_history_path_.isEmpty() ||
+        document_path_identity(query_history_path_) == document_path_identity(destination))) {
+      query_history_path_ = destination;
+      query_history_snapshot_.reset();
+      query_history_pruned_ = false;
+    }
+    return query_history_error(tr("Could not load query history"), error, mode);
+  }
+}
+
+bool MainWindow::save_query_history(const QString& path, OpenMode mode) {
+  if (query_history_busy_) return false;
+  const QPointer<MainWindow> self(this);
+  query_history_busy_ = true;
+  const auto idle = qScopeGuard([self] { if (self) self->query_history_busy_ = false; });
+  QString destination = path.isEmpty() ? query_history_path_ : absolute_document_path(path);
+  if (destination.isEmpty() && mode == OpenMode::kInteractive)
+    destination = QFileDialog::getSaveFileName(this, tr("Save Query History"), {}, tr("Native query history (*.bin);;All files (*)"));
+  if (!self || destination.isEmpty()) return false;
+  destination = absolute_document_path(destination);
+  try {
+    check_history_destination(destination);
+    const bool current = !query_history_path_.isEmpty() &&
+        document_path_identity(destination) == document_path_identity(query_history_path_);
+    std::optional<std::string> expected;
+    if (current) {
+      if (!query_history_snapshot_)
+        throw core::QueryHistoryError("History was not loaded safely; Reload it or use Save As");
+      expected = query_history_snapshot_->source;
+      if (query_history_pruned_) {
+        if (mode == OpenMode::kNonInteractive)
+          throw core::QueryHistoryError("Automatic saving is paused because history was reduced; Reload or explicitly Save");
+        if (!confirm_query_history_change(tr("The size limit omitted some entries. Replace the saved archive "
+            "with the current, possibly smaller histories?"), mode)) return false;
+      }
+    } else {
+      expected = read_query_histories(destination).source;
+      if (expected) {
+        if (mode == OpenMode::kNonInteractive)
+          throw core::QueryHistoryError("The destination already contains history; load it before saving");
+        if (!confirm_query_history_change(tr("Replace the existing history archive at %1?").arg(destination), mode)) return false;
+      }
+    }
+    check_history_destination(destination);
+    QueryHistorySnapshot next{*query_histories_, {}};
+    next.source = write_query_histories(destination, next.histories, expected);
+    query_history_snapshot_ = std::move(next);
+    query_history_path_ = destination;
+    query_history_pruned_ = false;
+    query_history_warning_.clear();
+    update_resource_status();
+    return true;
+  } catch (const std::exception& error) {
+    return query_history_error(tr("Could not save query history"), error, mode);
+  }
+}
+
+bool MainWindow::import_query_history(const QString& path, const std::optional<LegacyHistoryOptions>& legacy,
+                                     OpenMode mode) {
+  if (query_history_busy_) return false;
+  const QPointer<MainWindow> self(this);
+  query_history_busy_ = true;
+  const auto idle = qScopeGuard([self] { if (self) self->query_history_busy_ = false; });
+  try {
+    core::QueryHistories next;
+    if (legacy) {
+      next = import_legacy_query_histories(path, legacy->storage_cells, legacy->code_page);
+    } else {
+      auto snapshot = read_query_histories(path);
+      if (!snapshot.source) throw core::QueryHistoryError("The history import file does not exist");
+      next = std::move(snapshot.histories);
+    }
+    const auto count = history_entry_count(next);
+    resize_histories(next, static_cast<std::size_t>(application_settings_.history_size));
+    const auto omitted = count - history_entry_count(next);
+    if (omitted != 0 && mode == OpenMode::kNonInteractive)
+      throw core::QueryHistoryError("Imported history exceeds the configured size; increase the size or confirm the loss interactively");
+    if (!confirm_query_history_change(tr("Replace all three in-memory histories with this import? "
+        "%1 entries will be omitted by the configured limit. The imported file, current queries and results "
+        "will not be changed; use Save to persist the imported histories.").arg(omitted), mode)) return false;
+    *query_histories_ = std::move(next);
+    if (edict_lookup_dialog_) edict_lookup_dialog_->reset_history_navigation();
+    if (!query_history_pruned_ && (query_history_snapshot_ || query_history_path_.isEmpty()))
+      query_history_warning_.clear();
+    update_resource_status();
+    return true;
+  } catch (const std::exception& error) {
+    return query_history_error(tr("Could not import query history"), error, mode);
+  }
+}
+
+bool MainWindow::clear_query_history(OpenMode mode) {
+  if (query_history_busy_) return false;
+  const QPointer<MainWindow> self(this);
+  query_history_busy_ = true;
+  const auto idle = qScopeGuard([self] { if (self) self->query_history_busy_ = false; });
+  try {
+    if (!query_history_path_.isEmpty() && !query_history_snapshot_)
+      throw core::QueryHistoryError("History was not loaded safely; Reload it or save to a different file");
+    if (!confirm_query_history_change(tr("Clear dictionary, search and replace histories from memory "
+        "and the configured native archive? This also clears the archive when automatic saving is off. "
+        "Current queries, results and imported legacy files will not be changed."), mode)) return false;
+    core::QueryHistories next(static_cast<std::size_t>(application_settings_.history_size));
+    std::optional<QueryHistorySnapshot> snapshot;
+    if (!query_history_path_.isEmpty()) {
+      check_history_destination(query_history_path_);
+      snapshot = QueryHistorySnapshot{next, {}};
+      snapshot->source = write_query_histories(query_history_path_, next, query_history_snapshot_->source);
+    }
+    *query_histories_ = std::move(next);
+    query_history_snapshot_ = std::move(snapshot);
+    query_history_pruned_ = false;
+    query_history_warning_.clear();
+    if (edict_lookup_dialog_) edict_lookup_dialog_->reset_history_navigation();
+    update_resource_status();
+    return true;
+  } catch (const std::exception& error) {
+    return query_history_error(tr("Could not clear query history"), error, mode);
+  }
+}
+
+void MainWindow::import_query_history_dialog() {
+  const QPointer<MainWindow> self(this);
+  const QString legacy_filter = tr("JWPxp history (*.his)");
+  QString filter;
+  const QString path = QFileDialog::getOpenFileName(this, tr("Import Query History"), {},
+      tr("Native query history (*.bin)") + QStringLiteral(";;") + legacy_filter + tr(";;All files (*)"), &filter);
+  if (!self || path.isEmpty()) return;
+  std::optional<LegacyHistoryOptions> legacy;
+  if (filter == legacy_filter || QFileInfo(path).suffix().compare(QStringLiteral("his"), Qt::CaseInsensitive) == 0) {
+    QPointer<QDialog> dialog = new QDialog(this);
+    const auto dispose = qScopeGuard([dialog] { delete dialog.data(); });
+    dialog->setObjectName(QStringLiteral("legacyHistoryImportDialog"));
+    dialog->setWindowTitle(tr("Legacy History Parameters"));
+    auto* layout = new QFormLayout(dialog);
+    auto* note = new QLabel(tr("JWPxp.his does not store these values. Confirm the settings used by the source "
+        "application; incorrect values may misinterpret its data. Only histories are imported, not recent/workspace paths."), dialog);
+    note->setWordWrap(true);
+    layout->addRow(note);
+    auto* cells = new QSpinBox(dialog);
+    cells->setObjectName(QStringLiteral("legacyHistorySize"));
+    cells->setRange(0, 30000);
+    cells->setValue(application_settings_.history_size);
+    layout->addRow(tr("Source history storage cells"), cells);
+    auto* page = new QComboBox(dialog);
+    page->setObjectName(QStringLiteral("legacyHistoryCodePage"));
+    for (int number = 1250; number <= 1258; ++number) page->addItem(QStringLiteral("CP%1").arg(number), number);
+    page->setCurrentIndex(page->findData(static_cast<int>(default_jwp_code_page())));
+    layout->addRow(tr("Source code page"), page);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    layout->addRow(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+    const int accepted = dialog->exec();
+    if (!self || !dialog || accepted != QDialog::Accepted) return;
+    legacy = LegacyHistoryOptions{static_cast<std::size_t>(cells->value()),
+        static_cast<core::LegacyCodePage>(page->currentData().toInt())};
+  }
+  import_query_history(path, legacy, OpenMode::kInteractive);
 }
 
 bool MainWindow::load_recent_file_configuration(const QString& path, OpenMode mode) {
@@ -2195,6 +2452,31 @@ void MainWindow::create_actions() {
         tr("JWP settings (*.cfg);;All files (*)"));
     if (!path.isEmpty()) import_application_settings(path, OpenMode::kInteractive);
   });
+  auto* history_menu = tools_menu->addMenu(tr("Query &History"));
+  history_menu->setObjectName(QStringLiteral("queryHistoryMenu"));
+  auto* save_history = history_menu->addAction(tr("Save History"));
+  save_history->setObjectName(QStringLiteral("saveQueryHistoryAction"));
+  connect(save_history, &QAction::triggered, this,
+          [this] { save_query_history({}, OpenMode::kInteractive); });
+  auto* export_history = history_menu->addAction(tr("Save History As..."));
+  export_history->setObjectName(QStringLiteral("saveQueryHistoryAsAction"));
+  connect(export_history, &QAction::triggered, this, [this] {
+    const QPointer<MainWindow> self(this);
+    const QString path = QFileDialog::getSaveFileName(this, tr("Save Query History As"), {},
+        tr("Native query history (*.bin);;All files (*)"));
+    if (self && !path.isEmpty()) save_query_history(path, OpenMode::kInteractive);
+  });
+  auto* reload_history = history_menu->addAction(tr("Reload History..."));
+  reload_history->setObjectName(QStringLiteral("reloadQueryHistoryAction"));
+  connect(reload_history, &QAction::triggered, this,
+          [this] { load_query_history(query_history_path_, OpenMode::kInteractive); });
+  auto* import_history = history_menu->addAction(tr("Import History..."));
+  import_history->setObjectName(QStringLiteral("importQueryHistoryAction"));
+  connect(import_history, &QAction::triggered, this, &MainWindow::import_query_history_dialog);
+  auto* clear_history = history_menu->addAction(tr("Clear All Query History..."));
+  clear_history->setObjectName(QStringLiteral("clearQueryHistoryAction"));
+  connect(clear_history, &QAction::triggered, this,
+          [this] { clear_query_history(OpenMode::kInteractive); });
   tools_menu->addSeparator();
   edict_lookup_action_ =
       tools_menu->addAction(tr("&Dictionary Lookup..."));
@@ -2598,6 +2880,13 @@ QString MainWindow::resource_report() const {
   lines << (application_settings_path_.isEmpty() ? tr("Settings: memory only")
       : tr("Settings: %1").arg(application_settings_path_));
   if (!application_settings_warning_.isEmpty()) lines << application_settings_warning_;
+  lines << (query_history_path_.isEmpty() ? tr("Query history: memory only")
+                                         : tr("Query history: %1").arg(query_history_path_));
+  lines << tr("Query histories: %1 dictionary, %2 search, %3 replace; %4 storage cells each; automatic saving %5")
+      .arg(query_histories_->dictionary.entries().size()).arg(query_histories_->search.entries().size())
+      .arg(query_histories_->replace.entries().size()).arg(application_settings_.history_size)
+      .arg(application_settings_.save_histories ? tr("on") : tr("off"));
+  if (!query_history_warning_.isEmpty()) lines << query_history_warning_;
   if (!project_path_.isEmpty()) lines << tr("Project: %1").arg(project_path_);
   if (!project_warning_.isEmpty()) lines << project_warning_;
   lines << application_font_warnings_;
@@ -2641,13 +2930,15 @@ void MainWindow::update_resource_status() {
   resource_status_button_->setText(
       wnn_resources_ != nullptr && has_kanji_lookup() && dictionaries_loaded
           ? (record_warnings || !recent_file_warning_.isEmpty() ||
-             !application_settings_warning_.isEmpty() || !application_font_warnings_.isEmpty() ||
+             !application_settings_warning_.isEmpty() || !query_history_warning_.isEmpty() ||
+              !application_font_warnings_.isEmpty() ||
               !application_settings_.unapplied.isEmpty() || !project_warning_.isEmpty()
                  ? tr("Resources: warnings") : tr("Resources: loaded"))
           : tr("Resources: incomplete"));
   resource_status_button_->setToolTip(
       !project_warning_.isEmpty() ? project_warning_ :
       !application_settings_warning_.isEmpty() ? application_settings_warning_ :
+      !query_history_warning_.isEmpty() ? query_history_warning_ :
       !recent_file_warning_.isEmpty() ? recent_file_warning_ :
       !application_font_warnings_.isEmpty() ? application_font_warnings_.join(QLatin1Char('\n')) :
       !application_settings_.unapplied.isEmpty() ? tr("Some imported settings are retained but not yet applied") :
@@ -3863,7 +4154,7 @@ void MainWindow::show_edict_lookup_dialog() {
     edict_lookup_options_ = std::make_shared<EdictLookupOptions>(application_settings_.dictionary);
   }
   if (!edict_query_history_) {
-    edict_query_history_ = std::make_shared<core::QueryHistory>();
+    edict_query_history_ = std::shared_ptr<core::QueryHistory>(query_histories_, &query_histories_->dictionary);
   }
   auto* dialog = new EdictLookupDialog(
       [this](const core::JwpText& query, const EdictLookupOptions& options) {
@@ -6125,6 +6416,10 @@ void MainWindow::show_error(const QString& action,
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
+  if (query_history_busy_) {
+    event->ignore();
+    return;
+  }
   if (approve_close_all(OpenMode::kInteractive)) {
     if (application_settings_.save_settings_on_exit && application_settings_persistence_enabled_ &&
         !application_settings_path_.isEmpty()) {
@@ -6140,6 +6435,14 @@ void MainWindow::closeEvent(QCloseEvent* event) {
       }
       if (!saved && QMessageBox::warning(this, tr("Settings"),
           application_settings_warning_ + tr("\n\nExit without saving settings?"),
+          QMessageBox::Discard | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Discard) {
+        event->ignore();
+        return;
+      }
+    }
+    if (application_settings_.save_histories && !query_history_path_.isEmpty() && !save_query_history()) {
+      if (QMessageBox::warning(this, tr("Query History"),
+          query_history_warning_ + tr("\n\nExit without saving query history? The file on disk will be preserved."),
           QMessageBox::Discard | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Discard) {
         event->ignore();
         return;

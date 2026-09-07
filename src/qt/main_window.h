@@ -3,6 +3,7 @@
 #ifndef JWPQT_QT_MAIN_WINDOW_H
 #define JWPQT_QT_MAIN_WINDOW_H
 
+#include <cstddef>
 #include <exception>
 #include <memory>
 #include <optional>
@@ -20,6 +21,7 @@
 #include "character_context_menu.h"
 #include "input_mode.h"
 #include "project_workspace.h"
+#include "query_history_io.h"
 #include "recent_files.h"
 #include "jwpqt/core/jwp_conversion.h"
 #include "jwpqt/core/jwp_document_history.h"
@@ -110,6 +112,11 @@ struct ProjectOpenOptions {
   std::vector<ProjectPathMapping> path_mappings;
 };
 
+struct LegacyHistoryOptions {
+  std::size_t storage_cells;
+  core::LegacyCodePage code_page;
+};
+
 class MainWindow : public QMainWindow {
  public:
   explicit MainWindow(QWidget* parent = nullptr);
@@ -139,6 +146,14 @@ class MainWindow : public QMainWindow {
                                    OpenMode mode = OpenMode::kNonInteractive);
   bool save_application_settings(const QString& path = {},
                                  OpenMode mode = OpenMode::kNonInteractive);
+  const core::QueryHistories& query_histories() const noexcept;
+  QString query_history_warning() const;
+  bool load_query_history(const QString& path, OpenMode mode = OpenMode::kNonInteractive);
+  bool save_query_history(const QString& path = {}, OpenMode mode = OpenMode::kNonInteractive);
+  bool import_query_history(const QString& path,
+                            const std::optional<LegacyHistoryOptions>& legacy = {},
+                            OpenMode mode = OpenMode::kNonInteractive);
+  bool clear_query_history(OpenMode mode = OpenMode::kNonInteractive);
   bool open_project_path(const QString& path, const ProjectOpenOptions& options = {},
                          OpenMode mode = OpenMode::kNonInteractive);
   bool save_project_path(const QString& path, bool save_documents = true,
@@ -317,6 +332,10 @@ class MainWindow : public QMainWindow {
   void record_recent_file(RecentDocument entry);
   void update_recent_file_actions();
   void configure_application_settings();
+  void import_query_history_dialog();
+  bool confirm_query_history_change(const QString& message, OpenMode mode);
+  void check_history_destination(const QString& path) const;
+  bool query_history_error(const QString& action, const std::exception& error, OpenMode mode);
   core::LegacyCodePage default_jwp_code_page() const noexcept;
   void open_document();
   bool open_project_dialog(const QString& path = {});
@@ -387,6 +406,12 @@ class MainWindow : public QMainWindow {
   bool application_settings_persistence_enabled_ = true;
   QString project_path_;
   QString project_warning_;
+  std::shared_ptr<core::QueryHistories> query_histories_ = std::make_shared<core::QueryHistories>();
+  std::optional<QueryHistorySnapshot> query_history_snapshot_;
+  QString query_history_path_;
+  QString query_history_warning_;
+  bool query_history_pruned_ = false;
+  bool query_history_busy_ = false;
   QAction* print_action_ = nullptr;
   QAction* printer_setup_action_ = nullptr;
   QAction* revert_action_ = nullptr;

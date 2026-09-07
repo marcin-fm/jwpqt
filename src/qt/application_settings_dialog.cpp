@@ -146,6 +146,28 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   dictionary_note->setWordWrap(true);
   dictionary_form->addRow(dictionary_note);
   tabs->addTab(dictionary, tr("Dictionary"));
+  auto* history = new QWidget(tabs);
+  auto* history_form = new QFormLayout(history);
+  auto* history_size = new QSpinBox(history);
+  history_size->setObjectName(QStringLiteral("settingsHistorySize"));
+  history_size->setRange(0, 30000);
+  history_size->setValue(settings_.history_size);
+  history_form->addRow(tr("Storage cells per history"), history_size);
+  auto* save_histories = new QCheckBox(tr("Save query histories on exit"), history);
+  save_histories->setObjectName(QStringLiteral("settingsSaveHistories"));
+  save_histories->setChecked(settings_.save_histories);
+  history_form->addRow(save_histories);
+  booleans.push_back({save_histories, &ApplicationSettings::save_histories});
+  auto* history_note = new QLabel(tr("Each dictionary, search and replace history has its own budget. "
+      "The default 300 cells allow 31 entries and 267 text characters. "
+      "Reducing the size drops older or oversized entries; zero disables retention.\n\n"
+      "If reducing history may lose saved entries, automatic saving pauses until an explicit Save or Reload.\n\n"
+      "Turning off automatic saving leaves an existing file unchanged. Tools > Query History "
+      "provides explicit Save, Import, Reload and Clear commands. Search/replace history lists "
+      "are preserved in archives; their edit-dialog controls are not yet implemented."), history);
+  history_note->setWordWrap(true);
+  history_form->addRow(history_note);
+  tabs->addTab(history, tr("History"));
   if (!settings_.unapplied.isEmpty()) {
     auto* retained = new QPlainTextEdit(tabs);
     retained->setReadOnly(true);
@@ -155,7 +177,8 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
   outer->addWidget(buttons);
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-  connect(buttons, &QDialogButtonBox::accepted, this, [this, booleans, font_controls, dictionary_controls, code_page] {
+  connect(buttons, &QDialogButtonBox::accepted, this,
+          [this, booleans, font_controls, dictionary_controls, code_page, history_size] {
     auto next = settings_;
     for (const auto& control : booleans) next.*(control.member) = control.widget->isChecked();
     for (const auto& control : dictionary_controls) next.dictionary.*(control.member) = control.widget->isChecked();
@@ -166,6 +189,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
       if (control.automatic) next.fonts[i].automatic = control.automatic->isChecked();
     }
     next.translation_code_page = code_page->currentData().toInt();
+    next.history_size = history_size->value();
     try {
       (void)write_application_settings(next);
       settings_ = std::move(next);
