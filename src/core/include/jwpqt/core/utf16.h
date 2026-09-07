@@ -20,6 +20,10 @@ struct Utf16File {
   bool has_byte_order_mark = false;
 };
 
+// Raw strings have no file signature: initial U+FEFF/U+FFFE remain content.
+std::u32string decode_utf16(std::string_view bytes, Utf16ByteOrder order);
+std::string encode_utf16(std::u32string_view text, Utf16ByteOrder order);
+
 // An initial BOM is consumed. Write a BOM to preserve a leading text U+FEFF.
 Utf16File decode_utf16_file(std::string_view bytes, Utf16ByteOrder order);
 std::string encode_utf16_file(const Utf16File& file, Utf16ByteOrder order);

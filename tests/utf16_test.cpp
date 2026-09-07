@@ -34,6 +34,10 @@ void test_utf16() {
     if (value < 0xd800 || value > 0xdfff) all.push_back(value);
   for (const auto order : {Utf16ByteOrder::kLittleEndian,
                            Utf16ByteOrder::kBigEndian}) {
+    for (const auto& text : {all, std::u32string(U"\ufeff\ufffeX"),
+                             std::u32string(U"\ufffe\ufeffX")})
+      require(decode_utf16(encode_utf16(text, order), order) == text,
+              "Raw UTF-16 string interpreted a character as a file signature");
     for (const bool bom : {false, true}) {
       for (const auto& text : {std::u32string{}, sample.text,
                                std::u32string{U'X', U'\ufeff', U'\0', U'\r', U'\n'},
@@ -64,6 +68,7 @@ void test_utf16() {
                                   raw_units({0xdc00, 0xd800}),
                                   raw_units({0xd800, 0xdbff})}) {
       rejects([&] { decode_utf16_file(malformed, order); });
+      rejects([&] { decode_utf16(malformed, order); });
     }
     for (const char32_t value : {char32_t{0xd800}, char32_t{0xdfff},
                                  char32_t{0x110000}, char32_t{0xffffffff}})
@@ -74,6 +79,11 @@ void test_utf16() {
   }
   rejects([] { decode_utf16_file({}, static_cast<Utf16ByteOrder>(99)); });
   rejects([] { encode_utf16_file({}, static_cast<Utf16ByteOrder>(99)); });
+  rejects([] { decode_utf16({}, static_cast<Utf16ByteOrder>(99)); });
+  rejects([] { encode_utf16({}, static_cast<Utf16ByteOrder>(99)); });
+  rejects([] { decode_utf16("x", Utf16ByteOrder::kLittleEndian); });
+  rejects([] { encode_utf16(std::u32string(1, char32_t{0x110000}),
+                            Utf16ByteOrder::kLittleEndian); });
 }
 }  // namespace
 

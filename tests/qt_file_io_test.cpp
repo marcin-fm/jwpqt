@@ -186,14 +186,15 @@ void test_jwp_encoding_failure_preserves_file(const QString& directory) {
 void test_jwp_project_file_round_trip(const QString& directory) {
   const QString path = directory + QStringLiteral("/session.jpr");
   const jwpqt::core::JwpProject expected{
-      "Page_Width = 80\r\n", "/documents", {"one.jwp", "two.jfc"}};
+      "File.Size = 16\r\n", U"/documents/\u65e5\u672c",
+      {U"one.jwp", U"\ufeff\U0001f600.jfc"}};
   jwpqt::qt::write_jwp_project_file(path, expected);
   require(jwpqt::qt::read_jwp_project_file(path) == expected,
           "JWP project did not round-trip through the Qt file boundary");
 
   const QByteArray original = read_bytes(path);
   jwpqt::core::JwpProject invalid = expected;
-  invalid.paths = {std::string("bad\0path", 8)};
+  invalid.paths = {std::u32string(U"bad\0path", 8)};
   bool rejected = false;
   try {
     jwpqt::qt::write_jwp_project_file(path, invalid);
@@ -202,6 +203,15 @@ void test_jwp_project_file_round_trip(const QString& directory) {
   }
   require(rejected && read_bytes(path) == original,
           "Failed JWP project save changed the existing file");
+  invalid.paths = {std::u32string(1, char32_t{0xd800})};
+  rejected = false;
+  try {
+    jwpqt::qt::write_jwp_project_file(path, invalid);
+  } catch (const jwpqt::core::JwpProjectError&) {
+    rejected = true;
+  }
+  require(rejected && read_bytes(path) == original,
+          "Invalid Unicode project path damaged the existing output");
 
   bool missing_rejected = false;
   try {

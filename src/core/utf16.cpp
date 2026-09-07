@@ -28,9 +28,8 @@ void append_unit(std::string& bytes, std::uint16_t unit, Utf16ByteOrder order) {
       order == Utf16ByteOrder::kLittleEndian ? unit >> 8 : unit & 0xff));
 }
 
-}  // namespace
-
-Utf16File decode_utf16_file(std::string_view bytes, Utf16ByteOrder order) {
+Utf16File decode_utf16_data(std::string_view bytes, Utf16ByteOrder order,
+                            bool file_signature) {
   if (!valid_order(order)) throw Utf16Error("Invalid UTF-16 byte order");
   if (bytes.size() % 2 != 0) {
     throw Utf16Error("UTF-16 input has odd length at byte offset " +
@@ -38,7 +37,7 @@ Utf16File decode_utf16_file(std::string_view bytes, Utf16ByteOrder order) {
   }
   std::size_t offset = 0;
   Utf16File file;
-  if (bytes.size() >= 2) {
+  if (file_signature && bytes.size() >= 2) {
     const auto first = read_unit(bytes.data(), order);
     if (first == 0xfffe)
       throw Utf16Error("Opposite UTF-16 byte-order mark at byte offset 0");
@@ -77,11 +76,12 @@ Utf16File decode_utf16_file(std::string_view bytes, Utf16ByteOrder order) {
   return file;
 }
 
-std::string encode_utf16_file(const Utf16File& file, Utf16ByteOrder order) {
+std::string encode_utf16_data(std::u32string_view text, Utf16ByteOrder order,
+                              bool byte_order_mark) {
   if (!valid_order(order)) throw Utf16Error("Invalid UTF-16 byte order");
-  std::size_t units = file.has_byte_order_mark ? 1 : 0;
-  for (std::size_t index = 0; index < file.text.size(); ++index) {
-    const auto value = file.text[index];
+  std::size_t units = byte_order_mark ? 1 : 0;
+  for (std::size_t index = 0; index < text.size(); ++index) {
+    const auto value = text[index];
     if (value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff)) {
       throw Utf16Error("Invalid Unicode scalar at code-point offset " +
                        std::to_string(index));
@@ -93,8 +93,8 @@ std::string encode_utf16_file(const Utf16File& file, Utf16ByteOrder order) {
   }
   std::string bytes;
   bytes.reserve(units * 2);
-  if (file.has_byte_order_mark) append_unit(bytes, 0xfeff, order);
-  for (const auto value : file.text) {
+  if (byte_order_mark) append_unit(bytes, 0xfeff, order);
+  for (const auto value : text) {
     if (value <= 0xffff) {
       append_unit(bytes, static_cast<std::uint16_t>(value), order);
     } else {
@@ -105,6 +105,24 @@ std::string encode_utf16_file(const Utf16File& file, Utf16ByteOrder order) {
     }
   }
   return bytes;
+}
+
+}  // namespace
+
+std::u32string decode_utf16(std::string_view bytes, Utf16ByteOrder order) {
+  return decode_utf16_data(bytes, order, false).text;
+}
+
+std::string encode_utf16(std::u32string_view text, Utf16ByteOrder order) {
+  return encode_utf16_data(text, order, false);
+}
+
+Utf16File decode_utf16_file(std::string_view bytes, Utf16ByteOrder order) {
+  return decode_utf16_data(bytes, order, true);
+}
+
+std::string encode_utf16_file(const Utf16File& file, Utf16ByteOrder order) {
+  return encode_utf16_data(file.text, order, file.has_byte_order_mark);
 }
 
 }  // namespace jwpqt::core

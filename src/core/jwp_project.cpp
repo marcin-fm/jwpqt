@@ -5,12 +5,13 @@
 #include <utility>
 
 #include "jwpqt/core/byte_io.h"
+#include "jwpqt/core/utf16.h"
 
 namespace jwpqt::core {
 namespace {
 
 void validate_limits(const JwpProjectLimits& limits) {
-  if (limits.encoded_bytes < sizeof(std::uint32_t) + 2U ||
+  if (limits.encoded_bytes < sizeof(std::uint32_t) + 3U ||
       limits.configuration_bytes == 0 || limits.paths == 0 ||
       limits.path_bytes == 0) {
     throw JwpProjectError("JWP project limits must be positive");
@@ -28,6 +29,29 @@ std::string read_c_string(ByteReader& reader, std::size_t limit,
       throw JwpProjectError(std::string("JWP project ") + field +
                             " exceeds its byte limit");
     value.push_back(static_cast<char>(byte));
+  }
+  throw JwpProjectError(std::string("JWP project ") + field +
+                        " is not NUL terminated");
+}
+
+std::u32string read_path(ByteReader& reader, std::size_t limit,
+                         const char* field) {
+  std::string bytes;
+  while (!reader.empty()) {
+    const auto unit = reader.read_u16_le();
+    if (unit == 0) {
+      try {
+        return decode_utf16(bytes, Utf16ByteOrder::kLittleEndian);
+      } catch (const Utf16Error& error) {
+        throw JwpProjectError(std::string("JWP project ") + field + ": " +
+                              error.what());
+      }
+    }
+    if (limit - bytes.size() < 2U)
+      throw JwpProjectError(std::string("JWP project ") + field +
+                            " exceeds its byte limit");
+    bytes.push_back(static_cast<char>(unit & 0xffU));
+    bytes.push_back(static_cast<char>(unit >> 8U));
   }
   throw JwpProjectError(std::string("JWP project ") + field +
                         " is not NUL terminated");
@@ -71,11 +95,11 @@ JwpProject parse_jwp_project(std::string_view bytes,
     project.configuration = read_c_string(
         reader, limits.configuration_bytes, "configuration");
     project.current_directory =
-        read_c_string(reader, limits.path_bytes, "current directory");
+        read_path(reader, limits.path_bytes, "current directory");
     while (!reader.empty()) {
       if (project.paths.size() >= limits.paths)
         throw JwpProjectError("JWP project contains too many paths");
-      std::string path = read_c_string(reader, limits.path_bytes, "path");
+      std::u32string path = read_path(reader, limits.path_bytes, "path");
       if (path.empty())
         throw JwpProjectError("JWP project contains an empty path");
       project.paths.push_back(std::move(path));
@@ -92,29 +116,40 @@ std::string serialize_jwp_project(const JwpProject& project,
   validate_limits(limits);
   validate_field(project.configuration, limits.configuration_bytes,
                  "configuration", true);
-  validate_field(project.current_directory, limits.path_bytes,
-                 "current directory", true);
   if (project.paths.size() > limits.paths)
     throw JwpProjectError("JWP project contains too many paths");
 
   std::size_t total = sizeof(std::uint32_t);
-  checked_add(total, project.configuration.size() + 1U, limits);
-  checked_add(total, project.current_directory.size() + 1U, limits);
-  for (const std::string& path : project.paths) {
-    validate_field(path, limits.path_bytes, "path", false);
-    checked_add(total, path.size() + 1U, limits);
-  }
+  checked_add(total, project.configuration.size(), limits);
+  checked_add(total, 1U, limits);
 
   ByteWriter writer;
   writer.write_u32_le(kJwpProjectMagic);
   writer.write_bytes(project.configuration);
   writer.write_u8(0);
-  writer.write_bytes(project.current_directory);
-  writer.write_u8(0);
-  for (const std::string& path : project.paths) {
-    writer.write_bytes(path);
-    writer.write_u8(0);
-  }
+  const auto write_path = [&](std::u32string_view path, const char* field,
+                              bool may_be_empty) {
+    if ((!may_be_empty && path.empty()) ||
+        path.find(U'\0') != std::u32string_view::npos ||
+        path.size() > limits.path_bytes / 2U)
+      throw JwpProjectError(std::string("JWP project ") + field + " is invalid");
+    std::string bytes;
+    try {
+      bytes = encode_utf16(path, Utf16ByteOrder::kLittleEndian);
+    } catch (const Utf16Error& error) {
+      throw JwpProjectError(std::string("JWP project ") + field + ": " +
+                            error.what());
+    }
+    if (bytes.size() > limits.path_bytes)
+      throw JwpProjectError(std::string("JWP project ") + field +
+                            " exceeds its byte limit");
+    checked_add(total, bytes.size(), limits);
+    checked_add(total, 2U, limits);
+    writer.write_bytes(bytes);
+    writer.write_u16_le(0);
+  };
+  write_path(project.current_directory, "current directory", true);
+  for (const auto& path : project.paths) write_path(path, "path", false);
   return writer.take_bytes();
 }
 

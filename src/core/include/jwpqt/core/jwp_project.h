@@ -22,14 +22,15 @@ struct JwpProjectLimits {
   std::size_t encoded_bytes = 8U * 1024U * 1024U;
   std::size_t configuration_bytes = 1024U * 1024U;
   std::size_t paths = 4096;
-  std::size_t path_bytes = 64U * 1024U;
+  std::size_t path_bytes = 64U * 1024U;  // UTF-16 payload, excluding terminator.
 };
 
 struct JwpProject {
-  // The legacy desktop build stores path strings in the active ANSI code page.
+  // The current magic identifies the Unicode build: byte configuration and
+  // NUL-terminated UTF-16LE paths, without byte-order marks.
   std::string configuration;
-  std::string current_directory;
-  std::vector<std::string> paths;
+  std::u32string current_directory;
+  std::vector<std::u32string> paths;
 
   bool operator==(const JwpProject& other) const noexcept;
 };
