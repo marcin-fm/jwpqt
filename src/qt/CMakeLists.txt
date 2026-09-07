@@ -15,6 +15,8 @@ add_library(jwpqt_qt_support STATIC
   kanji_info_options.h
   project_workspace.cpp
   project_workspace.h
+  query_history_io.cpp
+  query_history_io.h
   recent_files.cpp
   recent_files.h
   text_bridge.cpp
