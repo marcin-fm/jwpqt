@@ -99,7 +99,7 @@ Copy cannot overwrite another open document's path.
 including JIS kanji in unrestricted Unicode documents without changing their
 text or history. **View Kanji Color List** opens a separate Japanese tab.
 
-**File > Recent Files** retains nine named documents, including each text
+**File > Recent Files** retains nine documents or projects, including each text
 encoding or JWP code page. Reopening activates an existing tab or opens a new
 one without guessing the encoding again. History is stored atomically in
 `recent-files.json` in the application configuration directory. Failed opens,
@@ -107,6 +107,30 @@ cancelled dialogs, and Export Copy do not add entries. **Clear Recent Files**
 clears history, not documents. Corrupt history is preserved until an explicit
 Clear; history errors appear in Runtime Resources without failing document I/O.
 Automatic history writes pause while that history file is open as a document.
+
+**File > Open Project** opens current Unicode `.jpr` workspaces, with a choice
+to replace or append to the open tabs. Files and supported settings are validated
+before replacement; save/discard/cancel decisions are collected before any
+editor is removed. Files are reread after save consent, including a changed
+encoding. Appending retains already-open buffers and their formats, not stale
+disk copies. Windows drive/UNC paths ask for equivalent Linux directories;
+ambiguous legacy text asks for its encoding rather than assuming UTF-8.
+
+**File > Save Project** offers to save the documents or just their references.
+References do not contain unsaved text or undo history; save nonempty unnamed
+documents first. A reference-only save does not accept an active conversion.
+Projects preserve explicit file formats, code pages, editing preferences,
+supported settings and native tab order. A bounded configuration comment carries
+native metadata while the legacy path list keeps the active file last. Unsupported
+settings are retained and require approval when opening; they are not silently
+treated as implemented. Restoration is bounded to 1024 documents, 64 MiB of
+source bytes and 33,554,432 Qt character positions; nested projects are rejected.
+
+`jwpqt workspace.jpr` opens a project automatically. Use
+`jwpqt --project --encoding old-jis legacy.jpr` to supply an encoding fallback
+for ambiguous legacy references; explicit native metadata still takes priority.
+Windows-directory choices and approval of unapplied settings require the GUI
+or the explicit project API options. Recent project entries reopen as projects.
 
 **Tools > Options** configures Japanese document/query/list/candidate fonts,
 font inheritance, toolbar/status/candidate visibility, scrollbar policies,
@@ -179,8 +203,8 @@ global color list with atomic persistence. The native modeless EDICT tool loads
 ordered indexed or unindexed resources from `dict.cfg`, searches with the
 portable direct, adaptive, wildcard, contingent, and name filters, and inserts
 selected rows into JWP with portable undo. Editable EDICT `user.dct` and native
-kanji lookup tools are available. Project lifecycle, remaining
-configuration, complete printing, help, and packaging remain in progress.
+kanji lookup tools and project workspaces are available. Remaining configuration,
+input/lookup controls, complete printing, help, and packaging remain in progress.
 
 ### Input modes and shortcuts
 

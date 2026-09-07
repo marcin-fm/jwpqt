@@ -20,6 +20,7 @@ struct RecentDocument {
   QString path;
   std::optional<core::TextEncoding> encoding;
   core::LegacyCodePage code_page = core::kDefaultLegacyCodePage;
+  bool project = false;
 };
 
 class RecentFilesError : public std::runtime_error {

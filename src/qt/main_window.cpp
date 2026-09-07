@@ -86,6 +86,7 @@
 #include "kanji_color_settings.h"
 #include "page_layout_dialog.h"
 #include "print_document.h"
+#include "jwpqt/core/byte_io.h"
 #include "jwpqt/core/jis_table.h"
 #include "jwpqt/core/jis_unicode.h"
 #include "jwpqt/core/jwp_configuration.h"
@@ -152,6 +153,12 @@ QString encoding_filter(core::TextEncoding encoding) {
 }
 
 QString jwp_filter() { return MainWindow::tr("JWP documents (*.jwp)"); }
+
+QString project_filter() { return MainWindow::tr("JWP projects (*.jpr)"); }
+
+bool project_magic(std::string_view bytes) {
+  return bytes.size() >= 4 && core::ByteReader(bytes).read_u32_le() == core::kJwpProjectMagic;
+}
 
 QString file_filters() {
   QString filters = jwp_filter();
@@ -531,6 +538,11 @@ bool MainWindow::activate_document(int index) {
     const QSignalBlocker blocker(document_tabs_);
     document_tabs_->setCurrentIndex(index);
   }
+  refresh_document_view();
+  return true;
+}
+
+void MainWindow::refresh_document_view() {
   if (document_->jwp_document_) {
     const QScopedValueRollback<bool> guard(document_->updating_editor_, true);
     apply_jwp_presentation(document_->jwp_document_->document(), document_->jwp_code_page_);
@@ -544,7 +556,6 @@ bool MainWindow::activate_document(int index) {
   update_conversion_actions();
   update_title();
   document_->editor_->setFocus();
-  return true;
 }
 
 int MainWindow::new_document_tab(bool japanese_editing) {
@@ -650,6 +661,286 @@ QString MainWindow::application_settings_warning() const {
 core::LegacyCodePage MainWindow::default_jwp_code_page() const noexcept {
   return static_cast<core::LegacyCodePage>(application_settings_.translation_code_page == 0
       ? 1252 : application_settings_.translation_code_page);
+}
+
+QString MainWindow::current_project_path() const { return project_path_; }
+QString MainWindow::project_warning() const { return project_warning_; }
+
+bool MainWindow::open_project_path(const QString& path, const ProjectOpenOptions& options, OpenMode mode) {
+  try {
+    const auto project_bytes = read_file_bytes(path, core::JwpProjectLimits{}.encoded_bytes);
+    const auto project = core::parse_jwp_project(project_bytes);
+    auto mappings = options.path_mappings;
+    ProjectWorkspace workspace;
+    for (;;) {
+      try {
+        workspace = decode_project_workspace(project, path, application_settings_, mappings);
+        break;
+      } catch (const ProjectPathError& error) {
+        if (mode == OpenMode::kNonInteractive) throw;
+        const auto directory = QFileDialog::getExistingDirectory(this,
+            tr("Linux directory corresponding to %1").arg(error.source_directory()), QFileInfo(path).absolutePath());
+        if (directory.isEmpty()) return false;
+        mappings.push_back({error.source_directory(), directory});
+      }
+    }
+    if (!workspace.settings.unapplied.empty() && !options.allow_unapplied_settings) {
+      if (mode == OpenMode::kNonInteractive)
+        throw core::JwpProjectError("Project contains unapplied settings; explicit consent is required");
+      QMessageBox warning(QMessageBox::Warning, tr("Project settings"),
+          tr("%1 settings will be retained but are not implemented. See details for the list.\n\n"
+             "Open the project with the supported settings?").arg(workspace.settings.unapplied.size()),
+          QMessageBox::Yes | QMessageBox::Cancel, this);
+      warning.setDetailedText(workspace.settings.unapplied.join(QLatin1Char('\n')));
+      warning.setDefaultButton(QMessageBox::Cancel);
+      if (warning.exec() != QMessageBox::Yes) return false;
+    }
+    if (options.append) {
+      std::size_t count = documents_.size();
+      for (const auto& entry : workspace.documents)
+        if (find_document_path(entry.path) < 0 && ++count > kMaximumWorkspaceDocuments)
+          throw core::JwpProjectError("The combined workspace exceeds the document limit");
+    }
+
+    constexpr std::size_t maximum_bytes = 64U * 1024U * 1024U;
+    std::vector<std::string> bytes(workspace.documents.size());
+    const auto read_documents = [&] {
+      std::size_t remaining = maximum_bytes;
+      for (std::size_t i = 0; i < bytes.size(); ++i) {
+        if (options.append && find_document_path(workspace.documents[i].path) >= 0) continue;
+        bytes[i] = read_file_bytes(workspace.documents[i].path, remaining);
+        remaining -= bytes[i].size();
+      }
+    };
+    read_documents();
+    if (workspace.detect_formats) {
+      for (std::size_t i = 0; i < bytes.size(); ++i) {
+        auto& entry = workspace.documents[i];
+        if (options.append && find_document_path(entry.path) >= 0) continue;
+        if (project_magic(bytes[i])) throw core::JwpProjectError("Nested project references are not supported");
+        if (core::has_jwp_document_magic(bytes[i])) continue;
+        if (QFileInfo(entry.path).suffix().compare(QStringLiteral("jfc"), Qt::CaseInsensitive) == 0)
+          entry.encoding = core::TextEncoding::kJfc;
+        else {
+          const auto detection = core::detect_text_encoding(bytes[i]);
+          if (detection.confidence == core::DetectionConfidence::kCertain && detection.candidates.size() == 1)
+            entry.encoding = detection.candidates.front();
+          else if (options.legacy_encoding) entry.encoding = options.legacy_encoding;
+          else if (mode == OpenMode::kInteractive) {
+            entry.encoding = prompt_for_encoding(detection.candidates,
+                tr("Choose the encoding for project document %1").arg(entry.path));
+            if (!entry.encoding) return false;
+          } else throw core::JwpProjectError("Project document encoding is ambiguous; select an explicit legacy encoding");
+        }
+      }
+    }
+
+    std::vector<DocumentState*> targets(workspace.documents.size());
+    QStringList warnings;
+    std::size_t incoming_count = 0;
+    // Reuse the normal import/presentation path without changing the live workspace.
+    const auto stage_documents = [&] {
+      auto staged = std::make_unique<MainWindow>();
+      staged->kanji_color_list_ = kanji_color_list_;
+      staged->kanji_color_policy_ = kanji_color_policy_;
+      if (!staged->apply_application_settings(workspace.settings))
+        throw core::JwpProjectError(staged->application_settings_warning().toStdString());
+      incoming_count = 0;
+      std::size_t characters = 0;
+      warnings.clear();
+      for (std::size_t i = 0; i < workspace.documents.size(); ++i) {
+        const auto& entry = workspace.documents[i];
+        const int existing = options.append ? find_document_path(entry.path) : -1;
+        if (existing >= 0) {
+          targets[i] = documents_[existing].get();
+          warnings << tr("Existing buffer and format retained: %1").arg(entry.path);
+          continue;
+        }
+        if (incoming_count != 0 && staged->new_document_tab() < 0)
+          throw core::JwpProjectError("Could not prepare a project editor");
+        staged->document_->jwp_code_page_ = entry.code_page;
+        try {
+          if (entry.encoding) {
+            staged->load_document(entry.path, core::decode_text_file(bytes[i], *entry.encoding), entry.japanese_editing);
+          } else {
+            staged->load_jwp_document(entry.path, core::decode_jwp_document(bytes[i]), entry.code_page);
+            if (!entry.japanese_editing && !staged->set_japanese_editing(false))
+              warnings << tr("Japanese editing retained to preserve document metadata: %1").arg(entry.path);
+          }
+        } catch (const std::exception& error) {
+          throw core::JwpProjectError((entry.path + QStringLiteral(": ") + QString::fromUtf8(error.what())).toStdString());
+        }
+        if (entry.japanese_editing && !staged->is_jwp_document())
+          warnings << tr("Unrestricted Unicode retained for unrepresentable text: %1").arg(entry.path);
+        const auto length = static_cast<std::size_t>(staged->document_->editor_->document()->characterCount());
+        if (length > 32U * 1024U * 1024U - characters)
+          throw core::JwpProjectError("Project text exceeds the workspace character limit");
+        characters += length;
+        targets[i] = staged->document_;
+        ++incoming_count;
+      }
+      return staged;
+    };
+    auto staged = stage_documents();
+    struct SavedState {
+      DocumentState* state;
+      bool dirty;
+      std::optional<core::TextEncoding> encoding;
+      core::LegacyCodePage code_page;
+    };
+    const auto modified = [](const DocumentState& state) {
+      return state.editor_->document()->isModified() || (state.saved_text_file_ &&
+          (state.encoding_ != state.saved_text_file_->encoding ||
+           state.has_byte_order_mark_ != state.saved_text_file_->has_byte_order_mark));
+    };
+    std::vector<SavedState> before;
+    for (const auto& state : documents_) {
+      const auto saved_encoding = state->jwp_format_ ? std::nullopt : std::optional{
+          state->saved_text_file_ ? state->saved_text_file_->encoding : state->encoding_};
+      before.push_back({state.get(), modified(*state) || state->kana_input_.pending() || state->jwp_conversion_,
+                        saved_encoding, state->jwp_code_page_});
+    }
+    if (!options.append) {
+      if (mode == OpenMode::kNonInteractive)
+        for (const auto& saved : before) if (saved.dirty)
+          throw core::JwpProjectError("Save or close modified documents before replacing the workspace");
+      const int original = current_document_index();
+      if (!approve_close_all(mode)) { activate_document(original); return false; }
+      if (read_file_bytes(path, core::JwpProjectLimits{}.encoded_bytes) != project_bytes)
+        throw core::JwpProjectError("The project changed while resolving unsaved documents; open it again");
+      const auto previous_bytes = bytes;
+      // Save prompts can change both the bytes and their encoding before replacement.
+      read_documents();
+      QStringList saved_formats;
+      for (std::size_t i = 0; i < workspace.documents.size(); ++i) {
+        auto& entry = workspace.documents[i];
+        for (const auto& saved : before) {
+          const auto& state = *saved.state;
+          if (!saved.dirty || modified(state) ||
+              document_path_identity(state.current_path_) != document_path_identity(entry.path)) continue;
+          const auto encoding = state.jwp_format_ ? std::nullopt : std::optional{state.encoding_};
+          if (bytes[i] != previous_bytes[i] || encoding != saved.encoding || state.jwp_code_page_ != saved.code_page) {
+            entry.encoding = encoding;
+            entry.code_page = state.jwp_code_page_;
+            entry.japanese_editing = state.jwp_document_.has_value();
+            saved_formats << tr("Restored the version just saved during project opening: %1").arg(entry.path);
+          }
+        }
+      }
+      staged = stage_documents();
+      warnings += saved_formats;
+    } else if (!targets.empty() && targets[workspace.current_document] != document_ && !finish_document_input()) return false;
+
+    documents_.reserve((options.append ? documents_.size() : 0) + std::max<std::size_t>(1, incoming_count));
+    if (!apply_application_settings(workspace.settings))
+      throw core::JwpProjectError(application_settings_warning().toStdString());
+    DocumentState* selected = targets.empty() ? (options.append ? document_ : staged->document_)
+                                             : targets[workspace.current_document];
+    std::vector<std::unique_ptr<DocumentState>> retired;
+    if (!options.append) retired.reserve(std::max<std::size_t>(1, incoming_count));
+    {
+      const QSignalBlocker main_blocker(document_tabs_);
+      const QSignalBlocker stage_blocker(staged->document_tabs_);
+      if (!options.append) {
+        for (const auto& state : documents_) {
+          state->editor_->disconnect(this);
+          state->editor_->document()->disconnect(this);
+          state->editor_->removeEventFilter(this);
+          state->editor_->viewport()->removeEventFilter(this);
+        }
+        while (document_tabs_->count()) document_tabs_->removeTab(0);
+        retired.swap(documents_);
+      }
+      if (incoming_count != 0 || !options.append) {
+        // The editors survive staging; all callbacks and actions must change owners.
+        for (auto& state : staged->documents_) {
+          auto* editor = state->editor_;
+          editor->disconnect(staged.get());
+          editor->document()->disconnect(staged.get());
+          editor->removeEventFilter(staged.get());
+          editor->viewport()->removeEventFilter(staged.get());
+          for (auto* action : staged->editor_actions_) editor->removeAction(action);
+          staged->document_tabs_->removeTab(0);
+          editor->setParent(this);
+          connect_editor(editor);
+          QString title = state->current_path_.isEmpty() ? tr("Untitled") : QFileInfo(state->current_path_).fileName();
+          const int tab = document_tabs_->addTab(editor, title.replace(QLatin1Char('&'), QStringLiteral("&&")));
+          document_tabs_->setTabToolTip(tab, state->current_path_);
+          documents_.push_back(std::move(state));
+        }
+        staged->documents_.clear();
+        staged->document_ = nullptr;
+      }
+      document_ = selected;
+      document_tabs_->setCurrentIndex(current_document_index());
+    }
+    refresh_document_view();
+    project_path_ = absolute_document_path(path);
+    project_warning_ = warnings.join(QLatin1Char('\n'));
+    for (const auto& state : retired) {
+      record_recent_document(*state);
+      delete state->editor_;
+    }
+    for (auto* target : targets) record_recent_document(*target);
+    record_recent_file({project_path_, {}, default_jwp_code_page(), true});
+    update_resource_status();
+    statusBar()->showMessage(tr("Opened project %1 (%2 documents)").arg(path).arg(workspace.documents.size()), 5000);
+    return true;
+  } catch (const std::exception& error) {
+    project_warning_ = tr("Could not open project: %1").arg(QString::fromUtf8(error.what()));
+    update_resource_status();
+    if (mode == OpenMode::kInteractive) show_error(tr("Could not open project %1").arg(path), error);
+    return false;
+  }
+}
+
+bool MainWindow::save_project_path(const QString& path, bool save_documents, OpenMode mode) {
+  try {
+    if (path.isEmpty() || find_document_path(path) >= 0)
+      throw core::JwpProjectError("A project cannot overwrite an open document");
+    const int original = current_document_index();
+    ProjectWorkspace workspace;
+    workspace.detect_formats = false;
+    bool preceding = false;
+    for (int i = 0; i < document_count(); ++i) {
+      if (save_documents && !activate_document(i)) return false;
+      const auto& state = *documents_[i];
+      const bool empty = state.current_path_.isEmpty() && !state.editor_->document()->isModified() &&
+          !state.kana_input_.pending() && !state.jwp_conversion_ &&
+          document_plain_text(*state.editor_->document()).isEmpty();
+      if (empty) continue;
+      if (save_documents) {
+        if (mode == OpenMode::kInteractive) { if (!save_document()) return false; }
+        else if (document_->current_path_.isEmpty() ||
+                 !save_as_path(document_->current_path_, document_->jwp_format_ ? std::nullopt
+                     : std::optional{document_->encoding_}, false, false, mode)) return false;
+      }
+      if (state.current_path_.isEmpty())
+        throw core::JwpProjectError("Save unnamed documents before saving a project");
+      if (i <= original) { workspace.current_document = workspace.documents.size(); preceding = true; }
+      const auto encoding = state.jwp_format_ ? std::nullopt : std::optional{
+          state.saved_text_file_ ? state.saved_text_file_->encoding : state.encoding_};
+      workspace.documents.push_back({absolute_document_path(state.current_path_), encoding,
+                                     state.jwp_code_page_, state.jwp_document_.has_value()});
+    }
+    if (!preceding && !workspace.documents.empty()) workspace.current_document = workspace.documents.size() - 1;
+    if (save_documents && !activate_document(original)) return false;
+    workspace.settings = application_settings_;
+    // Save As prompts may have introduced a new collision with the project destination.
+    if (find_document_path(path) >= 0) throw core::JwpProjectError("A project cannot overwrite an open document");
+    write_jwp_project_file(path, encode_project_workspace(workspace));
+    project_path_ = absolute_document_path(path);
+    project_warning_.clear();
+    record_recent_file({project_path_, {}, default_jwp_code_page(), true});
+    update_resource_status();
+    statusBar()->showMessage(tr("Saved project %1").arg(path), 3000);
+    return true;
+  } catch (const std::exception& error) {
+    project_warning_ = tr("Could not save project: %1").arg(QString::fromUtf8(error.what()));
+    update_resource_status();
+    if (mode == OpenMode::kInteractive) show_error(tr("Could not save project %1").arg(path), error);
+    return false;
+  }
 }
 
 bool MainWindow::apply_application_settings(const ApplicationSettings& settings, OpenMode mode) {
@@ -823,6 +1114,8 @@ bool MainWindow::open_recent_document(int index, OpenMode mode) {
   if (index < 0 || static_cast<std::size_t>(index) >= recent_documents_.size())
     return false;
   const RecentDocument entry = recent_documents_[index];
+  if (entry.project) return mode == OpenMode::kInteractive ? open_project_dialog(entry.path)
+                                                          : open_project_path(entry.path);
   return entry.encoding ? open_path(entry.path, *entry.encoding, mode, true)
                         : open_jwp_path(entry.path, entry.code_page, mode, true);
 }
@@ -853,13 +1146,14 @@ bool MainWindow::clear_recent_documents(OpenMode mode) {
 
 void MainWindow::record_recent_document(const DocumentState& state) {
   if (state.current_path_.isEmpty()) return;
+  const auto encoding = state.jwp_format_ ? std::nullopt : std::optional{
+      state.saved_text_file_ ? state.saved_text_file_->encoding : state.encoding_};
+  record_recent_file({state.current_path_, encoding, state.jwp_code_page_});
+}
+
+void MainWindow::record_recent_file(RecentDocument entry) {
   try {
-    RecentDocument entry;
-    entry.path = absolute_document_path(state.current_path_);
-    entry.code_page = state.jwp_code_page_;
-    if (!state.jwp_format_)
-      entry.encoding = state.saved_text_file_ ? state.saved_text_file_->encoding
-                                              : state.encoding_;
+    entry.path = absolute_document_path(entry.path);
     auto next = recent_documents_;
     const QString identity = document_path_identity(entry.path);
     next.erase(std::remove_if(next.begin(), next.end(), [&](const auto& old) {
@@ -900,7 +1194,7 @@ void MainWindow::update_recent_file_actions() {
     action->setText(tr("&%1 %2").arg(i + 1)
                         .arg(display.replace(QLatin1Char('&'), QStringLiteral("&&"))));
     action->setToolTip(entry.path + QStringLiteral("\n") +
-                      (entry.encoding ? encoding_name(*entry.encoding)
+                      (entry.project ? tr("JWP project") : entry.encoding ? encoding_name(*entry.encoding)
                                       : tr("JWP (%1)").arg(code_page_name(entry.code_page))));
   }
   if (clear_recent_files_action_)
@@ -1618,6 +1912,13 @@ void MainWindow::create_actions() {
           [this] { (void)delete_current_document(); });
 
   file_menu->addSeparator();
+  auto* open_project_action = file_menu->addAction(tr("Open Project..."));
+  open_project_action->setObjectName(QStringLiteral("openProjectAction"));
+  connect(open_project_action, &QAction::triggered, this, [this] { open_project_dialog(); });
+  auto* save_project_action = file_menu->addAction(tr("Save Project..."));
+  save_project_action->setObjectName(QStringLiteral("saveProjectAction"));
+  connect(save_project_action, &QAction::triggered, this, &MainWindow::save_project_dialog);
+  file_menu->addSeparator();
   print_action_ = file_menu->addAction(tr("&Print..."));
   print_action_->setObjectName(QStringLiteral("printAction"));
   print_action_->setShortcut(QKeySequence::Print);
@@ -2236,6 +2537,8 @@ QString MainWindow::resource_report() const {
   lines << (application_settings_path_.isEmpty() ? tr("Settings: memory only")
       : tr("Settings: %1").arg(application_settings_path_));
   if (!application_settings_warning_.isEmpty()) lines << application_settings_warning_;
+  if (!project_path_.isEmpty()) lines << tr("Project: %1").arg(project_path_);
+  if (!project_warning_.isEmpty()) lines << project_warning_;
   lines << application_font_warnings_;
   if (!application_settings_.unapplied.isEmpty())
     lines << tr("Retained settings not applied by the native interface: %1")
@@ -2278,10 +2581,11 @@ void MainWindow::update_resource_status() {
       wnn_resources_ != nullptr && has_kanji_lookup() && dictionaries_loaded
           ? (record_warnings || !recent_file_warning_.isEmpty() ||
              !application_settings_warning_.isEmpty() || !application_font_warnings_.isEmpty() ||
-             !application_settings_.unapplied.isEmpty()
+              !application_settings_.unapplied.isEmpty() || !project_warning_.isEmpty()
                  ? tr("Resources: warnings") : tr("Resources: loaded"))
           : tr("Resources: incomplete"));
   resource_status_button_->setToolTip(
+      !project_warning_.isEmpty() ? project_warning_ :
       !application_settings_warning_.isEmpty() ? application_settings_warning_ :
       !recent_file_warning_.isEmpty() ? recent_file_warning_ :
       !application_font_warnings_.isEmpty() ? application_font_warnings_.join(QLatin1Char('\n')) :
@@ -3862,8 +4166,13 @@ void MainWindow::new_document() {
 void MainWindow::open_document() {
   QString selected_filter = all_files_filter();
   const QString path = QFileDialog::getOpenFileName(
-      this, tr("Open document"), QString(), file_filters(), &selected_filter);
+      this, tr("Open document"), QString(), file_filters() + QStringLiteral(";;") + project_filter(), &selected_filter);
   if (path.isEmpty()) {
+    return;
+  }
+  if (selected_filter == project_filter() || (selected_filter == all_files_filter() &&
+      QFileInfo(path).suffix().compare(QStringLiteral("jpr"), Qt::CaseInsensitive) == 0)) {
+    open_project_dialog(path);
     return;
   }
   if (selected_filter == jwp_filter()) {
@@ -3877,6 +4186,33 @@ void MainWindow::open_document() {
   } else {
     open_path_detected(path, OpenMode::kInteractive, true);
   }
+}
+
+bool MainWindow::open_project_dialog(const QString& selected_path) {
+  const auto path = selected_path.isEmpty() ? QFileDialog::getOpenFileName(
+      this, tr("Open Project"), {}, project_filter()) : selected_path;
+  if (path.isEmpty()) return false;
+  ProjectOpenOptions options;
+  const bool blank = document_count() == 1 && document_->current_path_.isEmpty() &&
+      !document_modified() && !conversion_active() && !document_->kana_input_.pending() &&
+      document_plain_text(*document_->editor_->document()).isEmpty();
+  if (!blank) {
+    const auto choice = QMessageBox::question(this, tr("Open Project"),
+        tr("Replace the open workspace?\nYes: replace after resolving unsaved changes.\nNo: append and retain existing buffers."),
+        QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel, QMessageBox::Cancel);
+    if (choice == QMessageBox::Cancel) return false;
+    options.append = choice == QMessageBox::No;
+  }
+  return open_project_path(path, options, OpenMode::kInteractive);
+}
+
+void MainWindow::save_project_dialog() {
+  const auto path = QFileDialog::getSaveFileName(this, tr("Save Project"), project_path_, project_filter());
+  if (path.isEmpty()) return;
+  const auto choice = QMessageBox::question(this, tr("Save Project"),
+      tr("Save document changes first?\nYes: save documents, then the project.\nNo: save file references only; unsaved content is not stored."),
+      QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel, QMessageBox::Yes);
+  if (choice != QMessageBox::Cancel) save_project_path(path, choice == QMessageBox::Yes, OpenMode::kInteractive);
 }
 
 int MainWindow::find_document_path(const QString& path) const {
@@ -3986,6 +4322,12 @@ bool MainWindow::open_jwp_path(const QString& path,
 }
 
 bool MainWindow::open_path_detected(const QString& path, OpenMode mode, bool new_tab) {
+  const auto open_project = [&] {
+    if (mode == OpenMode::kInteractive) return open_project_dialog(path);
+    ProjectOpenOptions options;
+    options.append = new_tab;
+    return open_project_path(path, options, mode);
+  };
   const int existing = find_document_path(path);
   if (existing >= 0 && (new_tab || existing != current_document_index())) {
     const bool activated = activate_document(existing);
@@ -3993,11 +4335,14 @@ bool MainWindow::open_path_detected(const QString& path, OpenMode mode, bool new
     if (activated) record_recent_document(*document_);
     return activated;
   }
+  if (QFileInfo(path).suffix().compare(QStringLiteral("jpr"), Qt::CaseInsensitive) == 0)
+    return open_project();
   if (!new_tab && conversion_active() && !accept_conversion()) {
     return false;
   }
   try {
     const std::string bytes = read_file_bytes(path);
+    if (project_magic(bytes)) return open_project();
     if (core::has_jwp_document_magic(bytes)) {
       load_jwp_document(path, core::decode_jwp_document(bytes),
                         default_jwp_code_page(), new_tab);

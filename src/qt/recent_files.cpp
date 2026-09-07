@@ -47,7 +47,7 @@ RecentDocument validate_document(const QString& path, const QString& encoding,
     throw RecentFilesError("Recent document path must be valid absolute Unicode");
   }
   std::optional<core::TextEncoding> parsed;
-  if (encoding != QStringLiteral("jwp")) {
+  if (encoding != QStringLiteral("jwp") && encoding != QStringLiteral("jpr")) {
     parsed = core::parse_text_encoding(encoding.toStdString());
     if (!parsed) throw RecentFilesError("Unknown recent document encoding");
   }
@@ -56,7 +56,7 @@ RecentDocument validate_document(const QString& path, const QString& encoding,
   }
   // Lexically removing ".." can change the target across a directory symlink.
   return {path, parsed,
-          static_cast<core::LegacyCodePage>(code_page.toInt())};
+          static_cast<core::LegacyCodePage>(code_page.toInt()), encoding == QStringLiteral("jpr")};
 }
 
 }  // namespace
@@ -135,8 +135,10 @@ void write_recent_documents(const QString& path,
   QJsonArray files;
   QSet<QString> paths;
   for (const auto& document : documents) {
-    const auto encoding = document.encoding ? encoding_id(*document.encoding)
-                                           : QStringLiteral("jwp");
+    if (document.project && document.encoding)
+      throw RecentFilesError("A recent project cannot have a text encoding");
+    const auto encoding = document.project ? QStringLiteral("jpr")
+        : document.encoding ? encoding_id(*document.encoding) : QStringLiteral("jwp");
     const auto validated = validate_document(
         document.path, encoding, static_cast<int>(document.code_page));
     const auto identity = path_identity(validated.path);

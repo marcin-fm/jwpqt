@@ -46,6 +46,13 @@ target_link_libraries(jwpqt_project_workspace_tests PRIVATE jwpqt_qt_support)
 target_compile_options(jwpqt_project_workspace_tests PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME qt_project_workspace COMMAND jwpqt_project_workspace_tests)
 
+add_executable(jwpqt_project_window_tests project_window_test.cpp)
+add_dependencies(jwpqt_project_window_tests jwpqt)
+target_link_libraries(jwpqt_project_window_tests PRIVATE jwpqt_qt_ui)
+target_compile_options(jwpqt_project_window_tests PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME qt_project_window COMMAND jwpqt_project_window_tests $<TARGET_FILE:jwpqt>)
+set_tests_properties(qt_project_window PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 add_executable(jwpqt_edict_resource_search_tests
   edict_resource_search_test.cpp
 )

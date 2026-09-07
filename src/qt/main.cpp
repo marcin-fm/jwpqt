@@ -34,6 +34,11 @@ int main(int argc, char* argv[]) {
                       "euc-jp, shift-jis, new-jis, old-jis, or nec-jis."),
       QStringLiteral("encoding"));
   parser.addOption(encoding_option);
+  const QCommandLineOption project_option(
+      QStringLiteral("project"),
+      QStringLiteral("Open a JWP project; --encoding is the fallback for "
+                     "ambiguous legacy references."));
+  parser.addOption(project_option);
   const QCommandLineOption wnn_data_directory_option(
       QStringLiteral("wnn-data-dir"),
       QStringLiteral("Directory containing wnn.dix and wnn.dat."),
@@ -55,12 +60,13 @@ int main(int argc, char* argv[]) {
       QStringLiteral("Load resources, print their status and exit."));
   parser.addOption(resource_report_option);
   parser.addPositionalArgument(QStringLiteral("file"),
-                               QStringLiteral("Document to open."),
+                               QStringLiteral("Document or JWP project to open."),
                                QStringLiteral("[file]"));
   parser.process(application);
 
   const QStringList positional_arguments = parser.positionalArguments();
-  if (positional_arguments.size() > 1) {
+  if (positional_arguments.size() > 1 ||
+      (parser.isSet(project_option) && positional_arguments.isEmpty())) {
     parser.showHelp(2);
   }
 
@@ -158,15 +164,22 @@ int main(int argc, char* argv[]) {
     }
   }
   if (!positional_arguments.isEmpty()) {
+    jwpqt::qt::ProjectOpenOptions project_options;
+    project_options.legacy_encoding = encoding;
     const bool opened =
-        encoding.has_value()
+        parser.isSet(project_option)
+            ? window.open_project_path(positional_arguments.constFirst(),
+                                       project_options, interaction_mode)
+            : encoding.has_value()
             ? window.open_path(positional_arguments.constFirst(), *encoding,
                                interaction_mode)
             : window.open_path_detected(positional_arguments.constFirst(),
                                         interaction_mode);
     if (!opened) {
       if (interaction_mode == jwpqt::qt::OpenMode::kNonInteractive) {
-        if (encoding.has_value()) {
+        if (!window.project_warning().isEmpty()) {
+          QTextStream(stderr) << window.project_warning() << '\n';
+        } else if (encoding.has_value()) {
           QTextStream(stderr)
               << "Could not open the file using the requested encoding.\n";
         } else {

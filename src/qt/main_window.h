@@ -19,6 +19,7 @@
 #include "application_settings.h"
 #include "character_context_menu.h"
 #include "input_mode.h"
+#include "project_workspace.h"
 #include "recent_files.h"
 #include "jwpqt/core/jwp_conversion.h"
 #include "jwpqt/core/jwp_document_history.h"
@@ -100,6 +101,13 @@ struct KanjiColorListEditRequest {
   bool add = true;
 };
 
+struct ProjectOpenOptions {
+  bool append = false;
+  bool allow_unapplied_settings = false;
+  std::optional<core::TextEncoding> legacy_encoding;
+  std::vector<ProjectPathMapping> path_mappings;
+};
+
 class MainWindow : public QMainWindow {
  public:
   explicit MainWindow(QWidget* parent = nullptr);
@@ -129,6 +137,12 @@ class MainWindow : public QMainWindow {
                                    OpenMode mode = OpenMode::kNonInteractive);
   bool save_application_settings(const QString& path = {},
                                  OpenMode mode = OpenMode::kNonInteractive);
+  bool open_project_path(const QString& path, const ProjectOpenOptions& options = {},
+                         OpenMode mode = OpenMode::kNonInteractive);
+  bool save_project_path(const QString& path, bool save_documents = true,
+                         OpenMode mode = OpenMode::kNonInteractive);
+  QString current_project_path() const;
+  QString project_warning() const;
 
   // A new-tab open preserves other buffers and activates already-open paths.
   bool open_path(const QString& path, core::TextEncoding encoding,
@@ -294,13 +308,17 @@ class MainWindow : public QMainWindow {
   std::u32string edict_query_seed() const;
   void new_document();
   void connect_editor(JwpEditor* editor);
+  void refresh_document_view();
   bool finish_document_input();
   int find_document_path(const QString& path) const;
   void record_recent_document(const DocumentState& state);
+  void record_recent_file(RecentDocument entry);
   void update_recent_file_actions();
   void configure_application_settings();
   core::LegacyCodePage default_jwp_code_page() const noexcept;
   void open_document();
+  bool open_project_dialog(const QString& path = {});
+  void save_project_dialog();
   bool save_document();
   bool save_document_as(bool export_copy = false);
   bool maybe_save();
@@ -365,6 +383,8 @@ class MainWindow : public QMainWindow {
   QString application_settings_warning_;
   QStringList application_font_warnings_;
   bool application_settings_persistence_enabled_ = true;
+  QString project_path_;
+  QString project_warning_;
   QAction* print_action_ = nullptr;
   QAction* printer_setup_action_ = nullptr;
   QAction* revert_action_ = nullptr;

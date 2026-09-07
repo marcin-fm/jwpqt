@@ -76,6 +76,19 @@ std::string read_file_bytes(const QString& path) {
   return read_open_file_bytes(input, path);
 }
 
+std::string read_file_bytes(const QString& path, std::size_t maximum_bytes) {
+  if (maximum_bytes >= static_cast<std::size_t>(std::numeric_limits<qint64>::max()) ||
+      !QFileInfo(path).isFile())
+    throw io_error("Could not read", path, "Expected a bounded regular file");
+  QFile input(path);
+  if (!input.open(QIODevice::ReadOnly)) throw io_error("Could not open", path, input.errorString());
+  const auto bytes = input.read(static_cast<qint64>(maximum_bytes) + 1);
+  if (input.error() != QFileDevice::NoError) throw io_error("Could not read", path, input.errorString());
+  if (static_cast<std::size_t>(bytes.size()) > maximum_bytes || !input.atEnd())
+    throw io_error("Could not read", path, "File exceeds the workspace size limit");
+  return std::string(bytes.constData(), static_cast<std::size_t>(bytes.size()));
+}
+
 core::TextFile read_text_file(const QString& path,
                               core::TextEncoding encoding) {
   const std::string bytes = read_file_bytes(path);
