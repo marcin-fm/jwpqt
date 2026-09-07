@@ -1008,18 +1008,21 @@ bool MainWindow::apply_application_settings(const ApplicationSettings& settings,
           }
         }
       } restore{views};
+      application_settings_ = std::move(next);
+      if (edict_lookup_options_) *edict_lookup_options_ = application_settings_.dictionary;
+      if (edict_lookup_dialog_) edict_lookup_dialog_->set_options(application_settings_.dictionary);
       // Font/layout signals must not be interpreted as edits in any open tab.
-      application_font_warnings_ = set_japanese_fonts(*this, next);
+      application_font_warnings_ = set_japanese_fonts(*this, application_settings_);
       for (const auto& state : documents_) {
         if (state->current_path_.isEmpty() && !state->editor_->document()->isModified() &&
             document_plain_text(*state->editor_->document()).isEmpty() &&
             !state->jwp_history_.can_undo() && !state->jwp_history_.can_redo() &&
             !state->editor_->document()->isUndoAvailable() && !state->editor_->document()->isRedoAvailable())
           state->jwp_code_page_ = static_cast<core::LegacyCodePage>(
-              next.translation_code_page == 0 ? 1252 : next.translation_code_page);
-        state->editor_->setVerticalScrollBarPolicy(next.vertical_scrollbar
+              application_settings_.translation_code_page == 0 ? 1252 : application_settings_.translation_code_page);
+        state->editor_->setVerticalScrollBarPolicy(application_settings_.vertical_scrollbar
             ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
-        state->editor_->setHorizontalScrollBarPolicy(next.horizontal_scrollbar
+        state->editor_->setHorizontalScrollBarPolicy(application_settings_.horizontal_scrollbar
             ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
         if (state->jwp_document_) {
           state->editor_->apply_jwp_layout(state->jwp_document_->document());
@@ -1027,7 +1030,6 @@ bool MainWindow::apply_application_settings(const ApplicationSettings& settings,
               kanji_color_list_, kanji_color_policy_, state->jwp_code_page_);
         }
       }
-      application_settings_ = std::move(next);
     }
     main_toolbar_->setVisible(application_settings_.show_toolbar);
     statusBar()->setVisible(application_settings_.show_status_bar);
@@ -2179,6 +2181,7 @@ void MainWindow::create_actions() {
         QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Yes) return;
     ApplicationSettings defaults;
     defaults.source = application_settings_.source;
+    defaults.dictionary_extra_exclusions = application_settings_.dictionary_extra_exclusions;
     apply_application_settings(defaults, OpenMode::kInteractive);
   });
   auto* save_settings_action = tools_menu->addAction(tr("Save Settings"));
@@ -3857,7 +3860,7 @@ void MainWindow::show_edict_lookup_dialog() {
   }
 
   if (!edict_lookup_options_) {
-    edict_lookup_options_ = std::make_shared<EdictLookupOptions>();
+    edict_lookup_options_ = std::make_shared<EdictLookupOptions>(application_settings_.dictionary);
   }
   if (!edict_query_history_) {
     edict_query_history_ = std::make_shared<core::QueryHistory>();
@@ -3891,6 +3894,9 @@ void MainWindow::show_edict_lookup_dialog() {
       this, [this](char32_t character) {
         show_kanji_info_dialog(CharacterTarget{character, -1});
       }, edict_lookup_options_, edict_query_history_);
+  dialog->set_options_changed_handler([this](const EdictLookupOptions& options) {
+    application_settings_.dictionary = options;
+  });
   dialog->set_overwrite_action(overwrite_action_);
   if (!seed.empty()) {
     dialog->set_query(seed);

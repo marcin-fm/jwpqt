@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <limits>
 #include <utility>
 #include <vector>
 
@@ -28,13 +29,14 @@ constexpr FontDescriptor kFontFields[] = {{"Font", "name"}, {"Size", "size"},
     {"Auto", "automatic"}};
 static_assert(std::size(kFonts) == static_cast<std::size_t>(JapaneseFontRole::kCount));
 
+template <typename Owner>
 struct BooleanDescriptor {
   const char* name;
   const char* alias;
-  bool ApplicationSettings::*member;
+  bool Owner::*member;
 };
 
-constexpr BooleanDescriptor kBooleans[] = {
+constexpr BooleanDescriptor<ApplicationSettings> kBooleans[] = {
     {"Show_Toolbar", "toolbar", &ApplicationSettings::show_toolbar},
     {"Show_StatusBar", "status", &ApplicationSettings::show_status_bar},
     {"Show_KanjiBar", "kanjibar", &ApplicationSettings::show_kanji_bar},
@@ -44,6 +46,15 @@ constexpr BooleanDescriptor kBooleans[] = {
     {"ScrollBar_KanjiBar", "kscroll", &ApplicationSettings::kanji_bar_scrollbar},
     {"SaveSettingsOnExit", "save_exit", &ApplicationSettings::save_settings_on_exit},
     {"Save_RecentFiles", "save_recent", &ApplicationSettings::save_recent_files}};
+
+constexpr BooleanDescriptor<EdictLookupOptions> kDictionaryBooleans[] = {
+    {"Dict_AdvancedSearches", "dict_advanced", &EdictLookupOptions::advanced},
+    {"Dict_AlwaysAdvancedSearch", "dict_always", &EdictLookupOptions::advanced_always},
+    {"Dict_Adv_KeepSearching", "dict_showall", &EdictLookupOptions::advanced_show_all},
+    {"Dict_Adv_Try_I_Adjectives", "dict_iadj", &EdictLookupOptions::i_adjectives},
+    {"Dict_ClassicalSupport", "dict_classical", &EdictLookupOptions::classical},
+    {"Dict_JASCII_to_ASCII", "dict_jascii2ascii", &EdictLookupOptions::jascii_to_ascii},
+    {"Dict_ASCII_MatchFullEntry", "dict_fullascii", &EdictLookupOptions::full_ascii}};
 
 core::JwpConfigurationKey font_key(std::size_t role, std::size_t field) {
   return {std::string(kFonts[role].name) + '.' + kFontFields[field].name,
@@ -83,6 +94,22 @@ ApplicationSettings read_application_settings(std::string_view text,
         name = setting.name;
         result.*(setting.member) = core::parse_jwp_setting_bool(entry.value);
       }
+      for (const auto& setting : kDictionaryBooleans) {
+        if (!name.empty()) break;
+        if (!core::JwpConfigurationKey{setting.name, setting.alias}.matches(entry.name)) continue;
+        name = setting.name;
+        result.dictionary.*(setting.member) = core::parse_jwp_setting_bool(entry.value);
+      }
+      if (name.empty() && core::JwpConfigurationKey{"Dict_ExclusionFilters", "dict_bits"}.matches(entry.name)) {
+        name = "Dict_ExclusionFilters";
+        const auto bits = static_cast<std::uint32_t>(core::parse_jwp_setting_integer(entry.value,
+            std::numeric_limits<std::int32_t>::min(), std::numeric_limits<std::uint32_t>::max()));
+        result.dictionary.require_beginning = (bits & 1U) != 0;
+        result.dictionary.require_end = (bits & 2U) != 0;
+        result.dictionary.personal_names = (bits & 4U) == 0;
+        result.dictionary.place_names = (bits & 8U) == 0;
+        result.dictionary_extra_exclusions = bits & ~15U;
+      }
       if (name.empty() && core::JwpConfigurationKey{"TranslationCodePage", "code_page"}.matches(entry.name)) {
         name = "TranslationCodePage";
         const auto value = core::parse_jwp_setting_integer(entry.value, 0, 1258);
@@ -112,6 +139,10 @@ ApplicationSettings read_application_settings(std::string_view text,
       if (!result.unapplied.contains(unknown)) result.unapplied.push_back(unknown);
     }
   }
+  if (result.dictionary_extra_exclusions != 0) {
+    result.unapplied.push_back(QStringLiteral("Dict_ExclusionFilters (unsupported bits: 0x%1)")
+        .arg(result.dictionary_extra_exclusions, 0, 16));
+  }
   return result;
 }
 
@@ -134,6 +165,17 @@ std::string write_application_settings(const ApplicationSettings& settings) {
   for (const auto& setting : kBooleans) {
     updates.push_back({{setting.name, setting.alias}, settings.*(setting.member) ? "true" : "false"});
   }
+  for (const auto& setting : kDictionaryBooleans) {
+    updates.push_back({{setting.name, setting.alias}, settings.dictionary.*(setting.member) ? "true" : "false"});
+  }
+  if ((settings.dictionary_extra_exclusions & 15U) != 0)
+    throw core::JwpConfigurationError("Unsupported dictionary mask overlaps implemented filters");
+  const auto& dictionary = settings.dictionary;
+  const std::uint32_t bits = settings.dictionary_extra_exclusions |
+      (dictionary.require_beginning ? 1U : 0U) | (dictionary.require_end ? 2U : 0U) |
+      (dictionary.personal_names ? 0U : 4U) | (dictionary.place_names ? 0U : 8U);
+  updates.push_back({{"Dict_ExclusionFilters", "dict_bits"},
+                    "0x" + QString::number(bits, 16).toStdString()});
   updates.push_back({{"TranslationCodePage", "code_page"}, std::to_string(settings.translation_code_page)});
   validate_kanji_info_options(settings.kanji_info);
   std::string fields;

@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -11,6 +12,7 @@
 #include <QStringList>
 
 #include "kanji_info_options.h"
+#include "edict_lookup_options.h"
 
 namespace jwpqt::qt {
 
@@ -37,6 +39,8 @@ struct ApplicationSettings {
   bool save_recent_files = true;
   int translation_code_page = 1252;
   KanjiInfoOptions kanji_info;
+  EdictLookupOptions dictionary;
+  std::uint32_t dictionary_extra_exclusions = 0;
   std::string source;
   QStringList unapplied;
 };

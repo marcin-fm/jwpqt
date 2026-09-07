@@ -114,6 +114,38 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   grid->addWidget(explanation, 8, 0, 1, 4);
   grid->setRowStretch(9, 1);
   tabs->addTab(fonts, tr("Fonts"));
+  auto* dictionary = new QWidget(tabs);
+  auto* dictionary_form = new QFormLayout(dictionary);
+  struct DictionaryControl { QCheckBox* widget; bool EdictLookupOptions::*member; };
+  std::vector<DictionaryControl> dictionary_controls;
+  const auto add_dictionary = [&](const char* name, const QString& label, bool EdictLookupOptions::*member) {
+    auto* box = new QCheckBox(label, dictionary);
+    box->setObjectName(QString::fromLatin1(name));
+    box->setChecked(settings_.dictionary.*member);
+    dictionary_form->addRow(box);
+    dictionary_controls.push_back({box, member});
+    return box;
+  };
+  add_dictionary("settingsDictionaryBegin", tr("Begin With"), &EdictLookupOptions::require_beginning);
+  add_dictionary("settingsDictionaryEnd", tr("End With"), &EdictLookupOptions::require_end);
+  add_dictionary("settingsDictionaryNames", tr("Include personal names"), &EdictLookupOptions::personal_names);
+  add_dictionary("settingsDictionaryPlaces", tr("Include place names"), &EdictLookupOptions::place_names);
+  add_dictionary("settingsDictionaryClassical", tr("Classical dictionaries"), &EdictLookupOptions::classical);
+  auto* advanced = add_dictionary("settingsDictionaryAdvanced", tr("Advanced search"), &EdictLookupOptions::advanced);
+  for (auto* box : {
+       add_dictionary("settingsDictionaryAlways", tr("Always search inflected forms"), &EdictLookupOptions::advanced_always),
+       add_dictionary("settingsDictionaryShowAll", tr("Keep searching all inflected forms"), &EdictLookupOptions::advanced_show_all),
+       add_dictionary("settingsDictionaryIAdjectives", tr("Include I-adjectives"), &EdictLookupOptions::i_adjectives)}) {
+    box->setEnabled(advanced->isChecked());
+    connect(advanced, &QCheckBox::toggled, box, &QWidget::setEnabled);
+  }
+  add_dictionary("settingsDictionaryFullAscii", tr("ASCII boundaries match the complete definition"), &EdictLookupOptions::full_ascii);
+  add_dictionary("settingsDictionaryJascii", tr("Treat JASCII as ASCII"), &EdictLookupOptions::jascii_to_ascii);
+  auto* dictionary_note = new QLabel(tr("These settings apply to new searches. Existing queries and results stay unchanged. "
+      "Unimplemented exclusion bits and other dictionary policies remain retained and disclosed."), dictionary);
+  dictionary_note->setWordWrap(true);
+  dictionary_form->addRow(dictionary_note);
+  tabs->addTab(dictionary, tr("Dictionary"));
   if (!settings_.unapplied.isEmpty()) {
     auto* retained = new QPlainTextEdit(tabs);
     retained->setReadOnly(true);
@@ -123,9 +155,10 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
   outer->addWidget(buttons);
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-  connect(buttons, &QDialogButtonBox::accepted, this, [this, booleans, font_controls, code_page] {
+  connect(buttons, &QDialogButtonBox::accepted, this, [this, booleans, font_controls, dictionary_controls, code_page] {
     auto next = settings_;
     for (const auto& control : booleans) next.*(control.member) = control.widget->isChecked();
+    for (const auto& control : dictionary_controls) next.dictionary.*(control.member) = control.widget->isChecked();
     for (std::size_t i = 0; i < font_controls.size(); ++i) {
       const auto& control = font_controls[i];
       next.fonts[i].family = control.family->currentText();

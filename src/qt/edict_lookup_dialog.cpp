@@ -161,7 +161,7 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   options->addWidget(advanced_controls);
   outer->addLayout(options);
 
-  const std::pair<QCheckBox*, bool EdictLookupOptions::*> bindings[] = {
+  option_bindings_ = {
       {personal_names_, &EdictLookupOptions::personal_names},
       {place_names_, &EdictLookupOptions::place_names},
       {classical_, &EdictLookupOptions::classical},
@@ -173,11 +173,18 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
       {i_adjectives_, &EdictLookupOptions::i_adjectives},
       {full_ascii_, &EdictLookupOptions::full_ascii},
       {jascii_to_ascii_, &EdictLookupOptions::jascii_to_ascii}};
-  for (const auto& binding : bindings) {
+  for (const auto& binding : option_bindings_) {
     auto* checkbox = binding.first;
     checkbox->setChecked((*options_).*binding.second);
     connect(checkbox, &QCheckBox::toggled, this,
-            [this, member = binding.second](bool checked) { (*options_).*member = checked; });
+            [this, member = binding.second](bool checked) {
+              (*options_).*member = checked;
+              if (options_changed_handler_) {
+                auto handler = options_changed_handler_;
+                const auto options = *options_;
+                handler(options);
+              }
+            });
   }
   advanced_controls->setEnabled(advanced_->isChecked());
   connect(advanced_, &QCheckBox::toggled, advanced_controls, &QWidget::setEnabled);
@@ -229,6 +236,15 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
 
 void EdictLookupDialog::set_overwrite_action(QAction* action) {
   query_field_->set_overwrite_action(action);
+}
+
+void EdictLookupDialog::set_options(const EdictLookupOptions& options) {
+  *options_ = options;
+  for (const auto& binding : option_bindings_) {
+    const QSignalBlocker blocked(binding.first);
+    binding.first->setChecked((*options_).*binding.second);
+  }
+  always_->parentWidget()->setEnabled(options_->advanced);
 }
 
 void EdictLookupDialog::set_query(std::u32string_view query) {

@@ -27,7 +27,8 @@ void rejects(const std::function<void()>& action) {
 void roundtrip(const QString& directory) {
   qt::ProjectWorkspace workspace;
   workspace.detect_formats = false;
-  workspace.settings = qt::read_application_settings("Future_Field = raw\r\nFile.Size = 23\r\n");
+  workspace.settings = qt::read_application_settings("Future_Field = raw\r\nFile.Size = 23\r\n"
+      "Dict_AdvancedSearches=true\nDict_ExclusionFilters=0x10002\n");
   workspace.documents = {{directory + "/first.jwp", {}, core::LegacyCodePage::k1251, true},
       {directory + "/second.txt", core::TextEncoding::kUtf16Be, core::LegacyCodePage::k1252, false},
       {directory + "/third\\name.jfc", core::TextEncoding::kJfc, core::LegacyCodePage::k1258, true}};
@@ -41,6 +42,10 @@ void roundtrip(const QString& directory) {
             "Native project lost its tab order or active file");
     require(decoded.settings.fonts[static_cast<int>(qt::JapaneseFontRole::kFile)].size == 23 &&
             decoded.settings.unapplied.contains("Future_Field"), "Project settings were not retained/applied");
+    require(decoded.settings.dictionary.advanced && decoded.settings.dictionary.require_end &&
+            !decoded.settings.dictionary.require_beginning && decoded.settings.dictionary.personal_names &&
+            decoded.settings.dictionary.place_names && decoded.settings.dictionary_extra_exclusions == 0x10000U,
+            "Project lost dictionary policies or retained exclusion bits");
     for (std::size_t i = 0; i < decoded.documents.size(); ++i) {
       const auto& left = decoded.documents[i];
       const auto& right = workspace.documents[i];

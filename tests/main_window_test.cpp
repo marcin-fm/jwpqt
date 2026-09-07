@@ -3385,6 +3385,111 @@ void test_edict_search_controls(const QString& directory) {
   QApplication::sendEvent(dialog->findChild<QLineEdit*>(QStringLiteral("edictQuery")), &older_query);
   require(dialog->findChild<QLineEdit*>(QStringLiteral("edictQuery"))->text() == QStringLiteral("cat"),
           "Closing a modal history chooser discarded the shared query cache");
+
+  const QString preferences_path = base + QStringLiteral("/preferences.cfg");
+  require(window.application_settings().dictionary.full_ascii &&
+              window.application_settings().dictionary.require_end &&
+              window.application_settings().dictionary.jascii_to_ascii &&
+              window.save_application_settings(preferences_path),
+          "Manual dictionary controls did not reach saved application settings");
+  qt::MainWindow restored;
+  require(restored.load_application_settings(preferences_path) &&
+              restored.load_edict_configuration(registry_path),
+          "Could not load dictionary preferences into a fresh window");
+  find_action(restored, "edictLookupAction")->trigger();
+  auto* restored_dialog = dynamic_cast<qt::EdictLookupDialog*>(
+      restored.findChild<QDialog*>(QStringLiteral("edictLookupDialog")));
+  require(restored_dialog != nullptr, "Restored dictionary did not open");
+  restored_dialog->set_query(U"cat");
+  require(restored_dialog->search() && restored_dialog->report().results.size() == 1 &&
+              restored_dialog->findChild<QCheckBox*>(QStringLiteral("edictFullAscii"))->isChecked(),
+          "Saved dictionary policies did not change the fresh window's actual search");
+
+  require(count(U"cat") == 1, "Cannot prepare live dictionary settings update");
+  history_query = dialog->findChild<QLineEdit*>(QStringLiteral("edictQuery"));
+  history_query->setCursorPosition(history_query->text().size());
+  QKeyEvent pending(QEvent::KeyPress, Qt::Key_K, Qt::NoModifier, QStringLiteral("k"));
+  QApplication::sendEvent(history_query, &pending);
+  results = dialog->findChild<QTextEdit*>(QStringLiteral("edictResults"));
+  const QPointer<QTextDocument> preserved_results = results->document();
+  const int preserved_position = results->textCursor().position();
+  const int preserved_anchor = results->textCursor().anchor();
+  struct ChangeOnFont : QObject {
+    QCheckBox* box = nullptr;
+    bool changed = false;
+    bool eventFilter(QObject*, QEvent* event) override {
+      if (event->type() == QEvent::FontChange && !changed) {
+        changed = true;
+        box->setChecked(true);
+      }
+      return false;
+    }
+  } listener;
+  listener.box = dialog->findChild<QCheckBox*>(QStringLiteral("edictEnd"));
+  history_query->installEventFilter(&listener);
+  auto preferences = window.application_settings();
+  preferences.dictionary.require_beginning = false;
+  preferences.dictionary.require_end = false;
+  preferences.dictionary.full_ascii = false;
+  preferences.dictionary_extra_exclusions = 0x80000000U;
+  preferences.fonts[static_cast<std::size_t>(qt::JapaneseFontRole::kSystem)].size = 17;
+  require(window.apply_application_settings(preferences) && listener.changed &&
+              window.application_settings().dictionary.require_end && listener.box->isChecked() &&
+              history_query->text() == QStringLiteral("cat") && preserved_results &&
+              results->document() == preserved_results &&
+              results->textCursor().position() == preserved_position &&
+              results->textCursor().anchor() == preserved_anchor && !window.document_modified(),
+          "Settings lost a newer control change, pending input or existing dictionary results");
+  history_query->removeEventFilter(&listener);
+  QKeyEvent finish(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier, QStringLiteral("a"));
+  QApplication::sendEvent(history_query, &finish);
+  require(history_query->text() == QStringLiteral("cat\u304b"),
+          "Settings discarded the pending dictionary composer");
+  check("edictEnd", false);
+  require(count(U"cat") == 5, "Accepted dictionary options did not reach the next search");
+  const auto accepted_preferences = qt::write_application_settings(window.application_settings());
+  bool options_seen = false;
+  QTimer::singleShot(0, [&] {
+    auto* popup = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+    if (!popup) return;
+    auto* begin = popup->findChild<QCheckBox*>(QStringLiteral("settingsDictionaryBegin"));
+    options_seen = begin != nullptr;
+    if (begin) begin->setChecked(true);
+    popup->reject();
+  });
+  find_action(window, "applicationOptionsAction")->trigger();
+  require(options_seen && qt::write_application_settings(window.application_settings()) == accepted_preferences,
+          "Cancelling dictionary Options applied staged controls");
+  QTimer::singleShot(0, [&] {
+    auto* popup = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+    if (!popup) return;
+    popup->findChild<QCheckBox*>(QStringLiteral("settingsDictionaryBegin"))->setChecked(true);
+    popup->findChild<QTabWidget*>()->setCurrentIndex(2);
+    options_seen = popup->grab().save(QDir::current().filePath(QStringLiteral("application-options-dictionary.png")));
+    popup->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+  });
+  find_action(window, "applicationOptionsAction")->trigger();
+  require(options_seen && window.application_settings().dictionary.require_beginning &&
+              dialog->findChild<QCheckBox*>(QStringLiteral("edictBeginning"))->isChecked() &&
+              dialog->report().results.size() == 5 && count(U"cat") == 4,
+          "Accepted dictionary Options searched prematurely or failed to update live controls");
+  QTimer::singleShot(0, [] {
+    auto* popup = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    if (popup) popup->button(QMessageBox::Yes)->click();
+  });
+  find_action(window, "defaultSettingsAction")->trigger();
+  require(window.application_settings().dictionary.require_beginning &&
+              !window.application_settings().dictionary.require_end &&
+              !window.application_settings().dictionary.full_ascii &&
+              window.application_settings().dictionary_extra_exclusions == 0x80000000U &&
+              window.application_settings().unapplied.join(QLatin1Char('\n')).contains(QStringLiteral("0x80000000")),
+          "Default Settings lost unsupported dictionary bits or failed to reset supported flags");
+  const auto before_bad_import = qt::write_application_settings(window.application_settings());
+  const auto import_path = base + QStringLiteral("/import.cfg");
+  write_bytes(import_path, "Dict_AdvancedSearches=bad\nDict_AdvancedSearches=true\n");
+  require(!window.import_application_settings(import_path) &&
+              qt::write_application_settings(window.application_settings()) == before_bad_import,
+          "An invalid earlier dictionary setting changed live preferences");
 }
 
 void test_edict_user_dictionary_integration(const QString& directory) {

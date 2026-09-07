@@ -134,7 +134,8 @@ or the explicit project API options. Recent project entries reopen as projects.
 
 **Tools > Options** configures Japanese document/query/list/candidate fonts,
 font inheritance, toolbar/status/candidate visibility, scrollbar policies,
-candidate-bar position, default JWP code page and exit/recent-file persistence.
+candidate-bar position, default JWP code page, dictionary search policies and
+exit/recent-file persistence.
 Desktop menu fonts are unchanged. Character Table stays at 16 logical pixels;
 the large character keeps its default glyph size. Unavailable or legacy bitmap
 font families use native fallbacks, with their original names retained.
@@ -296,9 +297,13 @@ starts enabled, matching the legacy default. **Full ASCII** applies those
 boundaries to complete definitions, and **JASCII to ASCII** explicitly normalizes
 full-width query text. **Advanced** enables adaptive deinflection, independently
 of wildcard syntax, with **Always Search**, **Show All** and **I-adjectives**
-controls. These choices survive closing the lookup or replacing its resources
-within the same application window. Their cross-session settings migration is
-still pending. Changing a checkbox does not discard results or start a search.
+controls. These choices, plus personal/place-name inclusion and classical
+dictionaries, persist through application settings and projects. **Options >
+Dictionary** stages the same controls; accepted changes update an open lookup
+without searching, flushing pending kana or changing results and selection.
+Manual lookup changes also reach saved preferences. Legacy exclusion bits not
+yet implemented are retained and disclosed, including through Default Settings.
+Changing a checkbox does not discard results or start a search.
 
 Dictionary **History** opens a selectable query list; `Up` recalls older queries,
 and `Down` moves toward newer entries and a blank draft, or opens the list when

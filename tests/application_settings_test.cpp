@@ -137,6 +137,73 @@ void test_information_settings() {
   rejects([&] { (void)write_application_settings(settings); });
 }
 
+void test_dictionary_settings() {
+  using namespace jwpqt::qt;
+  const auto defaults = read_application_settings("");
+  require(defaults.dictionary.require_beginning && !defaults.dictionary.require_end &&
+              !defaults.dictionary.personal_names && !defaults.dictionary.place_names &&
+              !defaults.dictionary.advanced && defaults.dictionary.advanced_always &&
+              defaults.dictionary.i_adjectives && !defaults.dictionary.classical &&
+              !defaults.dictionary.full_ascii && !defaults.dictionary.jascii_to_ascii,
+          "Dictionary defaults differ from the source");
+  auto settings = read_application_settings(
+      "dict_advanced=no\nDiCt_AdvancedSearches=yes\ndict_always=false\n"
+      "dict_showall=true\ndict_iadj=false\ndict_classical=true\n"
+      "dict_fullascii=true\ndict_jascii2ascii=true\ndict_bits=0x80000006\n"
+      "DICT_BITS=bad\nDict_PriorityEntriesFirst=true\nFuture=\xff\n");
+  require(settings.dictionary.advanced && !settings.dictionary.advanced_always &&
+              settings.dictionary.advanced_show_all && !settings.dictionary.i_adjectives &&
+              settings.dictionary.classical && settings.dictionary.full_ascii &&
+              settings.dictionary.jascii_to_ascii && !settings.dictionary.require_beginning &&
+              settings.dictionary.require_end && !settings.dictionary.personal_names &&
+              settings.dictionary.place_names && settings.dictionary_extra_exclusions == 0x80000000U &&
+              settings.unapplied.size() == 4 &&
+              settings.unapplied.back().contains(QStringLiteral("0x80000000")),
+          "Dictionary aliases, mask inversion or unsupported-field reporting changed");
+  const auto encoded = write_application_settings(settings);
+  const auto restored = read_application_settings(encoded);
+  require(write_application_settings(restored) == encoded &&
+              encoded.find("Dict_ExclusionFilters = 0x80000006") != std::string::npos &&
+              encoded.find("DICT_BITS=bad\n") != std::string::npos &&
+              encoded.find("Dict_PriorityEntriesFirst=true\n") != std::string::npos &&
+              encoded.find("Future=\xff\n") != std::string::npos &&
+              encoded.find("dict_advanced=") == std::string::npos,
+          "Dictionary settings did not preserve unknown values and canonicalize aliases");
+  for (unsigned bits = 0; bits < 16; ++bits) {
+    const auto value = read_application_settings("Dict_ExclusionFilters=" + std::to_string(bits));
+    require(value.dictionary.require_beginning == ((bits & 1U) != 0) &&
+                value.dictionary.require_end == ((bits & 2U) != 0) &&
+                value.dictionary.personal_names == ((bits & 4U) == 0) &&
+                value.dictionary.place_names == ((bits & 8U) == 0) &&
+                value.dictionary_extra_exclusions == 0 && value.unapplied.isEmpty() &&
+                read_application_settings(write_application_settings(value)).dictionary.personal_names ==
+                    value.dictionary.personal_names,
+            "A supported filter mask changed or was reported unsupported");
+  }
+  for (const auto* mask : {"-1", "0xFFFFFFFF", "4294967295"}) {
+    const auto all = read_application_settings(std::string("dict_bits=") + mask);
+    require(all.dictionary_extra_exclusions == 0xfffffff0U && all.dictionary.require_end &&
+                !all.dictionary.personal_names && !all.dictionary.place_names,
+            "A source signed/unsigned 32-bit mask was truncated");
+  }
+  require(read_application_settings("dict_bits=0x100\ndict_bits=13").unapplied.isEmpty(),
+          "Overridden unsupported mask bits produced a stale warning");
+  for (const auto* bad : {"Dict_AdvancedSearches=bad\nDict_AdvancedSearches=true",
+                         "dict_always=2", "dict_showall=on", "dict_iadj=maybe",
+                         "dict_classical=2", "dict_jascii2ascii=2", "dict_fullascii=2",
+                         "dict_bits=bad\ndict_bits=13", "dict_bits=4294967296",
+                         "dict_bits=-2147483649", "dict_bits=1.5"}) {
+    rejects([&] { (void)read_application_settings(bad, settings); });
+  }
+  const auto overlay = read_application_settings("Dict_AdvancedSearches=false", settings);
+  require(!overlay.dictionary.advanced && settings.dictionary.advanced &&
+              overlay.dictionary_extra_exclusions == settings.dictionary_extra_exclusions &&
+              overlay.dictionary.require_end && overlay.dictionary.place_names,
+          "A dictionary overlay mutated its base or reset unspecified filters");
+  settings.dictionary_extra_exclusions |= 1U;
+  rejects([&] { (void)write_application_settings(settings); });
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -146,6 +213,7 @@ int main(int argc, char** argv) {
     require(directory.isValid(), "Could not create temporary settings directory");
     test_model();
     test_information_settings();
+    test_dictionary_settings();
     test_files(directory.path());
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';

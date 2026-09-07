@@ -12,6 +12,7 @@
 #include <QDialog>
 
 #include "edict_resource_search.h"
+#include "edict_lookup_options.h"
 #include "jwpqt/core/edict_sort.h"
 #include "jwpqt/core/query_history.h"
 
@@ -26,26 +27,13 @@ namespace jwpqt::qt {
 
 class KanaInputField;
 
-struct EdictLookupOptions {
-  bool personal_names = false;
-  bool place_names = false;
-  bool classical = false;
-  bool require_beginning = true;
-  bool require_end = false;
-  bool advanced = false;
-  bool advanced_always = true;
-  bool advanced_show_all = false;
-  bool i_adjectives = true;
-  bool full_ascii = false;
-  bool jascii_to_ascii = false;
-};
-
 class EdictLookupDialog : public QDialog {
  public:
   using SearchHandler = std::function<EdictResourceSearchReport(
       const core::JwpText&, const EdictLookupOptions&)>;
   using InsertHandler = std::function<bool(const std::u32string&)>;
   using InfoHandler = std::function<void(char32_t)>;
+  using OptionsHandler = std::function<void(const EdictLookupOptions&)>;
 
   explicit EdictLookupDialog(SearchHandler search_handler,
                              InsertHandler insert_handler = {},
@@ -56,6 +44,10 @@ class EdictLookupDialog : public QDialog {
 
   void set_query(std::u32string_view query);
   void set_overwrite_action(QAction* action);
+  void set_options(const EdictLookupOptions& options);
+  void set_options_changed_handler(OptionsHandler handler) {
+    options_changed_handler_ = std::move(handler);
+  }
   bool search();
   bool sort_results(Qt::KeyboardModifiers modifiers = Qt::NoModifier,
                     const core::EdictSortLimits& limits = {});
@@ -83,6 +75,7 @@ class EdictLookupDialog : public QDialog {
   SearchHandler search_handler_;
   InsertHandler insert_handler_;
   InfoHandler info_handler_;
+  OptionsHandler options_changed_handler_;
   std::shared_ptr<EdictLookupOptions> options_;
   std::shared_ptr<core::QueryHistory> history_;
   int history_index_ = -1;
@@ -105,6 +98,7 @@ class EdictLookupDialog : public QDialog {
   QCheckBox* i_adjectives_;
   QCheckBox* full_ascii_;
   QCheckBox* jascii_to_ascii_;
+  std::vector<std::pair<QCheckBox*, bool EdictLookupOptions::*>> option_bindings_;
   QTextEdit* results_;
   QLabel* status_;
   QPushButton* insert_button_;

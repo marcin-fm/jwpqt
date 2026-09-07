@@ -389,6 +389,65 @@ void test_search_controls() {
           "Independent dictionary state inherited another owner's settings");
 }
 
+void test_options_updates() {
+  using namespace jwpqt;
+  auto options = std::make_shared<qt::EdictLookupOptions>();
+  auto history = std::make_shared<core::QueryHistory>();
+  int searches = 0;
+  int notifications = 0;
+  std::u32string inserted;
+  const auto search = [&](const core::JwpText&, const qt::EdictLookupOptions&) {
+    ++searches;
+    qt::EdictResourceSearchReport report;
+    report.results = {result(0, QStringLiteral("Main"), U"\u3042", {}, {U"cat"})};
+    return report;
+  };
+  qt::EdictLookupDialog dialog(search, [&](const std::u32string& text) {
+    inserted = text;
+    return true;
+  }, nullptr, {}, options, history);
+  dialog.set_options_changed_handler([&](const qt::EdictLookupOptions& value) {
+    ++notifications;
+    require(value.personal_names, "Option callback did not contain the changed value");
+  });
+  dialog.set_query(U"cat");
+  require(dialog.search(), "Cannot seed live dictionary options test");
+  auto* query = dialog.findChild<QLineEdit*>(QStringLiteral("edictQuery"));
+  auto* results = dialog.findChild<QTextEdit*>(QStringLiteral("edictResults"));
+  const auto old_history = history->entries();
+  const QPointer<QTextDocument> document = results->document();
+  const int position = results->textCursor().position();
+  const int anchor = results->textCursor().anchor();
+  query->setCursorPosition(query->text().size());
+  QKeyEvent pending(QEvent::KeyPress, Qt::Key_K, Qt::NoModifier, QStringLiteral("k"));
+  QApplication::sendEvent(query, &pending);
+  auto next = *options;
+  next.require_beginning = false;
+  next.advanced = true;
+  next.full_ascii = true;
+  dialog.set_options(next);
+  require(!dialog.findChild<QCheckBox*>(QStringLiteral("edictBeginning"))->isChecked() &&
+              dialog.findChild<QCheckBox*>(QStringLiteral("edictAdvancedAlways"))->isEnabled() &&
+              options->full_ascii && searches == 1 && notifications == 0 &&
+              history->entries() == old_history && query->text() == QStringLiteral("cat") &&
+              document && results->document() == document &&
+              results->textCursor().position() == position && results->textCursor().anchor() == anchor,
+          "Applying dictionary options searched, flushed input or replaced existing state");
+  dialog.findChild<QCheckBox*>(QStringLiteral("edictPersonalNames"))->click();
+  require(notifications == 1 && options->personal_names,
+          "A manual dictionary policy did not publish exactly once");
+  QKeyEvent finish(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier, QStringLiteral("a"));
+  QApplication::sendEvent(query, &finish);
+  require(query->text() == QStringLiteral("cat\u304b") && dialog.insert_selected() &&
+              inserted == U"\u3042 /cat/" && searches == 1,
+          "Applying options lost pending kana or canonical result ownership");
+  auto* dying = new qt::EdictLookupDialog(search);
+  QPointer<qt::EdictLookupDialog> guard = dying;
+  dying->set_options_changed_handler([dying](const qt::EdictLookupOptions&) { delete dying; });
+  dying->findChild<QCheckBox*>(QStringLiteral("edictPersonalNames"))->setChecked(true);
+  require(!guard, "An options callback could not destroy its dialog safely");
+}
+
 void test_query_input_modes() {
   int searches = 0;
   jwpqt::core::JwpText received;
@@ -939,6 +998,7 @@ int main(int argc, char** argv) {
     test_empty_invalid_and_failed_search_are_contained();
     test_result_sorting();
     test_search_controls();
+    test_options_updates();
     test_query_input_modes();
     test_query_overwrite();
     test_query_history();

@@ -3,6 +3,7 @@ find_package(Qt6 REQUIRED COMPONENTS PrintSupport Widgets)
 add_library(jwpqt_qt_support STATIC
   application_settings.cpp
   application_settings.h
+  edict_lookup_options.h
   edict_resource_search.cpp
   edict_resource_search.h
   edict_resources.cpp
