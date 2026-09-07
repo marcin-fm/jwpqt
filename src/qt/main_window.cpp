@@ -52,6 +52,7 @@
 #include <QToolButton>
 #include <QPushButton>
 #include <QRadioButton>
+#include <QScrollBar>
 #include <QScopedValueRollback>
 #include <QScreen>
 #include <QSettings>
@@ -67,6 +68,7 @@
 #include <QToolBar>
 #include <QVBoxLayout>
 
+#include "application_settings_dialog.h"
 #include "edict_lookup_dialog.h"
 #include "edict_resource_search.h"
 #include "edict_results_window.h"
@@ -74,6 +76,7 @@
 #include "edict_user_dictionary_dialog.h"
 #include "file_io.h"
 #include "jis_table_dialog.h"
+#include "japanese_fonts.h"
 #include "jwp_editor.h"
 #include "kanji_code_lookup_dialog.h"
 #include "kanji_count_dialog.h"
@@ -85,6 +88,7 @@
 #include "print_document.h"
 #include "jwpqt/core/jis_table.h"
 #include "jwpqt/core/jis_unicode.h"
+#include "jwpqt/core/jwp_configuration.h"
 #include "jwpqt/core/jwp_plain_text.h"
 #include "jwpqt/core/jwp_text_codec.h"
 #include "jwpqt/core/plain_text_change.h"
@@ -272,7 +276,12 @@ std::optional<core::TextEncoding> encoding_from_filter(const QString& filter) {
 }  // namespace
 
 struct MainWindow::DocumentState {
-  explicit DocumentState(QWidget* parent) : editor_(new JwpEditor(parent)) {}
+  explicit DocumentState(QWidget* parent) : editor_(new JwpEditor(parent)) {
+    QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    font.setPixelSize(16);
+    editor_->setFont(font);
+    assign_japanese_font(*editor_, JapaneseFontRole::kFile);
+  }
 
   JwpEditor* editor_;
   QString current_path_;
@@ -361,6 +370,7 @@ MainWindow::MainWindow(QWidget* parent)
   conversion_candidates_->setObjectName(QStringLiteral("conversionCandidates"));
   conversion_candidates_->setAccessibleName(tr("Conversion candidates"));
   conversion_candidates_->setFont(content_font);
+  assign_japanese_font(*conversion_candidates_, JapaneseFontRole::kKanjiBar, true);
   conversion_candidates_->setFlow(QListView::LeftToRight);
   conversion_candidates_->setWrapping(false);
   conversion_candidates_->setWordWrap(false);
@@ -540,9 +550,12 @@ bool MainWindow::activate_document(int index) {
 int MainWindow::new_document_tab(bool japanese_editing) {
   if (!finish_document_input()) return -1;
   auto next = std::make_unique<DocumentState>(this);
-  next->jwp_code_page_ = document_->jwp_code_page_;
-  next->editor_->setFont(document_->editor_->font());
+  next->jwp_code_page_ = default_jwp_code_page();
   next->editor_->setLineWrapMode(QTextEdit::WidgetWidth);
+  next->editor_->setVerticalScrollBarPolicy(application_settings_.vertical_scrollbar
+      ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
+  next->editor_->setHorizontalScrollBarPolicy(application_settings_.horizontal_scrollbar
+      ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
   connect_editor(next->editor_);
   documents_.push_back(std::move(next));
   {
@@ -626,6 +639,164 @@ const std::vector<RecentDocument>& MainWindow::recent_documents() const noexcept
 
 QString MainWindow::recent_file_warning() const { return recent_file_warning_; }
 
+const ApplicationSettings& MainWindow::application_settings() const noexcept {
+  return application_settings_;
+}
+
+QString MainWindow::application_settings_warning() const {
+  return application_settings_warning_;
+}
+
+core::LegacyCodePage MainWindow::default_jwp_code_page() const noexcept {
+  return static_cast<core::LegacyCodePage>(application_settings_.translation_code_page == 0
+      ? 1252 : application_settings_.translation_code_page);
+}
+
+bool MainWindow::apply_application_settings(const ApplicationSettings& settings, OpenMode mode) {
+  try {
+    auto next = read_application_settings(write_application_settings(settings));
+    for (const auto& state : documents_)
+      if (state->updating_editor_ || state->applying_kana_input_)
+        throw core::JwpConfigurationError("Settings cannot change during an editor update");
+
+    {
+      struct View {
+        DocumentState* state;
+        QTextCursor cursor;
+        int vertical;
+        int horizontal;
+        bool modified;
+      };
+      std::vector<View> views;
+      views.reserve(documents_.size());
+      for (const auto& state : documents_)
+        views.push_back({state.get(), state->editor_->textCursor(),
+                         state->editor_->verticalScrollBar()->value(),
+                         state->editor_->horizontalScrollBar()->value(),
+                         state->editor_->document()->isModified()});
+      for (const auto& view : views) view.state->updating_editor_ = true;
+      struct RestoreViews {
+        std::vector<View>& views;
+        ~RestoreViews() {
+          for (const auto& view : views) {
+            auto* editor = view.state->editor_;
+            editor->setTextCursor(view.cursor);
+            editor->verticalScrollBar()->setValue(view.vertical);
+            editor->horizontalScrollBar()->setValue(view.horizontal);
+            editor->document()->setModified(view.modified);
+            view.state->updating_editor_ = false;
+          }
+        }
+      } restore{views};
+      // Font/layout signals must not be interpreted as edits in any open tab.
+      application_font_warnings_ = set_japanese_fonts(*this, next);
+      for (const auto& state : documents_) {
+        if (state->current_path_.isEmpty() && !state->editor_->document()->isModified() &&
+            document_plain_text(*state->editor_->document()).isEmpty() &&
+            !state->jwp_history_.can_undo() && !state->jwp_history_.can_redo() &&
+            !state->editor_->document()->isUndoAvailable() && !state->editor_->document()->isRedoAvailable())
+          state->jwp_code_page_ = static_cast<core::LegacyCodePage>(
+              next.translation_code_page == 0 ? 1252 : next.translation_code_page);
+        state->editor_->setVerticalScrollBarPolicy(next.vertical_scrollbar
+            ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
+        state->editor_->setHorizontalScrollBarPolicy(next.horizontal_scrollbar
+            ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
+        if (state->jwp_document_) {
+          state->editor_->apply_jwp_layout(state->jwp_document_->document());
+          state->editor_->apply_kanji_colors(state->jwp_document_->document(),
+              kanji_color_list_, kanji_color_policy_, state->jwp_code_page_);
+        }
+      }
+      application_settings_ = std::move(next);
+    }
+    main_toolbar_->setVisible(application_settings_.show_toolbar);
+    statusBar()->setVisible(application_settings_.show_status_bar);
+    auto* layout = qobject_cast<QVBoxLayout*>(centralWidget()->layout());
+    layout->removeWidget(conversion_candidates_);
+    layout->insertWidget(application_settings_.kanji_bar_at_top ? 0 : 1, conversion_candidates_);
+    conversion_candidates_->setHorizontalScrollBarPolicy(application_settings_.kanji_bar_scrollbar
+        ? Qt::ScrollBarAlwaysOn : Qt::ScrollBarAlwaysOff);
+    conversion_candidates_->setFixedHeight(conversion_candidates_->fontMetrics().height() + 12 +
+        (application_settings_.kanji_bar_scrollbar ? style()->pixelMetric(QStyle::PM_ScrollBarExtent) : 0));
+    application_settings_warning_.clear();
+    update_encoding_display();
+    update_conversion_actions();
+    update_undo_actions();
+    update_title();
+    update_resource_status();
+    return true;
+  } catch (const std::exception& error) {
+    application_settings_warning_ = tr("Could not apply settings: %1").arg(QString::fromUtf8(error.what()));
+    update_resource_status();
+    if (mode == OpenMode::kInteractive)
+      QMessageBox::warning(this, tr("Settings"), application_settings_warning_);
+    return false;
+  }
+}
+
+bool MainWindow::load_application_settings(const QString& path, OpenMode mode) {
+  application_settings_path_ = absolute_document_path(path);
+  application_settings_persistence_enabled_ = false;
+  try {
+    if (path.isEmpty()) throw core::JwpConfigurationError("Settings path must not be empty");
+    const QFileInfo file(path);
+    const auto next = !file.exists() && !file.isSymLink()
+        ? ApplicationSettings{} : read_application_settings_file(path);
+    if (!apply_application_settings(next, mode)) return false;
+    application_settings_persistence_enabled_ = true;
+    return true;
+  } catch (const std::exception& error) {
+    application_settings_warning_ = tr("Could not load settings: %1").arg(QString::fromUtf8(error.what()));
+    update_resource_status();
+    if (mode == OpenMode::kInteractive)
+      QMessageBox::warning(this, tr("Settings"), application_settings_warning_);
+    return false;
+  }
+}
+
+bool MainWindow::import_application_settings(const QString& path, OpenMode mode) {
+  try {
+    return apply_application_settings(read_application_settings_file(path, application_settings_), mode);
+  } catch (const std::exception& error) {
+    application_settings_warning_ = tr("Could not import settings: %1").arg(QString::fromUtf8(error.what()));
+    update_resource_status();
+    if (mode == OpenMode::kInteractive)
+      QMessageBox::warning(this, tr("Settings"), application_settings_warning_);
+    return false;
+  }
+}
+
+bool MainWindow::save_application_settings(const QString& path, OpenMode mode) {
+  QString destination = path.isEmpty() ? application_settings_path_ : absolute_document_path(path);
+  if (destination.isEmpty() && mode == OpenMode::kInteractive)
+    destination = QFileDialog::getSaveFileName(this, tr("Save Settings"), {}, tr("JWP settings (*.cfg);;All files (*)"));
+  if (destination.isEmpty()) return false;
+  try {
+    if (find_document_path(destination) >= 0)
+      throw core::JwpConfigurationError("Close the settings document before overwriting it");
+    auto next = read_application_settings(write_application_settings(application_settings_));
+    write_application_settings_file(destination, next);
+    application_settings_ = std::move(next);
+    application_settings_path_ = destination;
+    application_settings_persistence_enabled_ = true;
+    application_settings_warning_.clear();
+    update_resource_status();
+    return true;
+  } catch (const std::exception& error) {
+    application_settings_warning_ = tr("Could not save settings: %1").arg(QString::fromUtf8(error.what()));
+    update_resource_status();
+    if (mode == OpenMode::kInteractive)
+      QMessageBox::warning(this, tr("Settings"), application_settings_warning_);
+    return false;
+  }
+}
+
+void MainWindow::configure_application_settings() {
+  ApplicationSettingsDialog dialog(application_settings_, this);
+  if (dialog.exec() == QDialog::Accepted)
+    apply_application_settings(dialog.settings(), OpenMode::kInteractive);
+}
+
 bool MainWindow::load_recent_file_configuration(const QString& path, OpenMode mode) {
   recent_files_path_ = absolute_document_path(path);
   try {
@@ -697,7 +868,8 @@ void MainWindow::record_recent_document(const DocumentState& state) {
     next.insert(next.begin(), std::move(entry));
     if (next.size() > kMaximumRecentDocuments) next.resize(kMaximumRecentDocuments);
     recent_documents_ = std::move(next);
-    if (!recent_files_path_.isEmpty() && recent_file_persistence_enabled_) {
+    if (!recent_files_path_.isEmpty() && recent_file_persistence_enabled_ &&
+        application_settings_.save_recent_files) {
       if (find_document_path(recent_files_path_) >= 0)
         throw RecentFilesError("History is open as a document; automatic history saving is paused");
       (void)read_recent_documents(recent_files_path_);
@@ -1647,6 +1819,31 @@ void MainWindow::create_actions() {
           [this] { insert_page_break(); });
 
   QMenu* tools_menu = menuBar()->addMenu(tr("&Tools"));
+  auto* options_action = tools_menu->addAction(tr("&Options..."));
+  options_action->setObjectName(QStringLiteral("applicationOptionsAction"));
+  connect(options_action, &QAction::triggered, this, &MainWindow::configure_application_settings);
+  auto* defaults_action = tools_menu->addAction(tr("Default Settings..."));
+  defaults_action->setObjectName(QStringLiteral("defaultSettingsAction"));
+  connect(defaults_action, &QAction::triggered, this, [this] {
+    if (QMessageBox::question(this, tr("Default Settings"),
+        tr("Reset native options to defaults? Retained legacy-only settings will be kept."),
+        QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Yes) return;
+    ApplicationSettings defaults;
+    defaults.source = application_settings_.source;
+    apply_application_settings(defaults, OpenMode::kInteractive);
+  });
+  auto* save_settings_action = tools_menu->addAction(tr("Save Settings"));
+  save_settings_action->setObjectName(QStringLiteral("saveSettingsAction"));
+  connect(save_settings_action, &QAction::triggered, this,
+          [this] { save_application_settings({}, OpenMode::kInteractive); });
+  auto* import_settings_action = tools_menu->addAction(tr("Import Settings..."));
+  import_settings_action->setObjectName(QStringLiteral("importSettingsAction"));
+  connect(import_settings_action, &QAction::triggered, this, [this] {
+    const auto path = QFileDialog::getOpenFileName(this, tr("Import Settings"), {},
+        tr("JWP settings (*.cfg);;All files (*)"));
+    if (!path.isEmpty()) import_application_settings(path, OpenMode::kInteractive);
+  });
+  tools_menu->addSeparator();
   edict_lookup_action_ =
       tools_menu->addAction(tr("&Dictionary Lookup..."));
   edict_lookup_action_->setObjectName(QStringLiteral("edictLookupAction"));
@@ -1858,7 +2055,11 @@ void MainWindow::create_actions() {
     code_page_group->addAction(action);
     jwp_code_page_actions_.push_back(action);
     connect(action, &QAction::triggered, this,
-            [this, code_page] { set_jwp_code_page(code_page); });
+            [this, code_page] {
+              set_jwp_code_page(code_page);
+              if (document_->jwp_code_page_ == code_page)
+                application_settings_.translation_code_page = static_cast<int>(code_page);
+            });
   }
   QMenu* window_menu = menuBar()->addMenu(tr("&Window"));
   next_file_action_ = window_menu->addAction(tr("&Next File"));
@@ -1974,6 +2175,9 @@ void MainWindow::create_actions() {
   toolbar_visible->setText(tr("&Toolbar"));
   toolbar_visible->setObjectName(QStringLiteral("showToolbarAction"));
   view_menu->addAction(toolbar_visible);
+  connect(toolbar_visible, &QAction::triggered, this, [this](bool visible) {
+    application_settings_.show_toolbar = visible;
+  });
 }
 
 QString MainWindow::resource_report() const {
@@ -2029,6 +2233,13 @@ QString MainWindow::resource_report() const {
   lines << (recent_files_path_.isEmpty() ? tr("Recent files: memory only")
                                         : tr("Recent files: %1").arg(recent_files_path_));
   if (!recent_file_warning_.isEmpty()) lines << recent_file_warning_;
+  lines << (application_settings_path_.isEmpty() ? tr("Settings: memory only")
+      : tr("Settings: %1").arg(application_settings_path_));
+  if (!application_settings_warning_.isEmpty()) lines << application_settings_warning_;
+  lines << application_font_warnings_;
+  if (!application_settings_.unapplied.isEmpty())
+    lines << tr("Retained settings not applied by the native interface: %1")
+                 .arg(application_settings_.unapplied.join(QStringLiteral(", ")));
   lines << QString()
         << tr("Use --config-dir for settings and dictionaries, and "
               "--user-data-dir for conversion learning. WNN files are found "
@@ -2065,12 +2276,17 @@ void MainWindow::update_resource_status() {
                   });
   resource_status_button_->setText(
       wnn_resources_ != nullptr && has_kanji_lookup() && dictionaries_loaded
-          ? (record_warnings || !recent_file_warning_.isEmpty()
+          ? (record_warnings || !recent_file_warning_.isEmpty() ||
+             !application_settings_warning_.isEmpty() || !application_font_warnings_.isEmpty() ||
+             !application_settings_.unapplied.isEmpty()
                  ? tr("Resources: warnings") : tr("Resources: loaded"))
           : tr("Resources: incomplete"));
   resource_status_button_->setToolTip(
-      recent_file_warning_.isEmpty() ? tr("Inspect dictionary and lookup data")
-                                    : recent_file_warning_);
+      !application_settings_warning_.isEmpty() ? application_settings_warning_ :
+      !recent_file_warning_.isEmpty() ? recent_file_warning_ :
+      !application_font_warnings_.isEmpty() ? application_font_warnings_.join(QLatin1Char('\n')) :
+      !application_settings_.unapplied.isEmpty() ? tr("Some imported settings are retained but not yet applied") :
+      tr("Inspect dictionary and lookup data"));
 }
 
 void MainWindow::undo_document() {
@@ -2197,7 +2413,7 @@ void MainWindow::update_conversion_actions() {
     }
   }
   convert_action_->setEnabled(active || can_convert);
-  conversion_candidates_->setVisible(active);
+  conversion_candidates_->setVisible(active && application_settings_.show_kanji_bar);
   if (!active && conversion_candidates_->count() != 0) {
     const QSignalBlocker blocker(conversion_candidates_);
     conversion_candidates_->clear();
@@ -3651,7 +3867,7 @@ void MainWindow::open_document() {
     return;
   }
   if (selected_filter == jwp_filter()) {
-    open_jwp_path(path, document_->jwp_code_page_, OpenMode::kInteractive, true);
+    open_jwp_path(path, default_jwp_code_page(), OpenMode::kInteractive, true);
     return;
   }
   const std::optional<core::TextEncoding> encoding =
@@ -3784,7 +4000,7 @@ bool MainWindow::open_path_detected(const QString& path, OpenMode mode, bool new
     const std::string bytes = read_file_bytes(path);
     if (core::has_jwp_document_magic(bytes)) {
       load_jwp_document(path, core::decode_jwp_document(bytes),
-                        document_->jwp_code_page_, new_tab);
+                        default_jwp_code_page(), new_tab);
       statusBar()->showMessage(
           tr("Opened %1 as JWP (%2)")
               .arg(path, code_page_name(document_->jwp_code_page_)),
@@ -3857,15 +4073,16 @@ void MainWindow::load_document(const QString& path,
   core::TextFile normalized = file;
   normalized.text = from_qstring(document_plain_text(staged_text));
   std::optional<core::JwpDocumentModel> model;
+  const auto code_page = new_tab ? default_jwp_code_page() : document_->jwp_code_page_;
   if (japanese_editing) {
     try {
-      model = core::import_jwp_plain_text(normalized.text, document_->jwp_code_page_);
+      model = core::import_jwp_plain_text(normalized.text, code_page);
     } catch (const core::JwpPlainTextError&) {
       // Unrestricted Unicode stays editable; no replacement or truncation.
     }
   }
   if (model) {
-    load_jwp_document(path, model->document(), document_->jwp_code_page_, new_tab);
+    load_jwp_document(path, model->document(), code_page, new_tab);
     document_->jwp_format_ = false;
     document_->encoding_ = file.encoding;
     document_->has_byte_order_mark_ = file.has_byte_order_mark;
@@ -5418,6 +5635,25 @@ void MainWindow::show_error(const QString& action,
 
 void MainWindow::closeEvent(QCloseEvent* event) {
   if (approve_close_all(OpenMode::kInteractive)) {
+    if (application_settings_.save_settings_on_exit && application_settings_persistence_enabled_ &&
+        !application_settings_path_.isEmpty()) {
+      bool saved = false;
+      try {
+        const QFileInfo file(application_settings_path_);
+        if (file.exists() || file.isSymLink())
+          (void)read_application_settings_file(application_settings_path_);
+        saved = save_application_settings();
+      } catch (const std::exception& error) {
+        application_settings_warning_ = tr("Could not save settings: %1").arg(QString::fromUtf8(error.what()));
+        update_resource_status();
+      }
+      if (!saved && QMessageBox::warning(this, tr("Settings"),
+          application_settings_warning_ + tr("\n\nExit without saving settings?"),
+          QMessageBox::Discard | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Discard) {
+        event->ignore();
+        return;
+      }
+    }
     for (const auto& state : documents_) record_recent_document(*state);
     event->accept();
   } else {

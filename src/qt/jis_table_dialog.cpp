@@ -22,6 +22,7 @@
 #include <QVBoxLayout>
 
 #include "text_bridge.h"
+#include "japanese_fonts.h"
 
 namespace jwpqt::qt {
 namespace {
@@ -96,6 +97,7 @@ JisTableDialog::JisTableDialog(InsertHandler insert_handler,
   QFont content_font = table_->font();
   content_font.setPixelSize(16);
   table_->setFont(content_font);
+  assign_japanese_font(*table_, JapaneseFontRole::kTable);
   table_->horizontalHeader()->hide();
   table_->verticalHeader()->hide();
   table_->horizontalHeader()->setMinimumSectionSize(24);

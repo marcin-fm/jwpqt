@@ -116,6 +116,24 @@ void test_runtime_paths(const QString& executable, const QString& root) {
           QStringLiteral("Startup overwrote corrupt recent history"));
   history_file.close();
   require(history_file.remove(), QStringLiteral("Could not remove history fixture"));
+  const QString preferences = config + QStringLiteral("/jwpqt.cfg");
+  const QByteArray invalid_preferences("File.Size=bad\nFile.Size=18\n");
+  write_file(preferences, invalid_preferences);
+  require(run(options, 0).contains(QStringLiteral("Could not load settings")),
+          QStringLiteral("Invalid native settings blocked startup or were not disclosed"));
+  QFile preferences_file(preferences);
+  require(preferences_file.open(QIODevice::ReadOnly) && preferences_file.readAll() == invalid_preferences,
+          QStringLiteral("Startup rewrote invalid native settings"));
+  preferences_file.close();
+  const QByteArray retained_preferences("File.Size=20\nFuture_Field=keep\n");
+  write_file(preferences, retained_preferences);
+  const auto preferences_report = run(options, 0);
+  require(preferences_report.contains(QStringLiteral("Settings: ") + preferences) &&
+          preferences_report.contains(QStringLiteral("Future_Field")) &&
+          preferences_file.open(QIODevice::ReadOnly) && preferences_file.readAll() == retained_preferences,
+          QStringLiteral("Native settings path, retained fields or read-only startup were lost"));
+  preferences_file.close();
+  require(preferences_file.remove(), QStringLiteral("Could not remove native settings fixture"));
   for (const QString& option : {QStringLiteral("--config-dir"),
                                 QStringLiteral("--user-data-dir"),
                                 QStringLiteral("--wnn-data-dir")}) {

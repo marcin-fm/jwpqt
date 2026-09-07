@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "kanji_count_dialog.h"
+#include "japanese_fonts.h"
 
 #include <algorithm>
 #include <exception>
@@ -112,6 +113,7 @@ KanjiCountDialog::KanjiCountDialog(
   count_button->setDefault(true);
   outer->addWidget(count_button);
   results_->setObjectName(QStringLiteral("kanjiCountResults"));
+  assign_japanese_font(*results_, JapaneseFontRole::kList);
   results_->setSelectionMode(QAbstractItemView::ExtendedSelection);
   outer->addWidget(results_, 1);
   status_->setObjectName(QStringLiteral("kanjiCountStatus"));

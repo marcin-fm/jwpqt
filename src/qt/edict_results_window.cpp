@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "edict_results_window.h"
+#include "japanese_fonts.h"
 
 #include <algorithm>
 #include <exception>
@@ -67,6 +68,7 @@ EdictResultsWindow::EdictResultsWindow(QWidget* parent)
   resize(760, 420);
 
   results_->setObjectName(QStringLiteral("edictResultsList"));
+  assign_japanese_font(*results_, JapaneseFontRole::kList);
   results_->setSelectionMode(QAbstractItemView::ExtendedSelection);
   status_->setObjectName(QStringLiteral("edictResultsStatus"));
   copy_button_->setObjectName(QStringLiteral("edictResultsCopy"));

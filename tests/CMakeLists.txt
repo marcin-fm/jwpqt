@@ -36,6 +36,11 @@ target_link_libraries(jwpqt_recent_files_tests PRIVATE jwpqt_qt_support)
 target_compile_options(jwpqt_recent_files_tests PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME qt_recent_files COMMAND jwpqt_recent_files_tests)
 
+add_executable(jwpqt_application_settings_tests application_settings_test.cpp)
+target_link_libraries(jwpqt_application_settings_tests PRIVATE jwpqt_qt_support)
+target_compile_options(jwpqt_application_settings_tests PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME qt_application_settings COMMAND jwpqt_application_settings_tests)
+
 add_executable(jwpqt_edict_resource_search_tests
   edict_resource_search_test.cpp
 )

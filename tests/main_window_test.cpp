@@ -14,10 +14,13 @@
 #include <QClipboard>
 #include <QContextMenuEvent>
 #include <QDialog>
+#include <QDialogButtonBox>
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
 #include <QFontMetricsF>
+#include <QFontComboBox>
+#include <QFontDatabase>
 #include <QLabel>
 #include <QKeyEvent>
 #include <QLineEdit>
@@ -28,6 +31,8 @@
 #include <QPushButton>
 #include <QPrinter>
 #include <QSettings>
+#include <QSpinBox>
+#include <QStatusBar>
 #include <QSignalBlocker>
 #include <QScrollBar>
 #include <QTabWidget>
@@ -53,6 +58,7 @@
 #include "kanji_color_settings.h"
 #include "kanji_count_dialog.h"
 #include "kanji_info_dialog.h"
+#include "kana_input_field.h"
 #include "jis_table_dialog.h"
 #include "main_window.h"
 #include "wnn_user_dictionary_dialog.h"
@@ -1676,6 +1682,257 @@ void test_jwp_clipboard_changes(const QString& directory) {
                 *window.current_jwp_document() == saved,
             "Clipboard normalization bypassed lossless JWP encoding checks");
   }
+}
+
+void test_application_settings_workflow(const QString& directory) {
+  using namespace jwpqt::qt;
+  MainWindow window;
+  const QString settings_path = directory + QStringLiteral("/native-options.cfg");
+  require(window.load_application_settings(settings_path) && !QFile::exists(settings_path),
+          "Loading absent preferences wrote a file");
+  const QString history_path = directory + QStringLiteral("/options-history.json");
+  require(window.load_recent_file_configuration(history_path), "Could not configure history for settings test");
+  window.show();
+  auto* native = window.active_editor();
+  native->insertPlainText(QStringLiteral("\u3042\u3044"));
+  require(window.save_as_path(directory + QStringLiteral("/font-native.jwp"), std::nullopt),
+          "Could not save native font fixture");
+  native->moveCursor(QTextCursor::Start);
+  native->moveCursor(QTextCursor::End);
+  native->insertPlainText(QStringLiteral("\u3046"));
+  find_action(window, "undoAction")->trigger();
+  require(native->toPlainText() == QStringLiteral("\u3042\u3044") && !window.document_modified(),
+          "Native font fixture did not establish a separate undo step");
+  find_action(window, "redoAction")->trigger();
+  auto selection = native->textCursor();
+  selection.setPosition(1);
+  selection.setPosition(2, QTextCursor::KeepAnchor);
+  native->setTextCursor(selection);
+  const auto model = *window.current_jwp_document();
+  require(window.new_document_tab(false) == 1, "Could not create Unicode font fixture");
+  auto* unicode = window.active_editor();
+  unicode->insertPlainText(QStringLiteral("\U0001f600text"));
+  require(window.save_as_path(directory + QStringLiteral("/font-unicode.txt"),
+                             jwpqt::core::TextEncoding::kUtf8), "Could not save Unicode font fixture");
+  auto edit = unicode->textCursor();
+  edit.beginEditBlock();
+  edit.insertText(QStringLiteral("!"));
+  edit.endEditBlock();
+  unicode->setTextCursor(edit);
+  const QString unicode_text = unicode->toPlainText();
+  const auto history_before = read_bytes(history_path);
+  KanaInputField existing_query(QStringLiteral("existingFontQuery"), &window);
+
+  auto settings = read_application_settings("Future_Option = untouched\nFile.Vert = true\n",
+                                             window.application_settings());
+  const auto file_role = static_cast<std::size_t>(JapaneseFontRole::kFile);
+  settings.fonts[file_role] = {QFontDatabase::families().first(), 24, false};
+  settings.fonts[static_cast<std::size_t>(JapaneseFontRole::kSystem)].size = 18;
+  settings.fonts[static_cast<std::size_t>(JapaneseFontRole::kKanjiBar)] = {QString(), 22, false};
+  settings.show_toolbar = false;
+  settings.show_status_bar = false;
+  settings.kanji_bar_at_top = true;
+  settings.vertical_scrollbar = false;
+  settings.kanji_bar_scrollbar = false;
+  settings.save_recent_files = false;
+  settings.save_settings_on_exit = false;
+  settings.translation_code_page = 1251;
+  require(window.apply_application_settings(settings), "Could not apply native font/settings options");
+  require(window.active_editor() == unicode && unicode->toPlainText() == unicode_text &&
+          window.document_modified() && unicode->document()->isUndoAvailable() &&
+          native->font().pixelSize() == 24 && unicode->font().pixelSize() == 24 &&
+          native->textCursor().anchor() == 1 && native->textCursor().position() == 2 &&
+          existing_query.edit()->font().pixelSize() == 18 &&
+          unicode->verticalScrollBarPolicy() == Qt::ScrollBarAlwaysOff &&
+          window.findChild<QToolBar*>(QStringLiteral("mainToolBar"))->isHidden() && window.statusBar()->isHidden(),
+          "Applying fonts lost editor state or failed to update existing widgets");
+  auto* candidates = window.findChild<QListWidget*>(QStringLiteral("conversionCandidates"));
+  require(candidates->font().pixelSize() == 22 &&
+          candidates->horizontalScrollBarPolicy() == Qt::ScrollBarAlwaysOff,
+          "Candidate font/scroll options were not applied");
+  KanaInputField new_query(QStringLiteral("newFontQuery"), &window);
+  require(new_query.edit()->font().pixelSize() == 18 &&
+          window.resource_report().contains(QStringLiteral("Future_Option")),
+          "New query fields or retained-settings warnings ignored preferences");
+  find_action(window, "undoAction")->trigger();
+  require(unicode->toPlainText() == QStringLiteral("\U0001f600text") && !window.document_modified(),
+          "A font change replaced Unicode undo or its saved baseline");
+  require(window.activate_document(0) && *window.current_jwp_document() == model && window.document_modified() &&
+          window.jwp_code_page() == jwpqt::core::LegacyCodePage::k1252,
+          "Background native model/history was altered by fonts");
+  find_action(window, "undoAction")->trigger();
+  require(native->toPlainText() == QStringLiteral("\u3042\u3044") && !window.document_modified(),
+          "A font change replaced native undo or its saved baseline");
+  require(window.new_document_tab() == 2 && window.active_editor()->font().pixelSize() == 24 &&
+          window.jwp_code_page() == jwpqt::core::LegacyCodePage::k1251,
+          "New documents ignored the configured font/code page");
+  require(window.save_application_settings() && read_bytes(settings_path).contains("Future_Option = untouched"),
+          "Saving settings lost imported fields");
+
+  bool visited = false;
+  QTimer::singleShot(0, [&] {
+    auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+    if (!dialog) return;
+    auto* size = dialog->findChild<QSpinBox*>(QStringLiteral("settingsFontSize4"));
+    visited = size != nullptr;
+    if (size) size->setValue(26);
+    dialog->reject();
+  });
+  find_action(window, "applicationOptionsAction")->trigger();
+  require(visited && window.application_settings().fonts[file_role].size == 24,
+          "Cancelling Options applied edited fields");
+  QTimer::singleShot(0, [&] {
+    auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+    if (!dialog) return;
+    auto* size = dialog->findChild<QSpinBox*>(QStringLiteral("settingsFontSize4"));
+    auto* family = dialog->findChild<QFontComboBox*>(QStringLiteral("settingsFont4"));
+    visited = size && family;
+    if (!visited) { dialog->reject(); return; }
+    size->setValue(26);
+    family->setEditText(QString());
+    dialog->findChild<QTabWidget*>()->setCurrentIndex(1);
+    visited = dialog->grab().save(QDir::current().filePath(QStringLiteral("application-options-fonts.png")));
+    auto* button = dialog->findChild<QDialogButtonBox*>();
+    button->button(QDialogButtonBox::Ok)->click();
+  });
+  find_action(window, "applicationOptionsAction")->trigger();
+  require(visited && window.application_settings().fonts[file_role].size == 26 &&
+          window.application_settings().fonts[file_role].family.isEmpty() && native->font().pixelSize() == 26,
+          "Options did not apply accepted fields or retain an automatic family");
+
+  const auto accepted = window.application_settings();
+  const auto accepted_text = write_application_settings(accepted);
+  QTimer::singleShot(0, [] {
+    auto* warning = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    if (warning) warning->button(QMessageBox::Cancel)->click();
+  });
+  find_action(window, "defaultSettingsAction")->trigger();
+  require(write_application_settings(window.application_settings()) == accepted_text,
+          "Cancelling Default Settings changed preferences");
+  QTimer::singleShot(0, [] {
+    auto* warning = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    if (warning) warning->button(QMessageBox::Yes)->click();
+  });
+  find_action(window, "defaultSettingsAction")->trigger();
+  require(window.application_settings().fonts[file_role].size == 16 &&
+          native->font().pixelSize() == 16 &&
+          window.application_settings().source.find("Future_Option = untouched") != std::string::npos,
+          "Default Settings did not reset native fields while retaining unknown source");
+  require(window.apply_application_settings(accepted), "Could not restore preferences after defaults test");
+
+  QTimer::singleShot(0, [] {
+    auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+    if (dialog) dialog->reject();
+  });
+  find_action(window, "importSettingsAction")->trigger();
+  require(write_application_settings(window.application_settings()) == accepted_text,
+          "Cancelling Import Settings changed preferences");
+  const QString import_path = directory + QStringLiteral("/import-options.cfg");
+  write_bytes(import_path, "File.Auto=false\nFile.Size=28\nImported_Field=retained\n");
+  visited = false;
+  QTimer::singleShot(0, [&] {
+    auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+    visited = dialog != nullptr;
+    if (dialog) {
+      dialog->selectFile(import_path);
+      QMetaObject::invokeMethod(dialog, "accept", Qt::DirectConnection);
+    }
+  });
+  find_action(window, "importSettingsAction")->trigger();
+  require(visited && native->font().pixelSize() == 28 &&
+          !window.application_settings().save_recent_files &&
+          window.application_settings().unapplied.contains(QStringLiteral("Imported_Field")),
+          "Import Settings did not overlay native values or retain unknown imported fields");
+  require(window.apply_application_settings(accepted), "Could not restore preferences after import test");
+  find_action(window, "saveSettingsAction")->trigger();
+  require(read_application_settings_file(settings_path).fonts[file_role].size == 26 &&
+          read_bytes(settings_path).contains("Future_Option = untouched"),
+          "Save Settings changed destination after an import or lost retained fields");
+
+  const auto before = write_application_settings(window.application_settings());
+  auto invalid = window.application_settings();
+  invalid.fonts[file_role].size = 0;
+  require(!window.apply_application_settings(invalid) &&
+          write_application_settings(window.application_settings()) == before && native->font().pixelSize() == 26,
+          "Invalid preferences partially changed the interface");
+  require(window.save_application_settings(), "Could not save accepted preferences");
+  const auto disk = read_bytes(settings_path);
+  require(window.open_path(settings_path, jwpqt::core::TextEncoding::kUtf8, OpenMode::kNonInteractive, true) &&
+          !window.save_application_settings() && read_bytes(settings_path) == disk,
+          "Settings overwrote their own open document");
+  require(read_bytes(history_path) == history_before && !window.recent_documents().empty(),
+          "Disabling recent-file persistence wrote history or disabled the in-memory list");
+}
+
+void test_application_settings_preview(const QString& directory) {
+  using namespace jwpqt::qt;
+  QTemporaryDir preview_directory(directory + QStringLiteral("/font-preview-XXXXXX"));
+  require(preview_directory.isValid(), "Could not isolate font conversion preferences");
+  MainWindow window;
+  const auto fixture = write_wnn_fixture(preview_directory.path());
+  require(window.load_wnn_resources(fixture.index_path, fixture.data_path, fixture.preferences_path,
+                                     OpenMode::kNonInteractive), "Could not load font preview conversion data");
+  auto* editor = window.active_editor();
+  editor->insertPlainText(QStringLiteral("\u3042"));
+  editor->selectAll();
+  require(window.convert_selection(), "Could not start conversion before font changes");
+  const auto text = editor->toPlainText();
+  const auto model = *window.current_jwp_document();
+  auto* candidates = window.findChild<QListWidget*>(QStringLiteral("conversionCandidates"));
+  const auto row = candidates->currentRow();
+  auto settings = window.application_settings();
+  settings.fonts[static_cast<std::size_t>(JapaneseFontRole::kSystem)].size = 20;
+  settings.show_kanji_bar = false;
+  require(window.apply_application_settings(settings) && window.conversion_active() &&
+          *window.current_jwp_document() == model && editor->toPlainText() == text &&
+          candidates->isHidden() && candidates->currentRow() == row,
+          "Changing display settings accepted or damaged a conversion preview");
+  settings.show_kanji_bar = true;
+  require(window.apply_application_settings(settings) && !candidates->isHidden() &&
+          window.cycle_conversion() && window.accept_conversion(),
+          "Conversion could not continue after a font/display change");
+  find_action(window, "undoAction")->trigger();
+  require(editor->toPlainText() == QStringLiteral("\u3042"),
+          "Font changes changed the conversion's undo transaction");
+}
+
+void test_application_settings_exit(const QString& directory) {
+  using namespace jwpqt::qt;
+  const QString path = directory + QStringLiteral("/exit-options.cfg");
+  MainWindow window;
+  require(window.load_application_settings(path), "Could not configure settings persistence");
+  auto settings = window.application_settings();
+  settings.show_toolbar = false;
+  require(window.apply_application_settings(settings) && window.close() &&
+          !read_application_settings_file(path).show_toolbar, "Settings were not saved on exit");
+
+  MainWindow corrupted;
+  write_bytes(path, "File.Size=bad");
+  require(!corrupted.load_application_settings(path) && corrupted.close() &&
+          read_bytes(path) == "File.Size=bad", "Corrupt startup settings were overwritten on exit");
+
+  write_application_settings_file(path, ApplicationSettings{});
+  MainWindow changed;
+  require(changed.load_application_settings(path), "Could not load settings before external change");
+  write_bytes(path, "File.Auto=bad");
+  QTimer::singleShot(0, [] {
+    auto* warning = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    if (warning) warning->button(QMessageBox::Cancel)->click();
+  });
+  require(!changed.close() && changed.document_count() == 1 && read_bytes(path) == "File.Auto=bad",
+          "Failed automatic settings save ignored cancellation or replaced corrupt bytes");
+
+  MainWindow configured;
+  write_bytes(path, "TranslationCodePage=1251");
+  require(configured.load_application_settings(path), "Could not load the default translation code page");
+  jwpqt::core::TextFile text;
+  text.text = U"\u0402";
+  const auto text_path = directory + QStringLiteral("/default-cp1251.txt");
+  write_text_file(text_path, text);
+  require(configured.open_path(text_path, jwpqt::core::TextEncoding::kUtf8, OpenMode::kNonInteractive) &&
+          configured.is_jwp_document() && configured.jwp_code_page() == jwpqt::core::LegacyCodePage::k1251 &&
+          configured.active_editor()->toPlainText() == QStringLiteral("\u0402"),
+          "A fresh imported text file ignored the configured translation code page");
 }
 
 void test_jwp_code_page_switch(const QString& directory) {
@@ -4258,6 +4515,9 @@ int main(int argc, char* argv[]) {
     test_jwp_replace_preserves_structure(directory.path());
     test_jwp_open_edit_and_save(directory.path());
     test_jwp_clipboard_changes(directory.path());
+    test_application_settings_workflow(directory.path());
+    test_application_settings_preview(directory.path());
+    test_application_settings_exit(directory.path());
     test_jwp_code_page_switch(directory.path());
     test_jwp_code_page_can_be_selected_before_open(directory.path());
     test_zero_paragraph_jwp_save_is_not_normalized(directory.path());

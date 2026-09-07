@@ -28,6 +28,7 @@
 #include "character_context_menu.h"
 #include "kana_input_field.h"
 #include "text_bridge.h"
+#include "japanese_fonts.h"
 
 namespace jwpqt::qt {
 namespace {
@@ -108,6 +109,7 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   QFont content_font = results_->font();
   content_font.setPixelSize(16);
   results_->setFont(content_font);
+  assign_japanese_font(*results_, JapaneseFontRole::kList);
   results_->installEventFilter(this);
   results_->viewport()->installEventFilter(this);
   outer->addWidget(results_, 1);

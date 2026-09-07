@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "edict_user_dictionary_dialog.h"
+#include "japanese_fonts.h"
 
 #include <algorithm>
 #include <limits>
@@ -72,6 +73,7 @@ EdictUserDictionaryDialog::EdictUserDictionaryDialog(
   auto* outer = new QVBoxLayout(this);
   auto* content = new QHBoxLayout();
   entries_list_->setObjectName(QStringLiteral("edictUserEntries"));
+  assign_japanese_font(*entries_list_, JapaneseFontRole::kList);
   entries_list_->setAlternatingRowColors(true);
   content->addWidget(entries_list_, 1);
 
@@ -305,10 +307,13 @@ EdictUserDictionaryDialog::prompt_for_entry(
   auto* form = new QFormLayout();
   auto* headword = new QLineEdit(&dialog);
   headword->setObjectName(QStringLiteral("edictUserHeadword"));
+  assign_japanese_font(*headword, JapaneseFontRole::kEdit);
   auto* reading = new QLineEdit(&dialog);
   reading->setObjectName(QStringLiteral("edictUserReading"));
+  assign_japanese_font(*reading, JapaneseFontRole::kEdit);
   auto* meaning = new QLineEdit(&dialog);
   meaning->setObjectName(QStringLiteral("edictUserMeaning"));
+  assign_japanese_font(*meaning, JapaneseFontRole::kEdit);
   if (initial.has_value()) {
     headword->setText(display_jwp(initial->headword, code_page_));
     reading->setText(display_jwp(initial->reading, code_page_));

@@ -28,6 +28,7 @@
 #include "jwpqt/core/jwp_text_codec.h"
 #include "jwpqt/core/kana_input.h"
 #include "text_bridge.h"
+#include "japanese_fonts.h"
 
 namespace jwpqt::qt {
 namespace {
@@ -100,6 +101,7 @@ KanjiInfoDialog::KanjiInfoDialog(
   QFont character_font = character_->font();
   character_font.setPointSize(112);
   character_->setFont(character_font);
+  assign_japanese_font(*character_, JapaneseFontRole::kBig);
   character_->setToolTip(tr("Double-click to insert this character into the file"));
   character_->installEventFilter(this);
   left->addWidget(character_);
@@ -152,6 +154,7 @@ KanjiInfoDialog::KanjiInfoDialog(
   QFont reading_font = readings_->font();
   reading_font.setPointSizeF(std::max(12.0, reading_font.pointSizeF()));
   readings_->setFont(reading_font);
+  assign_japanese_font(*readings_, JapaneseFontRole::kList);
   readings_->setMinimumWidth(260);
   readings_->viewport()->installEventFilter(this);
   readings_->installEventFilter(this);

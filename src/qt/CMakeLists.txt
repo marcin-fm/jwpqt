@@ -1,6 +1,8 @@
 find_package(Qt6 REQUIRED COMPONENTS PrintSupport Widgets)
 
 add_library(jwpqt_qt_support STATIC
+  application_settings.cpp
+  application_settings.h
   edict_resource_search.cpp
   edict_resource_search.h
   edict_resources.cpp
@@ -34,6 +36,10 @@ target_compile_options(jwpqt_qt_support
 )
 
 add_library(jwpqt_qt_ui STATIC
+  application_settings_dialog.cpp
+  application_settings_dialog.h
+  japanese_fonts.cpp
+  japanese_fonts.h
   character_context_menu.cpp
   character_context_menu.h
   edict_lookup_dialog.cpp

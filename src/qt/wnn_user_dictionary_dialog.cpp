@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "wnn_user_dictionary_dialog.h"
+#include "japanese_fonts.h"
 
 #include <algorithm>
 #include <limits>
@@ -136,6 +137,7 @@ WnnUserDictionaryDialog::WnnUserDictionaryDialog(
   auto* outer = new QVBoxLayout(this);
   auto* content = new QHBoxLayout();
   entries_list_->setObjectName(QStringLiteral("wnnUserEntries"));
+  assign_japanese_font(*entries_list_, JapaneseFontRole::kList);
   entries_list_->setAlternatingRowColors(true);
   content->addWidget(entries_list_, 1);
 
@@ -347,8 +349,10 @@ WnnUserDictionaryDialog::prompt_for_entry(
   auto* form = new QFormLayout();
   auto* reading = new QLineEdit(&dialog);
   reading->setObjectName(QStringLiteral("wnnUserReading"));
+  assign_japanese_font(*reading, JapaneseFontRole::kEdit);
   auto* candidates = new QLineEdit(&dialog);
   candidates->setObjectName(QStringLiteral("wnnUserCandidates"));
+  assign_japanese_font(*candidates, JapaneseFontRole::kEdit);
   auto* inflection = new QComboBox(&dialog);
   inflection->setObjectName(QStringLiteral("wnnUserInflection"));
   inflection->addItem(tr("Uninflected"),

@@ -16,6 +16,7 @@
 #include <QPixmap>
 #include <QString>
 
+#include "application_settings.h"
 #include "character_context_menu.h"
 #include "input_mode.h"
 #include "recent_files.h"
@@ -118,6 +119,16 @@ class MainWindow : public QMainWindow {
   QString recent_file_warning() const;
   bool open_recent_document(int index, OpenMode mode = OpenMode::kNonInteractive);
   bool clear_recent_documents(OpenMode mode = OpenMode::kNonInteractive);
+  const ApplicationSettings& application_settings() const noexcept;
+  QString application_settings_warning() const;
+  bool apply_application_settings(const ApplicationSettings& settings,
+                                  OpenMode mode = OpenMode::kNonInteractive);
+  bool load_application_settings(const QString& path,
+                                 OpenMode mode = OpenMode::kNonInteractive);
+  bool import_application_settings(const QString& path,
+                                   OpenMode mode = OpenMode::kNonInteractive);
+  bool save_application_settings(const QString& path = {},
+                                 OpenMode mode = OpenMode::kNonInteractive);
 
   // A new-tab open preserves other buffers and activates already-open paths.
   bool open_path(const QString& path, core::TextEncoding encoding,
@@ -287,6 +298,8 @@ class MainWindow : public QMainWindow {
   int find_document_path(const QString& path) const;
   void record_recent_document(const DocumentState& state);
   void update_recent_file_actions();
+  void configure_application_settings();
+  core::LegacyCodePage default_jwp_code_page() const noexcept;
   void open_document();
   bool save_document();
   bool save_document_as(bool export_copy = false);
@@ -347,6 +360,11 @@ class MainWindow : public QMainWindow {
   QString recent_files_path_;
   QString recent_file_warning_;
   bool recent_file_persistence_enabled_ = true;
+  ApplicationSettings application_settings_;
+  QString application_settings_path_;
+  QString application_settings_warning_;
+  QStringList application_font_warnings_;
+  bool application_settings_persistence_enabled_ = true;
   QAction* print_action_ = nullptr;
   QAction* printer_setup_action_ = nullptr;
   QAction* revert_action_ = nullptr;

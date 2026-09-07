@@ -108,6 +108,22 @@ clears history, not documents. Corrupt history is preserved until an explicit
 Clear; history errors appear in Runtime Resources without failing document I/O.
 Automatic history writes pause while that history file is open as a document.
 
+**Tools > Options** configures Japanese document/query/list/candidate fonts,
+font inheritance, toolbar/status/candidate visibility, scrollbar policies,
+candidate-bar position, default JWP code page and exit/history persistence.
+Desktop menu fonts are unchanged. Character Table stays at 16 logical pixels;
+the large character keeps its default glyph size. Unavailable or legacy bitmap
+font families use native fallbacks, with their original names retained.
+**Default Settings**, **Save Settings** and **Import Settings** operate on this
+supported subset. Imports overlay known values and retain unsupported entries
+from the imported file; Default Settings retains existing unsupported entries.
+Runtime Resources and the Options dialog disclose retained, unapplied settings.
+Preferences load from `jwpqt.cfg` in the application configuration directory;
+Save and the optional save-on-exit use atomic replacement. Invalid settings are
+not applied, corrupt startup files are not automatically overwritten, and saving
+cannot overwrite an open document. Font changes preserve every tab's text,
+history and selection, including an active conversion preview.
+
 Startup and **File > New Japanese Document** create a native JWP document with
 Japanese editing, conversion, formatting, and lookup insertion available without
 opening an existing file first. **File > New Text Document** creates unrestricted
@@ -193,8 +209,8 @@ Menu text and the embedded legacy Japanese toolbar artwork adapt to light/dark
 palettes, including mismatched desktop text colors. Low-contrast monochrome
 standard icons also adapt, while colored artwork is retained. The 29 toolbar
 actions include Index Lookup; short text or native icon fallbacks remain when
-no icon theme is installed. Toolbar customization and saved layout/visibility
-are not implemented yet; the unavailable General Options button is omitted.
+no icon theme is installed. Toolbar visibility is saved with native preferences;
+customization and saved placement remain open. Options is available in Tools.
 
 ### Dictionary and kanji lookup
 

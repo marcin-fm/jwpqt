@@ -11,6 +11,7 @@
 
 #include "jwpqt/core/jwp_text_codec.h"
 #include "text_bridge.h"
+#include "japanese_fonts.h"
 
 namespace jwpqt::qt {
 
@@ -26,6 +27,7 @@ KanaInputField::KanaInputField(const QString& name, QWidget* parent)
   QFont content_font = edit_->font();
   content_font.setPixelSize(16);
   edit_->setFont(content_font);
+  assign_japanese_font(*edit_, JapaneseFontRole::kEdit);
   auto* layout = new QHBoxLayout(this);
   layout->setContentsMargins(0, 0, 0, 0);
   layout->setSpacing(4);

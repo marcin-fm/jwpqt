@@ -28,6 +28,7 @@
 #include "jwpqt/core/kanji_bushu_selector.h"
 #include "lookup_artwork.h"
 #include "text_bridge.h"
+#include "japanese_fonts.h"
 
 namespace jwpqt::qt {
 namespace {
@@ -156,6 +157,7 @@ KanjiLookupDialog::KanjiLookupDialog(
   QFont content_font = results_->font();
   content_font.setPixelSize(16);
   results_->setFont(content_font);
+  assign_japanese_font(*results_, JapaneseFontRole::kList, true);
   results_->setFlow(QListView::LeftToRight);
   results_->setWrapping(false);
   results_->setMovement(QListView::Static);
