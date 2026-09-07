@@ -13,7 +13,7 @@ JwpText convert_romaji_text(std::string_view input,
                             const WnnConversionSession* session,
                             KanaInputOptions options,
                             std::size_t maximum_cells) {
-  if (maximum_cells > 65535 || input.empty() || input.size() > maximum_cells) {
+  if (maximum_cells > kMaximumRomajiCells || input.empty() || input.size() > maximum_cells) {
     throw KanaInputError("romaji selection is empty or exceeds its size limit");
   }
   for (const char character : input) {

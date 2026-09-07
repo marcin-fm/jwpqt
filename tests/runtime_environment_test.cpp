@@ -892,9 +892,26 @@ void test_real_resources(const QString& root, const QString& source,
           QStringLiteral("Selecting the Love candidate did not preserve the conversion preview"));
   capture(&window, QStringLiteral("conversion-candidates"));
   require(window.accept_conversion(), QStringLiteral("Real Love conversion could not be accepted"));
+  editor->selectAll();
+  editor->insertPlainText(QStringLiteral("nihon"));
+  editor->selectAll();
+  convert->trigger();
+  require(!window.conversion_active() &&
+              editor->textCursor().selectedText() == QStringLiteral("\u306b\u307b\u3093"),
+          QStringLiteral("Real selected-romaji replay did not retain the kana selection"));
+  capture(&window, QStringLiteral("selected-romaji"));
+  window.findChild<QAction*>(QStringLiteral("undoAction"))->trigger();
+  require(editor->toPlainText() == QStringLiteral("nihon"),
+          QStringLiteral("Real romaji replay did not undo in one step"));
+  editor->selectAll();
+  convert->trigger();
+  convert->trigger();
+  require(window.conversion_active() && editor->toPlainText() == QStringLiteral("\u65e5\u672c") &&
+              window.accept_conversion(),
+          QStringLiteral("Real replayed kana did not enter the ordinary WNN workflow"));
   std::cout << "Real-data workflow: romanized input -> WNN Japan -> save/reopen; "
                "EDICT indexed lookup; Love metadata and independent character navigation; "
-               "all lookup reference modes; conversion candidate strip.\n";
+               "all lookup reference modes; conversion candidate strip; selected-romaji replay and undo.\n";
 }
 
 }  // namespace

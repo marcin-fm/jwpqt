@@ -2401,6 +2401,151 @@ void test_jwp_rejects_non_bmp_edit(const QString& directory) {
           "Rejected non-BMP edit corrupted the JWP document");
 }
 
+void test_selected_romaji(const QString& directory) {
+  using namespace jwpqt::core;
+  using namespace jwpqt::qt;
+  const QString root = directory + QStringLiteral("/selected-romaji");
+  require(QDir().mkpath(root), "Could not create isolated romaji fixture directory");
+  const auto select = [](QTextEdit* editor, int begin, int end, bool reversed = false) {
+    QTextCursor cursor(editor->document());
+    cursor.setPosition(reversed ? end : begin);
+    cursor.setPosition(reversed ? begin : end, QTextCursor::KeepAnchor);
+    editor->setTextCursor(cursor);
+  };
+
+  JwpDocument original;
+  original.paragraphs.resize(1);
+  original.paragraphs[0].text = encode_jwp_text(U"L nihon R");
+  original.paragraphs[0].first_indent = 1;
+  original.paragraphs[0].line_spacing = 125;
+  original.summary[0] = {'M'};
+  JwpDocument converted = original;
+  converted.paragraphs[0].text = encode_jwp_text(U"L \u306b\u307b\u3093 R");
+  QString native_path;
+  for (const bool reversed : {false, true}) {
+    native_path = root + (reversed ? QStringLiteral("/reverse.jwp") : QStringLiteral("/forward.jwp"));
+    write_jwp_file(native_path, original);
+    MainWindow window;
+    require(window.open_jwp_path(native_path), "Could not open romaji document");
+    auto* editor = window.active_editor();
+    auto* action = find_action(window, "convertSelectionAction");
+    require(!action->isEnabled(), "Convert was enabled without input or resources");
+    find_action(window, "overwriteModeAction")->setChecked(true);
+    select(editor, 2, 7, reversed);
+    require(action->isEnabled(), "Selected romaji was gated on WNN resources");
+    action->trigger();
+    require(!window.conversion_active() && *window.current_jwp_document() == converted &&
+                editor->textCursor().selectedText() == QStringLiteral("\u306b\u307b\u3093") &&
+                editor->textCursor().position() == (reversed ? 2 : 5) &&
+                editor->textCursor().anchor() == (reversed ? 5 : 2) && window.current_path() == native_path,
+            std::string("Romaji conversion changed selection direction, suffix or native metadata: text=") +
+                editor->toPlainText().toUtf8().toHex().constData() +
+                " cursor=" + std::to_string(editor->textCursor().position()) +
+                " anchor=" + std::to_string(editor->textCursor().anchor()) +
+                " document=" + std::to_string(*window.current_jwp_document() == converted));
+    find_action(window, "undoAction")->trigger();
+    require(*window.current_jwp_document() == original && !window.document_modified() &&
+                !find_action(window, "undoAction")->isEnabled(),
+            "Romaji conversion did not undo as one clean transaction");
+    find_action(window, "redoAction")->trigger();
+    require(*window.current_jwp_document() == converted && window.save_as_path(native_path, std::nullopt) &&
+                read_jwp_file(native_path) == converted, "Romaji redo/save lost metadata or content");
+  }
+
+  const QString unicode_path = root + QStringLiteral("/unicode.txt");
+  const std::u32string unicode_original = U"\ufeff\U0001f600nihon\u00a0Z";
+  const std::u32string unicode_converted = U"\ufeff\U0001f600\u306b\u307b\u3093\u00a0Z";
+  write_text_file(unicode_path, {unicode_original, TextEncoding::kUtf16Be, true});
+  MainWindow unicode;
+  require(unicode.open_jwp_path(native_path) &&
+              unicode.open_path(unicode_path, TextEncoding::kUtf16Be, OpenMode::kNonInteractive, true),
+          "Could not open Unicode romaji workspace");
+  auto* editor = unicode.active_editor();
+  require(!unicode.is_jwp_document(), "Unicode fixture unexpectedly acquired a JIS editing model");
+  bool observed_edit = false;
+  bool reentered = false;
+  const auto listener = QObject::connect(editor->document(), &QTextDocument::contentsChanged, &unicode, [&] {
+    observed_edit = true;
+    reentered = unicode.activate_document(0) || reentered;
+  });
+  select(editor, 3, 8, true);
+  require(find_action(unicode, "convertSelectionAction")->isEnabled() && unicode.convert_selection(),
+          "Unrestricted Unicode romaji conversion was unavailable");
+  QObject::disconnect(listener);
+  require(observed_edit && !reentered && unicode.active_editor() == editor &&
+              !unicode.is_jwp_document() && unicode.text_encoding() == TextEncoding::kUtf16Be &&
+              document_plain_text(*editor->document()) == to_qstring(unicode_converted) &&
+              editor->textCursor().position() == 3 && editor->textCursor().anchor() == 6,
+          "Unicode replay changed engine, scalar content, selection, codec or active document");
+  find_action(unicode, "undoAction")->trigger();
+  require(document_plain_text(*editor->document()) == to_qstring(unicode_original) &&
+              !unicode.document_modified() && !find_action(unicode, "undoAction")->isEnabled(),
+          "Unicode romaji replay lost its saved undo baseline");
+  select(editor, 3, 8);
+  editor->setReadOnly(true);
+  require(!unicode.convert_selection() && document_plain_text(*editor->document()) == to_qstring(unicode_original),
+          "Romaji replay edited a read-only document");
+  editor->setReadOnly(false);
+  require(unicode.convert_selection() && unicode.save_as_path(unicode_path, TextEncoding::kUtf16Be),
+          "Unicode romaji replay did not save");
+  const auto saved = read_text_file(unicode_path, TextEncoding::kUtf16Be);
+  require(saved.text == unicode_converted && saved.has_byte_order_mark,
+          "Unicode romaji replay changed literal signatures or BOM policy");
+
+  for (const QString& invalid : {QStringLiteral("k!"), QStringLiteral("ka k"),
+                                 QStringLiteral("ka\nki"), QStringLiteral("ka\u3042"),
+                                 QStringLiteral("a\0b"), QString(65536, QLatin1Char('a'))}) {
+    MainWindow rejected;
+    find_action(rejected, "newTextDocumentAction")->trigger();
+    rejected.active_editor()->insertPlainText(invalid);
+    rejected.active_editor()->selectAll();
+    const int position = rejected.active_editor()->textCursor().position();
+    const int anchor = rejected.active_editor()->textCursor().anchor();
+    require(!rejected.convert_selection() &&
+                document_plain_text(*rejected.active_editor()->document()) == invalid &&
+                rejected.active_editor()->textCursor().position() == position &&
+                rejected.active_editor()->textCursor().anchor() == anchor,
+            "Rejected romaji replay partially replaced its source or selection");
+    find_action(rejected, "undoAction")->trigger();
+    require(rejected.active_editor()->document()->isEmpty(), "Failed replay added an undo entry");
+  }
+
+  const WnnFixture fixture = write_wnn_fixture(root);
+  JwpDocument reading;
+  reading.paragraphs.resize(1);
+  reading.paragraphs[0].text = {'a'};
+  const QString reading_path = root + QStringLiteral("/reading.jwp");
+  write_jwp_file(reading_path, reading);
+  MainWindow wnn;
+  require(wnn.load_wnn_resources(fixture.index_path, fixture.data_path, fixture.preferences_path) &&
+              wnn.open_jwp_path(reading_path), "Could not open selected-romaji WNN fixture");
+  editor = wnn.active_editor();
+  editor->selectAll();
+  require(wnn.convert_selection() && !wnn.conversion_active() &&
+              editor->textCursor().selectedText() == QStringLiteral("\u3042"),
+          "Lowercase romaji did not remain selected kana for the next Convert");
+  require(wnn.convert_selection() && wnn.conversion_active(), "Replayed kana could not start WNN conversion");
+  require(wnn.cycle_conversion(true) && wnn.accept_conversion() &&
+              editor->toPlainText() == QStringLiteral("\u3042"),
+          "Returning to original kana after replay changed the input");
+  find_action(wnn, "undoAction")->trigger();
+  require(*wnn.current_jwp_document() == reading && !wnn.document_modified(),
+          "Undo after original-kana acceptance did not restore selected romaji");
+
+  reading.paragraphs[0].text = {'L', ' ', 'A', 'k', 'a', ' ', 'R'};
+  write_jwp_file(reading_path, reading);
+  require(wnn.open_jwp_path(reading_path), "Could not reload capitalized romaji fixture");
+  editor = wnn.active_editor();
+  select(editor, 2, 5);
+  require(wnn.convert_selection() && !wnn.conversion_active() &&
+              wnn.current_jwp_document()->paragraphs[0].text == JwpText({'L', ' ', 0x3021, 0x242b, ' ', 'R'}) &&
+              editor->textCursor().selectionStart() == 2 && editor->textCursor().selectionEnd() == 4,
+          "Capitalized automatic replay left a preview or overwrote the following text");
+  find_action(wnn, "undoAction")->trigger();
+  require(*wnn.current_jwp_document() == reading && !wnn.document_modified(),
+          "Capitalized replay was not one undoable transaction");
+}
+
 void test_jwp_wnn_conversion(const QString& directory) {
   const WnnFixture fixture = write_wnn_fixture(directory);
   jwpqt::core::JwpDocument source;
@@ -4801,6 +4946,7 @@ int main(int argc, char* argv[]) {
     test_jwp_history_actions(directory.path());
     test_jwp_paragraph_formatting(directory.path());
     test_jwp_page_break_insertion(directory.path());
+    test_selected_romaji(directory.path());
     test_jwp_wnn_conversion(directory.path());
     test_jwp_wnn_conversion_boundaries(directory.path());
     test_jwp_wnn_user_dictionary(directory.path());

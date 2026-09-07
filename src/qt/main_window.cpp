@@ -94,6 +94,7 @@
 #include "jwpqt/core/jwp_plain_text.h"
 #include "jwpqt/core/jwp_text_codec.h"
 #include "jwpqt/core/plain_text_change.h"
+#include "jwpqt/core/romaji_conversion.h"
 #include "jwpqt/core/text_detection.h"
 #include "text_bridge.h"
 #include "wnn_user_dictionary_dialog.h"
@@ -125,6 +126,22 @@ QString encoding_name(core::TextEncoding encoding) {
 QString code_page_name(core::LegacyCodePage code_page) {
   const std::string_view name = core::legacy_code_page_name(code_page);
   return QString::fromLatin1(name.data(), static_cast<qsizetype>(name.size()));
+}
+
+std::optional<QByteArray> selected_romaji(const QTextCursor& cursor) {
+  if (!cursor.hasSelection() ||
+      cursor.selectionEnd() - cursor.selectionStart() >
+          static_cast<int>(core::kMaximumRomajiCells)) {
+    return std::nullopt;
+  }
+  QByteArray input;
+  input.reserve(cursor.selectionEnd() - cursor.selectionStart());
+  for (const QChar character : cursor.selectedText()) {
+    const auto value = character.unicode();
+    if (value != '\t' && (value < 0x20U || value >= 0x7fU)) return std::nullopt;
+    input.append(static_cast<char>(value));
+  }
+  return input;
 }
 
 QString encoding_filter(core::TextEncoding encoding) {
@@ -2737,8 +2754,11 @@ void MainWindow::update_conversion_actions() {
     return;
   }
   const bool active = conversion_active();
-  bool can_convert = false;
-  if (!active && document_->jwp_document_.has_value() && wnn_resources_ != nullptr) {
+  const bool writable = !document_->editor_->isReadOnly();
+  bool can_convert = !active && writable &&
+                     selected_romaji(document_->editor_->textCursor()).has_value();
+  if (!can_convert && !active && writable &&
+      document_->jwp_document_.has_value() && wnn_resources_ != nullptr) {
     const QTextCursor cursor = document_->editor_->textCursor();
     if (cursor.hasSelection()) {
       try {
@@ -3938,6 +3958,7 @@ bool MainWindow::insert_edict_text(std::u32string_view text) {
                            (cursor.selectionEnd() - cursor.selectionStart());
       if (inserted.size() > std::numeric_limits<int>::max() - retained)
         throw std::runtime_error("Inserted text exceeds the Qt document limit");
+      const QScopedValueRollback<bool> applying(document_->applying_kana_input_, true);
       cursor.beginEditBlock();
       cursor.insertText(inserted);
       cursor.endEditBlock();
@@ -4014,8 +4035,46 @@ bool MainWindow::conversion_active() const noexcept {
 }
 
 bool MainWindow::convert_selection() {
+  if (document_->updating_editor_ || document_->applying_kana_input_) return false;
   if (conversion_active()) {
     return cycle_conversion();
+  }
+  if (document_->editor_->isReadOnly()) return false;
+  const QTextCursor original_cursor = document_->editor_->textCursor();
+  if (const auto input = selected_romaji(original_cursor)) {
+    // QTextCursor copies track later document edits; preserve immutable bounds.
+    const int selection_begin = original_cursor.selectionStart();
+    const bool reversed = original_cursor.position() < original_cursor.anchor();
+    if (document_->kana_input_.pending() || document_->automatic_conversion_range_) {
+      statusBar()->showMessage(tr("Finish the current kana input before replaying romaji"), 3000);
+      return false;
+    }
+    try {
+      const core::JwpText result = core::convert_romaji_text(
+          std::string_view(input->constData(), static_cast<std::size_t>(input->size())),
+          wnn_resources_ ? &wnn_resources_->session : nullptr);
+      const std::u32string text = core::decode_jwp_text(result, document_->jwp_code_page_);
+      if (to_qstring(text) == original_cursor.selectedText()) return false;
+      // Replay is fully validated before this single, selection-bounded edit.
+      if (!insert_edict_text(text)) return false;
+      const QScopedValueRollback<bool> applying(document_->applying_kana_input_, true);
+      QTextCursor selected = document_->editor_->textCursor();
+      const int end = selected.position();
+      if (reversed) {
+        selected.setPosition(end);
+        selected.setPosition(selection_begin, QTextCursor::KeepAnchor);
+      } else {
+        selected.setPosition(selection_begin);
+        selected.setPosition(end, QTextCursor::KeepAnchor);
+      }
+      document_->editor_->setTextCursor(selected);
+      statusBar()->showMessage(tr("Converted selected romaji"), 2000);
+      return true;
+    } catch (const std::exception& error) {
+      statusBar()->showMessage(
+          tr("Could not replay selected romaji: %1").arg(QString::fromUtf8(error.what())), 5000);
+      return false;
+    }
   }
   if (!document_->jwp_document_.has_value() || wnn_resources_ == nullptr) {
     statusBar()->showMessage(tr("WNN conversion is not available"), 3000);

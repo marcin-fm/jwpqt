@@ -12,6 +12,8 @@ namespace jwpqt::core {
 
 class WnnConversionSession;
 
+constexpr std::size_t kMaximumRomajiCells = 65535;
+
 // Replays one selected ASCII/tab span. Capitalized automatic spans may use WNN;
 // preparation never changes its session or preferences. Invalid replay throws
 // before returning any output, unlike the legacy per-character document edits.
@@ -19,7 +21,7 @@ class WnnConversionSession;
 JwpText convert_romaji_text(std::string_view input,
                             const WnnConversionSession* session = nullptr,
                             KanaInputOptions options = {},
-                            std::size_t maximum_cells = 65535);
+                            std::size_t maximum_cells = kMaximumRomajiCells);
 
 }  // namespace jwpqt::core
 

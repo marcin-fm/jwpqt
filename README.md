@@ -182,7 +182,20 @@ search/replace, and portable transaction history. The portable core also
 contains the recovered desktop romaji-to-kana composer plus bounded WNN
 dictionary parsing, ordered candidate lookup, a portable user-selection cache,
 atomic preference file I/O, candidate-session state, and one-undo document
-conversion transactions. With WNN loaded, Convert handles selected kana or a
+conversion transactions.
+
+**Convert** also replays an ASCII selection in either editing engine without
+requiring WNN data. Lowercase romaji becomes hiragana, uppercase syllables produce
+katakana, and capitalized spans can use the preferred loaded WNN candidates.
+The result remains selected in the original direction; one Undo restores the
+entire original selection. In Japanese editing, a second Convert can then start
+ordinary kana-to-kanji candidate selection. Replay is staged before replacement:
+incomplete romaji, unsupported input, or an exceeded bound leaves the source
+unchanged. The selection must stay within one paragraph and contain only printable
+ASCII or tabs, with at most 65,535 input/output cells. Finish pending kana input
+before replaying; overwrite mode never consumes text beyond the selected range.
+
+In Japanese editing with WNN loaded, Convert handles selected kana or a
 pending automatic conversion range without prematurely accepting the preview.
 The horizontal strip below the editor previews candidates on click; Space,
 Shift+Space or Convert cycles them, and Enter or Escape accepts the displayed
