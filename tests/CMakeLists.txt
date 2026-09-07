@@ -53,6 +53,11 @@ target_compile_options(jwpqt_project_window_tests PRIVATE -Wall -Wextra -Wpedant
 add_test(NAME qt_project_window COMMAND jwpqt_project_window_tests $<TARGET_FILE:jwpqt>)
 set_tests_properties(qt_project_window PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
+add_executable(jwpqt_query_history_tests query_history_test.cpp)
+target_link_libraries(jwpqt_query_history_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_query_history_tests PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME core_query_history COMMAND jwpqt_query_history_tests)
+
 add_executable(jwpqt_edict_resource_search_tests
   edict_resource_search_test.cpp
 )
