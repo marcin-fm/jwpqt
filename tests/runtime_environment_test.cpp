@@ -16,6 +16,7 @@
 #include <QImage>
 #include <QKeyEvent>
 #include <QLineEdit>
+#include <QLabel>
 #include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
@@ -801,6 +802,37 @@ void test_real_resources(const QString& root, const QString& source,
           QStringLiteral("Real dictionary character navigation did not open independent information"));
   capture(dictionary, QStringLiteral("lookup-dictionary"));
 
+  const auto unsorted_count = dictionary->report().results.size();
+  const auto completed_queries = dictionary->report().queries;
+  auto* sort_button = dictionary->findChild<QPushButton*>(QStringLiteral("edictSort"));
+  require(sort_button && sort_button->isEnabled(), QStringLiteral("Real dictionary Sort is unavailable"));
+  sort_button->click();
+  require(dictionary->findChild<QLabel*>(QStringLiteral("edictStatus"))->text().contains(
+              QStringLiteral("Reading order")), QStringLiteral("Real dictionary Sort button did not select Reading"));
+  for (int mode = 0; mode < 3; ++mode) {
+    require(dictionary->sort_results(), QStringLiteral("Real dictionary sort cycle failed"));
+  }
+  require(dictionary->sort_results(Qt::ControlModifier) &&
+              dictionary->report().results.size() <= unsorted_count &&
+              dictionary->report().queries == completed_queries,
+          QStringLiteral("Real dictionary sorting failed, duplicated records or searched again"));
+  const int sorted_love = dictionary_results->toPlainText().indexOf(QChar(0x611b));
+  require(sorted_love >= 0, QStringLiteral("Sorting real dictionary results lost Love"));
+  QTextCursor sorted_cursor(dictionary_results->document());
+  sorted_cursor.setPosition(sorted_love);
+  sorted_cursor.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
+  dictionary_results->setTextCursor(sorted_cursor);
+  dictionary_results->ensureCursorVisible();
+  const QString before_sorted_insert = editor->toPlainText();
+  const bool before_sorted_modified = window.document_modified();
+  require(dictionary->insert_selected() && editor->toPlainText() != before_sorted_insert,
+          QStringLiteral("Sorted real dictionary result did not insert into its document"));
+  window.findChild<QAction*>(QStringLiteral("undoAction"))->trigger();
+  require(editor->toPlainText() == before_sorted_insert &&
+              window.document_modified() == before_sorted_modified,
+          QStringLiteral("Sorted real dictionary insertion did not undo cleanly"));
+  capture(dictionary, QStringLiteral("lookup-dictionary-sorted"));
+
   open("jisTableAction");
   auto* table = dynamic_cast<jwpqt::qt::JisTableDialog*>(
       window.findChild<QDialog*>(QStringLiteral("jisTableDialog")));
@@ -910,7 +942,7 @@ void test_real_resources(const QString& root, const QString& source,
               window.accept_conversion(),
           QStringLiteral("Real replayed kana did not enter the ordinary WNN workflow"));
   std::cout << "Real-data workflow: romanized input -> WNN Japan -> save/reopen; "
-               "EDICT indexed lookup; Love metadata and independent character navigation; "
+               "EDICT indexed lookup and result sorting/insertion/undo; Love metadata and independent character navigation; "
                "all lookup reference modes; conversion candidate strip; selected-romaji replay and undo.\n";
 }
 

@@ -12,6 +12,7 @@
 #include <QDialog>
 
 #include "edict_resource_search.h"
+#include "jwpqt/core/edict_sort.h"
 #include "jwpqt/core/query_history.h"
 
 class QAction;
@@ -56,6 +57,8 @@ class EdictLookupDialog : public QDialog {
   void set_query(std::u32string_view query);
   void set_overwrite_action(QAction* action);
   bool search();
+  bool sort_results(Qt::KeyboardModifiers modifiers = Qt::NoModifier,
+                    const core::EdictSortLimits& limits = {});
   bool insert_selected();
   void copy_selected();
 
@@ -71,6 +74,9 @@ class EdictLookupDialog : public QDialog {
   std::u32string selected_rows() const;
   void history_command(HistoryCommand command);
   bool recall_history(std::u32string_view text, int index, bool changed);
+  bool publish_results(EdictResourceSearchReport report, int sort_state,
+                       bool reverse, bool query_had_kanji,
+                       core::QueryHistory* history = nullptr);
   void update_actions();
   void show_status();
 
@@ -83,6 +89,9 @@ class EdictLookupDialog : public QDialog {
   bool history_changed_ = false;
   bool history_loading_ = false;
   bool query_busy_ = false;
+  int sort_state_ = -1;
+  bool sort_reverse_ = false;
+  bool query_had_kanji_ = false;
   KanaInputField* query_field_;
   QLineEdit* query_edit_;
   QCheckBox* personal_names_;
@@ -99,6 +108,7 @@ class EdictLookupDialog : public QDialog {
   QTextEdit* results_;
   QLabel* status_;
   QPushButton* insert_button_;
+  QPushButton* sort_button_;
   EdictResourceSearchReport report_;
   std::vector<std::u32string> rendered_rows_;
   std::vector<std::pair<int, int>> row_ranges_;

@@ -317,6 +317,19 @@ the lookup and replacing its resources within the same window. Disk persistence,
 legacy history-file import, history-size settings and other history consumers
 remain separate work.
 
+Dictionary **Sort** cycles Reading, Length, Entry and Definition order. Hold
+`Shift` to cycle backwards or `Ctrl` to reverse the current order without cycling.
+Length uses headwords when the completed query contained kanji, otherwise readings;
+editing the query afterwards does not reinterpret existing results. Each successful
+sort removes exact duplicate entries, retains the first entry's provenance and
+selects the first result. Copy and Insert continue to use the correctly mapped
+display text and canonical entry. Sorting does not search, flush pending query
+input or change query history; a new successful search resets the sort order.
+Invalid or over-budget sorting preserves the previous results and selection.
+The source comparison rules are applied deterministically with explicit work
+limits, retaining distinct Unicode and structured metadata. `Ctrl` keeps toggling
+rather than reproducing the legacy lock into reverse after twenty presses.
+
 Character Table places its code fields beside the full character grid. Lookup
 results use horizontal character strips with Information, Insert and Copy
 actions. Bushu, Stroke/Bushu, SKIP, Spahn-Hadamitzky, Four Corner and Index Lookup
@@ -329,8 +342,8 @@ In dark palettes, radical strokes use light ink on dark paper and stroke-count
 headings stay readable. Switching back restores the original light artwork
 without changing queries, selections or results.
 
-This is not complete dialog parity: persisted query history, sort/options
-integration, radical automatic stroke estimation and stroke-tolerance shortcuts
+This is not complete dialog parity: persisted query history, remaining dictionary
+options, radical automatic stroke estimation and stroke-tolerance shortcuts
 remain open. Existing numeric ranges and portable dictionary search algorithms
 do not substitute for those controls.
 

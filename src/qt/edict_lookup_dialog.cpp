@@ -97,7 +97,8 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
       jascii_to_ascii_(new QCheckBox(tr("JASCII to ASCII"), this)),
       results_(new QTextEdit(this)),
       status_(new QLabel(this)),
-      insert_button_(new QPushButton(tr("&Insert in Document"), this)) {
+      insert_button_(new QPushButton(tr("&Insert in Document"), this)),
+      sort_button_(new QPushButton(tr("S&ort"), this)) {
   setObjectName(QStringLiteral("edictLookupDialog"));
   setWindowTitle(tr("Dictionary Lookup"));
   setModal(false);
@@ -198,6 +199,9 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
 
   auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, this);
   insert_button_->setObjectName(QStringLiteral("edictInsert"));
+  sort_button_->setObjectName(QStringLiteral("edictSort"));
+  sort_button_->setToolTip(tr("Cycle Reading, Length, Entry and Definition. Shift cycles backward; Ctrl reverses the current order."));
+  buttons->addButton(sort_button_, QDialogButtonBox::ActionRole);
   buttons->addButton(insert_button_, QDialogButtonBox::ActionRole);
   outer->addWidget(buttons);
 
@@ -211,6 +215,8 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
           [this] { search(); });
   connect(insert_button_, &QPushButton::clicked, this,
           [this] { insert_selected(); });
+  connect(sort_button_, &QPushButton::clicked, this,
+          [this] { sort_results(QApplication::keyboardModifiers()); });
   connect(results_, &QTextEdit::selectionChanged, this,
           [this] { update_actions(); });
   connect(copy_action, &QAction::triggered, this,
@@ -266,66 +272,11 @@ bool EdictLookupDialog::search() {
           "Dictionary search returned too many interactive results");
     }
 
-    std::vector<std::u32string> rows;
-    rows.reserve(candidate.results.size());
-    for (const EdictResourceSearchResult& result : candidate.results) {
-      rows.push_back(render_row(result.result.record));
-    }
-
-    auto document = std::make_unique<QTextDocument>();
-    document->setDefaultFont(results_->font());
-    document->setUndoRedoEnabled(false);
-    QTextCursor cursor(document.get());
-    std::vector<std::pair<int, int>> ranges;
-    ranges.reserve(rows.size());
-    for (const auto& result : candidate.results) {
-      if (!ranges.empty()) cursor.insertBlock();
-      const int start = cursor.position();
-      QTextBlockFormat heading;
-      cursor.setBlockFormat(heading);
-      QTextCharFormat format;
-      format.setToolTip(result.label);
-      const auto& record = result.result.record;
-      QString headword = to_qstring(record.headword);
-      if (!record.readings.empty()) {
-        QStringList readings;
-        for (const auto& reading : record.readings) readings.push_back(to_qstring(reading));
-        headword += QStringLiteral(" [%1]").arg(readings.join(QStringLiteral("; ")));
-      }
-      cursor.insertText(headword, format);
-      cursor.insertBlock();
-      QTextBlockFormat definition;
-      definition.setLeftMargin(16);
-      cursor.setBlockFormat(definition);
-      QStringList meanings;
-      for (const auto& meaning : record.definitions) meanings.push_back(to_qstring(meaning));
-      cursor.insertText(meanings.join(QStringLiteral("; ")), format);
-      ranges.emplace_back(start, cursor.position());
-    }
     core::QueryHistory history = *history_;
     history.remember(history_text);
-    report_ = std::move(candidate);
-    rendered_rows_ = std::move(rows);
-    row_ranges_ = std::move(ranges);
-    *history_ = std::move(history);
-    history_index_ = -1;
-    history_changed_ = true;
-    const QPointer<QTextDocument> previous = results_->document();
-    document->setParent(results_);
-    results_->setDocument(document.release());
-    if (!self) return false;
-    if (previous && previous->parent() == results_) delete previous.data();
-    if (!self) return false;
-    if (!rendered_rows_.empty()) {
-      QTextCursor selected(results_->document());
-      selected.setPosition(row_ranges_.front().second, QTextCursor::KeepAnchor);
-      results_->setTextCursor(selected);
-      if (!self) return false;
-      results_->setFocus();
-    } else {
-      query_edit_->setFocus();
-    }
-    if (!self) return false;
+    const bool had_kanji = std::any_of(query.begin(), query.end(),
+        [](core::JisCode code) { return code >= 0x3000U; });
+    if (!publish_results(std::move(candidate), -1, false, had_kanji, &history)) return false;
     show_status();
     if (!history_->find(history_text)) {
       status_->setText(status_->text() + tr("; query was not retained in bounded history"));
@@ -343,6 +294,117 @@ bool EdictLookupDialog::search() {
     query_edit_->setFocus();
     return false;
   }
+}
+
+bool EdictLookupDialog::sort_results(Qt::KeyboardModifiers modifiers,
+                                    const core::EdictSortLimits& limits) {
+  if (query_busy_ || report_.results.empty()) return false;
+  const QPointer<EdictLookupDialog> self(this);
+  query_busy_ = true;
+  const auto idle = qScopeGuard([self] { if (self) self->query_busy_ = false; });
+  try {
+    int state = sort_state_;
+    bool reverse = sort_reverse_;
+    if (modifiers.testFlag(Qt::ControlModifier)) {
+      if (state < 0) state = 0;
+      reverse = !reverse;
+    } else {
+      state += modifiers.testFlag(Qt::ShiftModifier) ? -1 : 1;
+      if (state < 0) state = 3;
+      if (state > 3) state = 0;
+    }
+    core::EdictSortOptions options;
+    options.mode = static_cast<core::EdictSortMode>(state);
+    options.reverse = reverse;
+    options.headword_length = query_had_kanji_;
+    std::vector<std::reference_wrapper<const core::EdictRecord>> records;
+    records.reserve(report_.results.size());
+    for (const auto& result : report_.results) records.emplace_back(result.result.record);
+    const auto order = core::sort_edict_records(records, options, limits);
+    EdictResourceSearchReport candidate = report_;
+    candidate.results.clear();
+    candidate.results.reserve(order.size());
+    for (std::size_t index : order) candidate.results.push_back(report_.results[index]);
+    if (!publish_results(std::move(candidate), state, reverse, query_had_kanji_)) return false;
+    show_status();
+    update_actions();
+    return true;
+  } catch (const std::exception& error) {
+    if (self) status_->setText(tr("Sort failed: %1").arg(QString::fromUtf8(error.what())));
+    return false;
+  } catch (...) {
+    if (self) status_->setText(tr("Sort failed with an unknown error."));
+    return false;
+  }
+}
+
+bool EdictLookupDialog::publish_results(EdictResourceSearchReport candidate,
+                                       int sort_state, bool reverse,
+                                       bool query_had_kanji,
+                                       core::QueryHistory* history) {
+  std::vector<std::u32string> rows;
+  rows.reserve(candidate.results.size());
+  for (const auto& result : candidate.results) rows.push_back(render_row(result.result.record));
+
+  auto document = std::make_unique<QTextDocument>();
+  document->setDefaultFont(results_->font());
+  document->setUndoRedoEnabled(false);
+  QTextCursor cursor(document.get());
+  std::vector<std::pair<int, int>> ranges;
+  ranges.reserve(rows.size());
+  for (const auto& result : candidate.results) {
+    if (!ranges.empty()) cursor.insertBlock();
+    const int start = cursor.position();
+    cursor.setBlockFormat(QTextBlockFormat{});
+    QTextCharFormat format;
+    format.setToolTip(result.label);
+    const auto& record = result.result.record;
+    QString headword = to_qstring(record.headword);
+    if (!record.readings.empty()) {
+      QStringList readings;
+      for (const auto& reading : record.readings) readings.push_back(to_qstring(reading));
+      headword += QStringLiteral(" [%1]").arg(readings.join(QStringLiteral("; ")));
+    }
+    cursor.insertText(headword, format);
+    cursor.insertBlock();
+    QTextBlockFormat definition;
+    definition.setLeftMargin(16);
+    cursor.setBlockFormat(definition);
+    QStringList meanings;
+    for (const auto& meaning : record.definitions) meanings.push_back(to_qstring(meaning));
+    cursor.insertText(meanings.join(QStringLiteral("; ")), format);
+    ranges.emplace_back(start, cursor.position());
+  }
+
+  // Publish all logical state before widget signals can invoke external handlers.
+  report_ = std::move(candidate);
+  rendered_rows_ = std::move(rows);
+  row_ranges_ = std::move(ranges);
+  sort_state_ = sort_state;
+  sort_reverse_ = reverse;
+  query_had_kanji_ = query_had_kanji;
+  if (history) {
+    *history_ = std::move(*history);
+    history_index_ = -1;
+    history_changed_ = true;
+  }
+  const QPointer<EdictLookupDialog> self(this);
+  const QPointer<QTextDocument> previous = results_->document();
+  document->setParent(results_);
+  results_->setDocument(document.release());
+  if (!self) return false;
+  if (previous && previous->parent() == results_) delete previous.data();
+  if (!self) return false;
+  if (!rendered_rows_.empty()) {
+    QTextCursor selected(results_->document());
+    selected.setPosition(row_ranges_.front().second, QTextCursor::KeepAnchor);
+    results_->setTextCursor(selected);
+    if (!self) return false;
+    results_->setFocus();
+  } else {
+    query_edit_->setFocus();
+  }
+  return self != nullptr;
 }
 
 bool EdictLookupDialog::recall_history(std::u32string_view text, int index,
@@ -579,6 +641,7 @@ std::u32string EdictLookupDialog::selected_rows() const {
 
 void EdictLookupDialog::update_actions() {
   insert_button_->setEnabled(insert_handler_ && results_->textCursor().hasSelection());
+  sort_button_->setEnabled(!report_.results.empty());
 }
 
 bool EdictLookupDialog::eventFilter(QObject* watched, QEvent* event) {
@@ -616,6 +679,11 @@ void EdictLookupDialog::show_status() {
   if (report_.rejected != 0) {
     text += tr("; %1 rejected").arg(
         static_cast<qulonglong>(report_.rejected));
+  }
+  if (sort_state_ >= 0) {
+    const QString modes[] = {tr("Reading"), tr("Length"), tr("Entry"), tr("Definition")};
+    text += tr("; %1 order").arg(modes[sort_state_]);
+    if (sort_reverse_) text += tr(" (reversed)");
   }
 
   QStringList failures;

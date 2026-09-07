@@ -3290,6 +3290,20 @@ void test_edict_search_controls(const QString& directory) {
   require(count(U"cat") == 4, "Default Begin With did not reject an embedded ASCII match");
   check("edictBeginning", false);
   require(count(U"cat") == 5, "Open beginning did not include the embedded match");
+  auto* sort_button = dialog->findChild<QPushButton*>(QStringLiteral("edictSort"));
+  require(sort_button && sort_button->isEnabled(), "Native dictionary Sort button is unavailable");
+  sort_button->click();
+  require(dialog->sort_results(Qt::ControlModifier) &&
+              dialog->report().results.front().result.record.headword == U"\u3055",
+          "Native dictionary Sort did not reverse reading order");
+  dialog->copy_selected();
+  require(QApplication::clipboard()->text() == QStringLiteral("\u3055\ncat food") &&
+              dialog->insert_selected() &&
+              window.active_editor()->toPlainText() == QStringLiteral("\u3055 /cat food/"),
+          "Sorted native dictionary selection lost its copy/insertion mapping");
+  find_action(window, "undoAction")->trigger();
+  require(!window.document_modified() && window.active_editor()->toPlainText().isEmpty(),
+          "Sorted native dictionary insertion did not undo to its clean baseline");
   check("edictEnd", true);
   require(count(U"cat") == 4, "End With did not reject a trailing ASCII suffix");
   check("edictBeginning", true);

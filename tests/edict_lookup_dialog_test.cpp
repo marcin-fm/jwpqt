@@ -174,6 +174,163 @@ void test_empty_invalid_and_failed_search_are_contained() {
           "Unknown dictionary insertion failure escaped the dialog");
 }
 
+void test_result_sorting() {
+  using namespace jwpqt;
+  auto history = std::make_shared<core::QueryHistory>();
+  int searches = 0;
+  bool fail = false;
+  bool empty = false;
+  std::u32string inserted;
+  const auto handler = [&](const core::JwpText&, const qt::EdictLookupOptions&) {
+    ++searches;
+    if (fail) throw std::runtime_error("failed replacement");
+    qt::EdictResourceSearchReport report;
+    if (!empty) {
+      report.results = {
+          result(10, QStringLiteral("Z source"), U"Z", {U"\u3044\u3044"}, {U"alpha"}),
+          result(11, QStringLiteral("First B"), U"B", {U"\u3042"}, {U"zulu"}),
+          result(12, QStringLiteral("AA source"), U"AA", {U"\u3044"}, {U"beta"}),
+          result(13, QStringLiteral("Duplicate B"), U"B", {U"\u3042"}, {U"zulu"})};
+      report.results[1].result.record.byte_offset = 9;
+      report.results[3].result.record.byte_offset = 77;
+    }
+    report.rejected = 7;
+    report.queries = 4;
+    report.failures = {{8, QStringLiteral("source"), QStringLiteral("diagnostic"), false}};
+    return report;
+  };
+  qt::EdictLookupDialog dialog(handler, [&](const std::u32string& text) {
+    inserted = text;
+    return true;
+  }, nullptr, {}, {}, history);
+  auto* sort = dialog.findChild<QPushButton*>(QStringLiteral("edictSort"));
+  auto* results = dialog.findChild<QTextEdit*>(QStringLiteral("edictResults"));
+  auto* query = dialog.findChild<QLineEdit*>(QStringLiteral("edictQuery"));
+  auto* status = dialog.findChild<QLabel*>(QStringLiteral("edictStatus"));
+  const auto order = [&] {
+    std::vector<std::size_t> indices;
+    for (const auto& row : dialog.report().results) indices.push_back(row.registry_index);
+    return indices;
+  };
+  require(sort && !sort->isEnabled() && !dialog.sort_results(),
+          "Empty dictionary results could be sorted");
+  dialog.set_query(U"cat");
+  dialog.show();
+  require(dialog.search() && sort->isEnabled(), "Sort fixture search failed");
+  const auto retained_history = history->entries();
+  const QPointer<QTextDocument> previous = results->document();
+  sort->click();
+  require(previous.isNull() && order() == std::vector<std::size_t>{11, 12, 10} &&
+              dialog.report().results.front().result.record.byte_offset == 9 &&
+              dialog.report().results.front().label == QStringLiteral("First B") &&
+              dialog.report().rejected == 7 && dialog.report().queries == 4 &&
+              dialog.report().failures.size() == 1 &&
+              status->text().contains(QStringLiteral("Reading order")) &&
+              searches == 1 && history->entries() == retained_history,
+          "Sort did not deduplicate in reading order while preserving first provenance");
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() == QStringLiteral("B [\u3042]\nzulu") &&
+              dialog.insert_selected() && inserted == U"B [\u3042] /zulu/" &&
+              results->textCursor().charFormat().toolTip() == QStringLiteral("First B"),
+          "Sorted selection copied or inserted the wrong record");
+  QApplication::processEvents();
+  require(dialog.grab().save(QCoreApplication::applicationDirPath() +
+                             QStringLiteral("/dictionary-sorted.png")),
+          "Could not render sorted dictionary results");
+  query->setText(QStringLiteral("\u4e9c"));
+  require(dialog.sort_results() && order() == std::vector<std::size_t>{10, 12, 11} &&
+              status->text().contains(QStringLiteral("Length order")),
+          "Length sorting used an edited query instead of the completed search");
+  require(dialog.sort_results() && order() == std::vector<std::size_t>{12, 11, 10} &&
+              dialog.sort_results() && order() == std::vector<std::size_t>{10, 12, 11},
+          "Sort did not cycle through Entry and Definition");
+  require(dialog.sort_results(Qt::ControlModifier) &&
+              order() == std::vector<std::size_t>{11, 12, 10} &&
+              status->text().contains(QStringLiteral("Definition order (reversed)")) &&
+              dialog.sort_results(Qt::ShiftModifier) &&
+              order() == std::vector<std::size_t>{10, 11, 12} &&
+              status->text().contains(QStringLiteral("Entry order (reversed)")) &&
+              dialog.sort_results(Qt::ControlModifier | Qt::ShiftModifier) &&
+              order() == std::vector<std::size_t>{12, 11, 10} &&
+              status->text().contains(QStringLiteral("Entry order")) &&
+              !status->text().contains(QStringLiteral("reversed")),
+          "Ctrl/Shift sort precedence, direction or reverse retention changed");
+  QTextCursor selected(results->document());
+  selected.setPosition(1);
+  selected.setPosition(4, QTextCursor::KeepAnchor);
+  results->setTextCursor(selected);
+  const QPointer<QTextDocument> before_failure = results->document();
+  core::EdictSortLimits limits;
+  limits.comparisons = 0;
+  require(!dialog.sort_results(Qt::NoModifier, limits) && results->document() == before_failure &&
+              results->textCursor().position() == 4 && results->textCursor().anchor() == 1 &&
+              order() == std::vector<std::size_t>{12, 11, 10} &&
+              status->text().startsWith(QStringLiteral("Sort failed:")) &&
+              history->entries() == retained_history && searches == 1,
+          "Failed sorting changed the result document, selection or query history");
+  require(dialog.sort_results(Qt::ControlModifier) &&
+              order() == std::vector<std::size_t>{10, 11, 12} &&
+              status->text().contains(QStringLiteral("Entry order (reversed)")),
+          "A failed sort advanced the mode or reverse state");
+  require(dialog.search() && !status->text().contains(QStringLiteral("order")) &&
+              order() == std::vector<std::size_t>{10, 11, 12, 13},
+          "A new search did not restore ranked results and reset sorting");
+  query->setText(QStringLiteral("cat"));
+  sort->click();
+  require(dialog.sort_results() && order() == std::vector<std::size_t>{12, 11, 10},
+          "Completed kanji-query length sorting did not use headword length");
+  fail = true;
+  const QPointer<QTextDocument> sorted_document = results->document();
+  require(!dialog.search() && results->document() == sorted_document &&
+              dialog.sort_results(Qt::ControlModifier) &&
+              status->text().contains(QStringLiteral("Length order (reversed)")),
+          "Failed search reset the successful result ordering");
+  fail = false;
+  empty = true;
+  require(dialog.search() && !sort->isEnabled() && !dialog.sort_results(),
+          "Empty replacement results left sorting enabled");
+  empty = false;
+  dialog.set_query(U"cat");
+  require(dialog.search(), "Could not prepare pending query sort");
+  query->deselect();
+  query->setCursorPosition(query->text().size());
+  QKeyEvent pending(QEvent::KeyPress, Qt::Key_N, Qt::NoModifier, QStringLiteral("n"));
+  QApplication::sendEvent(query, &pending);
+  const int before_sort = searches;
+  require(query->text() == QStringLiteral("cat") && dialog.sort_results() &&
+              query->text() == QStringLiteral("cat") && searches == before_sort,
+          "Sorting flushed pending query input or searched again");
+  QKeyEvent complete(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier, QStringLiteral("a"));
+  QApplication::sendEvent(query, &complete);
+  require(query->text() == QStringLiteral("cat\u306a"),
+          (QStringLiteral("Sorting discarded pending query composition: ") +
+           QString::fromLatin1(query->text().toUtf8().toHex())).toStdString().c_str());
+  dialog.set_query(U"cat");
+  bool reentered = false;
+  bool attempted = false;
+  QObject::connect(results, &QTextEdit::selectionChanged, &dialog, [&] {
+    if (!attempted) {
+      attempted = true;
+      reentered = dialog.sort_results() || dialog.search();
+      history->remember(U"listener");
+    }
+  });
+  require(dialog.search() && attempted && !reentered && history->find(U"listener") &&
+              history->find(U"cat"),
+          "Result publication clobbered listener history or permitted reentrant commands");
+  attempted = false;
+  require(dialog.sort_results(Qt::ShiftModifier) && attempted && !reentered &&
+              status->text().contains(QStringLiteral("Definition order")),
+          "Shift-first sorting or publication command guards failed");
+  require(dialog.search(), "Could not reset repeated reverse test");
+  for (int press = 0; press < 25; ++press) {
+    require(dialog.sort_results(Qt::ControlModifier) &&
+                status->text().contains(QStringLiteral("Reading order")) &&
+                status->text().contains(QStringLiteral("reversed")) == (press % 2 == 0),
+            "Repeated Ctrl sorting locked the reverse control");
+  }
+}
+
 void test_search_controls() {
   using namespace jwpqt::qt;
   auto settings = std::make_shared<EdictLookupOptions>();
@@ -780,6 +937,7 @@ int main(int argc, char** argv) {
   try {
     test_search_render_status_copy_and_insert();
     test_empty_invalid_and_failed_search_are_contained();
+    test_result_sorting();
     test_search_controls();
     test_query_input_modes();
     test_query_overwrite();
