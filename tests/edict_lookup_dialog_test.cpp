@@ -4,15 +4,18 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 
+#include <QAction>
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
 #include <QContextMenuEvent>
 #include <QLabel>
 #include <QInputMethodEvent>
+#include <QIntValidator>
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QMenu>
@@ -248,6 +251,181 @@ void test_query_input_modes() {
   require(mode->text() == QStringLiteral("K"), "Read-only field changed input mode");
 }
 
+void test_query_overwrite() {
+  using namespace jwpqt::qt;
+  int searches = 0;
+  EdictLookupDialog dialog([&](const auto&, const auto&) {
+    ++searches;
+    return EdictResourceSearchReport{};
+  });
+  auto* query = dialog.findChild<QLineEdit*>(QStringLiteral("edictQuery"));
+  auto* field = dynamic_cast<KanaInputField*>(query->parentWidget());
+  auto action = std::make_unique<QAction>();
+  action->setCheckable(true);
+  dialog.set_overwrite_action(action.get());
+  KanaInputField other(QStringLiteral("other"));
+  other.set_overwrite_action(action.get());
+  const auto key = [&](int code, const QString& text = {},
+                       Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+    QKeyEvent event(QEvent::KeyPress, code, modifiers, text);
+    QApplication::sendEvent(query, &event);
+  };
+  const auto type = [&](const QString& text) {
+    for (const QChar character : text) key(character.toUpper().unicode(), QString(character));
+  };
+  const auto reset = [&](const QString& text = QStringLiteral("ABC")) {
+    query->setText(text);
+    query->setCursorPosition(1);
+  };
+  dialog.show();
+  query->setFocus();
+  QApplication::processEvents();
+  require(field && !field->overwrite_mode(), "Query did not start in insert mode");
+  key(Qt::Key_Insert);
+  require(action->isChecked() && field->overwrite_mode() && other.overwrite_mode() &&
+              query->accessibleDescription().contains(QStringLiteral("Overwrite")),
+          "Query Insert did not update the shared mode and accessibility hint");
+  for (const auto mode : {InputMode::kAscii, InputMode::kJascii, InputMode::kKanji}) {
+    field->set_input_mode(mode);
+    for (const bool selected : {false, true}) {
+      reset();
+      if (selected) query->setSelection(1, 1);
+      type(mode == InputMode::kKanji ? QStringLiteral("kya") : QStringLiteral("X"));
+      const QString added = mode == InputMode::kKanji ? QStringLiteral("\u304d\u3083") :
+                            mode == InputMode::kJascii ? QStringLiteral("\uff38") : QStringLiteral("X");
+      require(query->text() == QStringLiteral("A") + added +
+                  (selected || mode != InputMode::kKanji ? QStringLiteral("C") : QString{}),
+              "Query overwrite changed the wrong range or lost selected-range suffix text");
+      query->undo();
+      require(query->text() == QStringLiteral("ABC") && !query->isUndoAvailable(),
+              "Query overwrite did not undo as one input transaction");
+      query->redo();
+      require(query->text().startsWith(QStringLiteral("A") + added),
+              "Query overwrite redo lost composed input");
+    }
+  }
+  reset();
+  type(QStringLiteral("k"));
+  key(Qt::Key_Insert);
+  key(Qt::Key_Insert);
+  require(query->text() == QStringLiteral("ABC"), "Query mode toggle flushed pending kana");
+  type(QStringLiteral("a"));
+  require(query->text() == QStringLiteral("A\u304bC"), "Query mode toggle discarded pending kana");
+  field->set_input_mode(InputMode::kAscii);
+  const QString supplementary = QStringLiteral("A\U0001f600BC");
+  reset(supplementary);
+  key(Qt::Key_unknown, QStringLiteral("\ufeff\u00a0"));
+  require(query->text() == QStringLiteral("A\ufeff\u00a0C") && query->cursorPosition() == 3,
+          (std::string("Query overwrite split a scalar or normalized signature/NBSP content: ") +
+           query->text().toUtf8().toHex().toStdString() + " cursor=" +
+           std::to_string(query->cursorPosition())).c_str());
+  query->undo();
+  require(query->text() == supplementary, "Unicode query overwrite did not undo");
+  reset(supplementary);
+  query->setCursorPosition(2);
+  key(Qt::Key_X, QStringLiteral("X"));
+  require(query->text() == supplementary && !query->isUndoAvailable(),
+          "Query overwrite accepted a cursor inside a surrogate pair");
+  for (const char16_t invalid : {char16_t{0xd800}, char16_t{0xdc00}}) {
+    reset();
+    key(Qt::Key_unknown, QString(QChar(invalid)));
+    require(query->text() == QStringLiteral("ABC") && !query->isUndoAvailable(),
+            "Query overwrite accepted malformed Unicode input");
+  }
+  reset();
+  query->setMaxLength(3);
+  key(Qt::Key_unknown, QStringLiteral("\U0001f680"));
+  require(query->text() == QStringLiteral("ABC") && !query->hasSelectedText() &&
+              !query->isUndoAvailable(), "Query maxLength rejection erased or split text");
+  query->setMaxLength(32767);
+  QIntValidator numbers(0, 999, &dialog);
+  reset(QStringLiteral("123"));
+  query->setValidator(&numbers);
+  key(Qt::Key_X, QStringLiteral("X"));
+  require(query->text() == QStringLiteral("123") && !query->hasSelectedText() &&
+              !query->isUndoAvailable(), "Query validator rejection changed the selection or text");
+  query->setValidator(nullptr);
+  reset();
+  query->setReadOnly(true);
+  QKeyEvent shortcut(QEvent::ShortcutOverride, Qt::Key_Insert,
+                     Qt::ControlModifier | Qt::ShiftModifier);
+  shortcut.ignore();
+  QApplication::sendEvent(query, &shortcut);
+  require(shortcut.isAccepted(), "Read-only query leaked its paste shortcut to the document");
+  key(Qt::Key_X, QStringLiteral("X"));
+  require(query->text() == QStringLiteral("ABC"), "Read-only query was overwritten");
+  query->setReadOnly(false);
+  query->setSelection(1, 1);
+  key(Qt::Key_Insert, {}, Qt::ControlModifier);
+  require(QApplication::clipboard()->text() == QStringLiteral("B") && action->isChecked(),
+          "Query Ctrl+Insert toggled mode instead of copying");
+  for (const auto modifiers : {Qt::KeyboardModifiers(Qt::ShiftModifier),
+                              Qt::KeyboardModifiers(Qt::ShiftModifier | Qt::ControlModifier)}) {
+    reset();
+    QApplication::clipboard()->setText(QStringLiteral("xy"));
+    key(Qt::Key_Insert, {}, modifiers);
+    require(query->text() == QStringLiteral("AxyBC") && action->isChecked(),
+            "Query clipboard paste overwrote following text or changed mode");
+    query->undo();
+    require(query->text() == QStringLiteral("ABC"), "Query clipboard paste did not undo");
+  }
+  reset(supplementary);
+  QInputMethodEvent preedit(QStringLiteral("n"), {});
+  QApplication::sendEvent(query, &preedit);
+  require(query->text() == supplementary, "Query IME preedit overwrote committed text");
+  QInputMethodEvent commit;
+  commit.setCommitString(QStringLiteral("xy"));
+  QApplication::sendEvent(query, &commit);
+  require(query->text() == QStringLiteral("AxyC"), "Query IME did not overwrite whole scalars");
+  query->undo();
+  require(query->text() == supplementary, "Query IME overwrite was not one undo transaction");
+  reset();
+  query->setSelection(1, 1);
+  QApplication::sendEvent(query, &commit);
+  require(query->text() == QStringLiteral("AxyC"), "Selected IME query erased following text");
+  reset();
+  query->setCursorPosition(2);
+  QInputMethodEvent explicit_replacement;
+  explicit_replacement.setCommitString(QStringLiteral("X"), -1, 1);
+  QApplication::sendEvent(query, &explicit_replacement);
+  require(query->text() == QStringLiteral("AXC"), "Query overwrote an explicit IME range");
+  reset(supplementary);
+  QInputMethodEvent continuing(QStringLiteral("z"), {});
+  continuing.setCommitString(QStringLiteral("x"));
+  QApplication::sendEvent(query, &continuing);
+  commit.setCommitString(QStringLiteral("y"));
+  QApplication::sendEvent(query, &commit);
+  require(query->text() == QStringLiteral("AxyC"), "Query overwrite lost continued IME preedit");
+  reset();
+  bool replaced = false;
+  const auto reentrant = QObject::connect(query, &QLineEdit::selectionChanged, query, [&] {
+    if (!replaced) { replaced = true; query->setText(QStringLiteral("safe")); }
+  });
+  key(Qt::Key_X, QStringLiteral("X"));
+  QObject::disconnect(reentrant);
+  require(query->text() == QStringLiteral("safe"), "Query overwrite clobbered a reentrant replacement");
+  field->set_input_mode(InputMode::kKanji);
+  reset();
+  type(QStringLiteral("n"));
+  key(Qt::Key_Insert);
+  key(Qt::Key_Return);
+  require(!action->isChecked() && !other.overwrite_mode() && searches == 1 &&
+              query->text() == QStringLiteral("A\u3093BC"),
+          "Query mode toggle or submission lost pending input or submitted twice");
+  QAction invalid_action;
+  bool rejected = false;
+  try { field->set_overwrite_action(&invalid_action); }
+  catch (const std::invalid_argument&) { rejected = true; }
+  require(rejected, "Query accepted a non-checkable overwrite action");
+  action->setChecked(true);
+  action.reset();
+  require(!field->overwrite_mode() && !other.overwrite_mode(),
+          "Query retained a destroyed overwrite action");
+  key(Qt::Key_Insert);
+  require(field->overwrite_mode() && !other.overwrite_mode(),
+          "Standalone query fallback did not retain independent runtime mode");
+}
+
 void test_result_character_navigation() {
   std::vector<char32_t> inspected;
   int searches = 0;
@@ -315,6 +493,7 @@ int main(int argc, char** argv) {
     test_search_render_status_copy_and_insert();
     test_empty_invalid_and_failed_search_are_contained();
     test_query_input_modes();
+    test_query_overwrite();
     test_result_character_navigation();
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {

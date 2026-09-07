@@ -226,8 +226,17 @@ Overwrite replaces complete Unicode scalars without consuming a paragraph break.
 Typing over a selection replaces only the selection, deliberately avoiding the
 legacy behavior that also overwrote following text. Clipboard and lookup insertion
 remain insert operations: `Ctrl+Insert` copies, while `Shift+Insert` and
-`Ctrl+Shift+Insert` paste. Query-field overwrite and remaining clipboard formats
-are separate unfinished input-parity work.
+`Ctrl+Shift+Insert` paste.
+
+Dictionary and Reading Lookup query fields share the window's insert/overwrite
+mode while retaining their own K/A/J input modes. `Insert` in a query updates the
+shared mode without flushing pending kana; copy/paste shortcuts stay in that query,
+not the document behind it. Typed kana/JASCII, Unicode and ordinary IME commits
+use scalar-safe, selection-only replacement and native query undo. Mode hints
+are available in the query tooltips and accessibility descriptions. Invalid input,
+field limits, validators and read-only targets cannot erase text before rejection.
+Other edit forms, remaining clipboard formats and exact legacy visual-line-edge
+behavior remain separate input-parity work.
 
 `Ctrl+A` remains Select All. Close uses `Ctrl+F4`, leaving `Ctrl+W` for conversion.
 SKIP uses `Ctrl+Alt+S` and Spahn-Hadamitzky uses `Ctrl+Alt+H`, avoiding native

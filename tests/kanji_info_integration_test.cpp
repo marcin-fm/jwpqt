@@ -11,6 +11,7 @@
 #include <QFile>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
 #include <QMouseEvent>
@@ -269,6 +270,8 @@ void test_integration(const QString& directory) {
                       .size() == 1,
           "Integrated Spahn lookup returned wrong results or duplicate dialog");
 
+  auto* overwrite = window.findChild<QAction*>(QStringLiteral("overwriteModeAction"));
+  overwrite->setChecked(true);
   reading_action->trigger();
   QApplication::processEvents();
   auto* reading_dialog = dynamic_cast<jwpqt::qt::KanjiReadingLookupDialog*>(
@@ -278,6 +281,22 @@ void test_integration(const QString& directory) {
   jwpqt::core::KanjiReadingQuery reading;
   reading.kind = jwpqt::core::KanjiReadingKind::kMeaning;
   reading.text = U"tree";
+  reading_dialog->set_query(reading);
+  auto* reading_query = reading_dialog->findChild<QLineEdit*>(QStringLiteral("kanjiReadingQuery"));
+  const auto before_query = *window.current_jwp_document();
+  reading_query->setText(QStringLiteral("ABC"));
+  reading_query->setCursorPosition(1);
+  QKeyEvent typed(QEvent::KeyPress, Qt::Key_X, Qt::NoModifier, QStringLiteral("X"));
+  QApplication::sendEvent(reading_query, &typed);
+  require(reading_query->text() == QStringLiteral("AXC") &&
+              *window.current_jwp_document() == before_query,
+          "Reading query did not inherit overwrite without touching its document");
+  reading_query->undo();
+  QKeyEvent toggle(QEvent::KeyPress, Qt::Key_Insert, Qt::NoModifier);
+  QApplication::sendEvent(reading_query, &toggle);
+  require(reading_query->text() == QStringLiteral("ABC") && !overwrite->isChecked() &&
+              !window.active_editor()->overwriteMode(),
+          "Reading query Insert did not update the shared runtime mode");
   reading_dialog->set_query(reading);
   require(reading_dialog->search() && reading_dialog->results().size() == 1,
           "Integrated reading lookup returned wrong results");

@@ -12,6 +12,7 @@
 
 #include "edict_resource_search.h"
 
+class QAction;
 class QCheckBox;
 class QLabel;
 class QLineEdit;
@@ -41,6 +42,7 @@ class EdictLookupDialog : public QDialog {
                              InfoHandler info_handler = {});
 
   void set_query(std::u32string_view query);
+  void set_overwrite_action(QAction* action);
   bool search();
   bool insert_selected();
   void copy_selected();

@@ -14,6 +14,7 @@
 #include <QAbstractTextDocumentLayout>
 #include <QImage>
 #include <QInputMethodEvent>
+#include <QKeyEvent>
 #include <QPalette>
 #include <QScrollBar>
 #include <QSizeF>
@@ -438,6 +439,21 @@ void test_composed_overwrite() {
   QApplication::sendEvent(&editor, &invalid);
   require(editor.toPlainText() == original && !editor.document()->isUndoAvailable(),
           "Malformed input method commit damaged the document");
+  QKeyEvent format(QEvent::KeyPress, Qt::Key_unknown, Qt::NoModifier,
+                   QStringLiteral("\ufeff\u00a0"));
+  QApplication::sendEvent(&editor, &format);
+  require(jwpqt::qt::document_plain_text(*editor.document()) == QStringLiteral("A\ufeff\u00a0\nC"),
+          "Typed format characters bypassed scalar-safe document overwrite");
+  editor.undo();
+  require(editor.toPlainText() == original && !editor.document()->isUndoAvailable(),
+          "Typed format-character overwrite was not one undo transaction");
+  for (const char16_t scalar : {char16_t{0xd800}, char16_t{0xdc00}}) {
+    QKeyEvent malformed(QEvent::KeyPress, Qt::Key_unknown, Qt::NoModifier,
+                        QString(QChar(scalar)));
+    QApplication::sendEvent(&editor, &malformed);
+    require(editor.toPlainText() == original && !editor.document()->isUndoAvailable(),
+            "Malformed typed Unicode changed the document");
+  }
 }
 
 }  // namespace

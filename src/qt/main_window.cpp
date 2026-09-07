@@ -3661,6 +3661,7 @@ void MainWindow::show_kanji_reading_lookup_dialog() {
         }
       },
       [this](core::JisCode code) { show_kanji_info_code(code); }, this);
+  dialog->set_overwrite_action(overwrite_action_);
   if (!seed.empty()) dialog->set_query_text(seed);
   dialog->setAttribute(Qt::WA_DeleteOnClose);
   connect(dialog, &QObject::destroyed, this,
@@ -3867,6 +3868,7 @@ void MainWindow::show_edict_lookup_dialog() {
       this, [this](char32_t character) {
         show_kanji_info_dialog(CharacterTarget{character, -1});
       });
+  dialog->set_overwrite_action(overwrite_action_);
   if (!seed.empty()) {
     dialog->set_query(seed);
   }

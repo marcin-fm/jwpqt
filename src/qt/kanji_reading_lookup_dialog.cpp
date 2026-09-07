@@ -176,6 +176,10 @@ void KanjiReadingLookupDialog::set_query(
   partial_words_->setChecked(query.partial_words);
 }
 
+void KanjiReadingLookupDialog::set_overwrite_action(QAction* action) {
+  query_field_->set_overwrite_action(action);
+}
+
 void KanjiReadingLookupDialog::set_query_text(std::u32string_view text) {
   query_->setText(to_qstring(text));
 }

@@ -2931,7 +2931,11 @@ void test_edict_lookup_integration(const QString& directory) {
                   QKeySequence(QStringLiteral("Ctrl+D"))) &&
               lookup->shortcuts().contains(QKeySequence(Qt::Key_F6)),
           "Native EDICT lookup action is missing or has wrong shortcuts");
+  window.show();
+  QApplication::processEvents();
   editor->selectAll();
+  auto* overwrite = find_action(window, "overwriteModeAction");
+  overwrite->setChecked(true);
   lookup->trigger();
   QApplication::processEvents();
   auto* dialog = dynamic_cast<jwpqt::qt::EdictLookupDialog*>(
@@ -2943,6 +2947,34 @@ void test_edict_lookup_integration(const QString& directory) {
   require(dialog != nullptr && query_edit != nullptr &&
               query_edit->text() == QStringLiteral("cat"),
           "Native EDICT dialog was not seeded from the JWP selection");
+  query_edit->setText(QStringLiteral("ABC"));
+  query_edit->setCursorPosition(1);
+  QKeyEvent ascii_mode(QEvent::KeyPress, Qt::Key_F4, Qt::NoModifier);
+  QApplication::sendEvent(query_edit, &ascii_mode);
+  QKeyEvent typed(QEvent::KeyPress, Qt::Key_X, Qt::NoModifier, QStringLiteral("X"));
+  QApplication::sendEvent(query_edit, &typed);
+  require(query_edit->text() == QStringLiteral("AXC") && editor->overwriteMode() &&
+              *window.current_jwp_document() == source,
+          "Dictionary query did not inherit the window mode independently of its document");
+  query_edit->undo();
+  query_edit->setSelection(1, 1);
+  QKeyEvent copy(QEvent::KeyPress, Qt::Key_Insert, Qt::ControlModifier);
+  QApplication::sendEvent(query_edit, &copy);
+  require(QApplication::clipboard()->text() == QStringLiteral("B"),
+          "Dictionary query Copy used the document selection");
+  query_edit->setCursorPosition(1);
+  QApplication::clipboard()->setText(QStringLiteral("xy"));
+  QKeyEvent paste(QEvent::KeyPress, Qt::Key_Insert, Qt::ControlModifier | Qt::ShiftModifier);
+  QApplication::sendEvent(query_edit, &paste);
+  require(query_edit->text() == QStringLiteral("AxyBC") &&
+              *window.current_jwp_document() == source && overwrite->isChecked(),
+          "Dictionary query paste reached the document or overwrote its suffix");
+  query_edit->undo();
+  QKeyEvent toggle(QEvent::KeyPress, Qt::Key_Insert, Qt::NoModifier);
+  QApplication::sendEvent(query_edit, &toggle);
+  require(query_edit->text() == QStringLiteral("ABC") && !overwrite->isChecked() &&
+              !editor->overwriteMode() && !editor->document()->isModified(),
+          "Dictionary query Insert did not share the document action without mutation");
   dialog->set_query(U"ca");
   require(!dialog->search() &&
               window.findChild<QWidget*>(

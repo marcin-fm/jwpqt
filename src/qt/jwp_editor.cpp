@@ -170,7 +170,8 @@ void JwpEditor::keyPressEvent(QKeyEvent* event) {
   const bool tab = event->key() == Qt::Key_Tab && event->modifiers() == Qt::NoModifier;
   if (!overwriteMode() || isReadOnly() || text.isEmpty() ||
       (event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier)) ||
-      (!text.front().isPrint() && !text.front().isHighSurrogate() && !tab)) {
+      (!text.front().isPrint() && !text.front().isSurrogate() &&
+       text.front().category() != QChar::Other_Format && !tab)) {
     QTextEdit::keyPressEvent(event);
     return;
   }

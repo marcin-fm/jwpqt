@@ -143,6 +143,10 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   update_actions();
 }
 
+void EdictLookupDialog::set_overwrite_action(QAction* action) {
+  query_field_->set_overwrite_action(action);
+}
+
 void EdictLookupDialog::set_query(std::u32string_view query) {
   query_edit_->setText(to_qstring(query));
   query_edit_->selectAll();

@@ -10,6 +10,7 @@
 
 #include "jwpqt/core/kanji_reading_search.h"
 
+class QAction;
 class QCheckBox;
 class QComboBox;
 class QLabel;
@@ -34,6 +35,7 @@ class KanjiReadingLookupDialog : public QDialog {
 
   void set_query(const core::KanjiReadingQuery& query);
   void set_query_text(std::u32string_view text);
+  void set_overwrite_action(QAction* action);
   bool search();
   std::vector<core::JisCode> results() const;
 
