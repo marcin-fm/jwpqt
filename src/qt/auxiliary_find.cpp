@@ -158,6 +158,18 @@ FindReplaceResult AuxiliaryFind::find(const FindReplaceRequest& request) {
     const auto found = entries[match];
     if (list) {
       if (!found.index.isValid()) return {false, tr("Results changed during search")};
+      // Qt emits more selection-model signals after currentRowChanged. Keep
+      // that model alive if a callback destroys the owning list in the middle.
+      QPointer<QItemSelectionModel> selection = list->selectionModel();
+      QPointer<QObject> selection_owner = selection->parent();
+      const bool had_owner = !selection_owner.isNull();
+      const auto restore_owner = qScopeGuard([selection, selection_owner, had_owner] {
+        if (!selection || selection->parent()) return;
+        if (selection_owner) selection->setParent(selection_owner);
+        else if (had_owner) selection->deleteLater();
+      });
+      selection->setParent(nullptr);
+      if (!self || !target_ || !selection) return {false, tr("Results closed during selection")};
       list->setCurrentRow(found.index.row(), QItemSelectionModel::ClearAndSelect);
       if (!self || !target_ || !found.index.isValid() || list->currentIndex() != found.index)
         return {false, tr("Results closed or changed")};

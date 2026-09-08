@@ -158,8 +158,16 @@ void test_real_result_ownership() {
 void test_reentrancy_and_bounds() {
   QPointer<QWidget> owner = new QWidget; auto* list = new QListWidget(owner);
   auto* find = new AuxiliaryFind(list); list->addItems({"a", "b"}); list->setCurrentRow(0);
-  QObject::connect(list, &QListWidget::itemSelectionChanged, list, [&] { delete owner.data(); });
+  QPointer<QItemSelectionModel> selection_model = list->selectionModel();
+  bool model_survived_notification = false;
+  QObject::connect(list, &QListWidget::itemSelectionChanged, list, [&] {
+    delete owner.data();
+    model_survived_notification = !selection_model.isNull();
+  });
   find->find(request("b")); require(!owner, "Selection may delete owner");
+  require(model_survived_notification, "Qt selection model must outlive its remaining notifications");
+  QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+  require(!selection_model, "Detached selection model must not leak");
   QWidget second; auto* text = new QTextEdit(&second); text->setPlainText("first\nlabel\nsecond");
   auto* bad = new AuxiliaryFind(text, [] { return std::vector<std::pair<int,int>>{{0, 100}}; });
   const auto cursor = text->textCursor();
