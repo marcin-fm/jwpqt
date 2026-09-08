@@ -9,7 +9,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
-#include <QFontComboBox>
+#include <QFontDatabase>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QLabel>
@@ -77,16 +77,20 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   auto* fonts = new QWidget(tabs);
   auto* grid = new QGridLayout(fonts);
   grid->addWidget(new QLabel(tr("Japanese content"), fonts), 0, 0);
-  grid->addWidget(new QLabel(tr("Font family (blank uses native default)"), fonts), 0, 1);
+  grid->addWidget(new QLabel(tr("Font family or .f00 file (blank uses native default)"), fonts), 0, 1);
   grid->addWidget(new QLabel(tr("Size"), fonts), 0, 2);
   grid->addWidget(new QLabel(tr("Automatic"), fonts), 0, 3);
   const char* labels[] = {"System", "Query fields", "Lists and readings", "Candidate bar", "Document", "Large character", "Character Table", "Clipboard bitmap"};
-  struct FontControl { QFontComboBox* family; QSpinBox* size; QCheckBox* automatic; };
+  auto families = QFontDatabase::families();
+  for (auto it = families.begin(); it != families.end();)
+    if (it->startsWith(QStringLiteral("JwpqtRaster-"))) it = families.erase(it); else ++it;
+  struct FontControl { QComboBox* family; QSpinBox* size; QCheckBox* automatic; };
   std::vector<FontControl> font_controls;
   for (std::size_t i = 0; i < settings_.fonts.size(); ++i) {
     const auto role = static_cast<JapaneseFontRole>(i);
     const int row = static_cast<int>(i) + 1;
-    auto* family = new QFontComboBox(fonts);
+    auto* family = new QComboBox(fonts);
+    family->addItems(families);
     family->setObjectName(QStringLiteral("settingsFont%1").arg(i));
     family->setEditable(true);
     family->setEditText(settings_.fonts[i].family);
@@ -224,7 +228,8 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   tabs->addTab(history, tr("History"));
   auto* printing = new QWidget(tabs);
   auto* print_form = new QFormLayout(printing);
-  auto* print_family = new QFontComboBox(printing);
+  auto* print_family = new QComboBox(printing);
+  print_family->addItems(families);
   print_family->setEditable(true);
   print_family->setObjectName(QStringLiteral("settingsPrintFamily"));
   print_family->setEditText(settings_.print_font.family);

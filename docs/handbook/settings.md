@@ -17,9 +17,19 @@ File. Omit bitmap removes only that representation, not text or rich formats.
 Images have white paper and preserve the selected text without changing the
 document or undo. Images are bounded at 262,144 selected UTF-16 positions,
 8,192 pixels per edge and 16 million pixels; an omitted oversized image is
-reported while the text is still copied. Legacy raster-font files, independent
-ASCII runs, vertical/color-list bitmap policies and some other font tuning
+reported while the text is still copied. Independent ASCII runs,
+vertical/color-list bitmap policies and some other font tuning
 remain unimplemented.
+
+You can enter a legacy .f00 filename instead of a font family, including Print.
+Relative names use the settings directory, not a guessed Windows directory.
+The native renderer loads the original packed or holey JIS bitmaps as private
+pixel-outline faces. Screen roles use their original height; Big fits its pane,
+Table stays 16 px, and Print uses its physical point size. Unavailable or invalid
+screen fonts produce a diagnostic and inherited fallback. Invalid explicit print
+fonts fail before output is written. Files stay unchanged and are not installed
+system-wide or included with the program. Their original licensing still applies.
+Private font caching is bounded; closing the application releases it.
 
 ## Customize the Toolbar
 

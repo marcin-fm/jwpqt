@@ -10,6 +10,7 @@
 #include <utility>
 
 #include <QAction>
+#include <QComboBox>
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
@@ -20,7 +21,6 @@
 #include <QFile>
 #include <QFileDialog>
 #include <QFontMetricsF>
-#include <QFontComboBox>
 #include <QFontDatabase>
 #include <QLabel>
 #include <QKeyEvent>
@@ -1789,7 +1789,7 @@ void test_application_settings_workflow(const QString& directory) {
     auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
     if (!dialog) return;
     auto* size = dialog->findChild<QSpinBox*>(QStringLiteral("settingsFontSize4"));
-    auto* family = dialog->findChild<QFontComboBox*>(QStringLiteral("settingsFont4"));
+    auto* family = dialog->findChild<QComboBox*>(QStringLiteral("settingsFont4"));
     visited = size && family;
     if (!visited) { dialog->reject(); return; }
     size->setValue(26);

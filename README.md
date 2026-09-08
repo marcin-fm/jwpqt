@@ -209,8 +209,20 @@ white-background native text image. **Clipboard_Omit_Bitmap** disables only the
 image. Rendering uses a separate document, bounded at 262,144 selected UTF-16
 positions, 8,192 pixels per edge and 16 million pixels; oversized images are
 omitted with a status message while text remains available. This does not yet
-implement vertical or color-list bitmap policies, independent ASCII font runs,
-or direct legacy `.f00` raster-font loading.
+implement vertical or color-list bitmap policies or independent ASCII font runs.
+
+Legacy **`.f00` font files** can be entered instead of a font family, including
+the separate Print role. Relative paths resolve from the application settings
+directory; absolute paths are accepted. Native roles use the bitmap's original
+height (Table remains 16 px), Big fits its pane, and Print retains its physical
+point size. The portable decoder supports packed and holey JIS tables and both
+byte- and word-aligned rows, with safe fallback for missing final JIS slots.
+Original ink pixels become bounded rectangle outlines in private in-memory Qt
+faces, not a replacement Win32 layer or guessed modern typeface. Private face
+identities are not offered as persistent font names. Loading is bounded at 8 MiB
+per source, 64 MiB per generated face and 64 MiB/16 faces per application cache.
+The source font files are never modified, installed globally or bundled; their
+original licensing still applies, and generated faces restrict font embedding.
 
 Startup and **File > New Japanese Document** create a native JWP document with
 Japanese editing, conversion, formatting, and lookup insertion available without

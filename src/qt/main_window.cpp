@@ -802,6 +802,8 @@ bool MainWindow::open_project_path(const QString& path, const ProjectOpenOptions
     // Reuse the normal import/presentation path without changing the live workspace.
     const auto stage_documents = [&] {
       auto staged = std::make_unique<MainWindow>();
+      staged->application_settings_path_ = application_settings_path_;
+      staged->application_settings_persistence_enabled_ = false;
       staged->kanji_color_list_ = kanji_color_list_;
       staged->kanji_color_policy_ = kanji_color_policy_;
       if (!staged->apply_application_settings(workspace.settings))
@@ -1069,7 +1071,8 @@ bool MainWindow::apply_application_settings(const ApplicationSettings& settings,
       if (kanji_code_lookup_dialog_) kanji_code_lookup_dialog_->set_automatic_search(
           application_settings_.automatic_kanji_lookup);
       // Font/layout signals must not be interpreted as edits in any open tab.
-      application_font_warnings_ = set_japanese_fonts(*this, application_settings_);
+      application_font_warnings_ = set_japanese_fonts(*this, application_settings_,
+          QFileInfo(application_settings_path_).path());
       for (const auto& state : documents_) {
         if (state->current_path_.isEmpty() && !state->editor_->document()->isModified() &&
             document_plain_text(*state->editor_->document()).isEmpty() &&
@@ -5979,10 +5982,8 @@ void MainWindow::print_current_document(bool preview) {
     PrintOptions options;
     options.file_name = document_->current_path_;
     options.code_page = document_->jwp_code_page_;
-    options.font = source->defaultFont();
-    if (!application_settings_.print_font.automatic && !application_settings_.print_font.family.isEmpty())
-      options.font.setFamily(application_settings_.print_font.family);
-    options.font.setPointSizeF(application_settings_.print_font.size / 10.0);
+    options.font = japanese_print_font(source->defaultFont(), application_settings_.print_font,
+        QFileInfo(application_settings_path_).path());
     const auto cursor = document_->editor_->textCursor();
     if (cursor.hasSelection()) options.selection = {{cursor.selectionStart(), cursor.selectionEnd()}};
     print_selection_available_ = options.selection.has_value();

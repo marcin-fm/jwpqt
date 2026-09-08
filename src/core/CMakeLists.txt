@@ -43,6 +43,7 @@ add_library(jwpqt_core STATIC
   plain_text_change.cpp
   query_history.cpp
   query_history_file.cpp
+  raster_font.cpp
   romaji_conversion.cpp
   text_detection.cpp
   text_file.cpp

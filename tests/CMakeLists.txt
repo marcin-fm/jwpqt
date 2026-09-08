@@ -2,6 +2,12 @@ add_executable(jwpqt_core_tests
   utf8_test.cpp
 )
 
+add_executable(jwpqt_raster_font_tests raster_font_test.cpp)
+target_link_libraries(jwpqt_raster_font_tests PRIVATE jwpqt_qt_ui)
+target_compile_options(jwpqt_raster_font_tests PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME qt_raster_font COMMAND jwpqt_raster_font_tests)
+set_tests_properties(qt_raster_font PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;TMPDIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 90)
+
 target_link_libraries(jwpqt_core_tests PRIVATE jwpqt_core)
 target_compile_options(jwpqt_core_tests PRIVATE -Wall -Wextra -Wpedantic)
 
