@@ -105,6 +105,94 @@ void test_management_commands() {
   require(!disposable, "Management callback could not safely dispose its lookup");
 }
 
+void test_result_keyboard_commands() {
+  namespace qt = jwpqt::qt;
+  int searches = 0, inserts = 0;
+  bool reject_insert = false;
+  std::u32string inserted;
+  qt::EdictLookupDialog dialog([&](const auto&, const auto&, bool) {
+    ++searches;
+    qt::EdictResourceSearchReport report;
+    report.results = {result(0, QStringLiteral("Main"), U"cat", {}, {U"feline"})};
+    return report;
+  }, [&](const std::u32string& text) {
+    ++inserts; inserted = text; return !reject_insert;
+  });
+  dialog.set_query(U"cat");
+  dialog.show();
+  require(dialog.search(), "Could not prepare result keyboard commands");
+  auto* results = dialog.findChild<QTextEdit*>("edictResults");
+  auto* query = dialog.findChild<QLineEdit*>("edictQuery");
+  auto* field = dynamic_cast<qt::KanaInputField*>(query->parentWidget());
+  require(field, "Result typing has no local input field");
+  const QPointer<QTextDocument> document(results->document());
+  const int position = results->textCursor().position(), anchor = results->textCursor().anchor();
+  auto key = [&](int code, Qt::KeyboardModifiers modifiers, const QString& text = {}) {
+    QKeyEvent event(QEvent::KeyPress, code, modifiers, text);
+    QApplication::sendEvent(results, &event);
+  };
+  QKeyEvent override(QEvent::ShortcutOverride, Qt::Key_Return, Qt::NoModifier);
+  override.ignore();
+  QApplication::sendEvent(results, &override);
+  require(override.isAccepted(), "Result Return did not own its shortcut");
+  key(Qt::Key_Return, Qt::NoModifier);
+  require(inserts == 1 && searches == 1 && inserted == U"cat /feline/",
+          "Result Return searched or inserted display text instead of the canonical entry");
+  key(Qt::Key_Enter, Qt::ShiftModifier);
+  require(inserts == 2 && searches == 1, "Keypad/Shift Enter did not insert from results");
+  reject_insert = true;
+  key(Qt::Key_Return, Qt::NoModifier);
+  require(inserts == 3 && searches == 1 && results->document() == document &&
+              results->textCursor().position() == position && results->textCursor().anchor() == anchor,
+          "Failed keyboard insertion damaged result selection or searched again");
+  QTextCursor empty = results->textCursor(); empty.clearSelection(); results->setTextCursor(empty);
+  key(Qt::Key_Return, Qt::NoModifier);
+  require(inserts == 3 && searches == 1 && dialog.focusWidget() == query,
+          "Unselected result Enter did not return to the query without searching");
+  QTextCursor selected(results->document()); selected.select(QTextCursor::Document); results->setTextCursor(selected);
+  query->setText(QStringLiteral("draft")); query->setCursorPosition(5);
+  results->setFocus();
+  key(Qt::Key_K, Qt::NoModifier, QStringLiteral("k"));
+  require(query->text() == QStringLiteral("draft") && dialog.focusWidget() == query,
+          "Result typing failed to focus the query or prematurely flushed kana");
+  key(Qt::Key_A, Qt::NoModifier, QStringLiteral("a"));
+  require(query->text() == QStringLiteral("draft\u304b") && searches == 1 && results->document() == document,
+          "Result typing did not use local kana composition");
+  field->set_input_mode(qt::InputMode::kAscii);
+  query->setText(QStringLiteral("ab")); query->setSelection(0, 1);
+  key(Qt::Key_X, Qt::ShiftModifier, QStringLiteral("X"));
+  require(query->text() == QStringLiteral("Xb"), "Result typing ignored local ASCII selection replacement");
+  query->undo();
+  require(query->text() == QStringLiteral("ab"), "Forwarded typing did not retain local query undo");
+  field->set_input_mode(qt::InputMode::kJascii);
+  query->clear();
+  key(Qt::Key_A, Qt::NoModifier, QStringLiteral("a"));
+  require(query->text() == QStringLiteral("\uff41"), "Result typing ignored local JASCII mode");
+  query->setReadOnly(true);
+  key(Qt::Key_X, Qt::NoModifier, QStringLiteral("x"));
+  require(query->text() == QStringLiteral("\uff41"), "Result typing changed a read-only query");
+  query->setReadOnly(false); field->set_input_mode(qt::InputMode::kAscii);
+  query->setText(QStringLiteral("kept"));
+  results->selectAll();
+  key(Qt::Key_C, Qt::ControlModifier, QStringLiteral("c"));
+  require(query->text() == QStringLiteral("kept") && !QApplication::clipboard()->text().isEmpty(),
+          "Result typing stole native Copy");
+  key(Qt::Key_unknown, Qt::NoModifier);
+  const auto before = query->text();
+  key(Qt::Key_Left, Qt::NoModifier);
+  require(query->text() == before && searches == 1, "Result navigation changed or searched the query");
+  QPointer<qt::EdictLookupDialog> disposable;
+  disposable = new qt::EdictLookupDialog([](const auto&, const auto&, bool) {
+    qt::EdictResourceSearchReport report;
+    report.results = {result(0, {}, U"cat", {}, {U"feline"})}; return report;
+  }, [&](const auto&) { delete disposable.data(); return false; });
+  disposable->set_query(U"cat");
+  require(disposable->search(), "Could not prepare deleting insertion callback");
+  QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+  QApplication::sendEvent(disposable->findChild<QTextEdit*>("edictResults"), &enter);
+  require(!disposable, "Result insertion callback did not safely delete its owner");
+}
+
 void test_search_render_status_copy_and_insert() {
   jwpqt::core::JwpText received_query;
   jwpqt::qt::EdictLookupOptions received_options;
@@ -1160,6 +1248,7 @@ int main(int argc, char** argv) {
   QApplication application(argc, argv);
   try {
     test_management_commands();
+    test_result_keyboard_commands();
     test_search_render_status_copy_and_insert();
     test_compact_presentation();
     test_empty_invalid_and_failed_search_are_contained();

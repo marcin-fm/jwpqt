@@ -676,22 +676,25 @@ void EdictLookupDialog::history_command(HistoryCommand command) {
 }
 
 bool EdictLookupDialog::insert_selected() {
+  if (query_busy_) return false;
   const std::u32string rows = selected_rows();
   if (!insert_handler_ || rows.empty()) {
     return false;
   }
+  const QPointer<EdictLookupDialog> self(this);
+  const auto handler = insert_handler_;
   try {
-    if (!insert_handler_(rows)) {
-      status_->setText(tr("The selected entry could not be inserted."));
+    if (!handler(rows)) {
+      if (self) status_->setText(tr("The selected entry could not be inserted."));
       return false;
     }
     return true;
   } catch (const std::exception& error) {
-    status_->setText(
+    if (self) status_->setText(
         tr("Insert failed: %1").arg(QString::fromUtf8(error.what())));
     return false;
   } catch (...) {
-    status_->setText(tr("Insert failed with an unknown error."));
+    if (self) status_->setText(tr("Insert failed with an unknown error."));
     return false;
   }
 }
@@ -740,6 +743,29 @@ bool EdictLookupDialog::eventFilter(QObject* watched, QEvent* event) {
     }
   }
   if (watched == results_ || watched == results_->viewport()) {
+    if (event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress) {
+      auto* key = static_cast<QKeyEvent*>(event);
+      const bool plain = !(key->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier));
+      const bool enter = key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter;
+      const bool typing = !key->text().isEmpty() && key->text().front().unicode() >= 0x20U &&
+                          key->text().front().unicode() != 0x7fU;
+      if (plain && (enter || typing)) {
+        event->accept();
+        if (event->type() == QEvent::ShortcutOverride || query_busy_) return true;
+        if (enter) {
+          if (insert_handler_ && results_->textCursor().hasSelection()) insert_selected();
+          else query_edit_->setFocus();
+        } else {
+          const QPointer<EdictLookupDialog> self(this);
+          const QPointer<QLineEdit> query(query_edit_);
+          QKeyEvent forwarded(key->type(), key->key(), key->modifiers(), key->text(),
+                              key->isAutoRepeat(), static_cast<ushort>(key->count()));
+          query->setFocus();
+          if (self && query) QApplication::sendEvent(query, &forwarded);
+        }
+        return true;
+      }
+    }
     if (event->type() == QEvent::MouseButtonPress &&
         static_cast<QMouseEvent*>(event)->button() == Qt::RightButton) return true;
     if (event->type() == QEvent::ContextMenu && info_handler_) {
