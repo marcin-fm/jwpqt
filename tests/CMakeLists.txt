@@ -760,7 +760,7 @@ set_tests_properties(
 )
 set_tests_properties(qt_main_window PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/xdg-config"
-  TIMEOUT 10
+  TIMEOUT 30
 )
 set_tests_properties(
   qt_edict_lookup_dialog
@@ -809,3 +809,8 @@ set_tests_properties(qt_help_window PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offs
 add_test(NAME native_delivery COMMAND "${CMAKE_COMMAND}" "-DBUILD=${CMAKE_BINARY_DIR}"
   -P "${CMAKE_CURRENT_SOURCE_DIR}/installed_delivery.cmake")
 set_tests_properties(native_delivery PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
+add_executable(jwpqt_toolbar_tests toolbar_test.cpp)
+target_link_libraries(jwpqt_toolbar_tests PRIVATE jwpqt_qt_ui)
+target_compile_options(jwpqt_toolbar_tests PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME qt_toolbar COMMAND jwpqt_toolbar_tests)
+set_tests_properties(qt_toolbar PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 90)

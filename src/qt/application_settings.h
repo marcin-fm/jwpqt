@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #pragma once
+#include "toolbar_settings.h"
 
 #include <array>
 #include <cstddef>
@@ -30,6 +31,7 @@ struct ApplicationSettings {
   std::array<JapaneseFontSetting, static_cast<std::size_t>(JapaneseFontRole::kCount)> fonts;
   JapaneseFontSetting print_font{{}, 120, true}; // Size is tenths of a point, not screen pixels.
   bool show_toolbar = true;
+  ToolbarSettings toolbar;
   bool show_status_bar = true;
   bool show_kanji_bar = true;
   bool kanji_bar_at_top = false;

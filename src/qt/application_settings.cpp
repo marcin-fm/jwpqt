@@ -136,6 +136,25 @@ ApplicationSettings read_application_settings(std::string_view text,
         name = "HistoryBuffers_NumChars";
         result.history_size = static_cast<int>(core::parse_jwp_setting_integer(entry.value, 0, 30000));
       }
+      if (name.empty() && core::JwpConfigurationKey{"ToolbarButtons", "buttons"}.matches(entry.name)) {
+        name = "ToolbarButtons";
+        const auto bytes = core::parse_jwp_setting_bytes(entry.value, result.toolbar.buttons.size());
+        std::copy(bytes.begin(), bytes.end(), result.toolbar.buttons.begin());
+      }
+      const struct { const char* key; const char* alias; int ToolbarSettings::*member; int min; int max; } toolbar_values[] = {
+          {"ToolbarButtonCount", "button_count", &ToolbarSettings::count, 0, 100},
+          {"Jwpqt_ToolbarArea", "", &ToolbarSettings::area, 0, 3},
+          {"Jwpqt_ToolbarIconSize", "", &ToolbarSettings::icon_size, 16, 48},
+          {"Jwpqt_ToolbarTextStyle", "", &ToolbarSettings::text_style, 0, 3}};
+      for (const auto& value : toolbar_values) {
+        if (!name.empty() || !core::JwpConfigurationKey{value.key, value.alias}.matches(entry.name)) continue;
+        name = value.key;
+        result.toolbar.*(value.member) = static_cast<int>(core::parse_jwp_setting_integer(entry.value, value.min, value.max));
+      }
+      if (name.empty() && core::JwpConfigurationKey{"Jwpqt_ToolbarLocked", ""}.matches(entry.name)) {
+        name = "Jwpqt_ToolbarLocked";
+        result.toolbar.locked = core::parse_jwp_setting_bool(entry.value);
+      }
       if (name.empty() && core::JwpConfigurationKey{"CharInfo_Fields", "kanji_info"}.matches(entry.name)) {
         name = "CharInfo_Fields";
         const auto bytes = core::parse_jwp_setting_bytes(entry.value, result.kanji_info.fields.size());
@@ -163,10 +182,12 @@ ApplicationSettings read_application_settings(std::string_view text,
     result.unapplied.push_back(QStringLiteral("Dict_ExclusionFilters (unsupported bits: 0x%1)")
         .arg(result.dictionary_extra_exclusions, 0, 16));
   }
+  validate_toolbar(result.toolbar);
   return result;
 }
 
 std::string write_application_settings(const ApplicationSettings& settings) {
+  validate_toolbar(settings.toolbar);
   if (settings.history_size < 0 || settings.history_size > 30000)
     throw core::JwpConfigurationError("History storage is outside 0..30000 cells");
   if (settings.translation_code_page != 0 &&
@@ -174,6 +195,18 @@ std::string write_application_settings(const ApplicationSettings& settings) {
     throw core::JwpConfigurationError("Unknown translation code page");
   }
   std::vector<core::JwpConfigurationUpdate> updates;
+  std::string toolbar_bytes;
+  constexpr char digits[] = "0123456789ABCDEF";
+  for (const auto byte : settings.toolbar.buttons) {
+    toolbar_bytes.push_back(digits[byte >> 4]);
+    toolbar_bytes.push_back(digits[byte & 15]);
+  }
+  updates.push_back({{"ToolbarButtons", "buttons"}, toolbar_bytes});
+  updates.push_back({{"ToolbarButtonCount", "button_count"}, std::to_string(settings.toolbar.count)});
+  updates.push_back({{"Jwpqt_ToolbarArea", ""}, std::to_string(settings.toolbar.area)});
+  updates.push_back({{"Jwpqt_ToolbarIconSize", ""}, std::to_string(settings.toolbar.icon_size)});
+  updates.push_back({{"Jwpqt_ToolbarTextStyle", ""}, std::to_string(settings.toolbar.text_style)});
+  updates.push_back({{"Jwpqt_ToolbarLocked", ""}, settings.toolbar.locked ? "true" : "false"});
   for (std::size_t role = 0; role < std::size(kFonts); ++role) {
     const bool printing = role == settings.fonts.size();
     const auto& font = printing ? settings.print_font : settings.fonts[role];

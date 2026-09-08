@@ -217,7 +217,7 @@ bool HelpWindow::eventFilter(QObject* watched, QEvent* event) {
       else if (name.contains(QStringLiteral("dict"))) topic = QStringLiteral("dictionary.md");
       else if (name.contains(QStringLiteral("kanji")) || name.contains(QStringLiteral("jis"))) topic = QStringLiteral("kanji.md");
       else if (name.contains(QStringLiteral("print")) || name.contains(QStringLiteral("pagelayout"))) topic = QStringLiteral("printing.md");
-      else if (name.contains(QStringLiteral("settings"))) topic = QStringLiteral("settings.md");
+      else if (name.contains(QStringLiteral("settings")) || name.contains(QStringLiteral("toolbar"))) topic = QStringLiteral("settings.md");
       else if (name.contains(QStringLiteral("project")) || name.contains(QStringLiteral("file"))) topic = QStringLiteral("files.md");
       found = topic != QStringLiteral("start.md");
     }

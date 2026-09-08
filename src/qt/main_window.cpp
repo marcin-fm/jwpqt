@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "main_window.h"
+#include "toolbar_dialog.h"
+#include <QTimer>
 #include "help_window.h"
 #include <QApplication>
 #include "find_replace_dialog.h"
@@ -950,6 +952,7 @@ bool MainWindow::open_project_path(const QString& path, const ProjectOpenOptions
 
 bool MainWindow::save_project_path(const QString& path, bool save_documents, OpenMode mode) {
   try {
+    sync_toolbar_position();
     if (path.isEmpty() || find_document_path(path) >= 0)
       throw core::JwpProjectError("A project cannot overwrite an open document");
     const int original = current_document_index();
@@ -1042,6 +1045,7 @@ bool MainWindow::apply_application_settings(const ApplicationSettings& settings,
         }
       } restore{views};
       application_settings_ = std::move(next);
+      apply_toolbar();
       if (histories) {
         if (query_history_snapshot_ && query_history_snapshot_->source &&
             history_entry_count(query_history_snapshot_->histories) != 0 &&
@@ -1137,6 +1141,7 @@ bool MainWindow::import_application_settings(const QString& path, OpenMode mode)
 }
 
 bool MainWindow::save_application_settings(const QString& path, OpenMode mode) {
+  sync_toolbar_position();
   QString destination = path.isEmpty() ? application_settings_path_ : absolute_document_path(path);
   if (destination.isEmpty() && mode == OpenMode::kInteractive)
     destination = QFileDialog::getSaveFileName(this, tr("Save Settings"), {}, tr("JWP settings (*.cfg);;All files (*)"));
@@ -2455,6 +2460,8 @@ void MainWindow::create_actions() {
     ApplicationSettings defaults;
     defaults.source = application_settings_.source;
     defaults.dictionary_extra_exclusions = application_settings_.dictionary_extra_exclusions;
+    std::copy(application_settings_.toolbar.buttons.begin() + defaults.toolbar.count,
+              application_settings_.toolbar.buttons.end(), defaults.toolbar.buttons.begin() + defaults.toolbar.count);
     apply_application_settings(defaults, OpenMode::kInteractive);
   });
   auto* save_settings_action = tools_menu->addAction(tr("Save Settings"));
@@ -2793,11 +2800,9 @@ void MainWindow::create_actions() {
     action->setIcon(QIcon::fromTheme(QString::fromLatin1(theme), fallback));
     toolbar_standard_icons_.emplace_back(action, action->icon());
     action->setIconText(label);
-    main_toolbar_->addAction(action);
   };
   const auto add_legacy = [&](QAction* action, int index) {
     toolbar_icons_.emplace_back(action, index);
-    main_toolbar_->addAction(action);
   };
   // Default groups and custom bitmap indices: jwp_stat.cpp:235-325.
   add_standard(new_action, "document-new", tr("New"),
@@ -2806,30 +2811,23 @@ void MainWindow::create_actions() {
                style()->standardIcon(QStyle::SP_DialogOpenButton));
   add_standard(save_action, "document-save", tr("Save"),
                style()->standardIcon(QStyle::SP_DialogSaveButton));
-  main_toolbar_->addSeparator();
   add_standard(print_action_, "document-print", tr("Print"));
-  main_toolbar_->addSeparator();
   add_standard(cut_action, "edit-cut", tr("Cut"));
   add_standard(copy_action, "edit-copy", tr("Copy"));
   add_standard(paste_action, "edit-paste", tr("Paste"));
-  main_toolbar_->addSeparator();
   add_standard(undo_action_, "edit-undo", tr("Undo"));
   add_standard(redo_action_, "edit-redo", tr("Redo"));
-  main_toolbar_->addSeparator();
   add_standard(find_action, "edit-find", tr("Find"));
   add_standard(replace_action, "edit-find-replace", tr("Replace"));
   add_legacy(find_next_action, 21);
-  main_toolbar_->addSeparator();
   add_legacy(kana_input_action_, 0);
   add_legacy(ascii_input, 1);
   add_legacy(jascii_input, 2);
   add_legacy(convert_action_, 3);
-  main_toolbar_->addSeparator();
   add_legacy(kanji_info_action_, 4);
   add_legacy(jis_table_action_, 13);
   add_legacy(edict_lookup_action_, 19);
   add_legacy(kanji_count_action_, 14);
-  main_toolbar_->addSeparator();
   add_legacy(kanji_lookup_action_, 5);
   add_legacy(bushu_lookup_action_, 6);
   add_legacy(stroke_bushu_lookup_action_, 7);
@@ -2838,8 +2836,25 @@ void MainWindow::create_actions() {
   add_legacy(four_corner_lookup_action_, 10);
   add_legacy(kanji_reading_lookup_action_, 11);
   add_legacy(index_lookup_action_, 12);
-  main_toolbar_->addSeparator();
   add_legacy(page_layout_action_, 18);
+
+  // Optional source commands receive the same theme-aware icons as the default set.
+  add_standard(delete_action_, "edit-delete", tr("Delete"), style()->standardIcon(QStyle::SP_TrashIcon));
+  add_legacy(find_previous_action, 22);
+  add_legacy(make_kanji_color_list_action_, 15);
+  add_legacy(format_file_action_, 16);
+  add_legacy(format_paragraph_action_, 17);
+  add_legacy(user_dictionary_action_, 20);
+  add_standard(options_action, "preferences-system", tr("Options"), style()->standardIcon(QStyle::SP_FileDialogDetailedView));
+  toolbar_catalog_.push_back(nullptr);
+  for (std::size_t id = 1; id < kToolbarCommands.size(); ++id) {
+    auto* command = findChild<QAction*>(QString::fromLatin1(kToolbarCommands[id]));
+    if (!command) throw std::runtime_error("Missing native toolbar command");
+    toolbar_catalog_.push_back(command);
+  }
+  main_toolbar_->setAllowedAreas(Qt::AllToolBarAreas);
+  main_toolbar_->installEventFilter(this);
+  apply_toolbar();
 
   QMenu* view_menu = new QMenu(tr("&View"), this);
   menuBar()->insertMenu(format_menu->menuAction(), view_menu);
@@ -2850,6 +2865,80 @@ void MainWindow::create_actions() {
   connect(toolbar_visible, &QAction::triggered, this, [this](bool visible) {
     application_settings_.show_toolbar = visible;
   });
+  auto* customize = view_menu->addAction(tr("Customize Toolbar..."));
+  customize->setObjectName("customizeToolbarAction");
+  connect(customize, &QAction::triggered, this, [this] { customize_toolbar(); });
+  tools_menu->addAction(customize);
+}
+
+void MainWindow::sync_toolbar_position() {
+  if (!main_toolbar_ || updating_toolbar_) return;
+  const Qt::ToolBarArea areas[] = {Qt::TopToolBarArea, Qt::BottomToolBarArea, Qt::LeftToolBarArea, Qt::RightToolBarArea};
+  for (int i = 0; i < 4; ++i) if (toolBarArea(main_toolbar_) == areas[i]) application_settings_.toolbar.area = i;
+}
+
+void MainWindow::apply_toolbar() {
+  if (!main_toolbar_ || toolbar_catalog_.isEmpty()) return;
+  const auto settings = application_settings_.toolbar;
+  validate_toolbar(settings);
+  const Qt::ToolBarArea areas[] = {Qt::TopToolBarArea, Qt::BottomToolBarArea, Qt::LeftToolBarArea, Qt::RightToolBarArea};
+  if (applied_toolbar_ && applied_toolbar_->buttons == settings.buttons && applied_toolbar_->count == settings.count &&
+      applied_toolbar_->area == settings.area && applied_toolbar_->icon_size == settings.icon_size &&
+      applied_toolbar_->text_style == settings.text_style && applied_toolbar_->locked == settings.locked &&
+      toolBarArea(main_toolbar_) == areas[settings.area]) return;
+  updating_toolbar_ = true;
+  const auto guard = qScopeGuard([this] { updating_toolbar_ = false; });
+  for (auto* action : main_toolbar_->actions()) {
+    main_toolbar_->removeAction(action);
+    if (action->isSeparator() || action->property("toolbarProxy").toBool()) delete action;
+  }
+  const auto defaults = ToolbarSettings{};
+  const auto& layout = settings.count ? settings : defaults;
+  QList<QAction*> used;
+  for (int i = 0; i < layout.count; ++i) {
+    const auto id = layout.buttons[i];
+    if (!id) { main_toolbar_->addSeparator(); continue; }
+    auto* source = toolbar_catalog_[id];
+    if (!used.contains(source)) { main_toolbar_->addAction(source); used.push_back(source); continue; }
+    auto* proxy = new QAction(main_toolbar_);
+    proxy->setProperty("toolbarProxy", true);
+    proxy->setProperty("toolbarCommandId", id);
+    auto sync = [source, proxy] {
+      proxy->setText(source->text()); proxy->setIcon(source->icon()); proxy->setIconText(source->iconText());
+      proxy->setToolTip(source->toolTip()); proxy->setStatusTip(source->statusTip());
+      proxy->setVisible(source->isVisible());
+      proxy->setEnabled(source->isEnabled()); proxy->setCheckable(source->isCheckable()); proxy->setChecked(source->isChecked());
+    };
+    connect(source, &QAction::changed, proxy, sync);
+    connect(proxy, &QAction::triggered, proxy, [source = QPointer<QAction>(source),
+        proxy = QPointer<QAction>(proxy), sync] {
+      if (source && source->isEnabled()) source->trigger();
+      // Exclusive actions may stay checked and emit no change when re-triggered.
+      if (source && proxy) sync();
+    });
+    sync(); main_toolbar_->addAction(proxy);
+  }
+  addToolBar(areas[settings.area], main_toolbar_);
+  main_toolbar_->setMovable(!settings.locked);
+  main_toolbar_->setIconSize(QSize(settings.icon_size, settings.icon_size));
+  const Qt::ToolButtonStyle styles[] = {Qt::ToolButtonIconOnly, Qt::ToolButtonTextBesideIcon,
+                                      Qt::ToolButtonTextUnderIcon, Qt::ToolButtonTextOnly};
+  main_toolbar_->setToolButtonStyle(styles[settings.text_style]);
+  applied_toolbar_ = settings;
+}
+
+void MainWindow::customize_toolbar() {
+  sync_toolbar_position();
+  const QPointer<MainWindow> self(this);
+  QPointer<ToolbarDialog> dialog = new ToolbarDialog(application_settings_.toolbar, toolbar_catalog_, this);
+  const auto answer = dialog->exec();
+  if (!self || !dialog) return;
+  const auto value = dialog->settings();
+  delete dialog;
+  if (!self || answer != QDialog::Accepted) return;
+  auto next = application_settings_;
+  next.toolbar = value;
+  apply_application_settings(next, OpenMode::kInteractive);
 }
 
 QString MainWindow::resource_report() const {
@@ -3497,6 +3586,9 @@ void MainWindow::show_automatic_conversion_range() {
 }
 
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
+  if (watched == main_toolbar_ && event->type() == QEvent::Move && !updating_toolbar_) {
+    QTimer::singleShot(0, this, [this] { sync_toolbar_position(); });
+  }
   if (watched == document_->editor_ || watched == document_->editor_->viewport()) {
     if (event->type() == QEvent::ContextMenu) {
       show_character_context_menu(*document_->editor_, *static_cast<QContextMenuEvent*>(event),

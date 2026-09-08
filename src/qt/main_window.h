@@ -462,6 +462,12 @@ class MainWindow : public QMainWindow {
   QToolButton* overwrite_button_;
   QToolButton* resource_status_button_;
   QToolBar* main_toolbar_ = nullptr;
+  QList<QAction*> toolbar_catalog_;
+  std::optional<ToolbarSettings> applied_toolbar_;
+  bool updating_toolbar_ = false;
+  void apply_toolbar();
+  void sync_toolbar_position();
+  void customize_toolbar();
   std::vector<std::pair<QAction*, int>> toolbar_icons_;
   std::vector<std::pair<QAction*, QIcon>> toolbar_standard_icons_;
   QActionGroup* input_mode_actions_;

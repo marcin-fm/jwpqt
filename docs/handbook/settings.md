@@ -9,7 +9,23 @@ and are disclosed rather than silently applied.
 Settings are stored in jwpqt.cfg. Japanese System/Edit/List/KanjiBar/File/Big/Table
 fonts are not desktop menu fonts. Missing or bitmap families use native
 fallbacks. Print has a separate physical font role. Some remaining legacy
-font roles, toolbar customization and tuning controls are not implemented.
+font roles and tuning controls are not implemented.
+
+## Customize the Toolbar
+
+View or Tools > Customize Toolbar opens the complete command catalog. Select a
+command on the left and Add it after the selected toolbar slot. Select a slot on
+the right to Remove, Move Up or Move Down. Separator is a reusable catalog item;
+commands may also repeat. Reset Layout restores the native default order without
+changing unrelated settings. At least one slot remains; View > Toolbar hides an
+unused toolbar instead. Cancel discards all staged changes.
+
+Choose top/bottom/left/right docking, lock movement, icon size (16-48 logical
+pixels) and icon/text presentation. Floating is disabled. The menu actions remain
+authoritative, including enabled and checked state; duplicate buttons do not add
+duplicate shortcuts. Docking and customization save with normal preferences and
+projects. Imported legacy toolbar IDs and inactive configuration bytes are
+preserved. Toolbar changes do not edit document contents or clear Undo.
 
 ## Persistent Histories
 

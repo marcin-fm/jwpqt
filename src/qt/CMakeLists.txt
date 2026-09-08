@@ -82,6 +82,9 @@ add_library(jwpqt_qt_ui STATIC
   lookup_artwork.h
   main_window.cpp
   main_window.h
+  toolbar_settings.h
+  toolbar_dialog.cpp
+  toolbar_dialog.h
   page_layout_dialog.cpp
   page_layout_dialog.h
   print_document.cpp

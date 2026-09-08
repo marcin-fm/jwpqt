@@ -354,8 +354,22 @@ Menu text and the embedded legacy Japanese toolbar artwork adapt to light/dark
 palettes, including mismatched desktop text colors. Low-contrast monochrome
 standard icons also adapt, while colored artwork is retained. The 29 toolbar
 actions include Index Lookup; short text or native icon fallbacks remain when
-no icon theme is installed. Toolbar visibility is saved with native preferences;
-customization and saved placement remain open. Options is available in Tools.
+no icon theme is installed. **View or Tools > Customize Toolbar** provides the
+complete 36-command legacy catalog: add/remove/reorder buttons, insert separators,
+repeat commands, or reset the native default layout. Changes are staged until OK;
+Cancel preserves the live toolbar and editor state. Repeated commands mirror the
+same menu action without duplicating keyboard shortcuts.
+
+Dock at the top, bottom, left or right, lock/unlock movement, choose 16-48 logical
+pixel icons and icons-only, text-beside, text-below or text-only presentation.
+Floating remains disabled. Dragged placement, visibility and customization persist
+through settings and JPR. A layout must contain at least one slot; use View > Toolbar
+to hide it. The existing 29-command default is retained, while optional commands
+include Delete, previous search, formatting, color-list creation, user conversions
+and Options. `ToolbarButtons` retains the legacy 100-byte array and inactive tail,
+`ToolbarButtonCount` validates 0-100 (zero restores defaults), and native
+`Jwpqt_ToolbarArea/IconSize/TextStyle/Locked` settings store presentation. Invalid
+active IDs reject before changing the toolbar; unknown unrelated settings survive.
 
 ### Dictionary and kanji lookup
 
