@@ -1064,6 +1064,10 @@ bool MainWindow::apply_application_settings(const ApplicationSettings& settings,
       }
       if (edict_lookup_options_) *edict_lookup_options_ = application_settings_.dictionary;
       if (edict_lookup_dialog_) edict_lookup_dialog_->set_options(application_settings_.dictionary);
+      if (kanji_lookup_dialog_) kanji_lookup_dialog_->set_lookup_options(
+          application_settings_.automatic_kanji_lookup, application_settings_.rare_kanji_last);
+      if (kanji_code_lookup_dialog_) kanji_code_lookup_dialog_->set_automatic_search(
+          application_settings_.automatic_kanji_lookup);
       // Font/layout signals must not be interpreted as edits in any open tab.
       application_font_warnings_ = set_japanese_fonts(*this, application_settings_);
       for (const auto& state : documents_) {
@@ -4157,6 +4161,12 @@ void MainWindow::show_kanji_code_lookup_dialog(KanjiCodeLookupMode mode) {
       [this](core::JisCode code) { show_kanji_info_code(code); }, this,
       radical_sheet_);
   select_mode(*dialog);
+  dialog->set_automatic_search(application_settings_.automatic_kanji_lookup);
+  dialog->set_auto_search_handler([this](bool automatic) {
+    application_settings_.automatic_kanji_lookup = automatic;
+    if (kanji_lookup_dialog_) kanji_lookup_dialog_->set_lookup_options(
+        automatic, application_settings_.rare_kanji_last);
+  });
   dialog->setAttribute(Qt::WA_DeleteOnClose);
   connect(dialog, &QObject::destroyed, this,
           [this] { kanji_code_lookup_dialog_ = nullptr; });
@@ -4217,6 +4227,12 @@ void MainWindow::show_kanji_lookup_dialog() {
         }
       },
       [this](core::JisCode code) { show_kanji_info_code(code); }, this);
+  dialog->set_lookup_options(application_settings_.automatic_kanji_lookup,
+                             application_settings_.rare_kanji_last);
+  dialog->set_auto_search_handler([this](bool automatic) {
+    application_settings_.automatic_kanji_lookup = automatic;
+    if (kanji_code_lookup_dialog_) kanji_code_lookup_dialog_->set_automatic_search(automatic);
+  });
   dialog->setAttribute(Qt::WA_DeleteOnClose);
   connect(dialog, &QObject::destroyed, this,
           [this] { kanji_lookup_dialog_ = nullptr; });

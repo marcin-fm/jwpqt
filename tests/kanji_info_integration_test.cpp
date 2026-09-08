@@ -5,6 +5,8 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QCheckBox>
+#include <QDialogButtonBox>
 #include <QClipboard>
 #include <QContextMenuEvent>
 #include <QDialog>
@@ -22,6 +24,8 @@
 #include <QTimer>
 
 #include "file_io.h"
+#include "application_settings_dialog.h"
+#include "jwpqt/core/jwp_configuration.h"
 #include "jwpqt/core/kanji_info.h"
 #include "kanji_code_lookup_dialog.h"
 #include "kanji_count_dialog.h"
@@ -520,6 +524,99 @@ jwpqt::qt::KanjiInfoDialog* request_information(QTextEdit& editor, int position,
   return nullptr;
 }
 
+void test_lookup_preferences(const QString& directory) {
+  using namespace jwpqt;
+  const auto settings = qt::read_application_settings(
+      "auto_lookup=false\nRareKanjiLast=no\nFutureOption=42\n");
+  require(!settings.automatic_kanji_lookup && !settings.rare_kanji_last && settings.unapplied.size() == 1,
+          "Lookup aliases/defaults/retained fields are wrong");
+  try {
+    (void)qt::read_application_settings("rare_last=maybe\nRareKanjiLast=true\n");
+    require(false, "Invalid overridden lookup setting was accepted");
+  } catch (const core::JwpConfigurationError&) {}
+  const auto canonical = qt::write_application_settings(settings);
+  require(qt::write_application_settings(qt::read_application_settings(canonical)) == canonical,
+          "Lookup setting serialization is not canonical");
+  qt::ApplicationSettingsDialog options(settings);
+  auto* automatic = options.findChild<QCheckBox*>("settingsLookupAutomatic");
+  auto* rare = options.findChild<QCheckBox*>("settingsLookupRareLast");
+  require(automatic && rare && !automatic->isChecked() && !rare->isChecked(), "Lookup Options are missing");
+  automatic->setChecked(true);
+  options.reject();
+  require(!options.settings().automatic_kanji_lookup, "Cancelled lookup Options changed settings");
+  auto* buttons = options.findChild<QDialogButtonBox*>();
+  buttons->button(QDialogButtonBox::Ok)->click();
+  require(options.settings().automatic_kanji_lookup && !options.settings().rare_kanji_last,
+          "Accepted lookup Options lost values");
+
+  qt::MainWindow window;
+  write_database(directory + "/lookup-info.dat");
+  write_lookup_lists(directory + "/lookup-radicals.dat", core::kRadicalListGroups, 0x3021U);
+  write_lookup_lists(directory + "/lookup-strokes.dat", core::kStrokeListGroups, 0x3021U);
+  core::JwpDocument document;
+  document.paragraphs = {core::JwpParagraph{{0x3021U}}};
+  qt::write_jwp_file(directory + "/lookup-doc.jwp", document);
+  require(window.load_kanji_info(directory + "/lookup-info.dat", qt::OpenMode::kNonInteractive) &&
+              window.load_kanji_lookup(directory + "/lookup-radicals.dat", directory + "/lookup-strokes.dat", {},
+                                       qt::OpenMode::kNonInteractive) &&
+              window.open_jwp_path(directory + "/lookup-doc.jwp"), "Lookup settings fixture failed");
+  auto supported = settings;
+  supported.source.clear(); // The explicit unsupported-field consent is tested by project tests.
+  supported.unapplied.clear();
+  require(window.apply_application_settings(supported), "Could not apply shared lookup settings");
+  const auto original = *window.current_jwp_document();
+  window.findChild<QAction*>("radicalLookupAction")->trigger();
+  window.findChild<QAction*>("skipLookupAction")->trigger();
+  auto* radial = dynamic_cast<qt::KanjiLookupDialog*>(window.findChild<QDialog*>("kanjiLookupDialog"));
+  auto* code = dynamic_cast<qt::KanjiCodeLookupDialog*>(window.findChild<QDialog*>("kanjiCodeLookupDialog"));
+  require(radial && code, "Lookup windows did not open");
+  auto* radial_auto = radial->findChild<QCheckBox*>("kanjiLookupAutoSearch");
+  auto* code_auto = code->findChild<QCheckBox*>("kanjiCodeAutoSearch");
+  require(radial_auto && code_auto && !radial_auto->isChecked() && !code_auto->isChecked(),
+          "New lookup did not adopt saved Auto preference");
+  radial_auto->setChecked(true);
+  require(window.application_settings().automatic_kanji_lookup && code_auto->isChecked(),
+          "Radical Auto did not update global and code lookup state");
+  code_auto->setChecked(false);
+  require(!window.application_settings().automatic_kanji_lookup && !radial_auto->isChecked(),
+          "Code Auto did not update radical state");
+  require(!radial->findChild<QTimer*>("kanjiLookupSearchTimer")->isActive(),
+          "Disabling shared Auto left a pending radical search");
+  require(radial->search(), "Could not populate saved preference fixture");
+  auto* list = radial->findChild<QListWidget*>("kanjiLookupResults");
+  const auto values = radial->result_codes();
+  const auto row = list->currentRow();
+  auto next = window.application_settings();
+  next.automatic_kanji_lookup = true;
+  next.rare_kanji_last = true;
+  require(window.apply_application_settings(next) && radial_auto->isChecked() && code_auto->isChecked() &&
+              radial->result_codes() == values && list->currentRow() == row &&
+              *window.current_jwp_document() == original, "Preferences altered results or document");
+  bool reentered = false;
+  const auto connection = QObject::connect(list, &QListWidget::itemSelectionChanged, &window, [&] {
+    if (reentered) return;
+    reentered = true;
+    auto newer = window.application_settings();
+    newer.automatic_kanji_lookup = true;
+    require(window.apply_application_settings(newer), "Reentrant lookup preference update failed");
+  });
+  radial_auto->setChecked(false);
+  QObject::disconnect(connection);
+  require(reentered && window.application_settings().automatic_kanji_lookup && radial_auto->isChecked() &&
+              code_auto->isChecked(), "Older Auto notification overwrote a reentrant settings update");
+  code_auto->setChecked(false);
+  require(window.save_application_settings(directory + "/lookup.cfg") &&
+              window.save_project_path(directory + "/lookup.jpr", false), "Could not persist lookup preferences");
+  qt::MainWindow restarted;
+  require(restarted.load_application_settings(directory + "/lookup.cfg") &&
+              !restarted.application_settings().automatic_kanji_lookup && restarted.application_settings().rare_kanji_last,
+          "Restart lost lookup preferences");
+  qt::MainWindow project;
+  require(project.open_project_path(directory + "/lookup.jpr") &&
+              !project.application_settings().automatic_kanji_lookup && project.application_settings().rare_kanji_last,
+          "Project lost lookup preferences");
+}
+
 void test_character_context(const QString& directory) {
   const QString info_path = directory + QStringLiteral("/context-info.dat");
   write_database(info_path);
@@ -697,6 +794,7 @@ int main(int argc, char* argv[]) {
   QTemporaryDir directory(QStringLiteral("/srv/tmp/jwpqt-kanji-ui-XXXXXX"));
   require(directory.isValid(), "Could not create kanji integration directory");
   test_integration(directory.path());
+  test_lookup_preferences(directory.path());
   test_character_context(directory.path());
   return EXIT_SUCCESS;
 }

@@ -5,6 +5,9 @@
 #include <string>
 
 #include <QApplication>
+#include <QClipboard>
+#include <QKeyEvent>
+#include <QPointer>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QEventLoop>
@@ -21,6 +24,8 @@
 
 #include "jwpqt/core/kanji_info.h"
 #include "kanji_code_lookup_dialog.h"
+#include "text_bridge.h"
+#include "jwpqt/core/jwp_text_codec.h"
 
 namespace {
 
@@ -290,10 +295,13 @@ void test_graphical_controls_and_automatic_search() {
   QTimer::singleShot(20, &loop, &QEventLoop::quit);
   loop.exec();
   require(dialog.results().size() == 1, "Visible field changes did not run automatic search");
+  dialog.set_automatic_search(false);
+  require(dialog.results().size() == 1 && !timer->isActive(),
+          "Applying automatic preference changed existing results");
   automatic->setChecked(false);
   dialog.findChild<QSpinBox*>(QStringLiteral("spahnRadical"))->setValue(0);
-  require(!timer->isActive() && dialog.results().size() == 1,
-          "Disabled automatic search still changed the results");
+  require(!timer->isActive() && dialog.results().empty(),
+          "Changed criteria with Auto off retained stale results");
   automatic->setChecked(true);
   require(timer->isActive(), "Automatic search did not schedule the pending query");
   clear->click();
@@ -313,6 +321,96 @@ void test_graphical_controls_and_automatic_search() {
   dialog.reject();
   QMetaObject::invokeMethod(timer, "timeout", Qt::DirectConnection);
   require(!timer->isActive() && dialog.results().empty(), "Closing the lookup retained automatic work");
+}
+
+void test_result_keys_and_bushu_steps() {
+  const auto source = database();
+  std::vector<jwpqt::core::JisCode> inserted;
+  jwpqt::core::JisCode shown = 0;
+  jwpqt::qt::KanjiCodeLookupDialog dialog(source,
+      [&](const auto& codes) { inserted = codes; }, [&](auto code) { shown = code; });
+  dialog.set_automatic_search(false);
+  dialog.select_bushu_mode();
+  auto* radical = dialog.findChild<QSpinBox*>("bushuRadical");
+  auto* strokes = dialog.findChild<QSpinBox*>("bushuStrokes");
+  auto* choices = dialog.findChild<QListWidget*>("bushuRadicals");
+  radical->setValue(75);
+  require(choices->currentItem() && choices->currentItem()->data(Qt::UserRole + 2).toInt() == 4,
+          "Bushu stepping did not use the selected canonical radical's stroke count");
+  auto key = [](QWidget* target, int code, Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+    QKeyEvent event(QEvent::KeyPress, code, modifiers);
+    QApplication::sendEvent(target, &event);
+  };
+  key(strokes, Qt::Key_Up);
+  require(strokes->value() == 4, "Bushu Any did not step to radical minimum");
+  key(strokes, Qt::Key_Down);
+  require(strokes->value() == -1, "Bushu minimum did not step to Any");
+  key(strokes, Qt::Key_Down);
+  require(strokes->value() == 30, "Bushu Any did not wrap backwards");
+  key(strokes, Qt::Key_Up);
+  require(strokes->value() == -1, "Bushu maximum did not wrap to Any");
+  auto* list = dialog.findChild<QListWidget*>("kanjiCodeResults");
+  jwpqt::core::JwpText codes;
+  for (int i = 0; i < 8; ++i) {
+    codes.push_back(static_cast<jwpqt::core::JisCode>(0x3021 + i));
+    auto* item = new QListWidgetItem(jwpqt::qt::to_qstring(jwpqt::core::decode_jwp_text({codes.back()})), list);
+    item->setData(Qt::UserRole, codes.back());
+  }
+  list->setCurrentRow(0);
+  key(list, Qt::Key_F2);
+  require(list->currentRow() == 1, "F2 did not move forward");
+  key(list, Qt::Key_Right, Qt::ControlModifier);
+  require(list->currentRow() == 6, "Ctrl-Right did not move five characters");
+  key(list, Qt::Key_F3, Qt::ControlModifier);
+  require(list->currentRow() == 1, "Ctrl-F3 did not move five characters backwards");
+  key(list, Qt::Key_Less, Qt::ShiftModifier);
+  require(list->currentRow() == 0, "Less-than did not move backwards");
+  key(list, Qt::Key_I);
+  require(shown == codes.front(), "I did not open current character information");
+  key(list, Qt::Key_Return);
+  require(inserted == jwpqt::core::JwpText{codes.front()}, "Return searched instead of inserting the result");
+  key(list, Qt::Key_C, Qt::ShiftModifier);
+  require(QApplication::clipboard()->text() == jwpqt::qt::to_qstring(jwpqt::core::decode_jwp_text(codes)) &&
+              list->currentRow() == 0 && list->selectedItems().size() == 1,
+          "Shift-C did not copy all results without changing selection");
+  key(list, Qt::Key_C, Qt::ControlModifier);
+  require(QApplication::clipboard()->text() == list->item(0)->text(), "Ctrl-C did not copy selected result");
+  auto* copy = dialog.findChild<QPushButton*>("kanjiCodeCopy");
+  key(copy, Qt::Key_Space, Qt::ShiftModifier);
+  require(QApplication::clipboard()->text() == jwpqt::qt::to_qstring(jwpqt::core::decode_jwp_text(codes)),
+          "Shift-Space on Copy did not copy all");
+  QApplication::clipboard()->clear();
+  QMouseEvent copy_click(QEvent::MouseButtonRelease, QPointF(copy->rect().center()),
+      QPointF(copy->mapToGlobal(copy->rect().center())), Qt::LeftButton, Qt::NoButton, Qt::ShiftModifier);
+  QApplication::sendEvent(copy, &copy_click);
+  require(QApplication::clipboard()->text() == jwpqt::qt::to_qstring(jwpqt::core::decode_jwp_text(codes)) &&
+              list->selectedItems().size() == 1, "Shift-click Copy changed selection or omitted results");
+  dialog.show();
+  key(list, Qt::Key_F4);
+  require(!dialog.isVisible(), "Result F4 did not close the lookup");
+  dialog.set_automatic_search(true);
+  dialog.select_index_mode();
+  auto* index = dialog.findChild<QSpinBox*>("kanjiIndexValue");
+  index->setValue(2829);
+  require(dialog.search_index() && !dialog.results().empty(), "Could not prepare explicit Index result");
+  index->setValue(2828);
+  require(dialog.results().size() == 1 && !dialog.findChild<QTimer*>("kanjiCodeSearchTimer")->isActive(),
+          "Global Auto changed explicit Index result retention");
+
+  for (const int command : {Qt::Key_I, Qt::Key_Return}) {
+    QPointer<jwpqt::qt::KanjiCodeLookupDialog> owner;
+    const auto destroy = [&] { delete owner.data(); throw std::runtime_error("deleted lookup"); };
+    owner = new jwpqt::qt::KanjiCodeLookupDialog(source,
+        [&](const auto&) { destroy(); }, [&](auto) { destroy(); });
+    require(owner->search_skip(), "Could not prepare deletion fixture");
+    key(owner->findChild<QListWidget*>("kanjiCodeResults"), command);
+    require(!owner, "Result callback did not destroy the owner safely");
+  }
+  QPointer<jwpqt::qt::KanjiCodeLookupDialog> automatic_owner =
+      new jwpqt::qt::KanjiCodeLookupDialog(source, {}, {});
+  automatic_owner->set_auto_search_handler([&](bool) { delete automatic_owner.data(); });
+  automatic_owner->findChild<QCheckBox*>("kanjiCodeAutoSearch")->setChecked(false);
+  require(!automatic_owner, "Auto callback did not safely release its dialog");
 }
 
 void test_artwork_palette_changes() {
@@ -391,6 +489,7 @@ int main(int argc, char* argv[]) {
   test_dialog();
   test_graphical_controls_and_automatic_search();
   test_index_dialog();
+  test_result_keys_and_bushu_steps();
   test_artwork_palette_changes();
   return EXIT_SUCCESS;
 }

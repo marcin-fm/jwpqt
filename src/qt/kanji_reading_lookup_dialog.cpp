@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "kanji_reading_lookup_dialog.h"
+#include "kanji_result_keys.h"
 
 #include <exception>
 #include <utility>
@@ -135,7 +136,10 @@ KanjiReadingLookupDialog::KanjiReadingLookupDialog(
   connect(kind_, &QComboBox::currentIndexChanged, this,
           [this] { update_mode(); });
   connect(search_button, &QPushButton::clicked, this,
-          [this] { (void)search(); });
+          [this] {
+            const QPointer<KanjiReadingLookupDialog> self(this);
+            if (search() && self && results_->count()) results_->setFocus();
+          });
   connect(clear_button, &QPushButton::clicked, this, [this] {
     query_field_->clear_input();
     minimum_strokes_->setValue(0);
@@ -159,6 +163,7 @@ KanjiReadingLookupDialog::KanjiReadingLookupDialog(
   kind_->setCurrentIndex(2);
   update_mode();
   update_actions();
+  new KanjiResultKeys(results_, insert_button_, info_button_, copy_button_, this);
 }
 
 void KanjiReadingLookupDialog::set_query(
@@ -262,37 +267,42 @@ void KanjiReadingLookupDialog::update_actions() {
 }
 
 void KanjiReadingLookupDialog::copy_results() {
+  const QPointer<KanjiReadingLookupDialog> self(this);
   try {
     core::JwpText text;
     for (const core::JisCode code : selected_codes()) text.push_back(code);
     QApplication::clipboard()->setText(to_qstring(core::decode_jwp_text(text)));
-    status_->setText(tr("Copied %1 characters").arg(text.size()));
+    if (self) status_->setText(tr("Copied %1 characters").arg(text.size()));
   } catch (const std::exception& error) {
-    status_->setText(QString::fromUtf8(error.what()));
+    if (self) status_->setText(QString::fromUtf8(error.what()));
   } catch (...) {
-    status_->setText(tr("Copy failed"));
+    if (self) status_->setText(tr("Copy failed"));
   }
 }
 
 void KanjiReadingLookupDialog::insert_results() {
+  const QPointer<KanjiReadingLookupDialog> self(this);
+  const auto handler = insert_handler_;
   try {
     const std::vector<core::JisCode> codes = selected_codes();
-    if (!codes.empty() && insert_handler_) insert_handler_(codes);
+    if (!codes.empty() && handler) handler(codes);
   } catch (const std::exception& error) {
-    status_->setText(QString::fromUtf8(error.what()));
+    if (self) status_->setText(QString::fromUtf8(error.what()));
   } catch (...) {
-    status_->setText(tr("Insertion failed"));
+    if (self) status_->setText(tr("Insertion failed"));
   }
 }
 
 void KanjiReadingLookupDialog::show_information() {
+  const QPointer<KanjiReadingLookupDialog> self(this);
+  const auto handler = info_handler_;
   try {
     const std::vector<core::JisCode> codes = selected_codes();
-    if (!codes.empty() && info_handler_) info_handler_(codes.front());
+    if (!codes.empty() && handler) handler(codes.front());
   } catch (const std::exception& error) {
-    status_->setText(QString::fromUtf8(error.what()));
+    if (self) status_->setText(QString::fromUtf8(error.what()));
   } catch (...) {
-    status_->setText(tr("Information lookup failed"));
+    if (self) status_->setText(tr("Information lookup failed"));
   }
 }
 

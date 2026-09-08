@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "kanji_code_lookup_dialog.h"
+#include "kanji_result_keys.h"
 
 #include <exception>
 #include <utility>
@@ -26,6 +27,7 @@
 
 #include "jwpqt/core/jwp_text_codec.h"
 #include "jwpqt/core/kanji_bushu_selector.h"
+#include "jwpqt/core/kanji_lookup.h"
 #include "jwpqt/core/kanji_spahn_selector.h"
 #include "lookup_artwork.h"
 #include "text_bridge.h"
@@ -35,6 +37,20 @@ namespace jwpqt::qt {
 namespace {
 
 constexpr int kRadicalSourceSize = 16;
+
+class BushuStrokeSpin final : public QSpinBox {
+ public:
+  using QSpinBox::QSpinBox;
+  std::function<std::size_t()> estimate;
+ protected:
+  void stepBy(int steps) override {
+    const int count = core::step_kanji_strokes(qMax(0, value()), steps, estimate ? estimate() : 0);
+    setValue(count ? count : -1);
+  }
+  StepEnabled stepEnabled() const override {
+    return isReadOnly() ? StepNone : StepUpEnabled | StepDownEnabled;
+  }
+};
 
 QSpinBox* wildcard_spin(int maximum, const QString& object_name,
                         QWidget* parent) {
@@ -80,13 +96,14 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
       information_(information),
       insert_handler_(std::move(insert_handler)),
       info_handler_(std::move(info_handler)),
+      automatic_(new QCheckBox(tr("Automatic search"), this)),
       tabs_(new QTabWidget(this)),
       skip_type_(wildcard_spin(4, QStringLiteral("skipType"), this)),
       skip_first_(wildcard_spin(20, QStringLiteral("skipFirst"), this)),
       skip_second_(wildcard_spin(24, QStringLiteral("skipSecond"), this)),
       skip_misclassifications_(new QCheckBox(tr("Include &miscodes"), this)),
       bushu_radical_(wildcard_spin(255, QStringLiteral("bushuRadical"), this)),
-      bushu_strokes_(wildcard_spin(30, QStringLiteral("bushuStrokes"), this)),
+      bushu_strokes_(new BushuStrokeSpin(this)),
       bushu_nelson_(new QCheckBox(tr("&Nelson radical"), this)),
       bushu_classical_(new QCheckBox(tr("&Classical radical"), this)),
       bushu_radicals_(new QListWidget(this)),
@@ -119,6 +136,15 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
   setWindowTitle(tr("Kanji Code Lookup"));
   setModal(false);
   resize(880, 520);
+  bushu_strokes_->setObjectName(QStringLiteral("bushuStrokes"));
+  bushu_strokes_->setRange(-1, 30);
+  bushu_strokes_->setSpecialValueText(tr("Any"));
+  bushu_strokes_->setValue(-1);
+  static_cast<BushuStrokeSpin*>(bushu_strokes_)->estimate = [this] {
+    const auto* item = bushu_radicals_->currentItem();
+    return item && item->data(Qt::UserRole).isValid()
+        ? static_cast<std::size_t>(item->data(Qt::UserRole + 2).toUInt()) : 0;
+  };
 
   auto* outer = new QVBoxLayout(this);
   auto* skip_page = new QWidget(tabs_);
@@ -181,6 +207,7 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
           ? QString::number(choice.bushu) : QString(), bushu_radicals_);
       item->setData(Qt::UserRole, choice.bushu);
       item->setData(Qt::UserRole + 1, choice.sprite_index);
+      item->setData(Qt::UserRole + 2, strokes);
       item->setToolTip(tr("Bushu %1, %2 radical strokes").arg(choice.bushu).arg(strokes));
     }
   }
@@ -346,13 +373,16 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
   buttons->addButton(insert_button_, QDialogButtonBox::ActionRole);
   buttons->addButton(copy_button_, QDialogButtonBox::ActionRole);
   outer->addWidget(buttons);
-  auto* automatic = new QCheckBox(tr("Automatic search"), this);
+  auto* automatic = automatic_;
   automatic->setObjectName(QStringLiteral("kanjiCodeAutoSearch"));
   automatic->setChecked(true);
   outer->addWidget(automatic);
   outer->addWidget(tabs_, 1);
 
-  connect(search_button, &QPushButton::clicked, this, [this] { search_current(); });
+  connect(search_button, &QPushButton::clicked, this, [this] {
+    const QPointer<KanjiCodeLookupDialog> self(this);
+    if (search_current() && self && results_->count()) results_->setFocus();
+  });
   connect(clear_button, &QPushButton::clicked, this, [this] { clear_current(); });
   search_timer_->setObjectName(QStringLiteral("kanjiCodeSearchTimer"));
   search_timer_->setSingleShot(true);
@@ -363,6 +393,17 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
   });
   connect(this, &QDialog::finished, search_timer_, &QTimer::stop);
   auto schedule_search = [this, automatic] {
+    if (tabs_->currentIndex() == 5) {
+      search_timer_->stop();
+      return;
+    }
+    if (!automatic->isChecked()) {
+      search_timer_->stop();
+      results_->clear();
+      status_->clear();
+      update_actions();
+      return;
+    }
     if (isVisible() && automatic->isChecked() && tabs_->currentIndex() != 5)
       search_timer_->start();
   };
@@ -372,7 +413,10 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
     if (check != automatic) connect(check, &QCheckBox::toggled, this, schedule_search);
   }
   connect(automatic, &QCheckBox::toggled, this, [this, schedule_search](bool checked) {
-    if (checked) schedule_search(); else search_timer_->stop();
+    const QPointer<KanjiCodeLookupDialog> self(this);
+    const auto handler = auto_search_handler_;
+    if (handler) handler(checked);
+    if (self && automatic_->isChecked() == checked) schedule_search();
   });
   connect(tabs_, &QTabWidget::currentChanged, this, [this, automatic](int index) {
     search_timer_->stop();
@@ -443,6 +487,17 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
   populate_spahn_choices();
   update_actions();
   update_artwork();
+  new KanjiResultKeys(results_, insert_button_, info_button_, copy_button_, this);
+}
+
+void KanjiCodeLookupDialog::set_automatic_search(bool automatic) {
+  const QSignalBlocker blocker(automatic_);
+  automatic_->setChecked(automatic);
+  if (!automatic) search_timer_->stop();
+}
+
+void KanjiCodeLookupDialog::set_auto_search_handler(std::function<void(bool)> handler) {
+  auto_search_handler_ = std::move(handler);
 }
 
 void KanjiCodeLookupDialog::changeEvent(QEvent* event) {
@@ -485,16 +540,17 @@ void KanjiCodeLookupDialog::update_artwork() {
                           .scaled(320, 120, Qt::KeepAspectRatio));
 }
 
-void KanjiCodeLookupDialog::search_current() {
+bool KanjiCodeLookupDialog::search_current() {
   search_timer_->stop();
   switch (tabs_->currentIndex()) {
-    case 0: (void)search_skip(); break;
-    case 1: (void)search_four_corner(); break;
-    case 2: (void)search_bushu(); break;
-    case 3: (void)search_spahn(); break;
-    case 4: (void)search_stroke_bushu(); break;
-    case 5: (void)search_index(); break;
+    case 0: return search_skip();
+    case 1: return search_four_corner();
+    case 2: return search_bushu();
+    case 3: return search_spahn();
+    case 4: return search_stroke_bushu();
+    case 5: return search_index();
   }
+  return false;
 }
 
 void KanjiCodeLookupDialog::clear_current() {
@@ -827,24 +883,28 @@ void KanjiCodeLookupDialog::copy_results() {
 void KanjiCodeLookupDialog::insert_results() {
   const std::vector<core::JisCode> codes = selected_codes();
   if (codes.empty() || !insert_handler_) return;
+  const QPointer<KanjiCodeLookupDialog> self(this);
+  const auto handler = insert_handler_;
   try {
-    insert_handler_(codes);
+    handler(codes);
   } catch (const std::exception& error) {
-    status_->setText(QString::fromUtf8(error.what()));
+    if (self) status_->setText(QString::fromUtf8(error.what()));
   } catch (...) {
-    status_->setText(tr("Could not insert kanji results"));
+    if (self) status_->setText(tr("Could not insert kanji results"));
   }
 }
 
 void KanjiCodeLookupDialog::show_information() {
   const std::vector<core::JisCode> codes = selected_codes();
   if (codes.size() != 1 || !info_handler_) return;
+  const QPointer<KanjiCodeLookupDialog> self(this);
+  const auto handler = info_handler_;
   try {
-    info_handler_(codes.front());
+    handler(codes.front());
   } catch (const std::exception& error) {
-    status_->setText(QString::fromUtf8(error.what()));
+    if (self) status_->setText(QString::fromUtf8(error.what()));
   } catch (...) {
-    status_->setText(tr("Could not show kanji information"));
+    if (self) status_->setText(tr("Could not show kanji information"));
   }
 }
 

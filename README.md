@@ -594,9 +594,15 @@ Any; the estimate is a bounded stepping hint, not an automatic filter. Invalid
 extraction preserves prior state. Clear cancels pending work, and changed
 criteria clear stale results when automatic search is disabled.
 
-This is not complete dialog parity: shared lookup-policy persistence, other
-lookup keyboard/spinner controls, auxiliary history/search consumers and
-remaining dictionary options still need closure.
+Options > Kanji Lookup persists shared Auto Search and Rare Kanji Last through
+settings and projects without searching or disturbing the current results.
+Bushu has the same bounded stroke stepping. In radical/code/reading result
+strips, Enter inserts, I/F23 opens information, F2/F3 or period/comma moves
+(Ctrl moves five), C copies the selection, Shift+C copies all without changing
+selection, and F4 closes. Shift-click/Shift-Space on Copy also copies all.
+Query fields keep their local Japanese input controls; Reading/Index remain
+explicit searches. Auxiliary history/search consumers, remaining dictionary
+options and the final command audit still need closure.
 
 ### Character information
 

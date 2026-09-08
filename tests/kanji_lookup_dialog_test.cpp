@@ -167,6 +167,24 @@ void test_dialog() {
   require(!timer->isActive() && dialog.result_codes().empty(), "Hidden radical lookup still searched");
 }
 
+void test_rare_preference() {
+  const auto radicals = lists({{0x3021U}});
+  std::vector<std::vector<jwpqt::core::JisCode>> rows(30);
+  rows[0] = {0x5021U, 0x3021U};
+  const auto strokes = lists(rows);
+  const auto info = information();
+  jwpqt::qt::KanjiLookupDialog dialog(radicals, strokes, info, {}, {}, {});
+  require(dialog.search() && dialog.result_codes() == jwpqt::core::JwpText({0x3021U, 0x5021U}),
+          "Rare-last default did not group radical results");
+  auto* list = dialog.findChild<QListWidget*>("kanjiLookupResults");
+  list->setCurrentRow(1);
+  dialog.set_lookup_options(false, false);
+  require(list->currentRow() == 1 && dialog.result_codes() == jwpqt::core::JwpText({0x3021U, 0x5021U}),
+          "Changing lookup preferences reordered or deselected current results");
+  require(dialog.search() && dialog.result_codes() == jwpqt::core::JwpText({0x5021U, 0x3021U}),
+          "Rare-last preference did not reach the next search");
+}
+
 void test_artwork_palette_changes() {
   std::vector<std::vector<jwpqt::core::JisCode>> groups(241);
   groups[0] = {0x3021U};
@@ -323,6 +341,7 @@ void test_stroke_and_clipboard_controls() {
 int main(int argc, char* argv[]) {
   QApplication application(argc, argv);
   test_dialog();
+  test_rare_preference();
   test_artwork_palette_changes();
   test_stroke_and_clipboard_controls();
   return EXIT_SUCCESS;

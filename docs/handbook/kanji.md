@@ -27,8 +27,21 @@ an automatic filter or a guaranteed character count; counts can also be typed.
 Choose Exact, +/- 1 or +/- 2, or edit the explicit minimum/maximum range.
 Clear resets all of these controls and cancels pending search. With automatic
 search disabled, changed criteria clear stale results until Search is pressed.
-Shared lookup-policy persistence and some other lookup keyboard/spinner controls
-remain incomplete.
+Options > Kanji Lookup saves Automatic Lookup and Rare Kanji Last, including in
+projects. Auto is shared by the radical and code lookup windows in the current
+workspace. Applying preferences preserves current results and selection and does
+not start a search; Rare Kanji Last affects the next radical search. Reading and
+Index remain explicit searches, retaining the last report until successful Search.
+The Bushu stroke arrows also cycle Any, the selected radical's minimum, through
+30, and back to Any; manual counts remain available.
+
+In radical, code and reading result strips, Enter inserts the selection without
+searching, I or F23 opens information, and F4 closes the lookup. F2/period moves
+forward and F3/comma moves backward; Ctrl moves five characters, including with
+Left/Right. Standard selection/navigation keys remain available. C or Ctrl+C
+copies the selection; Shift+C, Shift-click Copy or Shift+Space on Copy copies all
+results in order without changing the selection. Successful manual Search focuses
+its result strip. These shortcuts do not take over the Japanese query field.
 
 Result strips provide canonical insertion and per-character information menus.
 Count Kanji can inspect current or all open documents without changing their

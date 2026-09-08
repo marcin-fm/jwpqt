@@ -39,6 +39,8 @@ class KanjiLookupDialog : public QDialog {
   std::vector<std::size_t> selected_radicals() const;
   void set_stroke_range(std::uint8_t minimum, std::uint8_t maximum);
   bool select_kanji(core::JisCode code);
+  void set_lookup_options(bool automatic, bool rare_last);
+  void set_auto_search_handler(std::function<void(bool)> handler);
   bool search();
   std::vector<core::JisCode> result_codes() const;
 
@@ -61,6 +63,8 @@ class KanjiLookupDialog : public QDialog {
   const core::KanjiInfoDatabase& information_;
   InsertHandler insert_handler_;
   InfoHandler info_handler_;
+  std::function<void(bool)> auto_search_handler_;
+  bool rare_last_ = true;
   QPixmap radical_sheet_;
   std::vector<QToolButton*> radical_buttons_;
   std::vector<QLabel*> stroke_headings_;

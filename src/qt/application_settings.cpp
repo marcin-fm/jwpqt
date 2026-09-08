@@ -38,6 +38,8 @@ struct BooleanDescriptor {
 };
 
 constexpr BooleanDescriptor<ApplicationSettings> kBooleans[] = {
+    {"AutoSearch_KanjiLookup", "auto_lookup", &ApplicationSettings::automatic_kanji_lookup},
+    {"RareKanjiLast", "rare_last", &ApplicationSettings::rare_kanji_last},
     {"Search_AllFiles", "search_all", &ApplicationSettings::search_all_files},
     {"Search_CaseInsensitive", "search_nocase", &ApplicationSettings::search_ignore_case},
     {"Search_WidthInsensitive", "search_jascii", &ApplicationSettings::search_ignore_width},

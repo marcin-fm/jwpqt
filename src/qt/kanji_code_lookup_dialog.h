@@ -38,6 +38,8 @@ class KanjiCodeLookupDialog : public QDialog {
   void set_bushu_query(const core::KanjiBushuQuery& query);
   void set_spahn_query(const core::KanjiSpahnQuery& query);
   void set_index_query(const core::KanjiIndexQuery& query);
+  void set_automatic_search(bool automatic);
+  void set_auto_search_handler(std::function<void(bool)> handler);
   void select_skip_mode();
   void select_four_corner_mode();
   void select_bushu_mode();
@@ -65,12 +67,14 @@ class KanjiCodeLookupDialog : public QDialog {
   void show_information();
   void populate_stroke_bushu_choices();
   void populate_spahn_choices();
-  void search_current();
+  bool search_current();
   void clear_current();
 
   const core::KanjiInfoDatabase& information_;
   InsertHandler insert_handler_;
   InfoHandler info_handler_;
+  std::function<void(bool)> auto_search_handler_;
+  QCheckBox* automatic_;
   QTabWidget* tabs_;
   QSpinBox* skip_type_;
   QSpinBox* skip_first_;

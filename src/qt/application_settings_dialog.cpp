@@ -235,6 +235,24 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
       "Vertical mode follows JWP: Japanese glyphs are rotated for quarter-turn reading of the paper."), printing);
   print_note->setWordWrap(true); print_form->addRow(print_note);
   tabs->addTab(printing, tr("Printing"));
+  auto* lookup = new QWidget(tabs);
+  auto* lookup_form = new QFormLayout(lookup);
+  auto* lookup_auto = new QCheckBox(tr("Automatic kanji lookup"), lookup);
+  lookup_auto->setObjectName(QStringLiteral("settingsLookupAutomatic"));
+  lookup_auto->setChecked(settings_.automatic_kanji_lookup);
+  auto* lookup_rare = new QCheckBox(tr("Show rare kanji last in radical results"), lookup);
+  lookup_rare->setObjectName(QStringLiteral("settingsLookupRareLast"));
+  lookup_rare->setChecked(settings_.rare_kanji_last);
+  lookup_form->addRow(lookup_auto);
+  lookup_form->addRow(lookup_rare);
+  booleans.push_back({lookup_auto, &ApplicationSettings::automatic_kanji_lookup});
+  booleans.push_back({lookup_rare, &ApplicationSettings::rare_kanji_last});
+  auto* lookup_note = new QLabel(tr("Auto is shared by radical and code lookup windows. "
+      "Changing preferences does not run a search or reorder current results. "
+      "Reading and Index lookup remain explicit searches."), lookup);
+  lookup_note->setWordWrap(true);
+  lookup_form->addRow(lookup_note);
+  tabs->addTab(lookup, tr("Kanji Lookup"));
   if (!settings_.unapplied.isEmpty()) {
     auto* retained = new QPlainTextEdit(tabs);
     retained->setReadOnly(true);

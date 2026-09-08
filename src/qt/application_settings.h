@@ -41,6 +41,8 @@ struct ApplicationSettings {
   bool save_settings_on_exit = true;
   bool save_recent_files = true;
   bool save_histories = true;
+  bool automatic_kanji_lookup = true;
+  bool rare_kanji_last = true;
   bool search_all_files = false;
   bool search_ignore_case = true;
   bool search_ignore_width = true;

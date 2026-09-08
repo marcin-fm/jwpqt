@@ -6,6 +6,8 @@
 #include <string>
 
 #include <QApplication>
+#include <QClipboard>
+#include <QPointer>
 #include <QCheckBox>
 #include <QLabel>
 #include <QKeyEvent>
@@ -114,6 +116,14 @@ void test_dialog() {
   require(inserted == std::vector<jwpqt::core::JisCode>{0x3021U} &&
               shown == 0x3021U,
           "Native reading callbacks received wrong result");
+  inserted.clear();
+  shown = 0;
+  QKeyEvent insert_key(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+  QKeyEvent info_key(QEvent::KeyPress, Qt::Key_F23, Qt::NoModifier);
+  QApplication::sendEvent(results, &insert_key);
+  QApplication::sendEvent(results, &info_key);
+  require(inserted == std::vector<jwpqt::core::JisCode>{0x3021U} && shown == 0x3021U &&
+              input->text() == QStringLiteral("apple"), "Reading result keys changed query or failed to dispatch");
 
   query.kind = jwpqt::core::KanjiReadingKind::kKun;
   query.text = U"あ";
@@ -171,6 +181,24 @@ void test_callback_containment() {
   dialog.findChild<QPushButton*>(QStringLiteral("kanjiReadingInfo"))->click();
   require(status->text().contains("failed", Qt::CaseInsensitive),
           "Unknown native reading information failure was not contained");
+  for (int key : {Qt::Key_Return, Qt::Key_I, Qt::Key_C}) {
+    QPointer<jwpqt::qt::KanjiReadingLookupDialog> owner;
+    const auto destroy = [&] { delete owner.data(); throw std::runtime_error("owner destroyed"); };
+    owner = new jwpqt::qt::KanjiReadingLookupDialog(source,
+        [&](const auto&) { destroy(); }, [&](auto) { destroy(); });
+    owner->set_query(query);
+    require(owner->search(), "Could not prepare reading callback deletion");
+    QMetaObject::Connection connection;
+    if (key == Qt::Key_C) {
+      QApplication::clipboard()->clear();
+      connection = QObject::connect(QApplication::clipboard(), &QClipboard::dataChanged,
+                                    [&] { delete owner.data(); });
+    }
+    QKeyEvent event(QEvent::KeyPress, key, Qt::NoModifier);
+    QApplication::sendEvent(owner->findChild<QListWidget*>("kanjiReadingResults"), &event);
+    QObject::disconnect(connection);
+    require(!owner, "Reading result callback did not destroy the owner safely");
+  }
 }
 
 }  // namespace

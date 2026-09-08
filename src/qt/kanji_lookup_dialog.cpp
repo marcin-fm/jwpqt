@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "kanji_lookup_dialog.h"
+#include "kanji_result_keys.h"
 
 #include <algorithm>
 #include <exception>
@@ -230,7 +231,10 @@ KanjiLookupDialog::KanjiLookupDialog(
   outer->addWidget(radical_group, 1);
 
   connect(search_button, &QPushButton::clicked, this,
-          [this] { (void)search(); });
+          [this] {
+            const QPointer<KanjiLookupDialog> self(this);
+            if (search() && self && results_->count()) results_->setFocus();
+          });
   search_timer_->setObjectName(QStringLiteral("kanjiLookupSearchTimer"));
   search_timer_->setSingleShot(true);
   search_timer_->setInterval(150);
@@ -263,8 +267,10 @@ KanjiLookupDialog::KanjiLookupDialog(
       schedule_search();
     });
   connect(automatic, &QCheckBox::toggled, this, [this](bool checked) {
-    if (!checked) search_timer_->stop();
-    schedule_search();
+    const QPointer<KanjiLookupDialog> self(this);
+    const auto handler = auto_search_handler_;
+    if (handler) handler(checked);
+    if (self && automatic_->isChecked() == checked) schedule_search();
   });
   connect(from_clipboard, &QPushButton::clicked, this, [this] {
     const QPointer<KanjiLookupDialog> self(this);
@@ -298,6 +304,18 @@ KanjiLookupDialog::KanjiLookupDialog(
   update_result_actions();
   update_artwork();
   update_stroke_estimate();
+  new KanjiResultKeys(results_, insert_button_, info_button_, copy_button_, this);
+}
+
+void KanjiLookupDialog::set_lookup_options(bool automatic, bool rare_last) {
+  const QSignalBlocker blocker(automatic_);
+  automatic_->setChecked(automatic);
+  rare_last_ = rare_last;
+  if (!automatic) search_timer_->stop();
+}
+
+void KanjiLookupDialog::set_auto_search_handler(std::function<void(bool)> handler) {
+  auto_search_handler_ = std::move(handler);
 }
 
 void KanjiLookupDialog::changeEvent(QEvent* event) {
@@ -421,7 +439,7 @@ bool KanjiLookupDialog::search() {
         static_cast<std::uint8_t>(minimum_strokes_->value());
     options.maximum_strokes =
         static_cast<std::uint8_t>(maximum_strokes_->value());
-    options.rare_last = true;
+    options.rare_last = rare_last_;
     const core::KanjiLookupReport report = core::search_kanji_radicals(
         radical_lists_, stroke_lists_, &information_, options);
     struct RenderedResult {
