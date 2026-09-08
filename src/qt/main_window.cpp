@@ -49,6 +49,8 @@
 #include <QPalette>
 #include <QPageSetupDialog>
 #include <QPrintDialog>
+#include <QPrintPreviewWidget>
+#include <QProgressDialog>
 #include <QPrinter>
 #include <QPointer>
 #include <QTextEdit>
@@ -387,7 +389,7 @@ MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
       document_tabs_(new QTabWidget(this)),
       conversion_candidates_(new QListWidget(this)),
-      printer_(std::make_unique<QPrinter>(QPrinter::HighResolution)),
+      printer_(std::make_shared<QPrinter>(QPrinter::HighResolution)),
       encoding_label_(new QLabel(this)),
       undo_action_(nullptr),
       redo_action_(nullptr),
@@ -2225,6 +2227,9 @@ void MainWindow::create_actions() {
   print_action_->setShortcut(QKeySequence::Print);
   connect(print_action_, &QAction::triggered, this,
           [this] { print_current_document(); });
+  auto* preview = file_menu->addAction(tr("Print Pre&view..."));
+  preview->setObjectName(QStringLiteral("printPreviewAction"));
+  connect(preview, &QAction::triggered, this, [this] { print_current_document(true); });
 
   printer_setup_action_ = file_menu->addAction(tr("Printer Set&up..."));
   printer_setup_action_->setObjectName(QStringLiteral("printerSetupAction"));
@@ -5416,15 +5421,21 @@ std::optional<core::JwpDocument> MainWindow::prompt_for_page_layout(
 }
 
 bool MainWindow::prompt_for_print(QPrinter& printer) {
-  QPrintDialog dialog(&printer, this);
-  dialog.setOption(QAbstractPrintDialog::PrintSelection,
-                   document_->editor_->textCursor().hasSelection());
-  return dialog.exec() == QDialog::Accepted;
+  QPointer<QPrintDialog> dialog = new QPrintDialog(&printer, this);
+  dialog->setOption(QAbstractPrintDialog::PrintSelection,
+                    print_selection_available_);
+  const int answer = dialog->exec();
+  if (!dialog) return false;
+  delete dialog;
+  return answer == QDialog::Accepted;
 }
 
 bool MainWindow::prompt_for_printer_setup(QPrinter& printer) {
-  QPageSetupDialog dialog(&printer, this);
-  return dialog.exec() == QDialog::Accepted;
+  QPointer<QPageSetupDialog> dialog = new QPageSetupDialog(&printer, this);
+  const int answer = dialog->exec();
+  if (!dialog) return false;
+  delete dialog;
+  return answer == QDialog::Accepted;
 }
 
 std::optional<core::KanjiColorPolicy>
@@ -5721,21 +5732,96 @@ bool MainWindow::apply_page_layout(const core::JwpDocument& requested) {
   return true;
 }
 
-void MainWindow::print_current_document() {
+void MainWindow::print_current_document(bool preview) {
+  if (print_busy_) return;
+  const QPointer<MainWindow> self(this);
+  print_busy_ = true;
+  const auto guard = qScopeGuard([self] { if (self) self->print_busy_ = false; });
   finish_kana_input();
-  if (conversion_active())
+  if (!self || conversion_active())
     return;
   try {
-    const core::JwpDocument* jwp =
-        document_->jwp_document_.has_value() ? &document_->jwp_document_->document() : nullptr;
-    if (jwp != nullptr)
-      configure_printer_for_jwp(*printer_, *jwp);
-    if (!prompt_for_print(*printer_))
-      return;
-    print_document(*printer_, *document_->editor_->document(), jwp);
-    statusBar()->showMessage(tr("Document sent to printer"), 3000);
+    const auto printer = printer_; // Keep the device alive if a modal callback destroys its owner.
+    std::shared_ptr<QTextDocument> source(document_->editor_->document()->clone());
+    const auto jwp = document_->jwp_document_ ? std::optional<core::JwpDocument>(document_->jwp_document_->document()) : std::nullopt;
+    PrintOptions options;
+    options.file_name = document_->current_path_;
+    options.code_page = document_->jwp_code_page_;
+    options.font = source->defaultFont();
+    if (!application_settings_.print_font.automatic && !application_settings_.print_font.family.isEmpty())
+      options.font.setFamily(application_settings_.print_font.family);
+    options.font.setPointSizeF(application_settings_.print_font.size / 10.0);
+    const auto cursor = document_->editor_->textCursor();
+    if (cursor.hasSelection()) options.selection = {{cursor.selectionStart(), cursor.selectionEnd()}};
+    print_selection_available_ = options.selection.has_value();
+    if (jwp) configure_printer_for_jwp(*printer, *jwp);
+    if (preview) {
+      printer->setPrintRange(QPrinter::AllPages);
+      QPointer<QDialog> dialog = new QDialog(this);
+      dialog->setObjectName(QStringLiteral("printPreviewDialog"));
+      dialog->setWindowTitle(tr("Print Preview"));
+      dialog->resize(900, 700);
+      auto* layout = new QVBoxLayout(dialog);
+      auto* controls = new QHBoxLayout;
+      auto* page = new QSpinBox(dialog); page->setMinimum(1);
+      page->setObjectName(QStringLiteral("printPreviewPage"));
+      auto* view = new QPrintPreviewWidget(printer.get(), dialog);
+      auto* message = new QLabel(dialog); message->setWordWrap(true);
+      auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, dialog);
+      auto* print_button = buttons->addButton(tr("Print..."), QDialogButtonBox::AcceptRole);
+      print_button->setObjectName(QStringLiteral("printFromPreview"));
+      controls->addWidget(new QLabel(tr("Page"), dialog)); controls->addWidget(page);
+      for (const auto& label : {tr("Zoom In"), tr("Zoom Out"), tr("Fit Page")}) {
+        auto* button = new QPushButton(label, dialog); controls->addWidget(button);
+        if (label == tr("Zoom In")) connect(button, &QPushButton::clicked, view, [view] { view->zoomIn(); });
+        else if (label == tr("Zoom Out")) connect(button, &QPushButton::clicked, view, [view] { view->zoomOut(); });
+        else connect(button, &QPushButton::clicked, view, &QPrintPreviewWidget::fitInView);
+      }
+      controls->addStretch(); layout->addLayout(controls); layout->addWidget(view); layout->addWidget(message); layout->addWidget(buttons);
+      connect(page, &QSpinBox::valueChanged, view, &QPrintPreviewWidget::setCurrentPage);
+      connect(view, &QPrintPreviewWidget::previewChanged, page, [page, view] { page->setMaximum(std::max(1, view->pageCount())); });
+      connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
+      connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+      connect(view, &QPrintPreviewWidget::paintRequested, dialog,
+          [source, jwp, options, message, print_button](QPrinter* target) mutable {
+        options.preview = true;
+        try { print_document(*target, *source, jwp ? &*jwp : nullptr, options); message->clear(); print_button->setEnabled(true); }
+        catch (const std::exception& error) { message->setText(QString::fromUtf8(error.what())); print_button->setEnabled(false); }
+      });
+      const int answer = dialog->exec();
+      if (!self || !dialog) return;
+      if (dialog) delete dialog;
+      if (answer != QDialog::Accepted || !self) return;
+    }
+    {
+      if (!prompt_for_print(*printer) || !self) return;
+      const QString output = printer->outputFileName();
+      const auto check_output = [self, output] {
+        if (!self || output.isEmpty()) return;
+        if (self->find_document_path(output) >= 0) throw PrintDocumentError("Print output cannot overwrite an open document");
+        for (const auto& path : {self->application_settings_path_, self->query_history_path_, self->recent_files_path_, self->project_path_})
+          if (!path.isEmpty() && document_path_identity(path) == document_path_identity(output))
+            throw PrintDocumentError("Print output cannot overwrite application settings, history or the current project");
+      };
+      check_output();
+      QPointer<QProgressDialog> progress = new QProgressDialog(tr("Printing document"), tr("Cancel"), 0, 0, this);
+      progress->setWindowModality(Qt::WindowModal);
+      progress->setAutoClose(false);
+      progress->setAutoReset(false);
+      options.progress = [self, progress, check_output](int page, int count) {
+        if (!self || !progress || progress->wasCanceled()) return false;
+        progress->setRange(0, count); progress->setValue(page);
+        QCoreApplication::processEvents();
+        if (!self || !progress || progress->wasCanceled()) return false;
+        check_output();
+        return true;
+      };
+      const auto cleanup = qScopeGuard([progress] { if (progress) delete progress; });
+      print_document(*printer, *source, jwp ? &*jwp : nullptr, options);
+      if (self) statusBar()->showMessage(tr("Document sent to printer"), 3000);
+    }
   } catch (const std::exception& error) {
-    statusBar()->showMessage(
+    if (self) statusBar()->showMessage(
         tr("Could not print document: %1")
             .arg(QString::fromUtf8(error.what())),
         5000);
@@ -5743,21 +5829,32 @@ void MainWindow::print_current_document() {
 }
 
 void MainWindow::setup_printer() {
+  if (print_busy_) return;
+  const QPointer<MainWindow> self(this);
+  print_busy_ = true;
+  const auto guard = qScopeGuard([self] { if (self) self->print_busy_ = false; });
   finish_kana_input();
-  if (conversion_active())
+  if (!self || conversion_active())
     return;
+  const auto printer = printer_;
+  const QPointer<JwpEditor> target = document_->editor_;
+  const QString target_path = document_->current_path_;
   try {
-    if (!prompt_for_printer_setup(*printer_))
+    if (document_->jwp_document_) configure_printer_for_jwp(*printer, document_->jwp_document_->document());
+    if (!prompt_for_printer_setup(*printer) || !self)
       return;
-    if (document_->jwp_document_.has_value()) {
+    if (target && document_->editor_ == target && document_->current_path_ == target_path && document_->jwp_document_.has_value()) {
       core::JwpDocument candidate = document_->jwp_document_->document();
       candidate.landscape =
-          printer_->pageLayout().orientation() == QPageLayout::Landscape;
-      (void)apply_page_layout(candidate);
+          printer->pageLayout().orientation() == QPageLayout::Landscape;
+      const auto margins = printer->pageLayout().margins(QPageLayout::Inch);
+      candidate.margins = {static_cast<float>(margins.left()), static_cast<float>(margins.right()),
+                           static_cast<float>(margins.top()), static_cast<float>(margins.bottom())};
+      if (!apply_page_layout(candidate)) throw PrintDocumentError("Could not apply printer page settings");
     }
-    statusBar()->showMessage(tr("Printer setup updated"), 2000);
+    if (self) statusBar()->showMessage(tr("Printer setup updated"), 2000);
   } catch (const std::exception& error) {
-    statusBar()->showMessage(
+    if (self) statusBar()->showMessage(
         tr("Could not configure printer: %1")
             .arg(QString::fromUtf8(error.what())),
         5000);
@@ -6528,7 +6625,7 @@ void MainWindow::show_error(const QString& action,
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
-  if (query_history_busy_ || search_busy_) {
+  if (query_history_busy_ || search_busy_ || print_busy_) {
     event->ignore();
     return;
   }

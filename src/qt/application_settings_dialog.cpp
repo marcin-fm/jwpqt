@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "application_settings_dialog.h"
+#include <QDoubleSpinBox>
 
 #include <utility>
 #include <vector>
@@ -209,11 +210,31 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
       "Reducing the size drops older or oversized entries; zero disables retention.\n\n"
       "If reducing history may lose saved entries, automatic saving pauses until an explicit Save or Reload.\n\n"
       "Turning off automatic saving leaves an existing file unchanged. Tools > Query History "
-      "provides explicit Save, Import, Reload and Clear commands. Search/replace history lists "
-      "are preserved in archives; their edit-dialog controls are not yet implemented."), history);
+      "provides explicit Save, Import, Reload and Clear commands. Find and Replace use their "
+      "own independent history controls."), history);
   history_note->setWordWrap(true);
   history_form->addRow(history_note);
   tabs->addTab(history, tr("History"));
+  auto* printing = new QWidget(tabs);
+  auto* print_form = new QFormLayout(printing);
+  auto* print_family = new QFontComboBox(printing);
+  print_family->setEditable(true);
+  print_family->setObjectName(QStringLiteral("settingsPrintFamily"));
+  print_family->setEditText(settings_.print_font.family);
+  auto* print_size = new QDoubleSpinBox(printing);
+  print_size->setObjectName(QStringLiteral("settingsPrintSize"));
+  print_size->setRange(1, 144); print_size->setDecimals(1); print_size->setSingleStep(0.1);
+  print_size->setSuffix(tr(" pt")); print_size->setValue(settings_.print_font.size / 10.0);
+  auto* print_auto = new QCheckBox(tr("Use document font family"), printing);
+  print_auto->setObjectName(QStringLiteral("settingsPrintAutomatic"));
+  print_auto->setChecked(settings_.print_font.automatic);
+  print_form->addRow(tr("Printer font"), print_family); print_form->addRow(tr("Physical size"), print_size);
+  print_form->addRow(print_auto);
+  auto* print_note = new QLabel(tr("Printing uses physical point sizes independently of screen zoom. "
+      "Page Layout controls margins, headers and vertical glyphs. Preview and output use a frozen document snapshot. "
+      "Vertical mode follows JWP: Japanese glyphs are rotated for quarter-turn reading of the paper."), printing);
+  print_note->setWordWrap(true); print_form->addRow(print_note);
+  tabs->addTab(printing, tr("Printing"));
   if (!settings_.unapplied.isEmpty()) {
     auto* retained = new QPlainTextEdit(tabs);
     retained->setReadOnly(true);
@@ -224,7 +245,8 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   outer->addWidget(buttons);
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
   connect(buttons, &QDialogButtonBox::accepted, this,
-          [this, booleans, font_controls, dictionary_controls, code_page, history_size, categories] {
+          [this, booleans, font_controls, dictionary_controls, code_page, history_size, categories,
+           print_family, print_size, print_auto] {
     auto next = settings_;
     for (const auto& control : booleans) next.*(control.member) = control.widget->isChecked();
     for (const auto& control : dictionary_controls) next.dictionary.*(control.member) = control.widget->isChecked();
@@ -240,6 +262,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
     }
     next.translation_code_page = code_page->currentData().toInt();
     next.history_size = history_size->value();
+    next.print_font = {print_family->currentText(), qRound(print_size->value() * 10), print_auto->isChecked()};
     try {
       (void)write_application_settings(next);
       settings_ = std::move(next);

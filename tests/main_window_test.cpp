@@ -4973,9 +4973,11 @@ void test_native_print_commands(const QString& directory) {
   require(!window.current_jwp_document()->landscape,
           "Undo did not restore the prior printer orientation");
   const int prompts_before_vertical = window.print_prompt_count;
+  window.accept_print_prompt = true;
+  window.print_output_path = directory + QStringLiteral("/vertical-print.pdf");
   print->trigger();
-  require(window.print_prompt_count == prompts_before_vertical,
-          "Vertical printing reached the native dialog instead of failing explicitly");
+  require(window.print_prompt_count == prompts_before_vertical + 1 && QFile::exists(window.print_output_path),
+          "Vertical printing did not reach native output");
 }
 
 void test_jis_table_integration(const QString& directory) {

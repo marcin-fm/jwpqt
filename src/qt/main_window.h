@@ -375,7 +375,7 @@ class MainWindow : public QMainWindow {
                               core::JwpPosition caret);
   void format_page_layout();
   bool apply_page_layout(const core::JwpDocument& requested);
-  void print_current_document();
+  void print_current_document(bool preview = false);
   void setup_printer();
   void configure_kanji_colors();
   void edit_kanji_color_list();
@@ -391,7 +391,9 @@ class MainWindow : public QMainWindow {
 
   QTabWidget* document_tabs_;
   QListWidget* conversion_candidates_;
-  std::unique_ptr<QPrinter> printer_;
+  std::shared_ptr<QPrinter> printer_;
+  bool print_busy_ = false;
+  bool print_selection_available_ = false;
   QLabel* encoding_label_;
   QAction* undo_action_;
   QAction* redo_action_;

@@ -13,7 +13,7 @@ under `src/core`; Qt-specific application code lives under `src/qt`. See
 On Fedora, install the native build dependencies:
 
 ```sh
-sudo dnf install gcc-c++ cmake ninja-build qt6-qtbase-devel
+sudo dnf install gcc-c++ cmake ninja-build qt6-qtbase-devel poppler-utils
 ```
 
 Configure, build, and test out of tree:
@@ -23,6 +23,9 @@ nice cmake -S . -B /srv/tmp/jwpqt-build -G Ninja -DCMAKE_BUILD_TYPE=Debug
 nice cmake --build /srv/tmp/jwpqt-build -j2
 nice ctest --test-dir /srv/tmp/jwpqt-build --output-on-failure
 ```
+
+The printing tests require `pdftotext` from `poppler-utils` to inspect actual PDF
+page content, not just file signatures. It is not an application runtime dependency.
 
 Run the editor, optionally opening a document:
 
@@ -218,8 +221,50 @@ global color list with atomic persistence. The native modeless EDICT tool loads
 ordered indexed or unindexed resources from `dict.cfg`, searches with the
 portable direct, adaptive, wildcard, contingent, and name filters, and inserts
 selected rows into JWP with portable undo. Editable EDICT `user.dct` and native
-kanji lookup tools and project workspaces are available. Remaining configuration,
-input/lookup controls, complete printing, help, and packaging remain in progress.
+kanji lookup tools and project workspaces are available. Native document printing
+and preview are described below. Remaining configuration, input/lookup controls,
+legacy print tuning, help, and packaging remain in progress.
+
+### Document printing and preview
+
+**File > Print** and **Print Preview** use a frozen document,
+formatting, selection and metadata snapshot. Editing or switching documents while
+a dialog is open cannot substitute another document into the job. Preview offers
+page navigation, zoom and Print through the same protected output path; preview
+alone never writes to the remembered PDF destination.
+
+The native renderer paginates in physical points, preserving paragraph indents,
+spacing, hard page breaks and hanging indents. Print supports exact selected text,
+contiguous or disjoint page ranges, reverse order, collated/uncollated copies and
+cancellation. Selected/ranged PDF output does not merely hide unwanted text behind
+a clip: it omits that text from the PDF stream. Printer Setup applies accepted JWP
+margins and orientation as one undoable change, only to its original document.
+
+JWP odd/even headers and footers support first-page suppression and the source
+`&A`, `&C`, `&D`, `&F`, `&K`, `&L`, `&N`, `&S`, `&T`, `&P` and `&&` substitutions.
+Date/time are captured once for the job and currently use `yyyy/MM/dd` and `HH:mm`.
+Vertical JWP output preserves the source paper convention: Japanese glyphs are
+counter-rotated while Latin and the recovered exception punctuation stay on the
+horizontal baseline, for reading the paper after a clockwise quarter turn. Native
+font shaping is retained; this is not a new top-to-bottom writing mode or a promise
+of pixel-identical legacy bitmap/vertical-GSUB placement.
+
+**Options > Printing** stores `Print.Font`, `Print.Size` and `Print.Auto` through
+configuration and projects. The size is physical points in the dialog and tenths
+of a point on disk, independently of screen font sizes. Automatic uses the document
+font family; explicit families use Qt's native font fallback. Output is monochrome.
+Custom legacy date/AM-PM formats, header-position tuning and ASCII grid-justification
+settings remain retained and disclosed as unapplied.
+
+PDF output is completed in a temporary file beside its destination and published
+atomically. Invalid geometry/ranges, cancellation (including the final checkpoint)
+or a print destination opened as a document during progress cannot destroy a prior
+file. Settings, histories and the current project are also protected destinations.
+Paper size, page/format/run counts, copies and rendering work are bounded; oversized
+jobs report an error rather than silently truncating. Native spool errors are
+reported, but cancellation cannot recall pages already sent to a physical printer.
+Configured printer/backend and physical printer acceptance remain environment-
+dependent verification, separate from the automated PDF/image/preview tests.
 
 ### Input modes and shortcuts
 

@@ -30,7 +30,8 @@ void roundtrip(const QString& directory) {
   workspace.settings = qt::read_application_settings("Future_Field = raw\r\nFile.Size = 23\r\nDict_Link_Adv_NoNames=true\n"
       "Dict_Compact=true\nDict_AutoSearch=false\nDict_AdvancedSearches=true\nDict_ContingentSearches=true\nDict_ExclusionFilters=0x10002\nHistoryBuffers_NumChars=512\nSave_Histories=false\n"
       "Dict_PriorityEntriesFirst=false\nDict_PrioritySeparator=false\nDict_Adv_SeparatorMark=false\n"
-      "Search_AllFiles=true\nSearch_CaseInsensitive=false\nSearch_WidthInsensitive=false\nSearch_WrapAround=true\nSearch_KeepDialogsOpen=false\n");
+      "Search_AllFiles=true\nSearch_CaseInsensitive=false\nSearch_WidthInsensitive=false\nSearch_WrapAround=true\nSearch_KeepDialogsOpen=false\n"
+      "Print.Font=\"Noto Sans CJK JP\"\nPrint.Size=95\nPrint.Auto=false\n");
   workspace.documents = {{directory + "/first.jwp", {}, core::LegacyCodePage::k1251, true},
       {directory + "/second.txt", core::TextEncoding::kUtf16Be, core::LegacyCodePage::k1252, false},
       {directory + "/third\\name.jfc", core::TextEncoding::kJfc, core::LegacyCodePage::k1258, true}};
@@ -56,6 +57,8 @@ void roundtrip(const QString& directory) {
     require(decoded.settings.search_all_files && !decoded.settings.search_ignore_case &&
             !decoded.settings.search_ignore_width && decoded.settings.search_wrap && !decoded.settings.search_keep_open,
             "Project lost document search policies");
+    require(decoded.settings.print_font.size == 95 && !decoded.settings.print_font.automatic &&
+            decoded.settings.print_font.family == QStringLiteral("Noto Sans CJK JP"), "Project lost physical print font settings");
     for (std::size_t i = 0; i < decoded.documents.size(); ++i) {
       const auto& left = decoded.documents[i];
       const auto& right = workspace.documents[i];

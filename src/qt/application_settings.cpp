@@ -25,10 +25,10 @@ struct FontDescriptor {
 
 constexpr FontDescriptor kFonts[] = {{"System", "sys_font"}, {"Edit", "edit_font"},
     {"List", "list_font"}, {"KanjiBar", "bar_font"}, {"File", "file_font"},
-    {"Big", "big_font"}, {"Table", "jis_font"}};
+    {"Big", "big_font"}, {"Table", "jis_font"}, {"Print", "print_font"}};
 constexpr FontDescriptor kFontFields[] = {{"Font", "name"}, {"Size", "size"},
     {"Auto", "automatic"}};
-static_assert(std::size(kFonts) == static_cast<std::size_t>(JapaneseFontRole::kCount));
+static_assert(std::size(kFonts) == static_cast<std::size_t>(JapaneseFontRole::kCount) + 1);
 
 template <typename Owner>
 struct BooleanDescriptor {
@@ -95,9 +95,10 @@ ApplicationSettings read_application_settings(std::string_view text,
           const auto key = font_key(role, field);
           if (!key.matches(entry.name)) continue;
           name = key.name;
-          auto& font = result.fonts[role];
+          const bool printing = role == result.fonts.size();
+          auto& font = printing ? result.print_font : result.fonts[role];
           if (field == 0) font.family = to_qstring(core::parse_jwp_setting_string(entry.value, 40));
-          else if (field == 1) font.size = static_cast<int>(core::parse_jwp_setting_integer(entry.value, 1, 1024));
+          else if (field == 1) font.size = static_cast<int>(core::parse_jwp_setting_integer(entry.value, printing ? 10 : 1, printing ? 1440 : 1024));
           else font.automatic = core::parse_jwp_setting_bool(entry.value);
           break;
         }
@@ -174,8 +175,10 @@ std::string write_application_settings(const ApplicationSettings& settings) {
   }
   std::vector<core::JwpConfigurationUpdate> updates;
   for (std::size_t role = 0; role < std::size(kFonts); ++role) {
-    const auto& font = settings.fonts[role];
-    if (font.size < 1 || font.size > 1024) throw core::JwpConfigurationError("Font size is outside 1..1024");
+    const bool printing = role == settings.fonts.size();
+    const auto& font = printing ? settings.print_font : settings.fonts[role];
+    if (font.size < (printing ? 10 : 1) || font.size > (printing ? 1440 : 1024))
+      throw core::JwpConfigurationError("Font size is outside its supported range");
     if (font.family.size() > 39) throw core::JwpConfigurationError("Font name exceeds its legacy array");
     const auto family = from_qstring(font.family);
     if (to_qstring(family) != font.family) throw core::JwpConfigurationError("Font name is not valid Unicode");

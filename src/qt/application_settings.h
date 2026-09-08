@@ -28,6 +28,7 @@ struct ApplicationSettings {
   ApplicationSettings();
 
   std::array<JapaneseFontSetting, static_cast<std::size_t>(JapaneseFontRole::kCount)> fonts;
+  JapaneseFontSetting print_font{{}, 120, true}; // Size is tenths of a point, not screen pixels.
   bool show_toolbar = true;
   bool show_status_bar = true;
   bool show_kanji_bar = true;
