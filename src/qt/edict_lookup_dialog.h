@@ -72,7 +72,7 @@ class EdictLookupDialog : public QDialog {
   void history_command(HistoryCommand command);
   bool recall_history(std::u32string_view text, int index, bool changed);
   bool publish_results(EdictResourceSearchReport report, int sort_state,
-                       bool reverse, bool query_had_kanji,
+                       bool reverse, bool query_had_kanji, bool compact,
                        core::QueryHistory* history = nullptr);
   void update_actions();
   void show_status();
@@ -90,6 +90,7 @@ class EdictLookupDialog : public QDialog {
   int sort_state_ = -1;
   bool sort_reverse_ = false;
   bool query_had_kanji_ = false;
+  bool compact_results_ = false;
   KanaInputField* query_field_;
   QLineEdit* query_edit_;
   QCheckBox* personal_names_;

@@ -21,6 +21,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
+#include <QMimeData>
 #include <QPointer>
 #include <QPushButton>
 #include <QTextDocument>
@@ -29,6 +30,7 @@
 #include <QToolButton>
 
 #include "jwpqt/core/jwp_text_codec.h"
+#include "jwp_editor.h"
 #include "kana_input_field.h"
 #include "text_bridge.h"
 
@@ -114,6 +116,108 @@ void test_search_render_status_copy_and_insert() {
   require(dialog.insert_selected() &&
               inserted == U"\u3042 [\u3044] /cat/feline/\nAlice /name/",
           "Dictionary insertion callback did not receive every selected row");
+}
+
+void test_compact_presentation() {
+  using namespace jwpqt;
+  qt::EdictLookupDialog* owner = nullptr;
+  bool fail = false;
+  bool change_policy = false;
+  std::u32string inserted;
+  qt::EdictLookupDialog dialog(
+      [&](const core::JwpText&, const qt::EdictLookupOptions& options, bool) {
+        if (fail) throw std::runtime_error("presentation search failed");
+        if (change_policy) {
+          auto next = options;
+          next.compact = false;
+          owner->set_options(next);
+        }
+        qt::EdictResourceSearchReport report;
+        report.results = {
+            result(4, QStringLiteral("Main source"), U"zeta", {U"\u3042", U"\u3044"},
+                   {U"first", U"\ufeff\u00a0\U0001f600", U"(P)", U"EntL123"}),
+            result(7, QStringLiteral("Second source"), U"alpha", {}, {U"other"})};
+        return report;
+      }, [&](const std::u32string& value) { inserted = value; return true; });
+  owner = &dialog;
+  auto* results = dialog.findChild<QTextEdit*>("edictResults");
+  dialog.set_query(U"cat");
+  qt::EdictLookupOptions options;
+  options.compact = true;
+  dialog.set_options(options);
+  change_policy = true;
+  require(dialog.search(), "Compact search failed");
+  const QString expected = QStringLiteral("zeta [\u3042; \u3044] first, \ufeff\u00a0\U0001f600, (P), EntL123\nalpha other");
+  require(qt::document_plain_text(*results->document()) == expected && results->document()->blockCount() == 2,
+          "Compact results lost scalar content, metadata or inline layout");
+  require(results->textCursor().selectedText() == expected.section(QLatin1Char('\n'), 0, 0) &&
+              dialog.insert_selected() && inserted == U"zeta [\u3042; \u3044] /first/\ufeff\u00a0\U0001f600/(P)/EntL123/",
+          "Compact selection inserted display formatting instead of the full canonical entry");
+  results->selectAll();
+  QTextEdit reference_copy;
+  reference_copy.setPlainText(expected);
+  reference_copy.selectAll();
+  reference_copy.copy();
+  auto clipboard_formats = QApplication::clipboard()->mimeData()->formats();
+  clipboard_formats.sort();
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() == expected,
+          "Compact Copy changed exact Unicode display text");
+  auto copied_formats = QApplication::clipboard()->mimeData()->formats();
+  copied_formats.sort();
+  require(copied_formats == clipboard_formats,
+          "Result Copy dropped a native Qt clipboard format");
+  QApplication::clipboard()->setText(QStringLiteral("sentinel"));
+  QKeyEvent copy_key(QEvent::KeyPress, Qt::Key_C, Qt::ControlModifier, QStringLiteral("c"));
+  QApplication::sendEvent(results, &copy_key);
+  QKeyEvent release_copy(QEvent::KeyRelease, Qt::Key_C, Qt::NoModifier);
+  QApplication::sendEvent(results, &release_copy);
+  // Synthetic releases do not update QApplication's cached modifier state.
+  QKeyEvent reset_modifiers(QEvent::KeyPress, Qt::Key_unknown, Qt::NoModifier);
+  QApplication::sendEvent(results, &reset_modifiers);
+  require(QApplication::keyboardModifiers() == Qt::NoModifier, "Copy fixture left keyboard modifiers active");
+  require(QApplication::clipboard()->text() == expected,
+          "Native result Copy bypassed exact Unicode clipboard content");
+  require(QApplication::clipboard()->mimeData()->hasHtml(), "Result Copy lost its rich-text representation");
+  QTextDocument rich_copy;
+  rich_copy.setHtml(QApplication::clipboard()->mimeData()->html());
+  require(qt::document_plain_text(rich_copy) == expected, "Rich result Copy changed Unicode content");
+  require(dialog.insert_selected() &&
+              inserted == U"zeta [\u3042; \u3044] /first/\ufeff\u00a0\U0001f600/(P)/EntL123/\nalpha /other/",
+          "Compact multi-entry insertion changed canonical content");
+  require(dialog.sort_results() && results->document()->blockCount() == 2 && dialog.query() == U"cat",
+          "Sort applied a newer layout preference or changed the query");
+  auto selected = results->document()->find(QStringLiteral("zeta"));
+  results->setTextCursor(selected);
+  require(selected.charFormat().toolTip() == QStringLiteral("Main source") && dialog.insert_selected() &&
+              inserted == U"zeta [\u3042; \u3044] /first/\ufeff\u00a0\U0001f600/(P)/EntL123/",
+          "Compact sorting lost provenance or canonical insertion ownership");
+  dialog.resize(780, 560);
+  dialog.show();
+  QApplication::processEvents();
+  require(dialog.grab().save(QStringLiteral("dictionary-compact.png")), "Could not capture compact results");
+  const QPointer<QTextDocument> previous(results->document());
+  const int position = results->textCursor().position();
+  const int anchor = results->textCursor().anchor();
+  core::EdictSortLimits limits;
+  limits.comparisons = 0;
+  fail = true;
+  require(!dialog.search() && !dialog.sort_results(Qt::NoModifier, limits) && previous &&
+              results->document() == previous && results->textCursor().position() == position &&
+              results->textCursor().anchor() == anchor,
+          "Failed compact search/sort changed the completed view or selection");
+  fail = false;
+  change_policy = false;
+  require(dialog.search() && results->document()->blockCount() == 4 && previous.isNull(),
+          "Next search failed to use the new expanded preference or retained an obsolete document");
+  options.compact = true;
+  dialog.set_options(options);
+  require(dialog.sort_results() && results->document()->blockCount() == 4,
+          "Expanded sorting reformatted an already completed search");
+  results->selectAll();
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() == qt::document_plain_text(*results->document()),
+          "Expanded result Copy changed exact Unicode content");
 }
 
 void test_empty_invalid_and_failed_search_are_contained() {
@@ -1006,6 +1110,7 @@ int main(int argc, char** argv) {
   QApplication application(argc, argv);
   try {
     test_search_render_status_copy_and_insert();
+    test_compact_presentation();
     test_empty_invalid_and_failed_search_are_contained();
     test_result_sorting();
     test_search_controls();

@@ -3563,6 +3563,7 @@ void test_edict_search_controls(const QString& directory) {
   check("edictEnd", false);
   require(count(U"cat") == 5, "Accepted dictionary options did not reach the next search");
   const auto accepted_preferences = qt::write_application_settings(window.application_settings());
+  const QPointer<QTextDocument> before_options_results(results->document());
   bool options_seen = false;
   QTimer::singleShot(0, [&] {
     auto* popup = qobject_cast<QDialog*>(QApplication::activeModalWidget());
@@ -3571,6 +3572,7 @@ void test_edict_search_controls(const QString& directory) {
     options_seen = begin != nullptr;
     if (begin) begin->setChecked(true);
     popup->findChild<QCheckBox*>("settingsDictionaryAutomatic")->setChecked(false);
+    popup->findChild<QCheckBox*>("settingsDictionaryCompact")->setChecked(true);
     popup->reject();
   });
   find_action(window, "applicationOptionsAction")->trigger();
@@ -3592,14 +3594,19 @@ void test_edict_search_controls(const QString& directory) {
     scroll->verticalScrollBar()->setValue(0);
     options_seen = popup->grab().save(QDir::current().filePath(QStringLiteral("application-options-dictionary.png")));
     popup->findChild<QCheckBox*>("settingsDictionaryAutomatic")->setChecked(false);
+    popup->findChild<QCheckBox*>("settingsDictionaryCompact")->setChecked(true);
     popup->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
   });
   find_action(window, "applicationOptionsAction")->trigger();
   require(options_seen && window.application_settings().dictionary.require_beginning &&
                !window.application_settings().dictionary.automatic_search &&
+               window.application_settings().dictionary.compact && before_options_results &&
+               results->document() == before_options_results &&
               dialog->findChild<QCheckBox*>(QStringLiteral("edictBeginning"))->isChecked() &&
               dialog->report().results.size() == 5 && count(U"cat") == 4,
           "Accepted dictionary Options searched prematurely or failed to update live controls");
+  require(results->document()->blockCount() == static_cast<int>(dialog->report().results.size()),
+          "Accepted Compact preference did not reach the next real dictionary search");
   QTimer::singleShot(0, [] {
     auto* popup = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
     if (popup) popup->button(QMessageBox::Yes)->click();
@@ -3607,6 +3614,7 @@ void test_edict_search_controls(const QString& directory) {
   find_action(window, "defaultSettingsAction")->trigger();
   require(window.application_settings().dictionary.require_beginning &&
                window.application_settings().dictionary.automatic_search &&
+               !window.application_settings().dictionary.compact &&
               !window.application_settings().dictionary.require_end &&
               !window.application_settings().dictionary.full_ascii &&
               window.application_settings().dictionary_extra_exclusions == 0x80000000U &&

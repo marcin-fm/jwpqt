@@ -885,6 +885,32 @@ void test_real_resources(const QString& root, const QString& source,
             QStringLiteral("A new native owner could not restore the real dictionary query"));
   }
 
+  const auto expanded_preferences = window.application_settings();
+  auto compact_preferences = expanded_preferences;
+  compact_preferences.dictionary.compact = true;
+  require(window.apply_application_settings(compact_preferences) &&
+              dictionary_results->document() == sorted_document && dictionary->search() &&
+              dictionary->report().results.size() == unsorted_count &&
+              dictionary_results->document()->blockCount() == static_cast<int>(unsorted_count),
+          QStringLiteral("Real compact settings changed old results or failed to render one paragraph per record"));
+  const int compact_love = dictionary_results->toPlainText().indexOf(QChar(0x611b));
+  require(compact_love >= 0, QStringLiteral("Compact real results lost Love"));
+  QTextCursor compact_cursor(dictionary_results->document());
+  compact_cursor.setPosition(compact_love);
+  compact_cursor.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
+  dictionary_results->setTextCursor(compact_cursor);
+  dictionary_results->ensureCursorVisible();
+  dictionary->copy_selected();
+  require(QApplication::clipboard()->text() == QString(QChar(0x611b)) && dictionary->insert_selected() &&
+              editor->toPlainText() != before_sorted_insert,
+          QStringLiteral("Compact real Copy/Insert lost the selected character or canonical entry"));
+  window.findChild<QAction*>(QStringLiteral("undoAction"))->trigger();
+  require(editor->toPlainText() == before_sorted_insert && window.document_modified() == before_sorted_modified,
+          QStringLiteral("Compact real insertion did not undo cleanly"));
+  capture(dictionary, QStringLiteral("lookup-dictionary-compact"));
+  require(window.apply_application_settings(expanded_preferences) && dictionary->search(),
+          QStringLiteral("Could not restore expanded real results"));
+
   open("jisTableAction");
   auto* table = dynamic_cast<jwpqt::qt::JisTableDialog*>(
       window.findChild<QDialog*>(QStringLiteral("jisTableDialog")));

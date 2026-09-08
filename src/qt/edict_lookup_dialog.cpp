@@ -20,6 +20,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMouseEvent>
+#include <QMimeData>
 #include <QPointer>
 #include <QPushButton>
 #include <QScopeGuard>
@@ -39,6 +40,24 @@
 
 namespace jwpqt::qt {
 namespace {
+
+class ResultTextEdit final : public QTextEdit {
+ public:
+  using QTextEdit::QTextEdit;
+
+ protected:
+  QMimeData* createMimeDataFromSelection() const override {
+    const QTextCursor cursor = textCursor();
+    std::unique_ptr<QMimeData> data(QTextEdit::createMimeDataFromSelection());
+    // Materialize Qt's lazy selection, retaining its other clipboard formats.
+    (void)data->text();
+    // The default plain-text conversion normalizes NBSP into ordinary spaces.
+    QString text = cursor.selectedText();
+    text.replace(QChar::ParagraphSeparator, QLatin1Char('\n'));
+    data->setText(text);
+    return data.release();
+  }
+};
 
 std::u32string render_row(const core::EdictRecord& record) {
   std::u32string row = record.headword;
@@ -96,7 +115,7 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
       full_ascii_(new QCheckBox(tr("&Full ASCII"), this)),
       jascii_to_ascii_(new QCheckBox(tr("JASCII to ASCII"), this)),
       contingent_(new QCheckBox(tr("Contingent"), this)),
-      results_(new QTextEdit(this)),
+      results_(new ResultTextEdit(this)),
       status_(new QLabel(this)),
       insert_button_(new QPushButton(tr("&Insert in Document"), this)),
       sort_button_(new QPushButton(tr("S&ort"), this)) {
@@ -304,7 +323,7 @@ bool EdictLookupDialog::search(bool force_contingent) {
     history.remember(history_text);
     const bool had_kanji = std::any_of(query.begin(), query.end(),
         [](core::JisCode code) { return code >= 0x3000U; });
-    if (!publish_results(std::move(candidate), -1, false, had_kanji, &history)) return false;
+    if (!publish_results(std::move(candidate), -1, false, had_kanji, options.compact, &history)) return false;
     show_status();
     if (!history_->find(history_text)) {
       status_->setText(status_->text() + tr("; query was not retained in bounded history"));
@@ -353,7 +372,7 @@ bool EdictLookupDialog::sort_results(Qt::KeyboardModifiers modifiers,
     candidate.results.clear();
     candidate.results.reserve(order.size());
     for (std::size_t index : order) candidate.results.push_back(report_.results[index]);
-    if (!publish_results(std::move(candidate), state, reverse, query_had_kanji_)) return false;
+    if (!publish_results(std::move(candidate), state, reverse, query_had_kanji_, compact_results_)) return false;
     show_status();
     update_actions();
     return true;
@@ -368,7 +387,7 @@ bool EdictLookupDialog::sort_results(Qt::KeyboardModifiers modifiers,
 
 bool EdictLookupDialog::publish_results(EdictResourceSearchReport candidate,
                                        int sort_state, bool reverse,
-                                       bool query_had_kanji,
+                                       bool query_had_kanji, bool compact,
                                        core::QueryHistory* history) {
   std::vector<std::u32string> rows;
   rows.reserve(candidate.results.size());
@@ -394,13 +413,17 @@ bool EdictLookupDialog::publish_results(EdictResourceSearchReport candidate,
       headword += QStringLiteral(" [%1]").arg(readings.join(QStringLiteral("; ")));
     }
     cursor.insertText(headword, format);
-    cursor.insertBlock();
-    QTextBlockFormat definition;
-    definition.setLeftMargin(16);
-    cursor.setBlockFormat(definition);
+    if (compact) {
+      cursor.insertText(QStringLiteral(" "), format);
+    } else {
+      cursor.insertBlock();
+      QTextBlockFormat definition;
+      definition.setLeftMargin(16);
+      cursor.setBlockFormat(definition);
+    }
     QStringList meanings;
     for (const auto& meaning : record.definitions) meanings.push_back(to_qstring(meaning));
-    cursor.insertText(meanings.join(QStringLiteral("; ")), format);
+    cursor.insertText(meanings.join(compact ? QStringLiteral(", ") : QStringLiteral("; ")), format);
     ranges.emplace_back(start, cursor.position());
   }
 
@@ -411,6 +434,7 @@ bool EdictLookupDialog::publish_results(EdictResourceSearchReport candidate,
   sort_state_ = sort_state;
   sort_reverse_ = reverse;
   query_had_kanji_ = query_had_kanji;
+  compact_results_ = compact;
   if (history) {
     *history_ = std::move(*history);
     history_index_ = -1;

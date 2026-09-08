@@ -370,6 +370,14 @@ The source comparison rules are applied deterministically with explicit work
 limits, retaining distinct Unicode and structured metadata. `Ctrl` keeps toggling
 rather than reproducing the legacy lock into reverse after twenty presses.
 
+**Options > Dictionary > Compact results** places each headword and its
+definitions in one paragraph, with comma-separated meanings. It persists as
+`Dict_Compact` and applies to the next successful search. Existing results retain
+their completed layout through sorting or failed searches even if the preference
+changes. Copy preserves exact selected Unicode text and rich text; Insert keeps
+the full canonical entries, including metadata, independently of display layout.
+Priority grouping and separator presentation remain separate porting work.
+
 Character Table places its code fields beside the full character grid. Lookup
 results use horizontal character strips with Information, Insert and Copy
 actions. Bushu, Stroke/Bushu, SKIP, Spahn-Hadamitzky, Four Corner and Index Lookup
