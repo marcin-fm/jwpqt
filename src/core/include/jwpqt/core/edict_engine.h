@@ -28,6 +28,15 @@ struct EdictSearchResult {
   EdictSearchStage stage = EdictSearchStage::kDirect;
   std::size_t adaptive_pass = 0;
   std::size_t source_index = 0;
+  bool priority = false;  // Original terminal (P), before sense filtering.
+};
+
+struct EdictSearchSection {
+  EdictSearchStage stage = EdictSearchStage::kDirect;
+  // Half-open range ends at the next section or report size; empty attempts count.
+  std::size_t begin = 0;
+  bool new_pass = false;
+  bool quiet_empty = false;
 };
 
 struct EdictSearchSource {
@@ -61,6 +70,7 @@ struct EdictSearchReport {
   std::size_t candidate_matches = 0;
   std::size_t queries = 0;
   std::size_t lookup_steps = 0;
+  std::vector<EdictSearchSection> sections;
 };
 
 EdictSearchReport search_edict(

@@ -79,6 +79,8 @@ void test_ordered_linear_resources(const QString& directory) {
               report.results[1].result.record.definitions ==
                   std::vector<std::u32string>{U"second"},
           "Resource search did not preserve configured result order");
+  require(report.sections.size() == 1 && report.sections[0].begin == 0 &&
+          report.sections[0].new_pass, "Normal resources acquired separate presentation phases");
 }
 
 void test_names_only_pseudo_passes(const QString& directory) {
@@ -103,6 +105,11 @@ void test_names_only_pseudo_passes(const QString& directory) {
               report.results[2].result.record.definitions ==
                   std::vector<std::u32string>{U"(p) place"},
           "Name pseudo passes did not filter or follow normal resources");
+  require(report.sections.size() == 3, "Name passes lost presentation boundaries");
+  for (std::size_t i = 0; i < 3; ++i)
+    require(report.sections[i].begin == i && report.sections[i].new_pass &&
+            report.sections[i].stage == jwpqt::core::EdictSearchStage::kDirect,
+            "Name presentation offsets or independent boundaries are wrong");
 }
 
 void test_non_keep_reload_and_failure(const QString& directory) {

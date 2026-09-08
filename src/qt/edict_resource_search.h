@@ -36,6 +36,7 @@ struct EdictResourceSearchReport {
   std::size_t candidate_matches = 0;
   std::size_t queries = 0;
   std::size_t lookup_steps = 0;
+  std::vector<core::EdictSearchSection> sections;
 };
 
 EdictResourceSearchReport search_edict_resources(

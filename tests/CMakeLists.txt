@@ -85,6 +85,11 @@ target_link_libraries(jwpqt_edict_sort_tests PRIVATE jwpqt_core)
 target_compile_options(jwpqt_edict_sort_tests PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME core_edict_sort COMMAND jwpqt_edict_sort_tests)
 
+add_executable(jwpqt_edict_presentation_tests edict_presentation_test.cpp)
+target_link_libraries(jwpqt_edict_presentation_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_edict_presentation_tests PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME core_edict_presentation COMMAND jwpqt_edict_presentation_tests)
+
 add_executable(jwpqt_edict_resource_search_tests
   edict_resource_search_test.cpp
 )

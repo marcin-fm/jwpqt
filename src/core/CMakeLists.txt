@@ -3,6 +3,7 @@ add_library(jwpqt_core STATIC
   edict_deinflection.cpp
   edict_dictionary.cpp
   edict_engine.cpp
+  edict_presentation.cpp
   edict_filter.cpp
   edict_index.cpp
   edict_pattern.cpp

@@ -125,6 +125,10 @@ void merge_report(EdictResourceSearchReport& destination,
               "EDICT query count overflows");
   checked_add(destination.lookup_steps, source.lookup_steps,
               "EDICT lookup work overflows");
+  for (auto section : source.sections) {
+    section.begin += destination.results.size();
+    destination.sections.push_back(section);
+  }
   for (core::EdictSearchResult& result : source.results) {
     destination.results.push_back(
         {resource.registry_index, resource.label, std::move(result)});
@@ -142,6 +146,10 @@ void merge_multi_report(
               "EDICT query count overflows");
   checked_add(destination.lookup_steps, source.lookup_steps,
               "EDICT lookup work overflows");
+  for (auto section : source.sections) {
+    section.begin += destination.results.size();
+    destination.sections.push_back(section);
+  }
   for (core::EdictSearchResult& result : source.results) {
     if (result.source_index >= resources.size()) {
       throw core::EdictSearchError("EDICT result source is invalid");
