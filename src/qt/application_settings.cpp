@@ -38,6 +38,11 @@ struct BooleanDescriptor {
 };
 
 constexpr BooleanDescriptor<ApplicationSettings> kBooleans[] = {
+    {"Search_AllFiles", "search_all", &ApplicationSettings::search_all_files},
+    {"Search_CaseInsensitive", "search_nocase", &ApplicationSettings::search_ignore_case},
+    {"Search_WidthInsensitive", "search_jascii", &ApplicationSettings::search_ignore_width},
+    {"Search_WrapAround", "search_wrap", &ApplicationSettings::search_wrap},
+    {"Search_KeepDialogsOpen", "keep_find", &ApplicationSettings::search_keep_open},
     {"Show_Toolbar", "toolbar", &ApplicationSettings::show_toolbar},
     {"Show_StatusBar", "status", &ApplicationSettings::show_status_bar},
     {"Show_KanjiBar", "kanjibar", &ApplicationSettings::show_kanji_bar},

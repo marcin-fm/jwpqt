@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "main_window.h"
+#include "find_replace_dialog.h"
+#include "jwpqt/core/unicode_search.h"
 
 #include <algorithm>
 #include <array>
@@ -1500,6 +1502,8 @@ void MainWindow::update_recent_file_actions() {
 }
 
 MainWindow::~MainWindow() {
+  delete find_dialog_.data();
+  delete replace_dialog_.data();
   document_tabs_->disconnect(this);
   conversion_candidates_->disconnect(this);
   for (const auto& state : documents_) {
@@ -4269,7 +4273,11 @@ std::u32string MainWindow::edict_query_seed() const {
 }
 
 bool MainWindow::insert_edict_text(std::u32string_view text) {
-  if (text.empty() || conversion_active() || document_->updating_editor_ ||
+  return !text.empty() && replace_editor_selection(text);
+}
+
+bool MainWindow::replace_editor_selection(std::u32string_view text) {
+  if ((text.empty() && !document_->editor_->textCursor().hasSelection()) || conversion_active() || document_->updating_editor_ ||
       document_->applying_kana_input_ || document_->editor_->isReadOnly()) {
     return false;
   }
@@ -5150,125 +5158,204 @@ std::optional<core::TextEncoding> MainWindow::prompt_for_encoding(
 
 std::optional<SearchRequest> MainWindow::prompt_for_search(
     const SearchRequest& initial) {
-  QDialog dialog(this);
-  dialog.setWindowTitle(tr("Find"));
-
-  auto* layout = new QVBoxLayout(&dialog);
-  auto* form = new QFormLayout();
-  auto* text = new QLineEdit(initial.text, &dialog);
-  text->setObjectName(QStringLiteral("findText"));
-  form->addRow(tr("Find:"), text);
-  layout->addLayout(form);
-
-  auto* ignore_case = new QCheckBox(tr("Ignore ASCII case"), &dialog);
-  ignore_case->setChecked(initial.options.ignore_ascii_case);
-  layout->addWidget(ignore_case);
-  auto* jascii = new QCheckBox(tr("Treat full-width ASCII as ASCII"), &dialog);
-  jascii->setChecked(initial.options.jascii_ascii_equivalence);
-  jascii->setEnabled(is_jwp_document());
-  layout->addWidget(jascii);
-  auto* wrap = new QCheckBox(tr("Wrap around"), &dialog);
-  wrap->setChecked(initial.options.wrap);
-  layout->addWidget(wrap);
-
-  auto* direction = new QHBoxLayout();
-  auto* forward = new QRadioButton(tr("Forward"), &dialog);
-  auto* backward = new QRadioButton(tr("Backward"), &dialog);
-  forward->setChecked(initial.options.direction ==
-                      core::JwpSearchDirection::kForward);
-  backward->setChecked(initial.options.direction ==
-                       core::JwpSearchDirection::kBackward);
-  direction->addWidget(forward);
-  direction->addWidget(backward);
-  layout->addLayout(direction);
-
-  auto* buttons = new QDialogButtonBox(
-      QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-  buttons->button(QDialogButtonBox::Ok)->setText(tr("Find"));
-  connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-  connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-  layout->addWidget(buttons);
-
-  text->selectAll();
-  text->setFocus();
-  if (dialog.exec() != QDialog::Accepted) {
-    return std::nullopt;
-  }
-  return SearchRequest{
-      text->text(),
-      core::JwpSearchOptions{
-          backward->isChecked() ? core::JwpSearchDirection::kBackward
-                                : core::JwpSearchDirection::kForward,
-          ignore_case->isChecked(), jascii->isChecked(), wrap->isChecked()}};
+  show_find_replace(false, initial.text, {});
+  return std::nullopt;
 }
 
 std::optional<ReplaceRequest> MainWindow::prompt_for_replace(
     const ReplaceRequest& initial) {
-  QDialog dialog(this);
-  dialog.setWindowTitle(tr("Replace"));
+  show_find_replace(true, initial.text, initial.replacement);
+  return std::nullopt;
+}
 
-  auto* layout = new QVBoxLayout(&dialog);
-  auto* form = new QFormLayout();
-  auto* text = new QLineEdit(initial.text, &dialog);
-  text->setObjectName(QStringLiteral("replaceFindText"));
-  form->addRow(tr("Find:"), text);
-  auto* replacement = new QLineEdit(initial.replacement, &dialog);
-  replacement->setObjectName(QStringLiteral("replacementText"));
-  form->addRow(tr("Replace with:"), replacement);
-  layout->addLayout(form);
+void MainWindow::show_find_replace(bool replacing, const QString& text, const QString& replacement) {
+  auto& dialog = replacing ? replace_dialog_ : find_dialog_;
+  if (dialog) { dialog->show(); dialog->raise(); dialog->activateWindow(); return; }
+  const QPointer<MainWindow> self(this);
+  dialog = new FindReplaceDialog(replacing, application_settings_, query_histories_,
+      [self](const FindReplaceRequest& request) {
+        if (!self) return FindReplaceResult{};
+        auto result = self->run_find_replace(request);
+        if (self) self->statusBar()->showMessage(result.message, 3000);
+        return result;
+      }, this);
+  dialog->set_overwrite_action(overwrite_action_);
+  QString seed = document_->editor_->textCursor().selectedText();
+  const auto newline = seed.indexOf(QChar::ParagraphSeparator);
+  if (newline >= 0) seed.truncate(newline);
+  const QPointer<FindReplaceDialog> opened = dialog;
+  opened->set_text(seed.isEmpty() ? text : seed, replacement);
+  if (self && opened) opened->show();
+}
 
-  auto* ignore_case = new QCheckBox(tr("Ignore ASCII case"), &dialog);
-  ignore_case->setChecked(initial.options.ignore_ascii_case);
-  layout->addWidget(ignore_case);
-  auto* jascii = new QCheckBox(tr("Treat full-width ASCII as ASCII"), &dialog);
-  jascii->setChecked(initial.options.jascii_ascii_equivalence);
-  jascii->setEnabled(is_jwp_document());
-  layout->addWidget(jascii);
-  auto* wrap = new QCheckBox(tr("Wrap around for Replace Next"), &dialog);
-  wrap->setChecked(initial.options.wrap);
-  layout->addWidget(wrap);
-
-  auto* direction = new QHBoxLayout();
-  auto* forward = new QRadioButton(tr("Forward"), &dialog);
-  auto* backward = new QRadioButton(tr("Backward"), &dialog);
-  forward->setChecked(initial.options.direction ==
-                      core::JwpSearchDirection::kForward);
-  backward->setChecked(initial.options.direction ==
-                       core::JwpSearchDirection::kBackward);
-  direction->addWidget(forward);
-  direction->addWidget(backward);
-  layout->addLayout(direction);
-
-  ReplaceMode mode = initial.mode;
-  auto* buttons = new QDialogButtonBox(&dialog);
-  QPushButton* replace_button = buttons->addButton(
-      tr("Replace Next"), QDialogButtonBox::ActionRole);
-  QPushButton* replace_all_button = buttons->addButton(
-      tr("Replace All"), QDialogButtonBox::ActionRole);
-  buttons->addButton(QDialogButtonBox::Cancel);
-  connect(replace_button, &QPushButton::clicked, &dialog, [&] {
-    mode = ReplaceMode::kNext;
-    dialog.accept();
-  });
-  connect(replace_all_button, &QPushButton::clicked, &dialog, [&] {
-    mode = ReplaceMode::kAll;
-    dialog.accept();
-  });
-  connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-  layout->addWidget(buttons);
-
-  text->selectAll();
-  text->setFocus();
-  if (dialog.exec() != QDialog::Accepted) {
-    return std::nullopt;
+FindReplaceResult MainWindow::run_find_replace(const FindReplaceRequest& request) {
+  if (search_busy_ || document_->updating_editor_ || document_->applying_kana_input_)
+    return {false, tr("An editor operation is already in progress")};
+  const QPointer<MainWindow> self(this);
+  search_busy_ = true;
+  const auto guard = qScopeGuard([self] { if (self) self->search_busy_ = false; });
+  std::size_t changed = 0;
+  try {
+    finish_kana_input();
+    if (!self) return {};
+    if (conversion_active()) throw core::JwpSearchError("Accept the current conversion before searching");
+    const auto pattern = from_qstring(request.text);
+    const auto replacement = from_qstring(request.replacement);
+    if (to_qstring(pattern) != request.text || to_qstring(replacement) != request.replacement)
+      throw core::JwpSearchError("Invalid Unicode in search or replacement");
+    if (request.text.contains(QLatin1Char('\n')) || request.text.contains(QChar::ParagraphSeparator) ||
+        request.replacement.contains(QLatin1Char('\n')) || request.replacement.contains(QChar::ParagraphSeparator))
+      throw core::JwpSearchError("Find and Replace operates within paragraphs");
+    struct Snapshot {
+      QPointer<JwpEditor> editor;
+      QString text;
+      std::vector<std::pair<int, int>> changes;
+      std::optional<core::JwpDocumentModel> validation;
+      core::LegacyCodePage code_page;
+      QPointer<QTextDocument> document;
+      int revision;
+    };
+    struct Match { std::size_t file; int begin; int end; };
+    std::vector<Snapshot> snapshots;
+    std::vector<Match> matches, wrapped;
+    const int start_file = current_document_index();
+    const int start = document_->editor_->textCursor().selectionStart();
+    const bool backwards = request.options.direction == core::JwpSearchDirection::kBackward;
+    const bool replace = request.operation != SearchOperation::kFind;
+    const int count = request.all_files ? document_count() : 1;
+    std::size_t content_budget = 33554432, render_budget = 100000000, search_work = 100000000;
+    for (int step = 0; step < count; ++step) {
+      const int index = (start_file + (backwards ? -step : step) + document_count()) % document_count();
+      const auto& state = *documents_[index];
+      QString text = document_plain_text(*state.editor_->document());
+      if (static_cast<std::size_t>(text.size()) > content_budget)
+        throw core::JwpSearchError("Workspace search size limit exceeded");
+      content_budget -= text.size();
+      const auto scalars = from_qstring(text);
+      if (to_qstring(scalars) != text) throw core::JwpSearchError("Invalid Unicode in a document");
+      auto found = core::find_unicode_text(scalars, pattern, request.options,
+                                           100000 - matches.size() - wrapped.size(), &search_work,
+                                           request.operation == SearchOperation::kFind);
+      if (matches.size() + wrapped.size() + found.size() > 100000)
+        throw core::JwpSearchError("Too many workspace matches");
+      std::vector<int> positions{0};
+      positions.reserve(scalars.size() + 1);
+      for (auto ch : scalars) positions.push_back(positions.back() + (ch > 0xffff ? 2 : 1));
+      if (backwards) std::reverse(found.begin(), found.end());
+      if (replace && !found.empty()) {
+        if (state.editor_->isReadOnly()) throw core::JwpSearchError("A matching document is read-only");
+        const std::size_t work = static_cast<std::size_t>(text.size()) + request.replacement.size();
+        if (work && found.size() > render_budget / work)
+          throw core::JwpSearchError("Replacement work limit exceeded; use a smaller scope");
+        render_budget -= found.size() * work;
+      }
+      snapshots.push_back({state.editor_, text, {}, replace ? state.jwp_document_ : std::nullopt, state.jwp_code_page_,
+                           state.editor_->document(), state.editor_->document()->revision()});
+      for (const auto& range : found) {
+        Match match{snapshots.size() - 1, positions[range.first], positions[range.second]};
+        if (request.operation == SearchOperation::kAll || step || (backwards ? match.begin < start : match.begin > start))
+          matches.push_back(match);
+        else if (match.begin != start && (request.all_files || request.options.wrap)) wrapped.push_back(match);
+      }
+    }
+    matches.insert(matches.end(), wrapped.begin(), wrapped.end());
+    if (request.operation == SearchOperation::kReplace && matches.size() > 1) matches.resize(1);
+    if (replace) {
+      auto validation_order = matches;
+      std::sort(validation_order.begin(), validation_order.end(), [](const Match& a, const Match& b) {
+        return a.file != b.file ? a.file < b.file : a.begin > b.begin;
+      });
+      for (const auto& match : validation_order) {
+        auto& file = snapshots[match.file];
+        if (!file.validation) continue;
+        const auto begin = utf32_offset_for_utf16(file.text, match.begin);
+        const auto end = utf32_offset_for_utf16(file.text, match.end);
+        core::replace_jwp_plain_text(*file.validation, begin, end - begin, replacement, file.code_page);
+      }
+    }
+    auto search_history = query_histories_->search;
+    auto replacement_history = query_histories_->replace;
+    search_history.remember(pattern);
+    if (replace && !replacement.empty()) replacement_history.remember(replacement);
+    // Publish accepted search state before selection signals or replacement prompts.
+    search_text_ = request.text;
+    if (replace) replacement_text_ = request.replacement;
+    search_options_ = request.options;
+    application_settings_.search_all_files = request.all_files;
+    application_settings_.search_keep_open = request.keep_open;
+    application_settings_.search_ignore_case = request.options.ignore_ascii_case;
+    application_settings_.search_ignore_width = request.options.jascii_ascii_equivalence;
+    application_settings_.search_wrap = request.options.wrap;
+    query_histories_->search = std::move(search_history);
+    if (replace) query_histories_->replace = std::move(replacement_history);
+    bool replace_remaining = request.operation == SearchOperation::kAll;
+    for (const auto& match : matches) {
+      auto& snapshot = snapshots[match.file];
+      auto unchanged = [&] {
+        if (!self || !snapshot.editor) return false;
+        if (document_plain_text(*snapshot.editor->document()) != snapshot.text) return false;
+        for (auto& file : snapshots) {
+          if (!file.editor || !file.document || file.editor->document() != file.document) return false;
+          if (file.document->revision() != file.revision) {
+            if (document_plain_text(*file.document) != file.text) return false;
+            file.revision = file.document->revision();
+          }
+        }
+        return true;
+      };
+      if (!unchanged()) throw core::JwpSearchError("Documents changed during search; unprocessed matches were left intact");
+      int index = -1;
+      for (std::size_t i = 0; i < documents_.size(); ++i)
+        if (documents_[i]->editor_ == snapshot.editor) index = static_cast<int>(i);
+      if (index < 0 || !activate_document(index) || !unchanged())
+        throw core::JwpSearchError("The matching document is no longer available");
+      int offset = 0;
+      for (const auto& delta : snapshot.changes) if (delta.first < match.begin) offset += delta.second;
+      const int begin = match.begin + offset, end = match.end + offset;
+      QTextCursor cursor(snapshot.editor->document());
+      cursor.setPosition(begin); cursor.setPosition(end, QTextCursor::KeepAnchor);
+      snapshot.editor->setTextCursor(cursor);
+      if (!unchanged()) throw core::JwpSearchError("The match changed while selecting it");
+      snapshot.editor->ensureCursorVisible();
+      if (!replace) return {true, tr("Match found")};
+      if (!replace_remaining) {
+        QPointer<QMessageBox> confirmation = new QMessageBox(QMessageBox::Question, tr("Replace Match"),
+            request.operation == SearchOperation::kReview
+                ? tr("Replace the selected match?\nYes to All processes the remaining snapshot matches.")
+                : tr("Replace the selected match?"),
+            QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel |
+                (request.operation == SearchOperation::kReview ? QMessageBox::YesToAll : QMessageBox::NoButton), this);
+        confirmation->setDefaultButton(QMessageBox::Cancel);
+        const auto answer = static_cast<QMessageBox::StandardButton>(confirmation->exec());
+        if (!self || !confirmation) return {};
+        delete confirmation;
+        if (!self) return {};
+        if (answer == QMessageBox::Cancel) return {true, tr("Stopped after %1 replacements").arg(changed)};
+        if (!unchanged()) throw core::JwpSearchError("Documents changed during confirmation; replacement cancelled");
+        if (answer == QMessageBox::No) {
+          if (request.operation == SearchOperation::kReplace) return {true, tr("Match skipped")};
+          continue;
+        }
+        replace_remaining = answer == QMessageBox::YesToAll;
+      }
+      if (document_->editor_ != snapshot.editor || snapshot.editor->textCursor().selectionStart() != begin ||
+          snapshot.editor->textCursor().selectionEnd() != end || snapshot.editor->isReadOnly())
+        throw core::JwpSearchError("Selection changed during confirmation; replacement cancelled");
+      if (snapshot.text.mid(begin, end - begin) != request.replacement && !replace_editor_selection(replacement))
+        throw core::JwpSearchError("Could not apply the validated replacement");
+      if (!self || !snapshot.editor) return {};
+      snapshot.text.replace(begin, end - begin, request.replacement);
+      snapshot.changes.emplace_back(match.begin, request.replacement.size() - (end - begin));
+      if (!unchanged()) throw core::JwpSearchError("Unexpected document change; remaining replacements cancelled");
+      ++changed;
+      if (request.operation == SearchOperation::kReplace && !replace_remaining) break;
+    }
+    return {true, changed ? tr("Replaced %1 matches (each edit is undoable)").arg(changed) :
+        matches.empty() ? tr("Text not found") : tr("Finished; no replacements made")};
+  } catch (const std::exception& error) {
+    if (!self) return {};
+    return {false, tr("%1. %2 replacements completed.").arg(QString::fromUtf8(error.what())).arg(changed)};
   }
-  return ReplaceRequest{
-      text->text(), replacement->text(),
-      core::JwpSearchOptions{
-          backward->isChecked() ? core::JwpSearchDirection::kBackward
-                                : core::JwpSearchDirection::kForward,
-          ignore_case->isChecked(), jascii->isChecked(), wrap->isChecked()},
-      mode};
 }
 
 std::optional<core::JwpParagraphFormat>
@@ -5519,7 +5606,10 @@ void MainWindow::find_again(core::JwpSearchDirection direction) {
   }
   core::JwpSearchOptions options = search_options_;
   options.direction = direction;
-  find_text(search_text_, options);
+  const QPointer<MainWindow> self(this);
+  const auto result = run_find_replace({search_text_, {}, options,
+      application_settings_.search_all_files, application_settings_.search_keep_open, SearchOperation::kFind});
+  if (self) statusBar()->showMessage(result.message, 3000);
 }
 
 void MainWindow::replace_document() {
@@ -6438,7 +6528,7 @@ void MainWindow::show_error(const QString& action,
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
-  if (query_history_busy_) {
+  if (query_history_busy_ || search_busy_) {
     event->ignore();
     return;
   }

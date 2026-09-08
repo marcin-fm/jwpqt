@@ -36,6 +36,7 @@ add_library(jwpqt_core STATIC
   jwp_plain_text.cpp
   jwp_project.cpp
   jwp_search.cpp
+  unicode_search.cpp
   jwp_text_codec.cpp
   legacy_code_page.cpp
   legacy_text.cpp

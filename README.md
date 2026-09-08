@@ -359,8 +359,8 @@ the lookup, replacing its resources and restarting the application.
 **Options > History** configures a per-history limit of 0..30000 storage cells
 and saving on exit. Each history has its own budget. The application loads
 `query-history.bin` from its configuration directory. All three
-dictionary/search/replace lists round-trip;
-search/replace edit-dialog history controls are not implemented yet. Settings,
+dictionary/search/replace lists round-trip and are available in their respective
+lookup, Find and Replace windows. Settings,
 history import and reload leave current queries, pending kana, results and
 selections intact. Turning off automatic saving leaves any existing file unchanged.
 
@@ -379,6 +379,40 @@ pauses automatic saving when it might discard saved entries: increase the size
 and Reload to recover them, or explicitly Save the smaller histories. Resource
 reports disclose these warnings without writing files. Locks do not provide
 race-free protection against external tools that ignore them.
+
+### Document Find And Replace
+
+**Edit > Find/Replace** opens modeless windows with local Kanji/ASCII/JASCII input,
+shared Insert/Overwrite mode, and separate search/replacement histories. Up/Down
+recalls text without searching; History offers Copy/Delete/OK/Cancel. Oversized
+drafts are not discarded, and history deletion is immediate even on Cancel.
+Opening a new window uses the selected first-paragraph text; reopening an existing
+window preserves its draft. Ordinary Find does not erase the last replacement.
+
+Search supports forward/backward matching, ASCII case folding, full-width
+letter/digit equivalence, optional wrap and circular traversal through all open
+documents. Find Next/Previous reuse the accepted search. All Files supersedes
+the wrap checkbox. Case, width, wrap, all-files and keep-open policies persist in
+configuration and JPR; direction starts forward in a newly opened window.
+
+Replace Next confirms one match. Review Matches offers Yes, Skip, Yes to All and
+Cancel; Replace All explicitly processes the whole selected document/workspace
+scope without per-match prompts. Replacement works on original non-overlapping
+snapshot matches, not newly inserted text. Normal next/review traversal excludes
+the current starting match, as in the source; Replace All includes it. Searches
+stay within paragraphs and preserve literal Unicode, including supplementary
+characters. An empty replacement deletes matches.
+
+All prospective native replacements are validated before editing. Work and match
+counts are bounded across the workspace. Changes to documents or selections during
+confirmation cancel unprocessed replacements rather than editing stale positions.
+Read-only documents and active conversions are protected. Each accepted edit is
+undoable in its document's native or Unicode history, preserving encoding and
+metadata. Cancel leaves already accepted edits undoable and remaining text intact;
+this is not an atomic cross-document transaction. Find in auxiliary result lists
+is a separate remaining porting task.
+
+### Dictionary Result Ordering
 
 Dictionary **Sort** cycles Reading, Length, Entry and Definition order. Hold
 `Shift` to cycle backwards or `Ctrl` to reverse the current order without cycling.

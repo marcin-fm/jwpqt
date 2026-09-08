@@ -38,6 +38,11 @@ struct ApplicationSettings {
   bool save_settings_on_exit = true;
   bool save_recent_files = true;
   bool save_histories = true;
+  bool search_all_files = false;
+  bool search_ignore_case = true;
+  bool search_ignore_width = true;
+  bool search_wrap = false;
+  bool search_keep_open = true;
   int history_size = 300;
   int translation_code_page = 1252;
   KanjiInfoOptions kanji_info;

@@ -14,6 +14,7 @@
 #include <QIcon>
 #include <QList>
 #include <QMainWindow>
+#include <QPointer>
 #include <QPixmap>
 #include <QString>
 
@@ -57,6 +58,9 @@ class QToolButton;
 namespace jwpqt::qt {
 
 class EdictLookupDialog;
+class FindReplaceDialog;
+struct FindReplaceRequest;
+struct FindReplaceResult;
 struct EdictLookupOptions;
 class EdictResultsWindow;
 class EdictUserDictionaryDialog;
@@ -357,6 +361,9 @@ class MainWindow : public QMainWindow {
                               core::LegacyCodePage code_page);
   void clear_jwp_presentation();
   void find_document();
+  void show_find_replace(bool replacing, const QString& text, const QString& replacement);
+  FindReplaceResult run_find_replace(const FindReplaceRequest& request);
+  bool replace_editor_selection(std::u32string_view text);
   void find_again(core::JwpSearchDirection direction);
   void replace_document();
   void format_document_paragraphs();
@@ -486,6 +493,9 @@ class MainWindow : public QMainWindow {
   QString search_text_;
   QString replacement_text_;
   core::JwpSearchOptions search_options_;
+  QPointer<FindReplaceDialog> find_dialog_;
+  QPointer<FindReplaceDialog> replace_dialog_;
+  bool search_busy_ = false;
   // Conversion transactions must be destroyed before the shared dictionaries.
   std::vector<std::unique_ptr<DocumentState>> documents_;
   DocumentState* document_ = nullptr;

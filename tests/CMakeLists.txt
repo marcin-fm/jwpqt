@@ -47,6 +47,17 @@ target_compile_options(jwpqt_query_history_window_tests PRIVATE -Wall -Wextra -W
 add_test(NAME qt_query_history_window COMMAND jwpqt_query_history_window_tests)
 set_tests_properties(qt_query_history_window PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 90)
 
+add_executable(jwpqt_find_replace_tests find_replace_test.cpp)
+target_link_libraries(jwpqt_find_replace_tests PRIVATE jwpqt_qt_ui)
+target_compile_options(jwpqt_find_replace_tests PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME qt_find_replace COMMAND jwpqt_find_replace_tests)
+set_tests_properties(qt_find_replace PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 90)
+
+add_executable(jwpqt_unicode_search_tests unicode_search_test.cpp)
+target_link_libraries(jwpqt_unicode_search_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_unicode_search_tests PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME core_unicode_search COMMAND jwpqt_unicode_search_tests)
+
 add_executable(jwpqt_category_exclusion_tests category_exclusion_test.cpp)
 target_link_libraries(jwpqt_category_exclusion_tests PRIVATE jwpqt_qt_ui)
 target_compile_options(jwpqt_category_exclusion_tests PRIVATE -Wall -Wextra -Wpedantic)

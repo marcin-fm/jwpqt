@@ -51,6 +51,8 @@ add_library(jwpqt_qt_ui STATIC
   character_context_menu.h
   edict_lookup_dialog.cpp
   edict_lookup_dialog.h
+  find_replace_dialog.cpp
+  find_replace_dialog.h
   edict_results_window.cpp
   edict_results_window.h
   edict_user_dictionary_dialog.cpp
