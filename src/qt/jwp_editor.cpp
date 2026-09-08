@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -13,19 +14,25 @@
 
 #include <QAbstractTextDocumentLayout>
 #include <QColor>
+#include <QCoreApplication>
 #include <QFontMetricsF>
+#include <QImage>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
+#include <QMimeData>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QScrollBar>
 #include <QSignalBlocker>
+#include <QStatusTipEvent>
 #include <QTextBlock>
 #include <QTextBlockFormat>
 #include <QTextCursor>
 #include <QTextDocument>
+#include <QTimer>
 
 #include "jwpqt/core/jwp_text_codec.h"
+#include "japanese_fonts.h"
 
 namespace jwpqt::qt {
 namespace {
@@ -97,6 +104,57 @@ std::u32string checked_input_text(const QString& text) {
 }
 
 }  // namespace
+
+QMimeData* JwpEditor::createMimeDataFromSelection() const {
+  // Qt's fragment MIME is lazy. Preserve all native/rich representations before
+  // replacing plain text (whose default conversion folds nonbreaking spaces).
+  std::unique_ptr<QMimeData> original(QTextEdit::createMimeDataFromSelection());
+  auto result = std::make_unique<QMimeData>();
+  for (const auto& format : original->formats()) result->setData(format, original->data(format));
+  QString text = textCursor().selectedText();
+  text.replace(QChar::ParagraphSeparator, QLatin1Char('\n'));
+  text.replace(QChar::LineSeparator, QLatin1Char('\n'));
+  result->setText(text);
+  result->setProperty("jwpqtInternalCopy", true);
+  if (text.isEmpty() || !clipboard_bitmap_enabled(*this)) return result.release();
+  try {
+    if (text.size() > 262144) throw std::runtime_error("selection exceeds 262144 character positions");
+    (void)checked_input_text(text);
+    const QFont font = japanese_font(*this, JapaneseFontRole::kBitmap);
+    QImage metrics(1, 1, QImage::Format_RGB32);
+    QTextDocument bitmap;
+    bitmap.documentLayout()->setPaintDevice(&metrics);
+    bitmap.setDefaultFont(font);
+    bitmap.setDocumentMargin(2);
+    bitmap.setPlainText(text);
+    const qreal old_unit = QFontMetricsF(document()->defaultFont()).horizontalAdvance(QStringLiteral("\u3000"));
+    const qreal new_unit = QFontMetricsF(font, &metrics).horizontalAdvance(QStringLiteral("\u3000"));
+    const qreal source_width = document()->textWidth() > 0 ? document()->textWidth() : viewport()->width();
+    const qreal width = source_width * (old_unit > 0 ? new_unit / old_unit : 1);
+    if (!std::isfinite(width)) throw std::runtime_error("invalid bitmap line width");
+    bitmap.setTextWidth(qBound<qreal>(1, width, 8192));
+    const qreal w = std::ceil(bitmap.idealWidth()), h = std::ceil(bitmap.size().height());
+    if (!std::isfinite(w) || !std::isfinite(h) || w > 8192 || h > 8192 || w * h > 16777216)
+      throw std::runtime_error("bitmap exceeds 8192 pixels per edge or 16 million pixels");
+    QImage image(qMax(1, static_cast<int>(w)), qMax(1, static_cast<int>(h)), QImage::Format_RGB32);
+    if (image.isNull()) throw std::runtime_error("could not allocate clipboard bitmap");
+    image.fill(Qt::white);
+    QPainter painter(&image);
+    QAbstractTextDocumentLayout::PaintContext context;
+    context.palette.setColor(QPalette::Text, Qt::black);
+    bitmap.documentLayout()->draw(&painter, context);
+    painter.end();
+    result->setImageData(image);
+  } catch (const std::exception& error) {
+    const auto message = tr("Clipboard text copied; bitmap omitted: %1").arg(QString::fromUtf8(error.what()));
+    // Report after QTextEdit's copy/cut call finishes, never from its MIME callback.
+    QTimer::singleShot(0, this, [this, message] {
+      QStatusTipEvent event(message);
+      QCoreApplication::sendEvent(window(), &event);
+    });
+  }
+  return result.release();
+}
 
 QString document_plain_text(const QTextDocument& document) {
   // Qt's toPlainText also changes NBSP to space; only normalize line separators.

@@ -58,6 +58,12 @@ target_compile_options(jwpqt_auxiliary_find_tests PRIVATE -Wall -Wextra -Wpedant
 add_test(NAME qt_auxiliary_find COMMAND jwpqt_auxiliary_find_tests)
 set_tests_properties(qt_auxiliary_find PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;TMPDIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 90)
 
+add_executable(jwpqt_font_rendering_tests font_rendering_test.cpp)
+target_link_libraries(jwpqt_font_rendering_tests PRIVATE jwpqt_qt_ui)
+target_compile_options(jwpqt_font_rendering_tests PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME qt_font_rendering COMMAND jwpqt_font_rendering_tests)
+set_tests_properties(qt_font_rendering PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;TMPDIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 90)
+
 add_executable(jwpqt_unicode_search_tests unicode_search_test.cpp)
 target_link_libraries(jwpqt_unicode_search_tests PRIVATE jwpqt_core)
 target_compile_options(jwpqt_unicode_search_tests PRIVATE -Wall -Wextra -Wpedantic)

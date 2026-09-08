@@ -7,9 +7,19 @@ values followed by valid overrides. Unsupported source lines remain preserved
 and are disclosed rather than silently applied.
 
 Settings are stored in jwpqt.cfg. Japanese System/Edit/List/KanjiBar/File/Big/Table
-fonts are not desktop menu fonts. Missing or bitmap families use native
-fallbacks. Print has a separate physical font role. Some remaining legacy
-font roles and tuning controls are not implemented.
+and Bitmap fonts are not desktop menu fonts. Missing families inherit the parent
+role, including its size; the stored unavailable name and a diagnostic remain.
+Large characters fit their pane on resize. Table remains 16 logical pixels.
+Print has a separate physical font role.
+
+Bitmap controls the image included when copying document text; Automatic inherits
+File. Omit bitmap removes only that representation, not text or rich formats.
+Images have white paper and preserve the selected text without changing the
+document or undo. Images are bounded at 262,144 selected UTF-16 positions,
+8,192 pixels per edge and 16 million pixels; an omitted oversized image is
+reported while the text is still copied. Legacy raster-font files, independent
+ASCII runs, vertical/color-list bitmap policies and some other font tuning
+remain unimplemented.
 
 ## Customize the Toolbar
 

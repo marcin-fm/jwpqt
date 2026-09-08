@@ -188,8 +188,10 @@ font inheritance, toolbar/status/candidate visibility, scrollbar policies,
 candidate-bar position, default JWP code page, dictionary search policies and
 exit/recent-file/query-history persistence and history capacity.
 Desktop menu fonts are unchanged. Character Table stays at 16 logical pixels;
-the large character keeps its default glyph size. Unavailable or legacy bitmap
-font families use native fallbacks, with their original names retained.
+the large character fits its available pane as the window is resized. Unavailable
+font families inherit their parent role's family and size, with their original
+names retained and fallback diagnostics shown. Legacy bitmap font files are not
+silently treated as loaded native fonts.
 **Default Settings**, **Save Settings** and **Import Settings** operate on this
 supported subset. Imports overlay known values and retain unsupported entries
 from the imported file; Default Settings retains existing unsupported entries.
@@ -199,6 +201,16 @@ Save and the optional save-on-exit use atomic replacement. Invalid settings are
 not applied, corrupt startup files are not automatically overwritten, and saving
 cannot overwrite an open document. Font changes preserve every tab's text,
 history and selection, including an active conversion preview.
+
+The **Bitmap** font role controls the image representation of copied document
+text, inheriting File when automatic. Copy/Cut retain plain text (including
+nonbreaking spaces and Unicode signatures) and Qt's rich formats, and add a
+white-background native text image. **Clipboard_Omit_Bitmap** disables only the
+image. Rendering uses a separate document, bounded at 262,144 selected UTF-16
+positions, 8,192 pixels per edge and 16 million pixels; oversized images are
+omitted with a status message while text remains available. This does not yet
+implement vertical or color-list bitmap policies, independent ASCII font runs,
+or direct legacy `.f00` raster-font loading.
 
 Startup and **File > New Japanese Document** create a native JWP document with
 Japanese editing, conversion, formatting, and lookup insertion available without

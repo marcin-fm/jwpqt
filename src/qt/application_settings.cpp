@@ -25,7 +25,7 @@ struct FontDescriptor {
 
 constexpr FontDescriptor kFonts[] = {{"System", "sys_font"}, {"Edit", "edit_font"},
     {"List", "list_font"}, {"KanjiBar", "bar_font"}, {"File", "file_font"},
-    {"Big", "big_font"}, {"Table", "jis_font"}, {"Print", "print_font"}};
+    {"Big", "big_font"}, {"Table", "jis_font"}, {"Bitmap", "clip_font"}, {"Print", "print_font"}};
 constexpr FontDescriptor kFontFields[] = {{"Font", "name"}, {"Size", "size"},
     {"Auto", "automatic"}};
 static_assert(std::size(kFonts) == static_cast<std::size_t>(JapaneseFontRole::kCount) + 1);
@@ -38,6 +38,7 @@ struct BooleanDescriptor {
 };
 
 constexpr BooleanDescriptor<ApplicationSettings> kBooleans[] = {
+    {"Clipboard_Omit_Bitmap", "no_BITMAP", &ApplicationSettings::omit_clipboard_bitmap},
     {"AutoSearch_KanjiLookup", "auto_lookup", &ApplicationSettings::automatic_kanji_lookup},
     {"RareKanjiLast", "rare_last", &ApplicationSettings::rare_kanji_last},
     {"Search_AllFiles", "search_all", &ApplicationSettings::search_all_files},

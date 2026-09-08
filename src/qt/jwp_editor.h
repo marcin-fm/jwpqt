@@ -49,6 +49,7 @@ class JwpEditor final : public QTextEdit {
       const QList<QTextEdit::ExtraSelection>& selections);
 
  protected:
+  QMimeData* createMimeDataFromSelection() const override;
   void inputMethodEvent(QInputMethodEvent* event) override;
   void keyPressEvent(QKeyEvent* event) override;
   void paintEvent(QPaintEvent* event) override;

@@ -47,6 +47,7 @@ class KanjiInfoDialog : public QDialog {
   void populate_fields(const core::KanjiInfoRecord* record);
   void populate_readings(const core::KanjiInfoRecord* record);
   void update_reading_colors();
+  void fit_character();
   void insert_text(const QString& text);
   void show_more_info();
 

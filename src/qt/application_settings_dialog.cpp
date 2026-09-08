@@ -80,7 +80,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   grid->addWidget(new QLabel(tr("Font family (blank uses native default)"), fonts), 0, 1);
   grid->addWidget(new QLabel(tr("Size"), fonts), 0, 2);
   grid->addWidget(new QLabel(tr("Automatic"), fonts), 0, 3);
-  const char* labels[] = {"System", "Query fields", "Lists and readings", "Candidate bar", "Document", "Large character", "Character Table"};
+  const char* labels[] = {"System", "Query fields", "Lists and readings", "Candidate bar", "Document", "Large character", "Character Table", "Clipboard bitmap"};
   struct FontControl { QFontComboBox* family; QSpinBox* size; QCheckBox* automatic; };
   std::vector<FontControl> font_controls;
   for (std::size_t i = 0; i < settings_.fonts.size(); ++i) {
@@ -94,7 +94,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
     grid->addWidget(family, row, 1);
     QSpinBox* size = nullptr;
     if (role == JapaneseFontRole::kBig || role == JapaneseFontRole::kTable) {
-      grid->addWidget(new QLabel(role == JapaneseFontRole::kBig ? tr("Default glyph size") : tr("16 px"), fonts), row, 2);
+      grid->addWidget(new QLabel(role == JapaneseFontRole::kBig ? tr("Fit to pane") : tr("16 px"), fonts), row, 2);
     } else {
       size = new QSpinBox(fonts);
       size->setObjectName(QStringLiteral("settingsFontSize%1").arg(i));
@@ -118,8 +118,14 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   auto* explanation = new QLabel(tr("Automatic query/document fonts inherit System; lists and candidates inherit query fields. "
       "These settings do not change desktop menu fonts. Unavailable or legacy bitmap families use a native fallback; their names remain stored."), fonts);
   explanation->setWordWrap(true);
-  grid->addWidget(explanation, 8, 0, 1, 4);
-  grid->setRowStretch(9, 1);
+  const int last_font_row = static_cast<int>(settings_.fonts.size()) + 1;
+  grid->addWidget(explanation, last_font_row, 0, 1, 4);
+  auto* omit_bitmap = new QCheckBox(tr("Omit bitmap images when copying document text"), fonts);
+  omit_bitmap->setObjectName(QStringLiteral("settingsOmitClipboardBitmap"));
+  omit_bitmap->setChecked(settings_.omit_clipboard_bitmap);
+  booleans.push_back({omit_bitmap, &ApplicationSettings::omit_clipboard_bitmap});
+  grid->addWidget(omit_bitmap, last_font_row + 1, 0, 1, 4);
+  grid->setRowStretch(last_font_row + 2, 1);
   tabs->addTab(fonts, tr("Fonts"));
   auto* dictionary = new QWidget(tabs);
   auto* dictionary_form = new QFormLayout(dictionary);

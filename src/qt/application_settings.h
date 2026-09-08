@@ -17,7 +17,7 @@
 
 namespace jwpqt::qt {
 
-enum class JapaneseFontRole { kSystem, kEdit, kList, kKanjiBar, kFile, kBig, kTable, kCount };
+enum class JapaneseFontRole { kSystem, kEdit, kList, kKanjiBar, kFile, kBig, kTable, kBitmap, kCount };
 
 struct JapaneseFontSetting {
   QString family;
@@ -31,6 +31,7 @@ struct ApplicationSettings {
   std::array<JapaneseFontSetting, static_cast<std::size_t>(JapaneseFontRole::kCount)> fonts;
   JapaneseFontSetting print_font{{}, 120, true}; // Size is tenths of a point, not screen pixels.
   bool show_toolbar = true;
+  bool omit_clipboard_bitmap = false;
   ToolbarSettings toolbar;
   bool show_status_bar = true;
   bool show_kanji_bar = true;

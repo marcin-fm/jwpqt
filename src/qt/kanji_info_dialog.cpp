@@ -13,6 +13,7 @@
 #include <QContextMenuEvent>
 #include <QDialogButtonBox>
 #include <QFont>
+#include <QFontMetricsF>
 #include <QHeaderView>
 #include <QKeyEvent>
 #include <QLabel>
@@ -94,6 +95,7 @@ KanjiInfoDialog::KanjiInfoDialog(
   character_->setTextFormat(Qt::PlainText);
   character_->setAlignment(Qt::AlignCenter);
   character_->setMinimumSize(200, 200);
+  character_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
   character_->setFrameStyle(QFrame::StyledPanel | QFrame::Sunken);
   character_->setBackgroundRole(QPalette::Base);
   character_->setForegroundRole(QPalette::Text);
@@ -104,7 +106,7 @@ KanjiInfoDialog::KanjiInfoDialog(
   assign_japanese_font(*character_, JapaneseFontRole::kBig);
   character_->setToolTip(tr("Double-click to insert this character into the file"));
   character_->installEventFilter(this);
-  left->addWidget(character_);
+  left->addWidget(character_, 1);
   left->addSpacing(12);
 
   auto* clipboard = new QPushButton(tr("From &Clipboard"), this);
@@ -131,8 +133,7 @@ KanjiInfoDialog::KanjiInfoDialog(
     button->setAutoDefault(false);
     left->addWidget(button);
   }
-  left->addStretch();
-  columns->addLayout(left);
+  columns->addLayout(left, 1);
 
   fields_->setObjectName(QStringLiteral("kanjiInfoFields"));
   fields_->setColumnCount(2);
@@ -210,6 +211,7 @@ bool KanjiInfoDialog::populate(char32_t character, std::optional<core::JisCode> 
   code_page_ = code_page;
   record_ = std::move(record);
   character_->setText(to_qstring(std::u32string{character}));
+  fit_character();
   populate_fields(record_ ? &*record_ : nullptr);
   populate_readings(record_ ? &*record_ : nullptr);
   more_button_->setEnabled(record_.has_value());
@@ -534,7 +536,27 @@ void KanjiInfoDialog::show_more_info() {
   more_dialog_->activateWindow();
 }
 
+void KanjiInfoDialog::fit_character() {
+  if (character_->text().isEmpty()) return;
+  const auto space = character_->contentsRect().adjusted(4, 4, -4, -4).size();
+  QFont font = character_->font();
+  int low = 1, high = qMin(2048, qMax(1, qMin(space.width(), space.height())));
+  while (low < high) {
+    const int size = (low + high + 1) / 2;
+    font.setPixelSize(size);
+    const auto bounds = QFontMetricsF(font).boundingRect(character_->text());
+    if (bounds.width() <= space.width() && bounds.height() <= space.height()) low = size;
+    else high = size - 1;
+  }
+  if (character_->font().pixelSize() != low) {
+    font.setPixelSize(low);
+    character_->setFont(font);
+  }
+}
+
 bool KanjiInfoDialog::eventFilter(QObject* watched, QEvent* event) {
+  if (watched == character_ && (event->type() == QEvent::Resize || event->type() == QEvent::FontChange))
+    fit_character();
   if (watched == readings_ && event->type() == QEvent::PaletteChange)
     update_reading_colors();
   if (event->type() == QEvent::MouseButtonPress &&
