@@ -3582,7 +3582,8 @@ void test_edict_search_controls(const QString& directory) {
     auto* popup = qobject_cast<QDialog*>(QApplication::activeModalWidget());
     if (!popup) return;
     popup->findChild<QCheckBox*>(QStringLiteral("settingsDictionaryBegin"))->setChecked(true);
-    popup->findChild<QTabWidget*>()->setCurrentIndex(2);
+    require(popup->findChild<QTabWidget*>()->currentIndex() == 2,
+            "Lookup Options did not open the Dictionary tab");
     auto* scroll = popup->findChild<QScrollArea*>("settingsDictionaryScroll");
     auto* note = popup->findChild<QLabel*>("settingsDictionaryNote");
     QApplication::processEvents();
@@ -3597,7 +3598,7 @@ void test_edict_search_controls(const QString& directory) {
     popup->findChild<QCheckBox*>("settingsDictionaryCompact")->setChecked(true);
     popup->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
   });
-  find_action(window, "applicationOptionsAction")->trigger();
+  dialog->findChild<QToolButton*>("edictOptions")->click();
   require(options_seen && window.application_settings().dictionary.require_beginning &&
                !window.application_settings().dictionary.automatic_search &&
                window.application_settings().dictionary.compact && before_options_results &&
@@ -3682,7 +3683,18 @@ void test_edict_user_dictionary_integration(const QString& directory) {
       window.findChild<QDialog*>(
           QStringLiteral("edictUserDictionaryDialog")));
   require(dialog != nullptr && dialog->entries().size() == 1,
-          "Native user dictionary dialog did not open its working copy");
+           "Native user dictionary dialog did not open its working copy");
+  find_action(window, "edictLookupAction")->trigger();
+  auto* lookup = window.findChild<QDialog*>(QStringLiteral("edictLookupDialog"));
+  require(lookup && lookup->findChild<QToolButton*>("edictUserDictionary")->isEnabled(),
+          "Lookup did not expose loaded user dictionary management");
+  lookup->findChild<QToolButton*>("edictUserDictionary")->click();
+  require(window.findChild<QDialog*>(QStringLiteral("edictUserDictionaryDialog")) == dialog,
+          "Lookup created a second user dictionary instead of reusing its working copy");
+  lookup->close();
+  QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+  require(window.findChild<QDialog*>(QStringLiteral("edictUserDictionaryDialog")) == dialog,
+          "Closing lookup destroyed the independent user dictionary window");
 
   const jwpqt::core::EdictUserEntry replacement =
       jwpqt::core::make_edict_user_entry(

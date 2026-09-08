@@ -1155,10 +1155,15 @@ bool MainWindow::save_application_settings(const QString& path, OpenMode mode) {
   }
 }
 
-void MainWindow::configure_application_settings() {
-  ApplicationSettingsDialog dialog(application_settings_, this);
-  if (dialog.exec() == QDialog::Accepted)
-    apply_application_settings(dialog.settings(), OpenMode::kInteractive);
+void MainWindow::configure_application_settings(bool dictionary_page) {
+  const QPointer<MainWindow> self(this);
+  QPointer<ApplicationSettingsDialog> dialog = new ApplicationSettingsDialog(application_settings_, this, dictionary_page);
+  const int result = dialog->exec();
+  if (!self || !dialog) return;
+  const auto settings = dialog->settings();
+  delete dialog.data();
+  if (self && result == QDialog::Accepted)
+    apply_application_settings(settings, OpenMode::kInteractive);
 }
 
 const core::QueryHistories& MainWindow::query_histories() const noexcept { return *query_histories_; }
@@ -2429,7 +2434,7 @@ void MainWindow::create_actions() {
   QMenu* tools_menu = menuBar()->addMenu(tr("&Tools"));
   auto* options_action = tools_menu->addAction(tr("&Options..."));
   options_action->setObjectName(QStringLiteral("applicationOptionsAction"));
-  connect(options_action, &QAction::triggered, this, &MainWindow::configure_application_settings);
+  connect(options_action, &QAction::triggered, this, [this] { configure_application_settings(); });
   auto* defaults_action = tools_menu->addAction(tr("Default Settings..."));
   defaults_action->setObjectName(QStringLiteral("defaultSettingsAction"));
   connect(defaults_action, &QAction::triggered, this, [this] {
@@ -4197,6 +4202,10 @@ void MainWindow::show_edict_lookup_dialog() {
   dialog->set_options_changed_handler([this](const EdictLookupOptions& options) {
     application_settings_.dictionary = options;
   });
+  auto* dictionary_options = new QAction(tr("Dictionary Options..."), dialog);
+  connect(dictionary_options, &QAction::triggered, this,
+          [this] { configure_application_settings(true); });
+  dialog->set_management_actions(dictionary_options, edict_user_dictionary_action_);
   dialog->set_overwrite_action(overwrite_action_);
   dialog->setAttribute(Qt::WA_DeleteOnClose);
   connect(dialog, &QObject::destroyed, this,

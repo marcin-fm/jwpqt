@@ -22,6 +22,7 @@ class QLabel;
 class QLineEdit;
 class QPushButton;
 class QTextEdit;
+class QToolButton;
 
 namespace jwpqt::qt {
 
@@ -45,6 +46,7 @@ class EdictLookupDialog : public QDialog {
   void set_query(std::u32string_view query);
   std::u32string query() const;
   void set_overwrite_action(QAction* action);
+  void set_management_actions(QAction* options, QAction* user_dictionary);
   void set_options(const EdictLookupOptions& options);
   void reset_history_navigation() noexcept {
     history_index_ = -1;
@@ -110,6 +112,8 @@ class EdictLookupDialog : public QDialog {
   QLabel* status_;
   QPushButton* insert_button_;
   QPushButton* sort_button_;
+  QToolButton* options_button_;
+  QToolButton* user_dictionary_button_;
   EdictResourceSearchReport report_;
   std::vector<std::u32string> rendered_rows_;
   std::vector<std::pair<int, int>> row_ranges_;

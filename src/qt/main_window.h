@@ -331,7 +331,7 @@ class MainWindow : public QMainWindow {
   void record_recent_document(const DocumentState& state);
   void record_recent_file(RecentDocument entry);
   void update_recent_file_actions();
-  void configure_application_settings();
+  void configure_application_settings(bool dictionary_page = false);
   void import_query_history_dialog();
   bool confirm_query_history_change(const QString& message, OpenMode mode);
   void check_history_destination(const QString& path) const;

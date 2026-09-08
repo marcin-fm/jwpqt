@@ -10,7 +10,8 @@ namespace jwpqt::qt {
 
 class ApplicationSettingsDialog : public QDialog {
  public:
-  explicit ApplicationSettingsDialog(const ApplicationSettings& settings, QWidget* parent = nullptr);
+  explicit ApplicationSettingsDialog(const ApplicationSettings& settings, QWidget* parent = nullptr,
+                                     bool dictionary_page = false);
   const ApplicationSettings& settings() const noexcept { return settings_; }
 
  private:

@@ -28,6 +28,7 @@
 #include <QStringList>
 #include <QTextBlockFormat>
 #include <QTextDocument>
+#include <QToolButton>
 #include <QTextEdit>
 #include <QVBoxLayout>
 #include <QValidator>
@@ -118,7 +119,9 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
       results_(new ResultTextEdit(this)),
       status_(new QLabel(this)),
       insert_button_(new QPushButton(tr("&Insert in Document"), this)),
-      sort_button_(new QPushButton(tr("S&ort"), this)) {
+      sort_button_(new QPushButton(tr("S&ort"), this)),
+      options_button_(new QToolButton(this)),
+      user_dictionary_button_(new QToolButton(this)) {
   setObjectName(QStringLiteral("edictLookupDialog"));
   setWindowTitle(tr("Dictionary Lookup"));
   setModal(false);
@@ -235,6 +238,13 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   sort_button_->setToolTip(tr("Cycle Reading, Length, Entry and Definition. Shift cycles backward; Ctrl reverses the current order."));
   buttons->addButton(sort_button_, QDialogButtonBox::ActionRole);
   buttons->addButton(insert_button_, QDialogButtonBox::ActionRole);
+  options_button_->setObjectName(QStringLiteral("edictOptions"));
+  user_dictionary_button_->setObjectName(QStringLiteral("edictUserDictionary"));
+  for (auto* button : {options_button_, user_dictionary_button_}) {
+    button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    buttons->addButton(button, QDialogButtonBox::ActionRole);
+  }
+  set_management_actions(nullptr, nullptr);
   outer->addWidget(buttons);
 
   auto* copy_action = new QAction(tr("&Copy"), this);
@@ -261,6 +271,26 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
 
 void EdictLookupDialog::set_overwrite_action(QAction* action) {
   query_field_->set_overwrite_action(action);
+}
+
+void EdictLookupDialog::set_management_actions(QAction* options, QAction* user_dictionary) {
+  for (const auto& binding : {std::make_pair(options_button_, options),
+                             std::make_pair(user_dictionary_button_, user_dictionary)}) {
+    auto* button = binding.first;
+    const QPointer<QAction> source(binding.second);
+    delete button->defaultAction();
+    auto* proxy = new QAction(button == options_button_ ? tr("Options...") : tr("User Dictionary..."), button);
+    proxy->setEnabled(source && source->isEnabled());
+    button->setDefaultAction(proxy);
+    if (!source) continue;
+    connect(source, &QAction::changed, proxy, [source, proxy] {
+      proxy->setEnabled(source && source->isEnabled());
+    });
+    connect(source, &QObject::destroyed, proxy, [proxy] { proxy->setEnabled(false); });
+    connect(proxy, &QAction::triggered, this, [this, source] {
+      if (!query_busy_ && source && source->isEnabled()) source->trigger();
+    });
+  }
 }
 
 void EdictLookupDialog::set_options(const EdictLookupOptions& options) {

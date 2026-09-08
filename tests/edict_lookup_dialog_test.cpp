@@ -55,6 +55,56 @@ jwpqt::qt::EdictResourceSearchResult result(
   return {registry_index, std::move(label), std::move(found)};
 }
 
+void test_management_commands() {
+  namespace qt = jwpqt::qt;
+  QAction options(nullptr), user(nullptr);
+  int options_calls = 0, user_calls = 0;
+  QObject::connect(&options, &QAction::triggered, [&] { ++options_calls; });
+  QObject::connect(&user, &QAction::triggered, [&] { ++user_calls; });
+  qt::EdictLookupDialog* current = nullptr;
+  qt::EdictLookupDialog dialog([&](const auto&, const auto&, bool) {
+    current->findChild<QToolButton*>("edictOptions")->click();
+    current->findChild<QToolButton*>("edictUserDictionary")->click();
+    qt::EdictResourceSearchReport report;
+    report.results = {result(0, QStringLiteral("Main"), U"cat", {}, {U"feline"})};
+    return report;
+  });
+  current = &dialog;
+  auto* options_button = dialog.findChild<QToolButton*>("edictOptions");
+  auto* user_button = dialog.findChild<QToolButton*>("edictUserDictionary");
+  require(options_button && user_button && !options_button->isEnabled() && !user_button->isEnabled(),
+          "Standalone lookup offered unavailable management commands");
+  dialog.set_management_actions(&options, &user);
+  options_button->click(); user_button->click();
+  require(options_calls == 1 && user_calls == 1, "Lookup management did not use supplied actions");
+  user.setEnabled(false); user_button->click();
+  require(!user_button->isEnabled() && user_calls == 1, "Lookup ignored disabled user dictionary action");
+  user.setEnabled(true);
+  dialog.set_query(U"cat");
+  require(dialog.search() && options_calls == 1 && user_calls == 1,
+          "Management command ran inside an active search");
+  auto* results = dialog.findChild<QTextEdit*>("edictResults");
+  const QPointer<QTextDocument> document(results->document());
+  const int position = results->textCursor().position(), anchor = results->textCursor().anchor();
+  options_button->click(); user_button->click();
+  require(options_calls == 2 && user_calls == 2 && document && results->document() == document &&
+              results->textCursor().position() == position && results->textCursor().anchor() == anchor &&
+              dialog.query() == U"cat", "Management altered current query or result selection");
+  auto* temporary = new QAction(nullptr);
+  dialog.set_management_actions(temporary, &user);
+  delete temporary;
+  require(!options_button->isEnabled(), "Deleted management action left its command enabled");
+  dialog.set_management_actions(&options, &user);
+  options_button->click();
+  require(options_calls == 3, "Rebinding management actions retained old callbacks");
+  QAction close_owner(nullptr);
+  QPointer<qt::EdictLookupDialog> disposable = new qt::EdictLookupDialog({});
+  QObject::connect(&close_owner, &QAction::triggered, [&] { delete disposable.data(); });
+  disposable->set_management_actions(&close_owner, nullptr);
+  disposable->findChild<QToolButton*>("edictOptions")->click();
+  require(!disposable, "Management callback could not safely dispose its lookup");
+}
+
 void test_search_render_status_copy_and_insert() {
   jwpqt::core::JwpText received_query;
   jwpqt::qt::EdictLookupOptions received_options;
@@ -1109,6 +1159,7 @@ void test_result_character_navigation() {
 int main(int argc, char** argv) {
   QApplication application(argc, argv);
   try {
+    test_management_commands();
     test_search_render_status_copy_and_insert();
     test_compact_presentation();
     test_empty_invalid_and_failed_search_are_contained();

@@ -25,13 +25,15 @@
 
 namespace jwpqt::qt {
 
-ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& settings, QWidget* parent)
+ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& settings, QWidget* parent,
+                                                     bool dictionary_page)
     : QDialog(parent), settings_(settings) {
   setObjectName(QStringLiteral("applicationSettingsDialog"));
   setWindowTitle(tr("Options"));
   resize(720, 470);
   auto* outer = new QVBoxLayout(this);
   auto* tabs = new QTabWidget(this);
+  tabs->setObjectName(QStringLiteral("applicationSettingsTabs"));
   outer->addWidget(tabs);
   auto* display = new QWidget(tabs);
   auto* form = new QFormLayout(display);
@@ -157,6 +159,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   dictionary_scroll->setWidgetResizable(true);
   dictionary_scroll->setWidget(dictionary);
   tabs->addTab(dictionary_scroll, tr("Dictionary"));
+  if (dictionary_page) tabs->setCurrentWidget(dictionary_scroll);
   auto* history = new QWidget(tabs);
   auto* history_form = new QFormLayout(history);
   auto* history_size = new QSpinBox(history);
