@@ -105,15 +105,17 @@ class SearchCollector {
  public:
   SearchCollector(const EdictDictionary& dictionary, const EdictIndex& index,
                    const EdictSearchOptions& options)
-      : sources_{{&dictionary, &index}}, options_(options) {}
+      : SearchCollector(std::vector<EdictSearchSource>{{&dictionary, &index}}, options) {}
 
   SearchCollector(const EdictDictionary& dictionary,
                   const EdictSearchOptions& options)
-      : sources_{{&dictionary, nullptr}}, options_(options) {}
+      : SearchCollector(std::vector<EdictSearchSource>{{&dictionary, nullptr}}, options) {}
 
   SearchCollector(std::vector<EdictSearchSource> sources,
                   const EdictSearchOptions& options)
       : sources_(std::move(sources)), options_(options) {
+    if ((options.name_filter.category_exclusions & ~kEdictCategoryMask) != 0)
+      throw EdictSearchError("Unknown EDICT category exclusion bits");
     for (const EdictSearchSource& source : sources_) {
       if (source.dictionary == nullptr) {
         throw EdictSearchError("EDICT search source has no dictionary");

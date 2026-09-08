@@ -128,6 +128,61 @@ void test_personal_aliases_and_tag_boundaries() {
           "Logical tag boundaries or malformed groups were handled incorrectly");
 }
 
+void test_all_category_exclusions() {
+  using namespace jwpqt::core;
+  std::uint32_t observed = 0;
+  for (std::size_t i = 0; i < kEdictCategoryTags.size(); ++i) {
+    const auto bit = std::uint32_t{1} << (i + 4);
+    observed |= bit;
+    const std::u32string tag(kEdictCategoryTags[i]);
+    EdictNameFilterOptions filter;
+    filter.category_exclusions = bit;
+    auto record = sample_record();
+    record.definitions = {U"(" + tag + U") rejected",
+        U"(" + tag + U",s) surname", U"(s," + tag + U") surname",
+        U"(n," + tag + U") unknown first", U"(" + tag + U",n) unknown last",
+        U"literal(" + tag + U") untouched", U"(" + tag + U"X) not a prefix",
+        U"(" + tag + U")", U"ordinary \ufeff\u00a0\U0001f600"};
+    const auto before = record;
+    const auto found = filter_edict_name_types(record, filter);
+    require(found && found->definitions == std::vector<std::u32string>{
+        U"(s) surname", U"(s) surname", U"(n," + tag + U") unknown first",
+        U"(n) unknown last", U"literal(" + tag + U") untouched",
+        U"(" + tag + U"X) not a prefix", U"ordinary \ufeff\u00a0\U0001f600"},
+        "Category exclusion did not preserve the source's sense/group boundaries");
+    require(record == before && found->headword == record.headword &&
+        found->readings == record.readings && found->byte_offset == record.byte_offset &&
+        found->byte_length == record.byte_length, "Category filtering changed provenance or input");
+    for (std::size_t other = 0; other < kEdictCategoryTags.size(); ++other) {
+      record.definitions = {U"(" + std::u32string(kEdictCategoryTags[other]) + U") sole"};
+      require(filter_edict_name_types(record, filter).has_value() == (i != other),
+              "A category exclusion affected another category");
+    }
+    record.definitions = {U"(" + tag + U",s,p) shared"};
+    filter.reject_personal_names = true;
+    auto shared = filter_edict_name_types(record, filter);
+    require(shared && shared->definitions == std::vector<std::u32string>{U"(p) shared"},
+            "Category and personal-name exclusions did not compose");
+    filter.reject_place_names = true;
+    require(!filter_edict_name_types(record, filter), "Combined filters retained an empty sense");
+  }
+  require(observed == kEdictCategoryMask, "Category mask differs from the 21 legacy bit positions");
+  EdictNameFilterOptions all;
+  all.category_exclusions = observed;
+  auto record = sample_record();
+  record.definitions.clear();
+  for (const auto tag : kEdictCategoryTags)
+    record.definitions.push_back(U"(" + std::u32string(tag) + U") sole");
+  require(!filter_edict_name_types(record, all), "Combined category mask retained rejected senses");
+  for (const auto invalid : {1U, 8U, 0x02000000U, 0x80000000U}) {
+    all.category_exclusions = invalid;
+    bool rejected = false;
+    try { (void)filter_edict_name_types(record, all); }
+    catch (const std::invalid_argument&) { rejected = true; }
+    require(rejected, "Unknown or name/boundary bits were accepted as category exclusions");
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -137,6 +192,7 @@ int main() {
     test_places_are_removed_or_stripped();
     test_combined_filter_rejects_empty_records();
     test_personal_aliases_and_tag_boundaries();
+    test_all_category_exclusions();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return EXIT_FAILURE;

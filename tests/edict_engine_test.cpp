@@ -733,6 +733,47 @@ void test_multi_source_direct_phase_precedes_adaptive() {
           "Multi-source search ran adaptive work before every direct source");
 }
 
+void test_category_filters_across_search_stages() {
+  using namespace jwpqt::core;
+  for (std::size_t i = 0; i < kEdictCategoryTags.size(); ++i) {
+    const auto tag = encode_utf8(kEdictCategoryTags[i]);
+    const std::string source = "cat /(" + tag + ") rejected/\ncat /kept/\n";
+    const Fixture fixture(source, {0, offset_of(source, "cat", 1)});
+    EdictSearchOptions options;
+    options.name_filter.category_exclusions = std::uint32_t{1} << (i + 4);
+    options.results = options.direct.results = 1;
+    const auto verify = [](const EdictSearchReport& report, EdictSearchStage stage) {
+      require(report.results.size() == 1 && report.rejected > 0 &&
+          report.results.front().record.definitions == std::vector<std::u32string>{U"kept"} &&
+          report.results.front().stage == stage,
+          "Category exclusion was lost before result limits or search fallback");
+    };
+    verify(search_edict(fixture.dictionary, fixture.index, query(U"cat"), options), EdictSearchStage::kDirect);
+    verify(search_edict_linear(fixture.dictionary, query(U"cat"), options), EdictSearchStage::kDirect);
+    const std::string pattern_source = "to cat /(" + tag + ") rejected/\nto cat /kept/\n";
+    const Fixture pattern_fixture(pattern_source, {3, offset_of(pattern_source, "cat", 4)});
+    verify(search_edict_pattern(pattern_fixture.dictionary, pattern_fixture.index,
+        prepare_edict_search_plan(encode_jwp_text(U"to cat")), options), EdictSearchStage::kPattern);
+    const auto adaptive = EdictDictionary::parse(encode_utf8(U"\u3042\u3044") +
+        " /(" + tag + ") rejected/\n" + encode_utf8(U"\u3042\u304f") + " /kept/\n", EdictEncoding::kUtf8);
+    options.adaptive = true;
+    options.direct.require_beginning = options.direct.require_end = true;
+    verify(search_edict_linear(adaptive, query(U"\u3042\u3044"), options), EdictSearchStage::kAdaptive);
+    options.adaptive = false;
+    options.contingent.enabled = true;
+    const auto contingent = EdictDictionary::parse(encode_utf8(U"\u65e5\u672c") +
+        " /(" + tag + ") rejected/\n" + encode_utf8(U"\u65e5\u672c\u8a9e") + " /kept/\n", EdictEncoding::kUtf8);
+    verify(search_edict_linear(contingent, query(U"\u65e5\u672c"), options), EdictSearchStage::kContingent);
+    options.lookup_steps = 0;
+    require_throws([&] { (void)search_edict_linear(contingent, query(U"\u65e5\u672c"), options); },
+                   "Category filters bypassed the search work budget");
+  }
+  EdictSearchOptions invalid;
+  invalid.name_filter.category_exclusions = 0x80000000U;
+  require_throws([&] { (void)search_edict_sources({}, query(U"cat"), invalid); },
+                 "An empty source list bypassed category mask validation");
+}
+
 }  // namespace
 
 int main() {
@@ -757,5 +798,6 @@ int main() {
   test_contingent_does_not_count_jis_punctuation_as_kana();
   test_linear_backend_runs_every_search_stage();
   test_multi_source_direct_phase_precedes_adaptive();
+  test_category_filters_across_search_stages();
   return 0;
 }

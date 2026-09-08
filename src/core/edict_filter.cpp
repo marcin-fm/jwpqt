@@ -4,6 +4,7 @@
 
 #include <array>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -18,12 +19,6 @@ enum class TagKind {
   kPlaceName,
 };
 
-constexpr std::array<std::u32string_view, 21> kOtherTags = {
-    U"vulg", U"X",    U"col", U"m-sl", U"sl",   U"MA",  U"id",
-    U"arch", U"obs",  U"obsc", U"ok",   U"abbr", U"fam", U"pol",
-    U"hum",  U"hon",  U"fem", U"male", U"pref", U"suf", U"oK",
-};
-
 TagKind classify_tag(std::u32string_view tag) {
   if (tag == U"s" || tag == U"u" || tag == U"g" || tag == U"f" ||
       tag == U"m") {
@@ -32,7 +27,7 @@ TagKind classify_tag(std::u32string_view tag) {
   if (tag == U"p") {
     return TagKind::kPlaceName;
   }
-  for (const std::u32string_view known : kOtherTags) {
+  for (const std::u32string_view known : kEdictCategoryTags) {
     if (tag == known) {
       return TagKind::kOther;
     }
@@ -40,7 +35,13 @@ TagKind classify_tag(std::u32string_view tag) {
   return TagKind::kUnknown;
 }
 
-bool reject_tag(TagKind kind, const EdictNameFilterOptions& options) {
+bool reject_tag(TagKind kind, std::u32string_view tag,
+                const EdictNameFilterOptions& options) {
+  if (kind == TagKind::kOther) {
+    for (std::size_t i = 0; i < kEdictCategoryTags.size(); ++i)
+      if (tag == kEdictCategoryTags[i])
+        return (options.category_exclusions & (std::uint32_t{1} << (i + 4))) != 0;
+  }
   return (kind == TagKind::kPersonalName && options.reject_personal_names) ||
          (kind == TagKind::kPlaceName && options.reject_place_names);
 }
@@ -94,7 +95,7 @@ FilteredGroup filter_group(std::u32string_view group,
       kept.push_back(tag);
       continue;
     }
-    if (reject_tag(kind, options)) {
+    if (reject_tag(kind, tag, options)) {
       changed = true;
     } else {
       kept.push_back(tag);
@@ -159,7 +160,10 @@ std::optional<std::u32string> filter_definition(
 
 std::optional<EdictRecord> filter_edict_name_types(
     const EdictRecord& record, const EdictNameFilterOptions& options) {
-  if (!options.reject_personal_names && !options.reject_place_names) {
+  if ((options.category_exclusions & ~kEdictCategoryMask) != 0)
+    throw std::invalid_argument("Unknown EDICT category exclusion bits");
+  if (!options.reject_personal_names && !options.reject_place_names &&
+      options.category_exclusions == 0) {
     return record;
   }
 
