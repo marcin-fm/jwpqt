@@ -26,6 +26,7 @@ struct EdictLookupOptions {
   bool priority_first = true;
   bool priority_separator = true;
   bool advanced_separator = true;
+  bool monitor_clipboard = false;
 };
 
 }  // namespace jwpqt::qt

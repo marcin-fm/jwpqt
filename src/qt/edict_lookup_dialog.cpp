@@ -14,6 +14,7 @@
 #include <QContextMenuEvent>
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
+#include <QHideEvent>
 #include <QKeyEvent>
 #include <QKeySequence>
 #include <QLabel>
@@ -29,6 +30,7 @@
 #include <QTextBlockFormat>
 #include <QTextDocument>
 #include <QToolButton>
+#include <QTimer>
 #include <QTextEdit>
 #include <QVBoxLayout>
 #include <QValidator>
@@ -41,6 +43,15 @@
 
 namespace jwpqt::qt {
 namespace {
+
+class NoNamesCheckBox final : public QCheckBox {
+ public:
+  using QCheckBox::QCheckBox;
+ protected:
+  void nextCheckState() override {
+    setCheckState(checkState() == Qt::Unchecked ? Qt::Checked : Qt::Unchecked);
+  }
+};
 
 class ResultTextEdit final : public QTextEdit {
  public:
@@ -56,6 +67,7 @@ class ResultTextEdit final : public QTextEdit {
     QString text = cursor.selectedText();
     text.replace(QChar::ParagraphSeparator, QLatin1Char('\n'));
     data->setText(text);
+    data->setProperty("jwpqtInternalCopy", true);
     return data.release();
   }
 };
@@ -116,6 +128,8 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
       full_ascii_(new QCheckBox(tr("&Full ASCII"), this)),
       jascii_to_ascii_(new QCheckBox(tr("JASCII to ASCII"), this)),
       contingent_(new QCheckBox(tr("Contingent"), this)),
+      no_names_(new NoNamesCheckBox(tr("No Names"), this)),
+      clipboard_timer_(new QTimer(this)),
       results_(new ResultTextEdit(this)),
       status_(new QLabel(this)),
       insert_button_(new QPushButton(tr("&Insert in Document"), this)),
@@ -134,8 +148,10 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   query_edit_->setClearButtonEnabled(true);
   query_edit_->installEventFilter(this);
   connect(query_edit_, &QLineEdit::textChanged, this, [this] {
+    clipboard_timer_->stop();
     if (!history_loading_) history_changed_ = true;
   });
+  connect(query_edit_, &QLineEdit::selectionChanged, clipboard_timer_, &QTimer::stop);
   auto* history_button = new QPushButton(tr("&History"), this);
   history_button->setObjectName(QStringLiteral("edictHistory"));
   history_button->setToolTip(tr("Recall a query without searching. Up/Down navigate query history."));
@@ -148,6 +164,11 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   query_row->addWidget(query_field_, 1);
   query_row->addWidget(history_button);
   query_row->addWidget(search_button);
+  auto* names_button = new QPushButton(tr("Names"), this);
+  names_button->setObjectName(QStringLiteral("edictNamesSearch"));
+  names_button->setToolTip(tr("Search with personal and place names included, without advanced or contingent retries. Saved options are unchanged."));
+  query_row->addWidget(names_button);
+  connect(names_button, &QPushButton::clicked, this, [this] { search(false, true); });
   outer->addLayout(query_row);
 
   beginning_->setObjectName(QStringLiteral("edictBeginning"));
@@ -179,6 +200,23 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   options->addWidget(personal_names_);
   options->addWidget(place_names_);
   options->addWidget(classical_);
+  no_names_->setObjectName(QStringLiteral("edictNoNames"));
+  no_names_->setTristate(true);
+  no_names_->setToolTip(tr("Checked excludes both name categories; a mixed state preserves the separate personal/place choices."));
+  options->addWidget(no_names_);
+  connect(no_names_, &QCheckBox::clicked, this, [this] {
+    const QPointer<EdictLookupDialog> self(this);
+    const bool include = no_names_->checkState() == Qt::Unchecked;
+    options_->personal_names = include;
+    options_->place_names = include;
+    if (include && options_->link_advanced_names) options_->advanced = false;
+    set_options(*options_);
+    if (self && options_changed_handler_) {
+      const auto handler = options_changed_handler_;
+      const auto options = *options_;
+      handler(options);
+    }
+  });
   options->addStretch();
   auto* advanced_controls = new QWidget(this);
   auto* advanced_row = new QHBoxLayout(advanced_controls);
@@ -202,6 +240,39 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   presentation_row->addStretch();
   outer->addLayout(presentation_row);
 
+  auto* clipboard_row = new QHBoxLayout();
+  auto* monitor = new QCheckBox(tr("Monitor Clipboard"), this);
+  monitor->setObjectName(QStringLiteral("edictMonitorClipboard"));
+  monitor->setToolTip(tr("Search future external copies while this window is visible. Successful queries may enter saved history. Opening or enabling does not read existing clipboard content."));
+  auto* from_clipboard = new QPushButton(tr("From Clipboard"), this);
+  from_clipboard->setObjectName(QStringLiteral("edictFromClipboard"));
+  clipboard_row->addWidget(monitor);
+  clipboard_row->addWidget(from_clipboard);
+  clipboard_row->addStretch();
+  outer->addLayout(clipboard_row);
+  connect(from_clipboard, &QPushButton::clicked, this, [this] { search_clipboard(); });
+  clipboard_timer_->setSingleShot(true);
+  clipboard_timer_->setInterval(150);
+  connect(this, &QDialog::finished, clipboard_timer_, &QTimer::stop);
+  connect(QApplication::clipboard(), &QClipboard::dataChanged, this, [this] {
+    clipboard_timer_->stop();
+    if (!options_->monitor_clipboard || !isVisible() || query_busy_ ||
+        QApplication::activeModalWidget() || QApplication::clipboard()->ownsClipboard()) return;
+    const auto* mime = QApplication::clipboard()->mimeData();
+    if (mime && mime->property("jwpqtInternalCopy").toBool()) return;
+    const QPointer<EdictLookupDialog> self(this);
+    const QString text = QApplication::clipboard()->text().left(201);
+    if (self && options_->monitor_clipboard && isVisible() && !query_busy_) {
+      clipboard_text_ = text;
+      clipboard_timer_->start();
+    }
+  });
+  connect(clipboard_timer_, &QTimer::timeout, this, [this] {
+    if (!options_->monitor_clipboard || !isVisible() || query_busy_ ||
+        QApplication::activeModalWidget() || QApplication::clipboard()->ownsClipboard()) return;
+    search_clipboard_text(clipboard_text_);
+  });
+
   option_bindings_ = {
       {personal_names_, &EdictLookupOptions::personal_names},
       {place_names_, &EdictLookupOptions::place_names},
@@ -217,12 +288,14 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
       {contingent_, &EdictLookupOptions::contingent},
       {priority, &EdictLookupOptions::priority_first},
       {priority_mark, &EdictLookupOptions::priority_separator},
-      {advanced_mark, &EdictLookupOptions::advanced_separator}};
+      {advanced_mark, &EdictLookupOptions::advanced_separator},
+      {monitor, &EdictLookupOptions::monitor_clipboard}};
   for (const auto& binding : option_bindings_) {
     auto* checkbox = binding.first;
     checkbox->setChecked((*options_).*binding.second);
     connect(checkbox, &QCheckBox::toggled, this,
             [this, member = binding.second](bool checked) {
+              const QPointer<EdictLookupDialog> self(this);
               (*options_).*member = checked;
               if (options_->link_advanced_names && checked) {
                 if (member == &EdictLookupOptions::advanced) {
@@ -234,7 +307,7 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
                 }
               }
               set_options(*options_);
-              if (options_changed_handler_) {
+              if (self && options_changed_handler_) {
                 auto handler = options_changed_handler_;
                 const auto options = *options_;
                 handler(options);
@@ -242,6 +315,7 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
             });
   }
   advanced_controls->setEnabled(advanced_->isChecked());
+  set_options(*options_);
 
   results_->setObjectName(QStringLiteral("edictResults"));
   results_->setReadOnly(true);
@@ -255,6 +329,7 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   outer->addWidget(results_, 1);
 
   status_->setObjectName(QStringLiteral("edictStatus"));
+  status_->setTextFormat(Qt::PlainText);
   status_->setWordWrap(true);
   outer->addWidget(status_);
 
@@ -328,6 +403,12 @@ void EdictLookupDialog::set_options(const EdictLookupOptions& options) {
     const QSignalBlocker blocked(binding.first);
     binding.first->setChecked((*options_).*binding.second);
   }
+  {
+    const QSignalBlocker blocked(no_names_);
+    no_names_->setCheckState(options_->personal_names != options_->place_names
+        ? Qt::PartiallyChecked : options_->personal_names ? Qt::Unchecked : Qt::Checked);
+  }
+  if (!options_->monitor_clipboard) clipboard_timer_->stop();
   always_->parentWidget()->setEnabled(options_->advanced);
 }
 
@@ -342,8 +423,53 @@ std::u32string EdictLookupDialog::query() const {
   return from_qstring(query_edit_->text());
 }
 
-bool EdictLookupDialog::search(bool force_contingent) {
+bool EdictLookupDialog::search_clipboard() {
+  const QPointer<EdictLookupDialog> self(this);
+  const QString text = QApplication::clipboard()->text().left(201);
+  return self && search_clipboard_text(text);
+}
+
+bool EdictLookupDialog::search_clipboard_text(const QString& clipboard) {
+  if (query_busy_ || query_edit_->isReadOnly()) return false;
+  const QPointer<EdictLookupDialog> self(this);
+  query_busy_ = true;
+  const auto idle = qScopeGuard([self] { if (self) self->query_busy_ = false; });
+  try {
+    const QString previous_query = query_edit_->text();
+    int end = 0;
+    while (end < clipboard.size() && end <= 200 && clipboard[end] != QLatin1Char('\r') &&
+           clipboard[end] != QLatin1Char('\n') && clipboard[end] != QChar::LineSeparator &&
+           clipboard[end] != QChar::ParagraphSeparator) ++end;
+    QString text = clipboard.left(end);
+    const auto scalars = from_qstring(text);
+    if (text.isEmpty() || text.size() > query_edit_->maxLength() ||
+        scalars.size() > 100 || to_qstring(scalars) != text) {
+      throw core::EdictSearchError("Clipboard must contain a valid single query of at most 100 characters");
+    }
+    const auto plan = core::prepare_edict_search_plan(core::encode_jwp_text(scalars),
+                                                    {options_->jascii_to_ascii});
+    if (plan.input_truncated) throw core::EdictSearchError("Clipboard query would be truncated");
+    if (const auto* validator = query_edit_->validator()) {
+      int position = text.size();
+      QString validated = text;
+      if (validator->validate(validated, position) != QValidator::Acceptable || validated != text)
+        throw core::EdictSearchError("Clipboard text is not accepted by the query field");
+    }
+    if (!self || query_edit_->isReadOnly() || query_edit_->text() != previous_query ||
+        text.size() > query_edit_->maxLength()) return false;
+    set_query(scalars);
+    if (!self || query_edit_->text() != text) return false;
+    query_busy_ = false;
+    return search();
+  } catch (const std::exception& error) {
+    if (self) status_->setText(tr("Clipboard search failed: %1").arg(QString::fromUtf8(error.what())));
+    return false;
+  }
+}
+
+bool EdictLookupDialog::search(bool force_contingent, bool names_request) {
   if (query_busy_) return false;
+  clipboard_timer_->stop();
   const QPointer<EdictLookupDialog> self(this);
   query_busy_ = true;
   const auto idle = qScopeGuard([self] { if (self) self->query_busy_ = false; });
@@ -366,7 +492,12 @@ bool EdictLookupDialog::search(bool force_contingent) {
       throw core::QueryHistoryError("The query contains invalid Unicode");
     }
     const core::JwpText query = core::encode_jwp_text(history_text);
-    const EdictLookupOptions options = *options_;
+    EdictLookupOptions options = *options_;
+    if (names_request) {
+      options.personal_names = options.place_names = true;
+      options.advanced = options.contingent = false;
+      force_contingent = false;
+    }
     const auto handler = search_handler_;
     EdictResourceSearchReport candidate = handler(query, options, force_contingent);
     if (!self) return false;
@@ -796,7 +927,14 @@ void EdictLookupDialog::update_actions() {
   sort_button_->setEnabled(!report_.results.empty());
 }
 
+void EdictLookupDialog::hideEvent(QHideEvent* event) {
+  clipboard_timer_->stop();
+  QDialog::hideEvent(event);
+}
+
 bool EdictLookupDialog::eventFilter(QObject* watched, QEvent* event) {
+  if (watched == query_edit_ && (event->type() == QEvent::KeyPress || event->type() == QEvent::InputMethod))
+    clipboard_timer_->stop();
   if (watched == query_edit_ && (event->type() == QEvent::ShortcutOverride ||
                                 event->type() == QEvent::KeyPress)) {
     auto* key = static_cast<QKeyEvent*>(event);

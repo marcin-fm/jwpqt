@@ -70,6 +70,7 @@ void mixed_workspace(const QString& directory) {
   auto settings = original.application_settings();
   settings.fonts[static_cast<int>(qt::JapaneseFontRole::kSystem)].size = 21;
   settings.show_toolbar = false;
+  settings.dictionary.monitor_clipboard = true;
   require(original.apply_application_settings(settings) && original.activate_document(1), "Could not prepare project settings");
   auto cursor = original.active_editor()->textCursor(); cursor.setPosition(1); cursor.setPosition(3, QTextCursor::KeepAnchor);
   original.active_editor()->setTextCursor(cursor);
@@ -96,7 +97,8 @@ void mixed_workspace(const QString& directory) {
   require(retired.isNull() && restored.document_count() == 3 && restored.current_document_index() == 1 &&
           restored.current_path() == unicode_path && !restored.is_jwp_document() &&
           restored.text_encoding() == core::TextEncoding::kUtf16Be, "Mixed project selection/Unicode format failed");
-  require(restored.active_editor()->font().pixelSize() == 21 && !restored.application_settings().show_toolbar,
+  require(restored.active_editor()->font().pixelSize() == 21 && !restored.application_settings().show_toolbar &&
+              restored.application_settings().dictionary.monitor_clipboard,
           "Project did not apply supported settings");
   require(qt::document_plain_text(*restored.active_editor()->document()) == qt::to_qstring(U"A\ufeff\u00a0\U0001f600"),
           "Project changed Unicode content");

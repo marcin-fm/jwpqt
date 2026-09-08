@@ -16,6 +16,7 @@
 #include <QDialogButtonBox>
 #include <QLabel>
 #include <QInputMethodEvent>
+#include <QEventLoop>
 #include <QIntValidator>
 #include <QKeyEvent>
 #include <QLineEdit>
@@ -54,6 +55,105 @@ jwpqt::qt::EdictResourceSearchResult result(
   jwpqt::core::EdictSearchResult found;
   found.record = std::move(record);
   return {registry_index, std::move(label), std::move(found)};
+}
+
+void test_names_and_clipboard() {
+  namespace qt = jwpqt::qt;
+  auto options = std::make_shared<qt::EdictLookupOptions>();
+  options->advanced = options->contingent = true;
+  options->link_advanced_names = true;
+  int calls = 0, changed = 0;
+  qt::EdictLookupOptions request;
+  bool forced = true;
+  qt::EdictLookupDialog dialog([&](const auto&, const auto& settings, bool force) {
+    ++calls; request = settings; forced = force;
+    qt::EdictResourceSearchReport report;
+    report.results = {result(0, QStringLiteral("Main"), U"cat", {}, {U"feline"})};
+    return report;
+  }, {}, nullptr, {}, options);
+  dialog.set_options_changed_handler([&](const auto&) { ++changed; });
+  dialog.set_query(U"cat");
+  dialog.findChild<QPushButton*>("edictNamesSearch")->click();
+  require(calls == 1 && request.personal_names && request.place_names && !request.advanced &&
+              !request.contingent && !forced && options->advanced && options->contingent &&
+              !options->personal_names && !options->place_names && changed == 0,
+          "One-shot Names changed saved options or retained adaptive/contingent retries");
+  auto* no_names = dialog.findChild<QCheckBox*>("edictNoNames");
+  require(no_names->checkState() == Qt::Checked, "No Names did not represent both exclusions");
+  no_names->click();
+  require(options->personal_names && options->place_names && !options->advanced && changed == 1 && calls == 1,
+          "Combined No Names did not update both categories and Advanced without searching");
+  options->place_names = false; dialog.set_options(*options);
+  require(no_names->checkState() == Qt::PartiallyChecked, "Mixed names settings were silently normalized");
+  no_names->click();
+  require(options->personal_names && options->place_names && no_names->checkState() == Qt::Unchecked,
+          "Clicking mixed No Names failed to include both categories");
+  no_names->click();
+  require(!options->personal_names && !options->place_names, "No Names did not exclude both categories");
+
+  QApplication::clipboard()->setText(QStringLiteral("dog\nignored"));
+  require(dialog.search_clipboard() && dialog.query() == U"dog" && calls == 2,
+          "Explicit clipboard search did not use the first paragraph");
+  auto* results = dialog.findChild<QTextEdit*>("edictResults");
+  const QPointer<QTextDocument> previous(results->document());
+  for (const QString& invalid : {QString(), QStringLiteral("ca"), QStringLiteral("a\u3042"), QString(101, QLatin1Char('a')),
+       qt::to_qstring(U"\U0001f600"), QString(QChar(0xd800))}) {
+    QApplication::clipboard()->setText(invalid);
+    require(!dialog.search_clipboard() && dialog.query() == U"dog" && calls == 2 &&
+                results->document() == previous, "Invalid clipboard text erased the query/results");
+  }
+  auto wait = [] {
+    QEventLoop loop;
+    QTimer::singleShot(220, &loop, &QEventLoop::quit);
+    loop.exec();
+  };
+  QApplication::clipboard()->setText(QStringLiteral("existing"));
+  dialog.show(); QApplication::processEvents();
+  auto* monitor = dialog.findChild<QCheckBox*>("edictMonitorClipboard");
+  monitor->click(); wait();
+  require(calls == 2 && dialog.query() == U"dog", "Enabling monitoring consumed the existing clipboard");
+  QApplication::clipboard()->setText(QStringLiteral("first"));
+  QApplication::clipboard()->setText(QStringLiteral("latest"));
+  wait();
+  require(calls == 3 && dialog.query() == U"latest", "Clipboard changes did not coalesce to the latest query");
+  dialog.copy_selected(); wait();
+  require(calls == 3 && dialog.query() == U"latest", "Lookup's own Copy triggered clipboard monitoring");
+  auto* query = dialog.findChild<QLineEdit*>("edictQuery");
+  query->setCursorPosition(query->text().size());
+  QApplication::clipboard()->setText(QStringLiteral("before typing"));
+  QKeyEvent pending(QEvent::KeyPress, Qt::Key_K, Qt::NoModifier, QStringLiteral("k"));
+  QApplication::sendEvent(query, &pending); wait();
+  require(calls == 3 && dialog.query() == U"latest", "Clipboard monitoring discarded pending kana input");
+  QKeyEvent finish(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier, QStringLiteral("a"));
+  QApplication::sendEvent(query, &finish);
+  require(dialog.query() == U"latest\u304b", "Cancelling clipboard search lost the kana composer");
+  QApplication::clipboard()->setText(QStringLiteral("obsolete"));
+  dialog.set_query(U"edited"); wait();
+  require(calls == 3 && dialog.query() == U"edited", "Queued clipboard replaced a newer user edit");
+  QApplication::clipboard()->setText(QStringLiteral("disabled"));
+  monitor->click(); wait();
+  require(calls == 3 && dialog.query() == U"edited", "Disabling monitor failed to cancel its queued search");
+  monitor->click();
+  QApplication::clipboard()->setText(QStringLiteral("hidden"));
+  dialog.hide(); wait();
+  require(calls == 3, "Hidden lookup searched queued clipboard content");
+  dialog.show(); wait();
+  require(calls == 3, "Reopening lookup consumed old clipboard content");
+  QApplication::clipboard()->setText(QStringLiteral("hide and reopen"));
+  dialog.hide(); dialog.show(); wait();
+  require(calls == 3, "Briefly hiding lookup retained a stale clipboard request");
+  QDialog modal(&dialog); modal.setModal(true); modal.show(); QApplication::processEvents();
+  QApplication::clipboard()->setText(QStringLiteral("modal")); wait(); modal.hide();
+  require(calls == 3, "Clipboard monitoring interrupted modal interaction");
+  dialog.close();
+
+  QPointer<qt::EdictLookupDialog> doomed;
+  doomed = new qt::EdictLookupDialog([&](const auto&, const auto&, bool) {
+    delete doomed.data();
+    return qt::EdictResourceSearchReport{};
+  });
+  QApplication::clipboard()->setText(QStringLiteral("delete"));
+  require(!doomed->search_clipboard() && !doomed, "Clipboard search retained a deleted owner");
 }
 
 void test_management_commands() {
@@ -1400,6 +1500,7 @@ void test_result_character_navigation() {
 int main(int argc, char** argv) {
   QApplication application(argc, argv);
   try {
+    test_names_and_clipboard();
     test_management_commands();
     test_result_keyboard_commands();
     test_linked_names();

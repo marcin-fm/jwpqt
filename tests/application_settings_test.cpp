@@ -172,13 +172,13 @@ void test_dictionary_settings() {
                !defaults.dictionary.full_ascii && !defaults.dictionary.jascii_to_ascii &&
                 !defaults.dictionary.contingent && defaults.dictionary.automatic_search && !defaults.dictionary.compact &&
                !defaults.dictionary.link_advanced_names && defaults.dictionary.priority_first &&
-               defaults.dictionary.priority_separator && defaults.dictionary.advanced_separator,
+               defaults.dictionary.priority_separator && defaults.dictionary.advanced_separator && !defaults.dictionary.monitor_clipboard,
           "Dictionary defaults differ from the source");
   auto settings = read_application_settings(
       "dict_advanced=no\nDiCt_AdvancedSearches=yes\ndict_always=false\n"
       "dict_showall=true\ndict_iadj=false\ndict_classical=true\ndict_contingent=yes\ndict_auto=false\n"
       "dict_fullascii=true\ndict_jascii2ascii=true\ndict_bits=0x80000006\ndict_compress=yes\n"
-       "dict_link_adv_noname=yes\nDICT_BITS=bad\nFuture_Presentation=true\nFuture=\xff\n");
+        "dict_link_adv_noname=yes\ndict_watchclip=yes\nDICT_BITS=bad\nFuture_Presentation=true\nFuture=\xff\n");
   require(settings.dictionary.link_advanced_names && settings.dictionary.compact && !settings.dictionary.automatic_search && settings.dictionary.contingent && settings.dictionary.advanced && !settings.dictionary.advanced_always &&
               settings.dictionary.advanced_show_all && !settings.dictionary.i_adjectives &&
               settings.dictionary.classical && settings.dictionary.full_ascii &&
@@ -190,7 +190,8 @@ void test_dictionary_settings() {
           "Dictionary aliases, mask inversion or unsupported-field reporting changed");
   const auto encoded = write_application_settings(settings);
   const auto restored = read_application_settings(encoded);
-  require(restored.dictionary.link_advanced_names && restored.dictionary.advanced && restored.dictionary.place_names &&
+  require(restored.dictionary.monitor_clipboard && encoded.find("MonitorClipboard = true") != std::string::npos &&
+               restored.dictionary.link_advanced_names && restored.dictionary.advanced && restored.dictionary.place_names &&
               restored.dictionary.compact && restored.dictionary.contingent && write_application_settings(restored) == encoded &&
               encoded.find("Dict_ExclusionFilters = 0x80000006") != std::string::npos &&
               encoded.find("DICT_BITS=bad\n") != std::string::npos &&
@@ -219,6 +220,7 @@ void test_dictionary_settings() {
   require(read_application_settings("dict_bits=0x100\ndict_bits=13").unapplied.isEmpty(),
           "Overridden unsupported mask bits produced a stale warning");
   for (const auto* bad : {"Dict_AdvancedSearches=bad\nDict_AdvancedSearches=true",
+                           "MonitorClipboard=bad\ndict_watchclip=true", "dict_watchclip=2",
                           "Dict_ContingentSearches=bad\nDict_ContingentSearches=true",
                           "dict_contingent=2",
                           "Dict_AutoSearch=bad\nDict_AutoSearch=true", "dict_auto=2",

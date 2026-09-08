@@ -24,6 +24,21 @@ unknown tags stop filtering that group. Advanced/name linkage acts only on user
 toggles: enabling Advanced excludes personal/place names, while including either
 category disables Advanced. Imported combinations are not silently normalized.
 
+No Names controls both name categories; its mixed state preserves unequal
+personal/place choices until clicked. Names performs one search including both
+categories, without Advanced or Contingent retries, and leaves saved options
+unchanged. These filters also apply to tagged names in ordinary dictionaries.
+
+From Clipboard explicitly searches the first paragraph of clipboard text.
+Monitor Clipboard is off by default and searches future external copies while
+lookup is visible. Opening/enabling does not consume existing clipboard data.
+Copies may enter persisted query history: enable monitoring only when wanted.
+Queued searches coalesce and are cancelled by editing, selection changes,
+disabling or closing; modal interactions and application-owned copies are
+ignored. Unsupported, malformed or oversized queries preserve the previous
+query and results. Valid searches that fail retain their previous results and
+show a nonmodal diagnostic. The limit is 100 characters, without truncation.
+
 ## Results
 
 Compact layout, priority grouping and separators take effect on a successful
@@ -40,8 +55,7 @@ typing from results enters the local query; clipboard/navigation shortcuts stay
 with results. Right-click a character for an independent information viewer.
 
 History recalls without searching. User Dictionary opens the shared editable
-working copy, which stays available after lookup closes. Clipboard watching
-and combined/one-shot Names controls are still incomplete.
+working copy, which stays available after lookup closes.
 
 ## Manage Dictionaries
 

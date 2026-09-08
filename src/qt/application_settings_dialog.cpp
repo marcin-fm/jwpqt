@@ -150,6 +150,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   add_dictionary("settingsDictionaryFullAscii", tr("ASCII boundaries match the complete definition"), &EdictLookupOptions::full_ascii);
   add_dictionary("settingsDictionaryJascii", tr("Treat JASCII as ASCII"), &EdictLookupOptions::jascii_to_ascii);
   add_dictionary("settingsDictionaryContingent", tr("Contingent search after eligible exact searches fail"), &EdictLookupOptions::contingent);
+  add_dictionary("settingsDictionaryClipboard", tr("Monitor future external clipboard changes while Dictionary Lookup is visible"), &EdictLookupOptions::monitor_clipboard);
   add_dictionary("settingsDictionaryAutomatic", tr("Search a document selection when opening dictionary lookup"), &EdictLookupOptions::automatic_search);
   add_dictionary("settingsDictionaryCompact", tr("Compact results: headword and definitions together"), &EdictLookupOptions::compact);
   add_dictionary("settingsDictionaryPriority", tr("Show priority entries first within search sections"), &EdictLookupOptions::priority_first);

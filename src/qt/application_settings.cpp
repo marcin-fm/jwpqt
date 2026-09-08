@@ -65,6 +65,7 @@ constexpr BooleanDescriptor<EdictLookupOptions> kDictionaryBooleans[] = {
     {"Dict_Link_Adv_NoNames", "dict_link_adv_noname", &EdictLookupOptions::link_advanced_names},
     {"Dict_AdvancedSearches", "dict_advanced", &EdictLookupOptions::advanced},
     {"Dict_ContingentSearches", "dict_contingent", &EdictLookupOptions::contingent},
+    {"MonitorClipboard", "dict_watchclip", &EdictLookupOptions::monitor_clipboard},
     {"Dict_AlwaysAdvancedSearch", "dict_always", &EdictLookupOptions::advanced_always},
     {"Dict_Adv_KeepSearching", "dict_showall", &EdictLookupOptions::advanced_show_all},
     {"Dict_Adv_Try_I_Adjectives", "dict_iadj", &EdictLookupOptions::i_adjectives},

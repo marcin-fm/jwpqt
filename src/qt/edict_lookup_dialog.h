@@ -24,6 +24,7 @@ class QLineEdit;
 class QPushButton;
 class QTextEdit;
 class QToolButton;
+class QTimer;
 
 namespace jwpqt::qt {
 
@@ -56,7 +57,8 @@ class EdictLookupDialog : public QDialog {
   void set_options_changed_handler(OptionsHandler handler) {
     options_changed_handler_ = std::move(handler);
   }
-  bool search(bool force_contingent = false);
+  bool search(bool force_contingent = false, bool names_request = false);
+  bool search_clipboard();
   bool sort_results(Qt::KeyboardModifiers modifiers = Qt::NoModifier,
                     const core::EdictSortLimits& limits = {});
   bool insert_selected();
@@ -66,6 +68,7 @@ class EdictLookupDialog : public QDialog {
 
  protected:
   bool eventFilter(QObject* watched, QEvent* event) override;
+  void hideEvent(QHideEvent* event) override;
 
  private:
   static constexpr std::size_t kMaximumVisibleResults = 100'000;
@@ -80,6 +83,7 @@ class EdictLookupDialog : public QDialog {
                        const core::EdictPresentationOptions* presentation = nullptr);
   void update_actions();
   void show_status();
+  bool search_clipboard_text(const QString& text);
 
   SearchHandler search_handler_;
   InsertHandler insert_handler_;
@@ -109,6 +113,9 @@ class EdictLookupDialog : public QDialog {
   QCheckBox* full_ascii_;
   QCheckBox* jascii_to_ascii_;
   QCheckBox* contingent_;
+  QCheckBox* no_names_;
+  QTimer* clipboard_timer_;
+  QString clipboard_text_;
   std::vector<std::pair<QCheckBox*, bool EdictLookupOptions::*>> option_bindings_;
   QTextEdit* results_;
   QLabel* status_;

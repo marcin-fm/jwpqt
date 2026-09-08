@@ -574,6 +574,19 @@ off. Each user toggle publishes one complete policy update without searching or
 discarding pending kana/results/history. Imports preserve their specified values
 until a user toggles a control rather than silently normalizing combinations.
 
+**No Names** controls both name exclusions, retaining a mixed state for unequal
+personal/place choices. **Names** temporarily includes both categories and
+disables Advanced/Contingent retries without changing saved preferences. Name
+filters apply to ordinary dictionary records as well as optional name passes.
+**From Clipboard** explicitly searches its first paragraph; **Monitor Clipboard**
+is default-off and persists as `MonitorClipboard`/`dict_watchclip`. It consumes
+future external changes only while lookup is visible and available, never old
+clipboard content merely on opening/enabling. Searches coalesce; editing,
+pending kana, selection, hiding and disabling invalidate queued work. Invalid
+or oversized input preserves the query/results, and application-owned copies
+do not feed back into monitoring. Successful clipboard queries may enter saved
+history; enable the option only when that is wanted.
+
 Character Table places its code fields beside the full character grid. Lookup
 results use horizontal character strips with Information, Insert and Copy
 actions. Bushu, Stroke/Bushu, SKIP, Spahn-Hadamitzky, Four Corner and Index Lookup

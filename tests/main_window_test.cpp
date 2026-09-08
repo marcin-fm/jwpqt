@@ -3355,7 +3355,8 @@ void test_edict_search_controls(const QString& directory) {
       "\u3048 /bobcat/\n\u3055 /cat food/\n"
       "\u3042\u3044 /direct/\n\u3042\u304f /first/\n\u3042\u308b /later/\n"
       "\u4e9c\u304b\u3044 /adjective/\n"
-      "\u3042\u3044\u3046\u3048 /leading/\n\u304b\u3042\u3044\u3046\u3048 /embedded/\n").toUtf8());
+      "\u3042\u3044\u3046\u3048 /leading/\n\u304b\u3042\u3044\u3046\u3048 /embedded/\n"
+      "\u306a\u307e\u3048 /(s) human/\n\u306a\u307e\u3048 /(p) location/\n").toUtf8());
   core::EdictRegistry registry;
   core::EdictRegistryEntry resource;
   resource.label = u"Controls";
@@ -3385,6 +3386,12 @@ void test_edict_search_controls(const QString& directory) {
     return dialog->report().results.size();
   };
   require(count(U"cat") == 4, "Default Begin With did not reject an embedded ASCII match");
+  require(count(U"\u306a\u307e\u3048") == 0 && dialog->search(false, true) &&
+              dialog->report().results.size() == 2 &&
+              !window.application_settings().dictionary.personal_names &&
+              !window.application_settings().dictionary.place_names &&
+              dialog->search() && dialog->report().results.empty(),
+          "One-shot Names did not filter actual resource records without changing preferences");
   check("edictBeginning", false);
   require(count(U"cat") == 5, "Open beginning did not include the embedded match");
   auto* sort_button = dialog->findChild<QPushButton*>(QStringLiteral("edictSort"));
@@ -3501,6 +3508,7 @@ void test_edict_search_controls(const QString& directory) {
           "Closing a modal history chooser discarded the shared query cache");
 
   const QString preferences_path = base + QStringLiteral("/preferences.cfg");
+  check("edictMonitorClipboard", true);
   check("edictContingent", true);
   require(window.application_settings().dictionary.full_ascii &&
               window.application_settings().dictionary.require_end &&
@@ -3515,6 +3523,11 @@ void test_edict_search_controls(const QString& directory) {
   auto* restored_dialog = dynamic_cast<qt::EdictLookupDialog*>(
       restored.findChild<QDialog*>(QStringLiteral("edictLookupDialog")));
   require(restored_dialog != nullptr, "Restored dictionary did not open");
+  require(restored.application_settings().dictionary.monitor_clipboard &&
+              restored_dialog->findChild<QCheckBox*>("edictMonitorClipboard")->isChecked(),
+          "Clipboard monitoring preference did not survive a restart");
+  check("edictMonitorClipboard", false);
+  restored_dialog->findChild<QCheckBox*>("edictMonitorClipboard")->click();
   restored_dialog->set_query(U"cat");
   require(restored_dialog->search() && restored_dialog->report().results.size() == 1 &&
               restored_dialog->findChild<QCheckBox*>(QStringLiteral("edictFullAscii"))->isChecked(),
@@ -3574,6 +3587,7 @@ void test_edict_search_controls(const QString& directory) {
     popup->findChild<QCheckBox*>("settingsDictionaryAutomatic")->setChecked(false);
     popup->findChild<QCheckBox*>("settingsDictionaryCompact")->setChecked(true);
     popup->findChild<QCheckBox*>("settingsDictionaryLinkNames")->setChecked(true);
+    popup->findChild<QCheckBox*>("settingsDictionaryClipboard")->setChecked(true);
     popup->reject();
   });
   find_action(window, "applicationOptionsAction")->trigger();
