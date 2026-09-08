@@ -4207,6 +4207,7 @@ void MainWindow::show_kanji_lookup_dialog() {
     kanji_lookup_dialog_->activateWindow();
     return;
   }
+  const auto seed = jwp_character_target();
   auto* dialog = new KanjiLookupDialog(
       *radical_lists_, *stroke_lists_, *kanji_info_database_, radical_sheet_,
       [this](const std::vector<core::JisCode>& codes) {
@@ -4220,7 +4221,9 @@ void MainWindow::show_kanji_lookup_dialog() {
   connect(dialog, &QObject::destroyed, this,
           [this] { kanji_lookup_dialog_ = nullptr; });
   kanji_lookup_dialog_ = dialog;
+  const QPointer<KanjiLookupDialog> shown(dialog);
   dialog->show();
+  if (shown && seed && *seed >= 0x3000) (void)shown->select_kanji(*seed);
 }
 
 std::optional<core::JisCode> MainWindow::jwp_character_target() const {

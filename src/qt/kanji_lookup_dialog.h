@@ -14,6 +14,8 @@
 #include "jwpqt/core/kanji_lookup.h"
 
 class QLabel;
+class QComboBox;
+class QCheckBox;
 class QListWidget;
 class QPushButton;
 class QSpinBox;
@@ -36,6 +38,7 @@ class KanjiLookupDialog : public QDialog {
   void set_selected_radicals(const std::vector<std::size_t>& radicals);
   std::vector<std::size_t> selected_radicals() const;
   void set_stroke_range(std::uint8_t minimum, std::uint8_t maximum);
+  bool select_kanji(core::JisCode code);
   bool search();
   std::vector<core::JisCode> result_codes() const;
 
@@ -44,6 +47,9 @@ class KanjiLookupDialog : public QDialog {
 
  private:
   void update_artwork();
+  void update_stroke_estimate();
+  void update_quick_strokes();
+  void schedule_search();
   std::vector<core::JisCode> selected_result_codes() const;
   void update_result_actions();
   void copy_results();
@@ -58,6 +64,10 @@ class KanjiLookupDialog : public QDialog {
   QPixmap radical_sheet_;
   std::vector<QToolButton*> radical_buttons_;
   std::vector<QLabel*> stroke_headings_;
+  QCheckBox* automatic_;
+  QSpinBox* stroke_count_;
+  QComboBox* tolerance_;
+  QLabel* stroke_estimate_;
   QSpinBox* minimum_strokes_;
   QSpinBox* maximum_strokes_;
   QTimer* search_timer_;

@@ -17,7 +17,18 @@ Native tools include graphical Radical, Bushu, Stroke/Bushu and Spahn selectors;
 SKIP and Four Corner helpers; reading/meaning lookup; code and Index Lookup;
 and the JIS character table. Installed data determines which indexes are
 available. Clear and automatic search retain sensible pending-query boundaries.
-Some legacy automatic stroke-estimation and tolerance shortcuts remain open.
+
+Radical Lookup links the recovered equivalent radical variants. Opening it
+seeds the current JIS kanji, or use From Clipboard to extract the first kanji's
+radicals. Invalid or unavailable characters leave the current query intact.
+The stroke-count arrows cycle through Any (zero), the selected-radical stroke
+estimate, up to 30, then Any again. The estimate is only a stepping hint, not
+an automatic filter or a guaranteed character count; counts can also be typed.
+Choose Exact, +/- 1 or +/- 2, or edit the explicit minimum/maximum range.
+Clear resets all of these controls and cancels pending search. With automatic
+search disabled, changed criteria clear stale results until Search is pressed.
+Shared lookup-policy persistence and some other lookup keyboard/spinner controls
+remain incomplete.
 
 Result strips provide canonical insertion and per-character information menus.
 Count Kanji can inspect current or all open documents without changing their

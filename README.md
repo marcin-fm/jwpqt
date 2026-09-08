@@ -586,10 +586,17 @@ In dark palettes, radical strokes use light ink on dark paper and stroke-count
 headings stay readable. Switching back restores the original light artwork
 without changing queries, selections or results.
 
-This is not complete dialog parity: remaining history consumers and dictionary
-options, radical automatic stroke estimation and stroke-tolerance shortcuts
-remain open. Existing numeric ranges and portable dictionary search algorithms
-do not substitute for those controls.
+Radical Lookup links the recovered variant groups, seeds the current JIS kanji
+and extracts radicals from the first clipboard character. A quick stroke count
+supports Exact, +/- 1 and +/- 2 alongside the explicit range controls. Its
+arrows cycle Any, the selected-radical stroke estimate, through 30 and back to
+Any; the estimate is a bounded stepping hint, not an automatic filter. Invalid
+extraction preserves prior state. Clear cancels pending work, and changed
+criteria clear stale results when automatic search is disabled.
+
+This is not complete dialog parity: shared lookup-policy persistence, other
+lookup keyboard/spinner controls, auxiliary history/search consumers and
+remaining dictionary options still need closure.
 
 ### Character information
 

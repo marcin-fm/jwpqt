@@ -31,6 +31,14 @@ struct KanjiLookupReport {
   bool truncated = false;
 };
 
+// Zero-based indices in the recovered 241-radical catalog.
+std::vector<std::size_t> linked_kanji_radicals(std::size_t radical);
+std::size_t kanji_radical_stroke_estimate(const std::vector<std::size_t>& radicals);
+int step_kanji_strokes(int count, int steps, std::size_t radical_strokes);
+std::vector<std::size_t> kanji_radicals_for_character(
+    const KanjiLookupLists& radical_lists, JisCode code,
+    std::size_t work_limit = 1'000'000);
+
 KanjiLookupReport search_kanji_radicals(
     const KanjiLookupLists& radical_lists,
     const KanjiLookupLists& stroke_lists,

@@ -2,12 +2,14 @@
 
 #include "kanji_lookup_dialog.h"
 
+#include <algorithm>
 #include <exception>
 #include <utility>
 
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
+#include <QComboBox>
 #include <QDialogButtonBox>
 #include <QEvent>
 #include <QGridLayout>
@@ -16,8 +18,10 @@
 #include <QIcon>
 #include <QLabel>
 #include <QListWidget>
+#include <QPointer>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QStyle>
 #include <QTimer>
@@ -25,6 +29,7 @@
 #include <QVBoxLayout>
 
 #include "jwpqt/core/jwp_text_codec.h"
+#include "jwpqt/core/jis_unicode.h"
 #include "jwpqt/core/kanji_bushu_selector.h"
 #include "lookup_artwork.h"
 #include "text_bridge.h"
@@ -40,6 +45,19 @@ core::JisCode item_code(const QListWidgetItem& item) {
   return static_cast<core::JisCode>(item.data(Qt::UserRole).toUInt());
 }
 
+class RadicalStrokeSpin : public QSpinBox {
+ public:
+  explicit RadicalStrokeSpin(QWidget* parent) : QSpinBox(parent) {}
+  std::function<std::size_t()> estimate;
+ protected:
+  void stepBy(int steps) override {
+    setValue(core::step_kanji_strokes(value(), steps, estimate ? estimate() : 0));
+  }
+  StepEnabled stepEnabled() const override {
+    return isReadOnly() ? StepNone : StepUpEnabled | StepDownEnabled;
+  }
+};
+
 }  // namespace
 
 KanjiLookupDialog::KanjiLookupDialog(
@@ -54,6 +72,10 @@ KanjiLookupDialog::KanjiLookupDialog(
       insert_handler_(std::move(insert_handler)),
       info_handler_(std::move(info_handler)),
       radical_sheet_(std::move(radical_sheet)),
+      automatic_(new QCheckBox(tr("Automatic search"), this)),
+      stroke_count_(new RadicalStrokeSpin(this)),
+      tolerance_(new QComboBox(this)),
+      stroke_estimate_(new QLabel(this)),
       minimum_strokes_(new QSpinBox(this)),
       maximum_strokes_(new QSpinBox(this)),
       search_timer_(new QTimer(this)),
@@ -65,7 +87,7 @@ KanjiLookupDialog::KanjiLookupDialog(
   setObjectName(QStringLiteral("kanjiLookupDialog"));
   setWindowTitle(tr("Radical and Stroke Lookup"));
   setModal(false);
-  resize(900, 540);
+  resize(900, 600);
 
   auto* outer = new QVBoxLayout(this);
   auto* radical_group = new QGroupBox(tr("Radicals"), this);
@@ -127,6 +149,28 @@ KanjiLookupDialog::KanjiLookupDialog(
   scroll->setWidget(radical_widget);
   radical_outer->addWidget(scroll);
 
+  auto* quick_controls = new QHBoxLayout;
+  stroke_count_->setObjectName(QStringLiteral("kanjiLookupStrokeCount"));
+  stroke_count_->setRange(0, 30);
+  stroke_count_->setSpecialValueText(tr("Any"));
+  stroke_count_->setAccessibleName(tr("Kanji stroke count"));
+  stroke_count_->setToolTip(tr("Zero means any count. Arrows skip below the selected-radical estimate."));
+  static_cast<RadicalStrokeSpin*>(stroke_count_)->estimate = [this] {
+    return radical_buttons_.size() == core::kRadicalListGroups
+        ? core::kanji_radical_stroke_estimate(selected_radicals()) : 0;
+  };
+  tolerance_->setObjectName(QStringLiteral("kanjiLookupTolerance"));
+  tolerance_->setAccessibleName(tr("Stroke tolerance"));
+  tolerance_->addItems({tr("Exact"), tr("+/- 1"), tr("+/- 2")});
+  stroke_estimate_->setObjectName(QStringLiteral("kanjiLookupStrokeEstimate"));
+  quick_controls->addWidget(new QLabel(tr("Stroke count"), this));
+  quick_controls->addWidget(stroke_count_);
+  quick_controls->addWidget(tolerance_);
+  quick_controls->addWidget(stroke_estimate_, 1);
+  auto* from_clipboard = new QPushButton(tr("From &Clipboard"), this);
+  from_clipboard->setObjectName(QStringLiteral("kanjiLookupFromClipboard"));
+  quick_controls->addWidget(from_clipboard);
+
   auto* controls = new QHBoxLayout;
   minimum_strokes_->setObjectName(QStringLiteral("minimumStrokes"));
   maximum_strokes_->setObjectName(QStringLiteral("maximumStrokes"));
@@ -141,7 +185,7 @@ KanjiLookupDialog::KanjiLookupDialog(
   auto* search_button = new QPushButton(tr("&Search"), this);
   search_button->setObjectName(QStringLiteral("kanjiLookupSearch"));
   search_button->setDefault(true);
-  auto* automatic = new QCheckBox(tr("Automatic search"), this);
+  auto* automatic = automatic_;
   automatic->setObjectName(QStringLiteral("kanjiLookupAutoSearch"));
   automatic->setChecked(true);
   controls->addWidget(automatic);
@@ -181,6 +225,7 @@ KanjiLookupDialog::KanjiLookupDialog(
   buttons->addButton(insert_button_, QDialogButtonBox::ActionRole);
   buttons->addButton(copy_button_, QDialogButtonBox::ActionRole);
   outer->addWidget(buttons);
+  outer->addLayout(quick_controls);
   outer->addLayout(controls);
   outer->addWidget(radical_group, 1);
 
@@ -193,15 +238,42 @@ KanjiLookupDialog::KanjiLookupDialog(
     if (isVisible() && automatic->isChecked()) (void)search();
   });
   connect(this, &QDialog::finished, search_timer_, &QTimer::stop);
-  auto schedule_search = [this, automatic] {
-    if (isVisible() && automatic->isChecked()) search_timer_->start();
-  };
-  for (auto* button : radical_buttons_)
-    connect(button, &QToolButton::toggled, this, schedule_search);
+  for (std::size_t index = 0; index < radical_buttons_.size(); ++index) {
+    connect(radical_buttons_[index], &QToolButton::toggled, this, [this, index](bool checked) {
+      if (radical_buttons_.size() == core::kRadicalListGroups) {
+        for (auto variant : core::linked_kanji_radicals(index)) {
+          QSignalBlocker block(radical_buttons_[variant]);
+          radical_buttons_[variant]->setChecked(checked);
+        }
+      }
+      update_stroke_estimate();
+      schedule_search();
+    });
+  }
+  connect(stroke_count_, &QSpinBox::valueChanged, this, [this] { update_quick_strokes(); });
+  connect(tolerance_, &QComboBox::currentIndexChanged, this, [this] { update_quick_strokes(); });
   for (auto* spin : {minimum_strokes_, maximum_strokes_})
-    connect(spin, &QSpinBox::valueChanged, this, schedule_search);
-  connect(automatic, &QCheckBox::toggled, this, [this, schedule_search](bool checked) {
-    if (checked) schedule_search(); else search_timer_->stop();
+    connect(spin, &QSpinBox::valueChanged, this, [this] {
+      QSignalBlocker count_block(stroke_count_);
+      QSignalBlocker tolerance_block(tolerance_);
+      const int minimum = minimum_strokes_->value(), maximum = maximum_strokes_->value();
+      stroke_count_->setSpecialValueText(minimum == 1 && maximum == 30 ? tr("Any") : tr("Custom range"));
+      stroke_count_->setValue(minimum == maximum ? minimum : 0);
+      tolerance_->setCurrentIndex(0);
+      schedule_search();
+    });
+  connect(automatic, &QCheckBox::toggled, this, [this](bool checked) {
+    if (!checked) search_timer_->stop();
+    schedule_search();
+  });
+  connect(from_clipboard, &QPushButton::clicked, this, [this] {
+    const QPointer<KanjiLookupDialog> self(this);
+    const QString text = QApplication::clipboard()->text();
+    if (!self) return;
+    const auto decoded = from_qstring(text);
+    const auto code = decoded.empty() ? std::nullopt : core::unicode_to_jis_x0208(decoded.front());
+    if (!code) status_->setText(tr("Clipboard must start with a JIS kanji"));
+    else (void)select_kanji(*code);
   });
   connect(any_strokes, &QPushButton::clicked, this, [this] { set_stroke_range(1, 30); });
   connect(clear_button, &QPushButton::clicked, this, [this] {
@@ -225,6 +297,7 @@ KanjiLookupDialog::KanjiLookupDialog(
           [this] { show_information(); });
   update_result_actions();
   update_artwork();
+  update_stroke_estimate();
 }
 
 void KanjiLookupDialog::changeEvent(QEvent* event) {
@@ -258,9 +331,60 @@ void KanjiLookupDialog::set_selected_radicals(
       throw core::KanjiLookupListError("Selected radical is out of range");
     }
   }
-  for (QToolButton* button : radical_buttons_) button->setChecked(false);
-  for (const std::size_t index : radicals) {
-    radical_buttons_[index]->setChecked(true);
+  std::vector<bool> selected(radical_buttons_.size());
+  for (const auto index : radicals) {
+    if (radical_buttons_.size() == core::kRadicalListGroups) {
+      for (auto variant : core::linked_kanji_radicals(index)) selected[variant] = true;
+    } else selected[index] = true;
+  }
+  for (std::size_t index = 0; index < radical_buttons_.size(); ++index) {
+    QSignalBlocker block(radical_buttons_[index]);
+    radical_buttons_[index]->setChecked(selected[index]);
+  }
+  update_stroke_estimate();
+  schedule_search();
+}
+
+void KanjiLookupDialog::schedule_search() {
+  if (!automatic_->isChecked()) {
+    search_timer_->stop();
+    results_->clear();
+    status_->clear();
+    update_result_actions();
+  } else if (isVisible()) search_timer_->start();
+}
+
+void KanjiLookupDialog::update_stroke_estimate() {
+  if (radical_buttons_.size() != core::kRadicalListGroups) {
+    stroke_estimate_->setText(tr("Stroke estimate unavailable for this catalog"));
+    return;
+  }
+  stroke_estimate_->setText(tr("Selected-radical estimate: %1 (spinner hint only)")
+      .arg(core::kanji_radical_stroke_estimate(selected_radicals())));
+}
+
+void KanjiLookupDialog::update_quick_strokes() {
+  const int count = stroke_count_->value(), tolerance = tolerance_->currentIndex();
+  QSignalBlocker minimum_block(minimum_strokes_), maximum_block(maximum_strokes_);
+  stroke_count_->setSpecialValueText(tr("Any"));
+  minimum_strokes_->setValue(count == 0 ? 1 : std::max(1, count - tolerance));
+  maximum_strokes_->setValue(count == 0 ? 30 : std::min(30, count + tolerance));
+  schedule_search();
+}
+
+bool KanjiLookupDialog::select_kanji(core::JisCode code) {
+  try {
+    const auto selected = core::kanji_radicals_for_character(radical_lists_, code);
+    if (selected.empty()) throw core::KanjiLookupListError("No radical data for this kanji");
+    set_selected_radicals(selected);
+    set_stroke_range(1, 30);
+    results_->clear();
+    status_->clear();
+    update_result_actions();
+    return true;
+  } catch (const std::exception& error) {
+    status_->setText(QString::fromUtf8(error.what()));
+    return false;
   }
 }
 
@@ -277,8 +401,15 @@ void KanjiLookupDialog::set_stroke_range(std::uint8_t minimum,
   if (minimum < 1 || maximum > 30 || minimum > maximum) {
     throw core::KanjiLookupListError("Kanji stroke range is invalid");
   }
-  minimum_strokes_->setValue(minimum);
-  maximum_strokes_->setValue(maximum);
+  {
+    QSignalBlocker a(minimum_strokes_), b(maximum_strokes_), c(stroke_count_), d(tolerance_);
+    minimum_strokes_->setValue(minimum);
+    maximum_strokes_->setValue(maximum);
+    stroke_count_->setSpecialValueText(minimum == 1 && maximum == 30 ? tr("Any") : tr("Custom range"));
+    stroke_count_->setValue(minimum == maximum ? minimum : 0);
+    tolerance_->setCurrentIndex(0);
+  }
+  schedule_search();
 }
 
 bool KanjiLookupDialog::search() {
@@ -367,24 +498,28 @@ void KanjiLookupDialog::copy_results() {
 void KanjiLookupDialog::insert_results() {
   const std::vector<core::JisCode> codes = selected_result_codes();
   if (codes.empty() || !insert_handler_) return;
+  const auto handler = insert_handler_;
+  const QPointer<KanjiLookupDialog> self(this);
   try {
-    insert_handler_(codes);
+    handler(codes);
   } catch (const std::exception& error) {
-    status_->setText(QString::fromUtf8(error.what()));
+    if (self) status_->setText(QString::fromUtf8(error.what()));
   } catch (...) {
-    status_->setText(tr("Could not insert kanji results"));
+    if (self) status_->setText(tr("Could not insert kanji results"));
   }
 }
 
 void KanjiLookupDialog::show_information() {
   const std::vector<core::JisCode> codes = selected_result_codes();
   if (codes.size() != 1 || !info_handler_) return;
+  const auto handler = info_handler_;
+  const QPointer<KanjiLookupDialog> self(this);
   try {
-    info_handler_(codes.front());
+    handler(codes.front());
   } catch (const std::exception& error) {
-    status_->setText(QString::fromUtf8(error.what()));
+    if (self) status_->setText(QString::fromUtf8(error.what()));
   } catch (...) {
-    status_->setText(tr("Could not show kanji information"));
+    if (self) status_->setText(tr("Could not show kanji information"));
   }
 }
 

@@ -3,19 +3,25 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <stdexcept>
 
 #include <QApplication>
 #include <QCheckBox>
+#include <QClipboard>
+#include <QComboBox>
 #include <QEventLoop>
 #include <QImage>
 #include <QLabel>
 #include <QListWidget>
 #include <QPushButton>
+#include <QSpinBox>
 #include <QTimer>
 #include <QToolButton>
 
 #include "jwpqt/core/kanji_lookup_lists.h"
 #include "kanji_lookup_dialog.h"
+#include "jwpqt/core/jwp_text_codec.h"
+#include "text_bridge.h"
 
 namespace {
 
@@ -227,11 +233,97 @@ void test_artwork_palette_changes() {
           "Unreadable theme ink was retained or palette changes restarted pending radical work");
 }
 
+void test_stroke_and_clipboard_controls() {
+  using namespace jwpqt;
+  std::vector<std::vector<core::JisCode>> groups(241);
+  groups[0] = {0x3021};
+  groups[64] = {0x3022};
+  groups[186] = {0x3022};
+  const auto radicals = lists(groups);
+  groups.assign(30, {});
+  groups[0] = {0x3021}; groups[1] = {0x3022};
+  const auto strokes = lists(groups);
+  const auto info = information();
+  qt::KanjiLookupDialog dialog(radicals, strokes, info, {}, {}, {});
+  auto* automatic = dialog.findChild<QCheckBox*>(QStringLiteral("kanjiLookupAutoSearch"));
+  auto* count = dialog.findChild<QSpinBox*>(QStringLiteral("kanjiLookupStrokeCount"));
+  auto* tolerance = dialog.findChild<QComboBox*>(QStringLiteral("kanjiLookupTolerance"));
+  auto* minimum = dialog.findChild<QSpinBox*>(QStringLiteral("minimumStrokes"));
+  auto* maximum = dialog.findChild<QSpinBox*>(QStringLiteral("maximumStrokes"));
+  auto* paste = dialog.findChild<QPushButton*>(QStringLiteral("kanjiLookupFromClipboard"));
+  auto* timer = dialog.findChild<QTimer*>(QStringLiteral("kanjiLookupSearchTimer"));
+  require(count && tolerance && paste, "Radical quick-count/tolerance/clipboard controls missing");
+  automatic->setChecked(false);
+  dialog.show();
+  dialog.set_selected_radicals({32});
+  require(dialog.selected_radicals() == std::vector<std::size_t>({32, 186}) &&
+              count->value() == 0 && minimum->value() == 1 && maximum->value() == 30,
+          "Radical variants did not link or selection unexpectedly filtered stroke counts");
+  count->stepUp();
+  require(count->value() == 9 && minimum->value() == 9 && maximum->value() == 9,
+          "Radical spinner did not skip to the selected stroke estimate");
+  count->stepDown(); require(count->value() == 0, "Smart stroke decrement did not return to Any");
+  count->stepDown(); require(count->value() == 30, "Smart stroke spinner did not wrap backwards");
+  tolerance->setCurrentIndex(2);
+  require(minimum->value() == 28 && maximum->value() == 30, "Upper stroke tolerance was not clipped");
+  count->setValue(1);
+  require(minimum->value() == 1 && maximum->value() == 3, "Lower stroke tolerance was not clipped");
+  count->setValue(2); tolerance->setCurrentIndex(0);
+  require(dialog.search() && dialog.result_codes() == std::vector<core::JisCode>({0x3022}),
+          "Quick exact stroke search did not use the selected radical variants");
+  dialog.set_stroke_range(5, 8);
+  require(count->value() == 0 && count->text().contains(QStringLiteral("Custom")) &&
+              minimum->value() == 5 && maximum->value() == 8 && dialog.result_codes().empty(),
+          "Custom range was overwritten by stale quick-count state");
+  minimum->setValue(8);
+  require(count->value() == 8 && maximum->value() == 8, "Manual exact range did not synchronize quick count");
+  dialog.findChild<QPushButton*>(QStringLiteral("kanjiLookupAnyStrokes"))->click();
+  require(count->value() == 0 && minimum->value() == 1 && maximum->value() == 30,
+          "Any strokes did not reset both control paths");
+  dialog.findChild<QToolButton*>(QStringLiteral("radicalButton33"))->click();
+  require(dialog.selected_radicals().empty(), "Toggling a variant left its linked form selected");
+  QApplication::clipboard()->setText(qt::to_qstring(core::decode_jwp_text({0x3022})) + QStringLiteral(" trailing"));
+  paste->click();
+  require(dialog.selected_radicals() == std::vector<std::size_t>({32, 64, 65, 66, 186}) &&
+              !timer->isActive() && dialog.search() && dialog.result_codes().size() == 1,
+          "Clipboard extraction failed to select linked radicals from the first kanji");
+  const auto selected = dialog.selected_radicals();
+  const auto results = dialog.result_codes();
+  for (const auto& text : {QString{}, QStringLiteral("abc"), QString::fromUtf8("\xe3\x81\x82"),
+                          QString::fromUtf8("\xf0\x9f\x98\x80")}) {
+    QApplication::clipboard()->setText(text); paste->click();
+    require(dialog.selected_radicals() == selected && dialog.result_codes() == results,
+            "Invalid clipboard extraction erased current radical state/results");
+  }
+  require(!dialog.select_kanji(0x3023) && dialog.selected_radicals() == selected,
+          "Kanji absent from radical data erased current selection");
+  automatic->setChecked(true);
+  require(dialog.select_kanji(0x3021) && timer->isActive(), "Extracting kanji did not schedule enabled search");
+  dialog.findChild<QPushButton*>(QStringLiteral("kanjiLookupClear"))->click();
+  require(count->value() == 0 && tolerance->currentIndex() == 0 &&
+              dialog.selected_radicals().empty() && dialog.result_codes().empty() && !timer->isActive(),
+          "Clear did not reset quick controls, variants and pending search");
+  dialog.grab().save(QStringLiteral("radical-stroke-controls.png"));
+
+  for (bool insert : {false, true}) {
+    qt::KanjiLookupDialog* owner = nullptr;
+    const auto destroy = [&] { delete owner; owner = nullptr; throw std::runtime_error("Owner closed"); };
+    owner = new qt::KanjiLookupDialog(radicals, strokes, info, {},
+        [&](const auto&) { destroy(); }, [&](auto) { destroy(); });
+    owner->set_selected_radicals({0});
+    require(owner->search(), "Could not prepare radical callback lifetime test");
+    owner->findChild<QPushButton*>(insert ? QStringLiteral("kanjiLookupInsert") :
+                                           QStringLiteral("kanjiLookupInfo"))->click();
+    require(!owner, "Radical callback did not close its owner safely");
+  }
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
   QApplication application(argc, argv);
   test_dialog();
   test_artwork_palette_changes();
+  test_stroke_and_clipboard_controls();
   return EXIT_SUCCESS;
 }

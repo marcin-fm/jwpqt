@@ -346,12 +346,17 @@ void test_integration(const QString& directory) {
   require(radical_action != nullptr && radical_action->isEnabled() &&
               radical_action->shortcut() == QKeySequence(Qt::Key_F5),
           "Radical lookup action is unavailable");
+  const auto before_radical_open = *window.current_jwp_document();
+  const bool before_radical_undo = undo->isEnabled();
   radical_action->trigger();
   QApplication::processEvents();
   auto* radical_dialog = dynamic_cast<jwpqt::qt::KanjiLookupDialog*>(
       window.findChild<QDialog*>(QStringLiteral("kanjiLookupDialog")));
   require(radical_dialog != nullptr,
-          "Radical lookup action did not open its dialog");
+           "Radical lookup action did not open its dialog");
+  require(!radical_dialog->selected_radicals().empty() &&
+              *window.current_jwp_document() == before_radical_open && undo->isEnabled() == before_radical_undo,
+          "Opening radical lookup did not seed the current kanji without editing its document");
   radical_dialog->set_selected_radicals({0});
   require(radical_dialog->search() &&
               radical_dialog->result_codes() ==

@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <string>
 
 #include "jwpqt/core/kanji_lookup.h"
@@ -156,10 +157,64 @@ void test_limits_and_validation() {
       "Kanji lookup work limit was not enforced");
 }
 
+void test_radical_controls() {
+  using namespace jwpqt::core;
+  for (std::size_t index = 0; index < 241; ++index) {
+    const auto linked = linked_kanji_radicals(index);
+    for (const auto variant : linked)
+      require(linked_kanji_radicals(variant) == linked, "Radical links are not symmetric");
+  }
+  require(linked_kanji_radicals(64) == std::vector<std::size_t>({64, 65, 66}) &&
+              linked_kanji_radicals(32) == std::vector<std::size_t>({186, 32}) &&
+              linked_kanji_radicals(74) == std::vector<std::size_t>({74}),
+          "Radical links were confused with Bushu variants");
+  require(kanji_radical_stroke_estimate({0, 6, 34, 240}) == 23 &&
+              kanji_radical_stroke_estimate({0, 0}) == 1 &&
+              kanji_radical_stroke_estimate(linked_kanji_radicals(32)) == 9,
+          "Selected radical stroke estimate is incorrect");
+  require_error([] { (void)linked_kanji_radicals(241); }, "Invalid radical link accepted");
+  require_error([] { (void)kanji_radical_stroke_estimate({241}); }, "Invalid estimate accepted");
+  for (int minimum = 1; minimum <= 30; ++minimum) {
+    require(step_kanji_strokes(0, 1, minimum) == minimum &&
+                step_kanji_strokes(minimum, -1, minimum) == 0 &&
+                step_kanji_strokes(30, 1, minimum) == 0 &&
+                step_kanji_strokes(0, -1, minimum) == 30,
+            "Smart stroke spinner does not cycle through Any and valid counts");
+    for (int count = 0; count <= 30; ++count)
+      for (int steps = -64; steps <= 64; ++steps) {
+        int expected = count;
+        for (int remaining = steps; remaining != 0; remaining += remaining > 0 ? -1 : 1) {
+          expected += remaining > 0 ? 1 : -1;
+          if (expected < 0) expected = 30;
+          if (expected > 30) expected = 0;
+          if (expected > 0 && expected < minimum) expected = remaining > 0 ? minimum : 0;
+        }
+        require(step_kanji_strokes(count, steps, minimum) == expected,
+                "Multi-step stroke spinner differs from repeated source stepping");
+      }
+  }
+  require(step_kanji_strokes(0, 1, 999) == 30 && step_kanji_strokes(0, 1, 0) == 1 &&
+              step_kanji_strokes(0, std::numeric_limits<int>::min(), 30) == 0,
+          "Extreme smart step is not safely bounded");
+  require_error([] { (void)step_kanji_strokes(31, 1, 0); }, "Invalid stroke count accepted");
+  const auto radicals = lists({{0x3021, 0x3022}, {}, {0x3022, 0x3023}, {0x3023}});
+  require(kanji_radicals_for_character(radicals, 0x3022) == std::vector<std::size_t>({0, 2}) &&
+              kanji_radicals_for_character(radicals, 0x3024).empty(),
+          "Radical extraction lost source indices or manufactured matches");
+  require_error([&] { (void)kanji_radicals_for_character(radicals, 0x3022, 1); },
+                "Radical extraction ignored work limit");
+  require_error([&] { (void)kanji_radicals_for_character(radicals, 0x2422); },
+                "Kana accepted as a kanji for extraction");
+  const auto empty = lists({{}, {}, {}});
+  require_error([&] { (void)kanji_radicals_for_character(empty, 0x3021, 2); },
+                "Empty groups escaped the radical extraction work budget");
+}
+
 }  // namespace
 
 int main() {
   test_intersection_and_strokes();
   test_limits_and_validation();
+  test_radical_controls();
   return EXIT_SUCCESS;
 }

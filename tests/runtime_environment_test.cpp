@@ -18,6 +18,7 @@
 #include <QImage>
 #include <QKeyEvent>
 #include <QLineEdit>
+#include <QComboBox>
 #include <QLabel>
 #include <QListWidget>
 #include <QMenu>
@@ -1006,6 +1007,17 @@ void test_real_resources(const QString& root, const QString& source,
   const auto radical_results = radical->result_codes();
   require(std::find(radical_results.begin(), radical_results.end(), 0x3026) != radical_results.end(),
           QStringLiteral("Real radical search did not find Love"));
+  const auto before_radical_query = editor->document()->toRawText();
+  QApplication::clipboard()->setText(QStringLiteral("\u611b"));
+  radical->findChild<QPushButton*>(QStringLiteral("kanjiLookupFromClipboard"))->click();
+  require(!radical->selected_radicals().empty(), QStringLiteral("Real kanji-to-radicals extraction failed"));
+  radical->findChild<QSpinBox*>(QStringLiteral("kanjiLookupStrokeCount"))->setValue(12);
+  radical->findChild<QComboBox*>(QStringLiteral("kanjiLookupTolerance"))->setCurrentIndex(1);
+  require(radical->search(), QStringLiteral("Real tolerant radical search failed"));
+  const auto tolerant_results = radical->result_codes();
+  require(std::find(tolerant_results.begin(), tolerant_results.end(), 0x3026) != tolerant_results.end() &&
+              editor->document()->toRawText() == before_radical_query,
+          QStringLiteral("Real extraction/tolerance lost Love or changed the source document"));
   capture(radical, QStringLiteral("lookup-radical"));
 
   open("bushuLookupAction");
