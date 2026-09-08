@@ -890,10 +890,24 @@ void test_real_resources(const QString& root, const QString& source,
   auto compact_preferences = expanded_preferences;
   compact_preferences.dictionary.compact = true;
   require(window.apply_application_settings(compact_preferences) &&
-              dictionary_results->document() == sorted_document && dictionary->search() &&
-              dictionary->report().results.size() == unsorted_count &&
-              dictionary_results->document()->blockCount() == static_cast<int>(unsorted_count),
-          QStringLiteral("Real compact settings changed old results or failed to render one paragraph per record"));
+               dictionary_results->document() == sorted_document && dictionary->search() &&
+               dictionary->report().results.size() == unsorted_count,
+          QStringLiteral("Real compact settings changed old results or source records"));
+  std::vector<bool> priority_flags;
+  for (const auto& entry : dictionary->report().results) priority_flags.push_back(entry.result.priority);
+  const auto presentation = jwpqt::core::prepare_edict_presentation(priority_flags, dictionary->report().sections,
+      {compact_preferences.dictionary.priority_first, compact_preferences.dictionary.priority_separator,
+       compact_preferences.dictionary.advanced_separator});
+  require(dictionary_results->document()->blockCount() == static_cast<int>(presentation.size()) &&
+              presentation.size() > unsorted_count &&
+              dictionary_results->toPlainText().contains(QStringLiteral("End of Priority Entries")),
+          QStringLiteral("Real priority groups or compact entry/label paragraphs were not rendered"));
+  const auto first_entry = std::find_if(presentation.begin(), presentation.end(), [](const auto& item) {
+    return item.kind == jwpqt::core::EdictPresentationKind::kEntry;
+  });
+  require(first_entry != presentation.end() && priority_flags[first_entry->index] &&
+              dictionary_results->textCursor().charFormat().toolTip() == dictionary->report().results[first_entry->index].label,
+          QStringLiteral("Real priority selection lost the first visible entry or provenance"));
   const int compact_love = dictionary_results->toPlainText().indexOf(QChar(0x611b));
   require(compact_love >= 0, QStringLiteral("Compact real results lost Love"));
   QTextCursor compact_cursor(dictionary_results->document());

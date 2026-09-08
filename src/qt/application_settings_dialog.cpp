@@ -151,6 +151,9 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   add_dictionary("settingsDictionaryContingent", tr("Contingent search after eligible exact searches fail"), &EdictLookupOptions::contingent);
   add_dictionary("settingsDictionaryAutomatic", tr("Search a document selection when opening dictionary lookup"), &EdictLookupOptions::automatic_search);
   add_dictionary("settingsDictionaryCompact", tr("Compact results: headword and definitions together"), &EdictLookupOptions::compact);
+  add_dictionary("settingsDictionaryPriority", tr("Show priority entries first within search sections"), &EdictLookupOptions::priority_first);
+  add_dictionary("settingsDictionaryPrioritySeparator", tr("Mark the end of priority entries"), &EdictLookupOptions::priority_separator);
+  add_dictionary("settingsDictionaryAdvancedSeparator", tr("Separate advanced results from earlier searches"), &EdictLookupOptions::advanced_separator);
   add_dictionary("settingsDictionaryLinkNames", tr("Link Advanced with exclusion of personal and place names"), &EdictLookupOptions::link_advanced_names);
   const char* category_labels[] = {
       QT_TR_NOOP("Vulgar expressions"), QT_TR_NOOP("Rude or X-rated terms"),

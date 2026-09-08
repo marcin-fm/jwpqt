@@ -399,7 +399,16 @@ definitions in one paragraph, with comma-separated meanings. It persists as
 their completed layout through sorting or failed searches even if the preference
 changes. Copy preserves exact selected Unicode text and rich text; Insert keeps
 the full canonical entries, including metadata, independently of display layout.
-Priority grouping and separator presentation remain separate porting work.
+Priority grouping and search separators are native. Priority entries are identified
+from the original terminal `/(P)/`, before category filtering, and are grouped
+within their actual search/pass boundaries. Priority and Advanced separators are
+independently configurable; unmarked adaptive searches retain the legacy shared
+boundary behavior. Labels can be copied but never inserted as dictionary entries.
+The view preserves original record provenance while inserting in visible order.
+Explicit Sort removes presentation labels and starts from the displayed ordering;
+later preference changes apply only to a new successful search. The three policies
+persist as `Dict_PriorityEntriesFirst`, `Dict_PrioritySeparator`, and
+`Dict_Adv_SeparatorMark` through Options, configuration and projects.
 
 The lookup's **Options** button opens the Dictionary settings tab; **User
 Dictionary** reuses the application-owned editor and follows its availability.

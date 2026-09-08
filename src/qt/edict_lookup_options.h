@@ -23,6 +23,9 @@ struct EdictLookupOptions {
   bool compact = false;
   bool link_advanced_names = false;
   std::uint32_t category_exclusions = 0;
+  bool priority_first = true;
+  bool priority_separator = true;
+  bool advanced_separator = true;
 };
 
 }  // namespace jwpqt::qt

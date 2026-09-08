@@ -52,6 +52,9 @@ constexpr BooleanDescriptor<ApplicationSettings> kBooleans[] = {
 constexpr BooleanDescriptor<EdictLookupOptions> kDictionaryBooleans[] = {
     {"Dict_AutoSearch", "dict_auto", &EdictLookupOptions::automatic_search},
     {"Dict_Compact", "dict_compress", &EdictLookupOptions::compact},
+    {"Dict_PriorityEntriesFirst", "dict_primaryfirst", &EdictLookupOptions::priority_first},
+    {"Dict_PrioritySeparator", "dict_primark", &EdictLookupOptions::priority_separator},
+    {"Dict_Adv_SeparatorMark", "dict_advmark", &EdictLookupOptions::advanced_separator},
     {"Dict_Link_Adv_NoNames", "dict_link_adv_noname", &EdictLookupOptions::link_advanced_names},
     {"Dict_AdvancedSearches", "dict_advanced", &EdictLookupOptions::advanced},
     {"Dict_ContingentSearches", "dict_contingent", &EdictLookupOptions::contingent},

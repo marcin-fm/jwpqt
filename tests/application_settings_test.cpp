@@ -171,13 +171,14 @@ void test_dictionary_settings() {
               defaults.dictionary.i_adjectives && !defaults.dictionary.classical &&
                !defaults.dictionary.full_ascii && !defaults.dictionary.jascii_to_ascii &&
                 !defaults.dictionary.contingent && defaults.dictionary.automatic_search && !defaults.dictionary.compact &&
-               !defaults.dictionary.link_advanced_names,
+               !defaults.dictionary.link_advanced_names && defaults.dictionary.priority_first &&
+               defaults.dictionary.priority_separator && defaults.dictionary.advanced_separator,
           "Dictionary defaults differ from the source");
   auto settings = read_application_settings(
       "dict_advanced=no\nDiCt_AdvancedSearches=yes\ndict_always=false\n"
       "dict_showall=true\ndict_iadj=false\ndict_classical=true\ndict_contingent=yes\ndict_auto=false\n"
       "dict_fullascii=true\ndict_jascii2ascii=true\ndict_bits=0x80000006\ndict_compress=yes\n"
-      "dict_link_adv_noname=yes\nDICT_BITS=bad\nDict_PriorityEntriesFirst=true\nFuture=\xff\n");
+       "dict_link_adv_noname=yes\nDICT_BITS=bad\nFuture_Presentation=true\nFuture=\xff\n");
   require(settings.dictionary.link_advanced_names && settings.dictionary.compact && !settings.dictionary.automatic_search && settings.dictionary.contingent && settings.dictionary.advanced && !settings.dictionary.advanced_always &&
               settings.dictionary.advanced_show_all && !settings.dictionary.i_adjectives &&
               settings.dictionary.classical && settings.dictionary.full_ascii &&
@@ -193,7 +194,7 @@ void test_dictionary_settings() {
               restored.dictionary.compact && restored.dictionary.contingent && write_application_settings(restored) == encoded &&
               encoded.find("Dict_ExclusionFilters = 0x80000006") != std::string::npos &&
               encoded.find("DICT_BITS=bad\n") != std::string::npos &&
-              encoded.find("Dict_PriorityEntriesFirst=true\n") != std::string::npos &&
+               encoded.find("Future_Presentation=true\n") != std::string::npos &&
               encoded.find("Future=\xff\n") != std::string::npos &&
               encoded.find("dict_advanced=") == std::string::npos,
           "Dictionary settings did not preserve unknown values and canonicalize aliases");
@@ -230,6 +231,13 @@ void test_dictionary_settings() {
     rejects([&] { (void)read_application_settings(bad, settings); });
   }
   const auto overlay = read_application_settings("Dict_AdvancedSearches=false", settings);
+  const auto presentation = read_application_settings("dict_primaryfirst=false\ndict_primark=no\ndict_advmark=false");
+  const auto presentation_copy = read_application_settings(write_application_settings(presentation));
+  require(!presentation_copy.dictionary.priority_first && !presentation_copy.dictionary.priority_separator &&
+          !presentation_copy.dictionary.advanced_separator, "Presentation aliases did not persist");
+  for (const auto* bad : {"Dict_PriorityEntriesFirst=bad\ndict_primaryfirst=true",
+                          "dict_primark=2", "Dict_Adv_SeparatorMark=bad\ndict_advmark=true"})
+    rejects([&] { (void)read_application_settings(bad); });
   require(!overlay.dictionary.advanced && settings.dictionary.advanced &&
               overlay.dictionary_extra_exclusions == settings.dictionary_extra_exclusions &&
               overlay.dictionary.require_end && overlay.dictionary.place_names,

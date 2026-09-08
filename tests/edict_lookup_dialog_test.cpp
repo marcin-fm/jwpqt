@@ -317,6 +317,72 @@ void test_search_render_status_copy_and_insert() {
           "Dictionary insertion callback did not receive every selected row");
 }
 
+void test_priority_presentation() {
+  namespace qt = jwpqt::qt;
+  namespace core = jwpqt::core;
+  auto options = std::make_shared<qt::EdictLookupOptions>();
+  options->compact = true;
+  auto history = std::make_shared<core::QueryHistory>();
+  bool malformed = false;
+  std::u32string inserted;
+  qt::EdictLookupDialog dialog([&](const auto&, const auto&, bool) {
+    qt::EdictResourceSearchReport report;
+    report.results = {result(0, "D0", U"d0", {}, {U"ordinary"}),
+                      result(1, "P1", U"p1", {}, {U"priority", U"(P)"}),
+                      result(2, "A2", U"a2", {}, {U"ordinary"}),
+                      result(3, "P3", U"p3", {}, {U"priority", U"(P)"})};
+    report.results[1].result.priority = report.results[3].result.priority = true;
+    report.sections = {{core::EdictSearchStage::kDirect, 0, true},
+                       {core::EdictSearchStage::kAdaptive, malformed ? 99U : 2U}};
+    return report;
+  }, [&](const auto& text) { inserted = text; return true; }, nullptr, {}, options, history);
+  dialog.set_query(U"cat");
+  dialog.show();
+  require(dialog.search(), "Priority presentation search failed");
+  auto* view = dialog.findChild<QTextEdit*>("edictResults");
+  auto* query = dialog.findChild<QLineEdit*>("edictQuery");
+  require(view->document()->blockCount() == 7 && view->textCursor().selectedText().startsWith("p1") &&
+          view->textCursor().charFormat().toolTip() == "P1" &&
+          dialog.report().results[0].result.record.headword == U"d0",
+          "Presentation lost first visible entry, provenance or original report order");
+  view->selectAll();
+  require(dialog.insert_selected() && inserted == U"p1 /priority/(P)/\nd0 /ordinary/\np3 /priority/(P)/\na2 /ordinary/",
+          "Labels became insertable or entries used backend rather than visible order");
+  view->setTextCursor(view->document()->find("End of Priority Entries"));
+  const auto before = inserted;
+  require(!dialog.insert_selected() && inserted == before,
+          "A label-only selection inserted an entry");
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() == "End of Priority Entries", "Label Copy differs from displayed text");
+  const QPointer<QTextDocument> document = view->document();
+  const int start = view->textCursor().selectionStart(), end = view->textCursor().selectionEnd();
+  const auto remembered = history->entries();
+  malformed = true;
+  require(!dialog.search() && view->document() == document && view->textCursor().selectionStart() == start &&
+          view->textCursor().selectionEnd() == end && history->entries() == remembered,
+          "Malformed presentation destroyed completed results or history");
+  malformed = false;
+  auto* marker = dialog.findChild<QCheckBox*>("edictAdvancedSeparator");
+  marker->setChecked(false);
+  require(view->document() == document && query->text() == "cat", "Marker preference reformatted old results");
+  require(dialog.search() && view->document()->blockCount() == 5 &&
+          !qt::document_plain_text(*view->document()).contains("Advanced"), "Unmarked adaptive layout failed");
+  view->selectAll();
+  require(dialog.insert_selected() && inserted == U"p1 /priority/(P)/\np3 /priority/(P)/\nd0 /ordinary/\na2 /ordinary/",
+          "Shared priority boundary lost visible insertion ordering");
+  require(dialog.sort_results() && view->document()->blockCount() == 4 &&
+          !qt::document_plain_text(*view->document()).contains("Priority") && dialog.report().sections.empty(),
+          "Sort retained presentation labels or invalid phase indices");
+  const QPointer<QTextDocument> sorted = view->document();
+  options->advanced_separator = true;
+  require(dialog.sort_results() && view->document()->blockCount() == 4 && !sorted,
+          "Later Sort recreated priority presentation");
+  dialog.findChild<QCheckBox*>("edictPriority")->setChecked(false);
+  require(dialog.search() && view->textCursor().selectedText().startsWith("d0") &&
+          view->document()->blockCount() == 5, "Disabling priority also disabled advanced headings");
+  dialog.grab().save(QStringLiteral("dictionary-priority.png"));
+}
+
 void test_compact_presentation() {
   using namespace jwpqt;
   qt::EdictLookupDialog* owner = nullptr;
@@ -1313,6 +1379,7 @@ int main(int argc, char** argv) {
     test_linked_names();
     test_search_render_status_copy_and_insert();
     test_compact_presentation();
+    test_priority_presentation();
     test_empty_invalid_and_failed_search_are_contained();
     test_result_sorting();
     test_search_controls();

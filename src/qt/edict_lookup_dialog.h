@@ -14,6 +14,7 @@
 #include "edict_resource_search.h"
 #include "edict_lookup_options.h"
 #include "jwpqt/core/edict_sort.h"
+#include "jwpqt/core/edict_presentation.h"
 #include "jwpqt/core/query_history.h"
 
 class QAction;
@@ -75,7 +76,8 @@ class EdictLookupDialog : public QDialog {
   bool recall_history(std::u32string_view text, int index, bool changed);
   bool publish_results(EdictResourceSearchReport report, int sort_state,
                        bool reverse, bool query_had_kanji, bool compact,
-                       core::QueryHistory* history = nullptr);
+                       core::QueryHistory* history = nullptr,
+                       const core::EdictPresentationOptions* presentation = nullptr);
   void update_actions();
   void show_status();
 
@@ -117,6 +119,7 @@ class EdictLookupDialog : public QDialog {
   EdictResourceSearchReport report_;
   std::vector<std::u32string> rendered_rows_;
   std::vector<std::pair<int, int>> row_ranges_;
+  std::vector<std::size_t> display_order_;
 };
 
 }  // namespace jwpqt::qt

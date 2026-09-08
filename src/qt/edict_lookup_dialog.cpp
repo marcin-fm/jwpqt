@@ -188,6 +188,19 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   options->addWidget(advanced_controls);
   outer->addLayout(options);
 
+  auto* presentation_row = new QHBoxLayout();
+  auto* priority = new QCheckBox(tr("Priority entries first"), this);
+  auto* priority_mark = new QCheckBox(tr("Priority separator"), this);
+  auto* advanced_mark = new QCheckBox(tr("Mark advanced results"), this);
+  priority->setObjectName(QStringLiteral("edictPriority"));
+  priority_mark->setObjectName(QStringLiteral("edictPrioritySeparator"));
+  advanced_mark->setObjectName(QStringLiteral("edictAdvancedSeparator"));
+  presentation_row->addWidget(priority);
+  presentation_row->addWidget(priority_mark);
+  presentation_row->addWidget(advanced_mark);
+  presentation_row->addStretch();
+  outer->addLayout(presentation_row);
+
   option_bindings_ = {
       {personal_names_, &EdictLookupOptions::personal_names},
       {place_names_, &EdictLookupOptions::place_names},
@@ -200,7 +213,10 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
       {i_adjectives_, &EdictLookupOptions::i_adjectives},
       {full_ascii_, &EdictLookupOptions::full_ascii},
       {jascii_to_ascii_, &EdictLookupOptions::jascii_to_ascii},
-      {contingent_, &EdictLookupOptions::contingent}};
+      {contingent_, &EdictLookupOptions::contingent},
+      {priority, &EdictLookupOptions::priority_first},
+      {priority_mark, &EdictLookupOptions::priority_separator},
+      {advanced_mark, &EdictLookupOptions::advanced_separator}};
   for (const auto& binding : option_bindings_) {
     auto* checkbox = binding.first;
     checkbox->setChecked((*options_).*binding.second);
@@ -362,7 +378,9 @@ bool EdictLookupDialog::search(bool force_contingent) {
     history.remember(history_text);
     const bool had_kanji = std::any_of(query.begin(), query.end(),
         [](core::JisCode code) { return code >= 0x3000U; });
-    if (!publish_results(std::move(candidate), -1, false, had_kanji, options.compact, &history)) return false;
+    const core::EdictPresentationOptions presentation{
+        options.priority_first, options.priority_separator, options.advanced_separator};
+    if (!publish_results(std::move(candidate), -1, false, had_kanji, options.compact, &history, &presentation)) return false;
     show_status();
     if (!history_->find(history_text)) {
       status_->setText(status_->text() + tr("; query was not retained in bounded history"));
@@ -405,12 +423,13 @@ bool EdictLookupDialog::sort_results(Qt::KeyboardModifiers modifiers,
     options.headword_length = query_had_kanji_;
     std::vector<std::reference_wrapper<const core::EdictRecord>> records;
     records.reserve(report_.results.size());
-    for (const auto& result : report_.results) records.emplace_back(result.result.record);
+    for (std::size_t index : display_order_) records.emplace_back(report_.results[index].result.record);
     const auto order = core::sort_edict_records(records, options, limits);
     EdictResourceSearchReport candidate = report_;
     candidate.results.clear();
+    candidate.sections.clear();  // Explicit Sort removes search presentation labels.
     candidate.results.reserve(order.size());
-    for (std::size_t index : order) candidate.results.push_back(report_.results[index]);
+    for (std::size_t index : order) candidate.results.push_back(report_.results[display_order_[index]]);
     if (!publish_results(std::move(candidate), state, reverse, query_had_kanji_, compact_results_)) return false;
     show_status();
     update_actions();
@@ -427,19 +446,47 @@ bool EdictLookupDialog::sort_results(Qt::KeyboardModifiers modifiers,
 bool EdictLookupDialog::publish_results(EdictResourceSearchReport candidate,
                                        int sort_state, bool reverse,
                                        bool query_had_kanji, bool compact,
-                                       core::QueryHistory* history) {
+                                       core::QueryHistory* history,
+                                       const core::EdictPresentationOptions* presentation) {
   std::vector<std::u32string> rows;
   rows.reserve(candidate.results.size());
   for (const auto& result : candidate.results) rows.push_back(render_row(result.result.record));
+
+  std::vector<core::EdictPresentationItem> items;
+  if (presentation) {
+    std::vector<bool> priority;
+    priority.reserve(candidate.results.size());
+    for (const auto& result : candidate.results) priority.push_back(result.result.priority);
+    items = core::prepare_edict_presentation(priority, candidate.sections, *presentation);
+  } else {
+    for (std::size_t i = 0; i < rows.size(); ++i) items.push_back({core::EdictPresentationKind::kEntry, i});
+  }
 
   auto document = std::make_unique<QTextDocument>();
   document->setDefaultFont(results_->font());
   document->setUndoRedoEnabled(false);
   QTextCursor cursor(document.get());
   std::vector<std::pair<int, int>> ranges;
-  ranges.reserve(rows.size());
-  for (const auto& result : candidate.results) {
-    if (!ranges.empty()) cursor.insertBlock();
+  ranges.resize(rows.size());
+  std::vector<std::size_t> display_order;
+  display_order.reserve(rows.size());
+  bool first = true;
+  for (const auto& item : items) {
+    if (!first) cursor.insertBlock();
+    first = false;
+    cursor.setBlockFormat(QTextBlockFormat{});
+    if (item.kind != core::EdictPresentationKind::kEntry) {
+      QTextBlockFormat heading;
+      heading.setAlignment(Qt::AlignCenter);
+      cursor.setBlockFormat(heading);
+      QTextCharFormat style;
+      style.setFontWeight(QFont::Bold);
+      const QString label = item.kind == core::EdictPresentationKind::kPriorityEnd ? tr("End of Priority Entries") :
+          item.kind == core::EdictPresentationKind::kContingent ? tr("No Exact Matches") : tr("Advanced");
+      cursor.insertText(label, style);
+      continue;
+    }
+    const auto& result = candidate.results[item.index];
     const int start = cursor.position();
     cursor.setBlockFormat(QTextBlockFormat{});
     QTextCharFormat format;
@@ -463,13 +510,15 @@ bool EdictLookupDialog::publish_results(EdictResourceSearchReport candidate,
     QStringList meanings;
     for (const auto& meaning : record.definitions) meanings.push_back(to_qstring(meaning));
     cursor.insertText(meanings.join(compact ? QStringLiteral(", ") : QStringLiteral("; ")), format);
-    ranges.emplace_back(start, cursor.position());
+    ranges[item.index] = {start, cursor.position()};
+    display_order.push_back(item.index);
   }
 
   // Publish all logical state before widget signals can invoke external handlers.
   report_ = std::move(candidate);
   rendered_rows_ = std::move(rows);
   row_ranges_ = std::move(ranges);
+  display_order_ = std::move(display_order);
   sort_state_ = sort_state;
   sort_reverse_ = reverse;
   query_had_kanji_ = query_had_kanji;
@@ -488,7 +537,9 @@ bool EdictLookupDialog::publish_results(EdictResourceSearchReport candidate,
   if (!self) return false;
   if (!rendered_rows_.empty()) {
     QTextCursor selected(results_->document());
-    selected.setPosition(row_ranges_.front().second, QTextCursor::KeepAnchor);
+    const auto& range = row_ranges_[display_order_.front()];
+    selected.setPosition(range.first);
+    selected.setPosition(range.second, QTextCursor::KeepAnchor);
     results_->setTextCursor(selected);
     if (!self) return false;
     results_->setFocus();
@@ -720,7 +771,7 @@ std::u32string EdictLookupDialog::selected_rows() const {
   std::u32string rows;
   const QTextCursor cursor = results_->textCursor();
   if (!cursor.hasSelection()) return rows;
-  for (std::size_t row = 0; row < row_ranges_.size(); ++row) {
+  for (std::size_t row : display_order_) {
     if (cursor.selectionEnd() <= row_ranges_[row].first ||
         cursor.selectionStart() >= row_ranges_[row].second) {
       continue;
@@ -734,7 +785,10 @@ std::u32string EdictLookupDialog::selected_rows() const {
 }
 
 void EdictLookupDialog::update_actions() {
-  insert_button_->setEnabled(insert_handler_ && results_->textCursor().hasSelection());
+  const auto cursor = results_->textCursor();
+  const bool entry_selected = cursor.hasSelection() && std::any_of(row_ranges_.begin(), row_ranges_.end(),
+      [&cursor](const auto& range) { return cursor.selectionEnd() > range.first && cursor.selectionStart() < range.second; });
+  insert_button_->setEnabled(insert_handler_ && entry_selected);
   sort_button_->setEnabled(!report_.results.empty());
 }
 
