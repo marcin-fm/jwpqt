@@ -58,6 +58,8 @@ add_library(jwpqt_qt_ui STATIC
   edict_results_window.cpp
   edict_results_window.h
   edict_user_dictionary_dialog.cpp
+  edict_registry_dialog.cpp
+  edict_registry_dialog.h
   edict_user_dictionary_dialog.h
   jis_table_dialog.cpp
   jis_table_dialog.h

@@ -55,6 +55,13 @@ void write_wnn_user_dictionary_file(
 std::optional<core::EdictRegistry> read_edict_registry_file(
     const QString& path,
     const core::EdictRegistryLimits& limits = core::EdictRegistryLimits{});
+struct EdictRegistrySnapshot {
+  core::EdictRegistry registry;
+  std::optional<std::string> source;
+};
+EdictRegistrySnapshot read_edict_registry_snapshot(const QString& path);
+void write_edict_registry_checked(const QString& path, const core::EdictRegistry& registry,
+                                 const std::optional<std::string>& expected_source);
 void write_edict_registry_file(
     const QString& path, const core::EdictRegistry& registry,
     const core::EdictRegistryLimits& limits = core::EdictRegistryLimits{});

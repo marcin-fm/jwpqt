@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "main_window.h"
+#include <QStringView>
 #include "toolbar_dialog.h"
 #include <QTimer>
 #include "help_window.h"
@@ -84,6 +85,7 @@
 #include "edict_results_window.h"
 #include "edict_resources.h"
 #include "edict_user_dictionary_dialog.h"
+#include "edict_registry_dialog.h"
 #include "file_io.h"
 #include "jis_table_dialog.h"
 #include "japanese_fonts.h"
@@ -231,7 +233,7 @@ QString decode_registry_text(const core::EdictRegistry& registry,
                              core::LegacyCodePage code_page) {
   if (registry.wire_encoding ==
       core::EdictRegistryWireEncoding::kUtf16Le) {
-    return QString::fromStdU16String(std::u16string(text));
+    return QStringView(text).toString();
   }
   std::u32string decoded;
   decoded.reserve(text.size());
@@ -252,6 +254,9 @@ QString decode_registry_text(const core::EdictRegistry& registry,
 }
 
 std::size_t ensure_edict_user_entry(core::EdictRegistry& registry) {
+  if (std::count_if(registry.entries.begin(), registry.entries.end(), [](const auto& entry) {
+        return entry.special == core::EdictRegistrySpecial::kUser;
+      }) > 1) throw core::EdictRegistryError("Only one editable user dictionary is supported");
   for (std::size_t i = 0; i < registry.entries.size(); ++i) {
     if (registry.entries[i].special == core::EdictRegistrySpecial::kUser) {
       const core::EdictRegistryEntry& entry = registry.entries[i];
@@ -283,8 +288,8 @@ QString resolve_registry_path(const QString& path,
     throw std::runtime_error("Dictionary path is empty");
   }
   return QDir::isAbsolutePath(path)
-             ? QDir::cleanPath(path)
-             : QDir::cleanPath(QDir(config_directory).absoluteFilePath(path));
+             ? path
+             : config_directory + QLatin1Char('/') + path;
 }
 
 std::size_t utf32_offset_for_utf16(const QString& text, int offset) {
@@ -1204,9 +1209,9 @@ bool MainWindow::confirm_query_history_change(const QString& message, OpenMode m
 void MainWindow::check_history_destination(const QString& path) const {
   if (find_document_path(path) >= 0)
     throw core::QueryHistoryError("History cannot overwrite an open document");
-  for (const auto& other : {application_settings_path_, recent_files_path_, project_path_})
+  for (const auto& other : {application_settings_path_, recent_files_path_, project_path_, edict_registry_path_})
     if (!other.isEmpty() && document_path_identity(other) == document_path_identity(path))
-      throw core::QueryHistoryError("History cannot overwrite settings, recent files or the current project");
+      throw core::QueryHistoryError("History cannot overwrite settings, recent files, the current project or dictionary registry");
 }
 
 bool MainWindow::load_query_history(const QString& path, OpenMode mode) {
@@ -1789,15 +1794,54 @@ bool MainWindow::has_kanji_lookup() const noexcept {
 
 bool MainWindow::load_edict_configuration(const QString& registry_path,
                                           OpenMode mode) {
+  if (edict_registry_path_.isEmpty()) edict_registry_path_ = absolute_document_path(registry_path);
   try {
-    const std::optional<core::EdictRegistry> loaded =
-        read_edict_registry_file(registry_path);
-    core::EdictRegistry registry = loaded.value_or(core::EdictRegistry{});
-    const QString directory = QFileInfo(registry_path).absolutePath();
+    return configure_edict_registry(registry_path, read_edict_registry_snapshot(registry_path).registry,
+                                    nullptr, true, mode);
+  } catch (const std::exception& error) {
+    if (mode == OpenMode::kInteractive) show_error(tr("Could not load dictionary configuration"), error);
+    return false;
+  }
+}
+
+bool MainWindow::save_edict_configuration(const QString& path, core::EdictRegistry registry,
+    const std::optional<std::string>& expected_source, bool allow_unavailable, OpenMode mode) {
+  return configure_edict_registry(path, std::move(registry), &expected_source, allow_unavailable, mode);
+}
+
+bool MainWindow::configure_edict_registry(const QString& registry_path, core::EdictRegistry registry,
+    const std::optional<std::string>* expected_source, bool allow_unavailable, OpenMode mode) {
+  const QPointer<MainWindow> self(this);
+  try {
+    const auto absolute = absolute_document_path(registry_path);
+    const QString directory = absolute.left(std::max(1, static_cast<int>(absolute.lastIndexOf('/'))));
+    if (expected_source) {
+      if (edict_user_dictionary_dialog_)
+        throw core::EdictRegistryError("Close the User Dictionary editor before replacing its resources");
+      if (find_document_path(registry_path) >= 0)
+        throw core::EdictRegistryError("The registry cannot overwrite an open document");
+      for (const auto& other : {application_settings_path_, recent_files_path_, project_path_, query_history_path_})
+        if (!other.isEmpty() && document_path_identity(other) == document_path_identity(registry_path))
+          throw core::EdictRegistryError("The registry cannot overwrite another application state file");
+    }
     const std::size_t user_index = ensure_edict_user_entry(registry);
+    (void)core::serialize_edict_registry(registry);
     const core::EdictRegistryEntry& user_entry = registry.entries[user_index];
     const core::LegacyCodePage user_code_page =
-        core::kDefaultLegacyCodePage;
+        default_jwp_code_page();
+    if (expected_source) {
+      for (const auto& entry : registry.entries) {
+        if (entry.label.empty() || entry.path.empty()) throw core::EdictRegistryError("Every dictionary needs a name and path");
+        const auto path = resolve_registry_path(decode_registry_text(registry, entry.path, user_code_page), directory);
+        if (document_path_identity(path) == document_path_identity(registry_path) ||
+            (entry.indexed && document_path_identity(edict_index_path(path)) == document_path_identity(registry_path)))
+          throw core::EdictRegistryError("The registry cannot overwrite dictionary data or indexes");
+      }
+      if (edict_resources_) for (const auto& resource : edict_resources_->resources)
+        if (document_path_identity(resource.source_path) == document_path_identity(registry_path) ||
+            (resource.index_path && document_path_identity(*resource.index_path) == document_path_identity(registry_path)))
+          throw core::EdictRegistryError("The registry cannot overwrite a loaded dictionary");
+    }
     const QString user_path = resolve_registry_path(
         decode_registry_text(registry, user_entry.path, user_code_page),
         directory);
@@ -1809,30 +1853,86 @@ bool MainWindow::load_edict_configuration(const QString& registry_path,
         EdictUserResources{loaded_user ? std::move(*loaded_user)
                                        : core::EdictUserDictionary{},
                            user_path, user_label, user_index, user_code_page});
-    auto candidate = std::make_unique<EdictResourceSet>(
-        load_edict_resources(registry, directory));
+    EdictResourceLoadOptions options;
+    options.ansi_code_page = options.mixed_code_page = user_code_page;
+    auto candidate = std::make_unique<EdictResourceSet>(load_edict_resources(registry, directory, options));
+    if (expected_source) {
+      if (candidate->truncated) throw core::EdictRegistryError("Dictionary resource limits exceeded");
+      if (!allow_unavailable) for (const auto& failure : candidate->failures) {
+        if (failure.registry_index == user_index && !loaded_user) continue;
+        throw core::EdictRegistryError(failure.message.toStdString());
+      }
+      write_edict_registry_checked(registry_path, registry, *expected_source);
+    }
 
-    delete edict_lookup_dialog_;
-    edict_lookup_dialog_ = nullptr;
-    delete edict_results_window_;
-    edict_results_window_ = nullptr;
+    // Managed saves retain owning result snapshots and pending queries. Ordinary
+    // explicit reload preserves its existing close/reopen contract.
+    if (!expected_source) {
+      delete edict_lookup_dialog_;
+      edict_lookup_dialog_ = nullptr;
+      delete edict_results_window_;
+      edict_results_window_ = nullptr;
+    }
     delete edict_user_dictionary_dialog_;
     edict_user_dictionary_dialog_ = nullptr;
     edict_resources_ = std::move(candidate);
     edict_user_resources_ = std::move(candidate_user);
     edict_config_directory_ = directory;
+    edict_registry_path_ = absolute;
+    edict_resource_code_page_ = user_code_page;
     update_resource_status();
+    if (!self) return true;
     update_edict_actions();
+    if (!self) return true;
     statusBar()->showMessage(
         tr("Loaded %1 dictionary resources")
             .arg(static_cast<qulonglong>(edict_resources_->resources.size())),
         3000);
     return true;
   } catch (const std::exception& error) {
-    if (mode == OpenMode::kInteractive) {
-      show_error(tr("Could not load dictionary configuration"), error);
+    if (self && mode == OpenMode::kInteractive) {
+      show_error(expected_source ? tr("Could not save dictionary configuration")
+                                 : tr("Could not load dictionary configuration"), error);
     }
     return false;
+  }
+}
+
+void MainWindow::manage_edict_registry() {
+  const QPointer<MainWindow> self(this);
+  try {
+    QString path = edict_registry_path_;
+    if (path.isEmpty()) path = QFileDialog::getSaveFileName(this, tr("Dictionary Registry"),
+        QStringLiteral("dict.cfg"), tr("Dictionary registry (*.cfg)"));
+    if (!self || path.isEmpty()) return;
+    auto snapshot = read_edict_registry_snapshot(path);
+    auto registry = snapshot.registry;
+    if (registry.wire_encoding == core::EdictRegistryWireEncoding::kAnsiBytes) {
+      QStringList pages;
+      for (int page = 1250; page <= 1258; ++page) pages << QString::number(page);
+      bool accepted = false;
+      const auto chosen = QInputDialog::getItem(this, tr("ANSI Registry Migration"),
+          tr("Choose the ORIGINAL Windows code page for names and paths.\nSave will convert the staged registry to Unicode; Cancel leaves the source unchanged."),
+          pages, 2, false, &accepted);
+      if (!self || !accepted) return;
+      const auto page = static_cast<core::LegacyCodePage>(chosen.toInt());
+      for (auto& entry : registry.entries) {
+        entry.label = decode_registry_text(registry, entry.label, page).toStdU16String();
+        entry.path = decode_registry_text(registry, entry.path, page).toStdU16String();
+      }
+      registry.wire_encoding = core::EdictRegistryWireEncoding::kUtf16Le;
+    }
+    ensure_edict_user_entry(registry);
+    const auto absolute = absolute_document_path(path);
+    QPointer<EdictRegistryDialog> dialog = new EdictRegistryDialog(std::move(registry),
+        absolute.left(std::max(1, static_cast<int>(absolute.lastIndexOf('/')))), default_jwp_code_page(), this);
+    while (dialog && dialog->exec() == QDialog::Accepted && self) {
+      if (save_edict_configuration(path, dialog->registry(), snapshot.source,
+                                  dialog->allow_unavailable(), OpenMode::kInteractive)) break;
+    }
+    if (dialog) delete dialog;
+  } catch (const std::exception& error) {
+    if (self) show_error(tr("Could not manage dictionaries"), error);
   }
 }
 
@@ -2522,6 +2622,9 @@ void MainWindow::create_actions() {
       QStringLiteral("edictUserDictionaryAction"));
   connect(edict_user_dictionary_action_, &QAction::triggered, this,
           [this] { show_edict_user_dictionary_dialog(); });
+  auto* registry_action = tools_menu->addAction(tr("Manage &Dictionaries..."));
+  registry_action->setObjectName(QStringLiteral("edictRegistryAction"));
+  connect(registry_action, &QAction::triggered, this, &MainWindow::manage_edict_registry);
 
   kanji_info_action_ = tools_menu->addAction(tr("Character &Information"));
   kanji_info_action_->setObjectName(QStringLiteral("kanjiInfoAction"));
@@ -4289,6 +4392,7 @@ void MainWindow::show_edict_lookup_dialog() {
           throw std::runtime_error("Dictionary resources are not available");
         }
         EdictResourceSearchOptions search;
+        search.reload.ansi_code_page = search.reload.mixed_code_page = edict_resource_code_page_;
         search.personal_names = options.personal_names;
         search.place_names = options.place_names;
         search.classical = options.classical;
@@ -4321,7 +4425,8 @@ void MainWindow::show_edict_lookup_dialog() {
   auto* dictionary_options = new QAction(tr("Dictionary Options..."), dialog);
   connect(dictionary_options, &QAction::triggered, this,
           [this] { configure_application_settings(true); });
-  dialog->set_management_actions(dictionary_options, edict_user_dictionary_action_);
+  dialog->set_management_actions(dictionary_options, edict_user_dictionary_action_,
+      findChild<QAction*>(QStringLiteral("edictRegistryAction")));
   dialog->set_overwrite_action(overwrite_action_);
   dialog->setAttribute(Qt::WA_DeleteOnClose);
   connect(dialog, &QObject::destroyed, this,

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "file_io.h"
+
 #include <algorithm>
 #include <cstdlib>
 #include <iostream>
@@ -886,6 +888,15 @@ void test_real_resources(const QString& root, const QString& source,
             QStringLiteral("A new native owner could not restore the real dictionary query"));
   }
 
+  const auto registry_snapshot = jwpqt::qt::read_edict_registry_snapshot(registry_path);
+  const auto previous_resource_count = window.edict_resources()->resources.size();
+  require(window.save_edict_configuration(registry_path, registry_snapshot.registry, registry_snapshot.source) &&
+              window.edict_resources()->resources.size() == previous_resource_count &&
+              dictionary_results->document() == sorted_document &&
+              dictionary_results->textCursor().position() == sorted_position &&
+              dictionary_results->textCursor().anchor() == sorted_anchor &&
+              query_edit->text() == QStringLiteral("\u3042\u3044"),
+          QStringLiteral("Real registry save/reload changed resource count, query or sorted selection"));
   const auto expanded_preferences = window.application_settings();
   auto compact_preferences = expanded_preferences;
   compact_preferences.dictionary.compact = true;

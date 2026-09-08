@@ -121,7 +121,8 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
       insert_button_(new QPushButton(tr("&Insert in Document"), this)),
       sort_button_(new QPushButton(tr("S&ort"), this)),
       options_button_(new QToolButton(this)),
-      user_dictionary_button_(new QToolButton(this)) {
+      user_dictionary_button_(new QToolButton(this)),
+      registry_button_(new QToolButton(this)) {
   setObjectName(QStringLiteral("edictLookupDialog"));
   setWindowTitle(tr("Dictionary Lookup"));
   setModal(false);
@@ -265,7 +266,8 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   buttons->addButton(insert_button_, QDialogButtonBox::ActionRole);
   options_button_->setObjectName(QStringLiteral("edictOptions"));
   user_dictionary_button_->setObjectName(QStringLiteral("edictUserDictionary"));
-  for (auto* button : {options_button_, user_dictionary_button_}) {
+  registry_button_->setObjectName(QStringLiteral("edictRegistry"));
+  for (auto* button : {options_button_, user_dictionary_button_, registry_button_}) {
     button->setToolButtonStyle(Qt::ToolButtonTextOnly);
     buttons->addButton(button, QDialogButtonBox::ActionRole);
   }
@@ -298,13 +300,15 @@ void EdictLookupDialog::set_overwrite_action(QAction* action) {
   query_field_->set_overwrite_action(action);
 }
 
-void EdictLookupDialog::set_management_actions(QAction* options, QAction* user_dictionary) {
+void EdictLookupDialog::set_management_actions(QAction* options, QAction* user_dictionary, QAction* registry) {
   for (const auto& binding : {std::make_pair(options_button_, options),
-                             std::make_pair(user_dictionary_button_, user_dictionary)}) {
+                             std::make_pair(user_dictionary_button_, user_dictionary),
+                             std::make_pair(registry_button_, registry)}) {
     auto* button = binding.first;
     const QPointer<QAction> source(binding.second);
     delete button->defaultAction();
-    auto* proxy = new QAction(button == options_button_ ? tr("Options...") : tr("User Dictionary..."), button);
+    auto* proxy = new QAction(button == options_button_ ? tr("Options...") :
+        button == registry_button_ ? tr("Dictionaries...") : tr("User Dictionary..."), button);
     proxy->setEnabled(source && source->isEnabled());
     button->setDefaultAction(proxy);
     if (!source) continue;

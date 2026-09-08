@@ -47,7 +47,7 @@ class EdictLookupDialog : public QDialog {
   void set_query(std::u32string_view query);
   std::u32string query() const;
   void set_overwrite_action(QAction* action);
-  void set_management_actions(QAction* options, QAction* user_dictionary);
+  void set_management_actions(QAction* options, QAction* user_dictionary, QAction* registry = nullptr);
   void set_options(const EdictLookupOptions& options);
   void reset_history_navigation() noexcept {
     history_index_ = -1;
@@ -116,6 +116,7 @@ class EdictLookupDialog : public QDialog {
   QPushButton* sort_button_;
   QToolButton* options_button_;
   QToolButton* user_dictionary_button_;
+  QToolButton* registry_button_;
   EdictResourceSearchReport report_;
   std::vector<std::u32string> rendered_rows_;
   std::vector<std::pair<int, int>> row_ranges_;

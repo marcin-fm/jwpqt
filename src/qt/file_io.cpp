@@ -8,12 +8,17 @@
 #include <system_error>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include <QByteArray>
+#include <QDir>
 #include <QFile>
 #include <QFileDevice>
 #include <QFileInfo>
+#include <QLockFile>
 #include <QSaveFile>
+
+#include "text_bridge.h"
 
 namespace jwpqt::qt {
 namespace {
@@ -93,6 +98,35 @@ core::TextFile read_text_file(const QString& path,
                               core::TextEncoding encoding) {
   const std::string bytes = read_file_bytes(path);
   return core::decode_text_file(bytes, encoding);
+}
+
+EdictRegistrySnapshot read_edict_registry_snapshot(const QString& path) {
+  if (path.isEmpty() || path.size() > 65536 || path.contains(QChar::Null) ||
+      to_qstring(from_qstring(path)) != path)
+    throw core::EdictRegistryError("Invalid dictionary registry path");
+  if (path_is_missing(path)) return {};
+  auto bytes = read_file_bytes(path, core::EdictRegistryLimits{}.encoded_bytes);
+  auto registry = core::parse_edict_registry(bytes);
+  return {std::move(registry), std::move(bytes)};
+}
+
+void write_edict_registry_checked(const QString& path, const core::EdictRegistry& registry,
+                                 const std::optional<std::string>& expected_source) {
+  const auto bytes = core::serialize_edict_registry(registry);
+  (void)read_edict_registry_snapshot(path);
+  auto identity = QFileInfo(path).canonicalFilePath();
+  if (identity.isEmpty()) {
+    const auto absolute = QDir::isAbsolutePath(path) ? path : QDir::currentPath() + '/' + path;
+    const auto slash = absolute.lastIndexOf('/');
+    const auto parent = QFileInfo(absolute.left(slash + 1)).canonicalFilePath();
+    identity = parent.isEmpty() ? absolute : parent + '/' + absolute.mid(slash + 1);
+  }
+  QLockFile lock(identity + QStringLiteral(".lock"));
+  lock.setStaleLockTime(0);
+  if (!lock.tryLock()) throw core::EdictRegistryError("Dictionary registry is locked or cannot be locked");
+  if (read_edict_registry_snapshot(path).source != expected_source)
+    throw core::EdictRegistryError("Dictionary registry changed on disk; reopen the manager before saving");
+  write_file_bytes(path, bytes);
 }
 
 void write_text_file(const QString& path, const core::TextFile& file) {

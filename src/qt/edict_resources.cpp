@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "edict_resources.h"
+#include <QStringView>
 
 #include <algorithm>
 #include <array>
@@ -134,7 +135,8 @@ QString decode_registry_field(const core::EdictRegistry& registry,
     case core::EdictRegistryWireEncoding::kAnsiBytes:
       return decode_ansi_field(field, ansi_code_page);
     case core::EdictRegistryWireEncoding::kUtf16Le:
-      return QString::fromStdU16String(std::u16string(field));
+      // Registry fields are literal code units, not BOM-prefixed text files.
+      return QStringView(field).toString();
   }
   throw std::runtime_error("Dictionary registry wire encoding is invalid");
 }
@@ -156,13 +158,15 @@ QString resolve_path(const QString& path, const QString& config_directory) {
     throw std::runtime_error("Dictionary path is empty");
   }
   if (QDir::isAbsolutePath(path)) {
-    return QDir::cleanPath(path);
+    return path;
   }
   if (config_directory.isEmpty()) {
     throw std::runtime_error(
         "Relative dictionary path has no configuration directory");
   }
-  return QDir::cleanPath(QDir(config_directory).absoluteFilePath(path));
+  const auto directory = QDir::isAbsolutePath(config_directory)
+      ? config_directory : QDir::currentPath() + '/' + config_directory;
+  return directory + '/' + path;
 }
 
 QString exception_message(const std::exception& error) {
@@ -272,7 +276,7 @@ QString edict_index_path(const QString& source_path) {
   const QString index_name =
       separator >= 0 ? name.left(separator) + QStringLiteral(".jdx")
                      : name + QStringLiteral(".jdx");
-  return QDir::cleanPath(info.dir().filePath(index_name));
+  return source_path.left(source_path.lastIndexOf('/') + 1) + index_name;
 }
 
 EdictResourceSet load_edict_resources(

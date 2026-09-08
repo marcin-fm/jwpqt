@@ -34,6 +34,7 @@
 #include "jwpqt/core/kanji_lookup_lists.h"
 #include "jwpqt/core/kana_input.h"
 #include "jwpqt/core/edict_user_dictionary.h"
+#include "jwpqt/core/edict_registry.h"
 #include "jwpqt/core/legacy_code_page.h"
 #include "jwpqt/core/query_history.h"
 #include "jwpqt/core/text_file.h"
@@ -224,6 +225,9 @@ class MainWindow : public QMainWindow {
   bool load_edict_configuration(
       const QString& registry_path,
       OpenMode mode = OpenMode::kInteractive);
+  bool save_edict_configuration(const QString& registry_path, core::EdictRegistry registry,
+      const std::optional<std::string>& expected_source, bool allow_unavailable = false,
+      OpenMode mode = OpenMode::kNonInteractive);
   bool load_kanji_info(const QString& path,
                        OpenMode mode = OpenMode::kInteractive);
   bool load_kanji_lookup(const QString& radical_path,
@@ -316,6 +320,9 @@ class MainWindow : public QMainWindow {
   void save_wnn_preferences();
   void show_wnn_user_dictionary_dialog();
   void show_edict_lookup_dialog();
+  void manage_edict_registry();
+  bool configure_edict_registry(const QString& path, core::EdictRegistry registry,
+      const std::optional<std::string>* expected_source, bool allow_unavailable, OpenMode mode);
   void show_edict_user_dictionary_dialog();
   void show_kanji_info_dialog(std::optional<CharacterTarget> target = {},
                              std::optional<core::JisCode> code = {});
@@ -483,6 +490,8 @@ class MainWindow : public QMainWindow {
   std::unique_ptr<EdictResourceSet> edict_resources_;
   std::unique_ptr<EdictUserResources> edict_user_resources_;
   QString edict_config_directory_;
+  QString edict_registry_path_;
+  core::LegacyCodePage edict_resource_code_page_ = core::kDefaultLegacyCodePage;
   std::shared_ptr<EdictLookupOptions> edict_lookup_options_;
   std::shared_ptr<core::QueryHistory> edict_query_history_;
   EdictLookupDialog* edict_lookup_dialog_ = nullptr;

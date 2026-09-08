@@ -114,6 +114,16 @@ The original `JWPxp.dic` is a supported binary registry and already names
 have separate licenses from the program: retain `_cpright.txt` and review the
 individual notices before redistributing any data.
 
+**Tools > Manage Dictionaries** (also available inside lookup) provides staged
+add/edit/remove/reorder, search flags, EUC/UTF-8/mixed and name/classical roles,
+index/keep/quiet preferences, defaults and bounded inspection. **Save and Reload**
+validates resources before checked atomic registry replacement. Unavailable
+searched resources require explicit acceptance, and a stale disk snapshot cannot
+be overwritten. Lookup queries/results/history remain intact; close the user
+dictionary editor first to protect its working copy. ANSI registry migration
+asks for the original code page and writes Unicode only on successful Save.
+The [handbook](docs/handbook/dictionary.md) describes details and remaining gaps.
+
 The clickable **Resources** status and **Help > Runtime Resources** show loaded
 sources, failures, and skipped invalid records. Add `--resource-report` to the
 launch command to print the same diagnostics and exit; use

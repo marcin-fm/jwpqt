@@ -40,7 +40,38 @@ typing from results enters the local query; clipboard/navigation shortcuts stay
 with results. Right-click a character for an independent information viewer.
 
 History recalls without searching. User Dictionary opens the shared editable
-working copy, which stays available after lookup closes. Registry management,
-clipboard watching and combined/one-shot Names controls are still incomplete.
+working copy, which stays available after lookup closes. Clipboard watching
+and combined/one-shot Names controls are still incomplete.
+
+## Manage Dictionaries
+
+Tools > Manage Dictionaries, or Dictionaries in lookup, opens a staged editor
+for the configured binary `dict.cfg`. Add, remove and reorder entries, toggle
+their search checkboxes, and edit names, paths, encoding, name role, classical
+role, index, keep-loaded and quiet preferences. Removing an entry never deletes
+its files. The single mixed/unindexed User entry cannot be removed; close its
+editor before replacing resources so its working copy is not discarded.
+
+Relative paths resolve from the registry's directory. Browse selects an exact
+local file. Choose EUC-JP, UTF-8 or mixed explicitly; Inspect validates the
+selected resource and any requested `.jdx`, reporting its record count or error.
+Mixed definitions use the configured default JWP code page captured at reload.
+Buffered preferences round-trip but share the bounded native loader, not a
+Win32 streaming implementation. Defaults stage CLASSICAL, EDICT and ENAMDICT
+while retaining your user entry; no optional corpus is downloaded.
+
+Save and Reload validates a complete candidate before atomically saving it.
+Unavailable searched resources require the explicit allow checkbox; diagnostics
+remain visible afterward. Resource-limit violations are fatal. An absent optional
+user file need not exist until its first entry is saved. Existing lookup queries,
+results and history remain unchanged; subsequent searches use the new order.
+Cancel leaves both the live configuration and disk unchanged.
+
+Old ANSI registries require an explicit original Windows code page. Conversion
+to Unicode is staged and only saved on acceptance. Registry flags are written
+canonically. If another process changes, deletes or creates the file while the
+manager is open, saving fails rather than overwriting it. Cancel and reopen to
+review that newer file. Application state, open documents, dictionary data and
+indexes cannot be used as registry output targets.
 
 [Runtime data](installation.md) | [Character information](kanji.md) | [Contents](start.md)
