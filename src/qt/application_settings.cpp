@@ -50,6 +50,7 @@ constexpr BooleanDescriptor<ApplicationSettings> kBooleans[] = {
 
 constexpr BooleanDescriptor<EdictLookupOptions> kDictionaryBooleans[] = {
     {"Dict_AdvancedSearches", "dict_advanced", &EdictLookupOptions::advanced},
+    {"Dict_ContingentSearches", "dict_contingent", &EdictLookupOptions::contingent},
     {"Dict_AlwaysAdvancedSearch", "dict_always", &EdictLookupOptions::advanced_always},
     {"Dict_Adv_KeepSearching", "dict_showall", &EdictLookupOptions::advanced_show_all},
     {"Dict_Adv_Try_I_Adjectives", "dict_iadj", &EdictLookupOptions::i_adjectives},

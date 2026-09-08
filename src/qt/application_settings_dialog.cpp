@@ -141,6 +141,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   }
   add_dictionary("settingsDictionaryFullAscii", tr("ASCII boundaries match the complete definition"), &EdictLookupOptions::full_ascii);
   add_dictionary("settingsDictionaryJascii", tr("Treat JASCII as ASCII"), &EdictLookupOptions::jascii_to_ascii);
+  add_dictionary("settingsDictionaryContingent", tr("Contingent search after eligible exact searches fail"), &EdictLookupOptions::contingent);
   auto* dictionary_note = new QLabel(tr("These settings apply to new searches. Existing queries and results stay unchanged. "
       "Unimplemented exclusion bits and other dictionary policies remain retained and disclosed."), dictionary);
   dictionary_note->setWordWrap(true);

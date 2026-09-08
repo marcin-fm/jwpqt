@@ -305,6 +305,12 @@ Manual lookup changes also reach saved preferences. Legacy exclusion bits not
 yet implemented are retained and disclosed, including through Default Settings.
 Changing a checkbox does not discard results or start a search.
 
+**Contingent** enables the source-style retry after eligible exact Japanese
+searches fail. It requires Begin and End With and retains the engine's pattern,
+ASCII, name-filter and work-limit safeguards. **Shift+Search** requests a forced
+retry for that search only, relaxing the source's heuristic restrictions without
+changing the saved preference. Ordinary searches do not inherit that forcing.
+
 Dictionary **History** opens a selectable query list; `Up` recalls older queries,
 and `Down` moves toward newer entries and a blank draft, or opens the list when
 the query has been edited. Recall resolves pending kana once, never starts a

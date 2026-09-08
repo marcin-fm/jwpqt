@@ -16,6 +16,7 @@ struct EdictLookupOptions {
   bool i_adjectives = true;
   bool full_ascii = false;
   bool jascii_to_ascii = false;
+  bool contingent = false;
 };
 
 }  // namespace jwpqt::qt

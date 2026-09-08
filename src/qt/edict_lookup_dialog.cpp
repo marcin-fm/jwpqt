@@ -95,6 +95,7 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
       i_adjectives_(new QCheckBox(tr("I-adjectives"), this)),
       full_ascii_(new QCheckBox(tr("&Full ASCII"), this)),
       jascii_to_ascii_(new QCheckBox(tr("JASCII to ASCII"), this)),
+      contingent_(new QCheckBox(tr("Contingent"), this)),
       results_(new QTextEdit(this)),
       status_(new QLabel(this)),
       insert_button_(new QPushButton(tr("&Insert in Document"), this)),
@@ -120,6 +121,7 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   auto* search_button = new QPushButton(tr("&Search"), this);
   search_button->setObjectName(QStringLiteral("edictSearch"));
   search_button->setDefault(true);
+  search_button->setToolTip(tr("Shift+Search requests a contingent retry without changing the saved policy. Exact Japanese searches require Begin and End With."));
   query_row->addWidget(query_field_, 1);
   query_row->addWidget(history_button);
   query_row->addWidget(search_button);
@@ -133,12 +135,15 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   i_adjectives_->setObjectName(QStringLiteral("edictIAdjectives"));
   full_ascii_->setObjectName(QStringLiteral("edictFullAscii"));
   jascii_to_ascii_->setObjectName(QStringLiteral("edictJasciiToAscii"));
+  contingent_->setObjectName(QStringLiteral("edictContingent"));
+  contingent_->setToolTip(tr("Retry eligible unsuccessful exact Japanese searches. Requires Begin and End With; does not expand ASCII or wildcard searches."));
   advanced_->setToolTip(tr("Search inflected forms using adaptive deinflection. Wildcard syntax is independent."));
   full_ascii_->setToolTip(tr("Apply Begin/End With to the complete definition, not individual ASCII words."));
   auto* boundaries = new QHBoxLayout();
   boundaries->addWidget(beginning_);
   boundaries->addWidget(end_);
   boundaries->addWidget(advanced_);
+  boundaries->addWidget(contingent_);
   boundaries->addStretch();
   boundaries->addWidget(full_ascii_);
   boundaries->addWidget(jascii_to_ascii_);
@@ -172,7 +177,8 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
       {show_all_, &EdictLookupOptions::advanced_show_all},
       {i_adjectives_, &EdictLookupOptions::i_adjectives},
       {full_ascii_, &EdictLookupOptions::full_ascii},
-      {jascii_to_ascii_, &EdictLookupOptions::jascii_to_ascii}};
+      {jascii_to_ascii_, &EdictLookupOptions::jascii_to_ascii},
+      {contingent_, &EdictLookupOptions::contingent}};
   for (const auto& binding : option_bindings_) {
     auto* checkbox = binding.first;
     checkbox->setChecked((*options_).*binding.second);
@@ -219,7 +225,7 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   results_->addAction(copy_action);
 
   connect(search_button, &QPushButton::clicked, this,
-          [this] { search(); });
+          [this] { search(QApplication::keyboardModifiers().testFlag(Qt::ShiftModifier)); });
   connect(insert_button_, &QPushButton::clicked, this,
           [this] { insert_selected(); });
   connect(sort_button_, &QPushButton::clicked, this,
@@ -252,7 +258,7 @@ void EdictLookupDialog::set_query(std::u32string_view query) {
   query_edit_->selectAll();
 }
 
-bool EdictLookupDialog::search() {
+bool EdictLookupDialog::search(bool force_contingent) {
   if (query_busy_) return false;
   const QPointer<EdictLookupDialog> self(this);
   query_busy_ = true;
@@ -278,7 +284,7 @@ bool EdictLookupDialog::search() {
     const core::JwpText query = core::encode_jwp_text(history_text);
     const EdictLookupOptions options = *options_;
     const auto handler = search_handler_;
-    EdictResourceSearchReport candidate = handler(query, options);
+    EdictResourceSearchReport candidate = handler(query, options, force_contingent);
     if (!self) return false;
     if (query_edit_->text() != original_query) {
       throw core::EdictSearchError("The query changed during the search");

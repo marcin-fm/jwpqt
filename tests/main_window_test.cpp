@@ -3258,7 +3258,8 @@ void test_edict_search_controls(const QString& directory) {
       "\u3042 /cat/\n\u3044 /wild cat/\n\u3046 /cattle/\n"
       "\u3048 /bobcat/\n\u3055 /cat food/\n"
       "\u3042\u3044 /direct/\n\u3042\u304f /first/\n\u3042\u308b /later/\n"
-      "\u4e9c\u304b\u3044 /adjective/\n").toUtf8());
+      "\u4e9c\u304b\u3044 /adjective/\n"
+      "\u3042\u3044\u3046\u3048 /leading/\n\u304b\u3042\u3044\u3046\u3048 /embedded/\n").toUtf8());
   core::EdictRegistry registry;
   core::EdictRegistryEntry resource;
   resource.label = u"Controls";
@@ -3314,6 +3315,23 @@ void test_edict_search_controls(const QString& directory) {
   check("edictJasciiToAscii", true);
   require(count(U"\uff43\uff41\uff54") == 1, "JASCII-to-ASCII policy did not reach preprocessing");
   require(count(U"\u3042\u3044") == 1, "Advanced-off search did not stay direct");
+  require(count(U"\u3042\u3044\u3046") == 0, "Disabled contingent policy expanded an exact query");
+  check("edictContingent", true);
+  require(count(U"\u3042\u3044\u3046") == 1 &&
+              dialog->report().results.front().result.stage == core::EdictSearchStage::kContingent,
+          "Automatic contingent retry did not preserve its heuristic beginning boundary");
+  require(dialog->search(true) && dialog->report().results.size() == 2,
+          "Forced contingent retry did not relax the heuristic boundary");
+  check("edictContingent", false);
+  require(dialog->search(true) && dialog->report().results.size() == 2 &&
+              !window.application_settings().dictionary.contingent &&
+              dialog->search() && dialog->report().results.empty(),
+          "Forced contingent request depended on or changed the saved preference");
+  check("edictContingent", true);
+  require(count(U"cat") == 1 && dialog->search(true) && dialog->report().results.size() == 1 &&
+              dialog->report().results.front().result.stage == core::EdictSearchStage::kDirect,
+          "Contingent forcing bypassed ASCII or successful-direct gates");
+  check("edictContingent", false);
   check("edictAdvanced", true);
   check("edictAdvancedAlways", false);
   require(count(U"\u3042\u3044") == 1 && dialog->report().queries == 1,
@@ -3387,6 +3405,7 @@ void test_edict_search_controls(const QString& directory) {
           "Closing a modal history chooser discarded the shared query cache");
 
   const QString preferences_path = base + QStringLiteral("/preferences.cfg");
+  check("edictContingent", true);
   require(window.application_settings().dictionary.full_ascii &&
               window.application_settings().dictionary.require_end &&
               window.application_settings().dictionary.jascii_to_ascii &&

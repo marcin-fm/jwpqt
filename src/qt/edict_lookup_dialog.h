@@ -30,7 +30,7 @@ class KanaInputField;
 class EdictLookupDialog : public QDialog {
  public:
   using SearchHandler = std::function<EdictResourceSearchReport(
-      const core::JwpText&, const EdictLookupOptions&)>;
+      const core::JwpText&, const EdictLookupOptions&, bool force_contingent)>;
   using InsertHandler = std::function<bool(const std::u32string&)>;
   using InfoHandler = std::function<void(char32_t)>;
   using OptionsHandler = std::function<void(const EdictLookupOptions&)>;
@@ -52,7 +52,7 @@ class EdictLookupDialog : public QDialog {
   void set_options_changed_handler(OptionsHandler handler) {
     options_changed_handler_ = std::move(handler);
   }
-  bool search();
+  bool search(bool force_contingent = false);
   bool sort_results(Qt::KeyboardModifiers modifiers = Qt::NoModifier,
                     const core::EdictSortLimits& limits = {});
   bool insert_selected();
@@ -102,6 +102,7 @@ class EdictLookupDialog : public QDialog {
   QCheckBox* i_adjectives_;
   QCheckBox* full_ascii_;
   QCheckBox* jascii_to_ascii_;
+  QCheckBox* contingent_;
   std::vector<std::pair<QCheckBox*, bool EdictLookupOptions::*>> option_bindings_;
   QTextEdit* results_;
   QLabel* status_;

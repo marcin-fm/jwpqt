@@ -4157,7 +4157,7 @@ void MainWindow::show_edict_lookup_dialog() {
     edict_query_history_ = std::shared_ptr<core::QueryHistory>(query_histories_, &query_histories_->dictionary);
   }
   auto* dialog = new EdictLookupDialog(
-      [this](const core::JwpText& query, const EdictLookupOptions& options) {
+      [this](const core::JwpText& query, const EdictLookupOptions& options, bool force_contingent) {
         if (edict_resources_ == nullptr) {
           throw std::runtime_error("Dictionary resources are not available");
         }
@@ -4173,6 +4173,8 @@ void MainWindow::show_edict_lookup_dialog() {
         search.search.adaptive_show_all = options.advanced_show_all;
         search.search.deinflection.include_i_adjectives = options.i_adjectives;
         search.pattern.jascii_to_ascii = options.jascii_to_ascii;
+        search.search.contingent.enabled = options.contingent;
+        search.search.contingent.forced = force_contingent;
         EdictResourceSearchReport report = search_edict_resources(
             *edict_resources_, edict_config_directory_, query, search);
         show_edict_results_window(false);

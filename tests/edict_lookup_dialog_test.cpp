@@ -59,7 +59,7 @@ void test_search_render_status_copy_and_insert() {
   std::u32string inserted;
   jwpqt::qt::EdictLookupDialog dialog(
       [&](const jwpqt::core::JwpText& query,
-          const jwpqt::qt::EdictLookupOptions& options) {
+          const jwpqt::qt::EdictLookupOptions& options, bool) {
         received_query = query;
         received_options = options;
         jwpqt::qt::EdictResourceSearchReport report;
@@ -120,7 +120,7 @@ void test_empty_invalid_and_failed_search_are_contained() {
   int searches = 0;
   jwpqt::qt::EdictLookupDialog dialog(
       [&](const jwpqt::core::JwpText&,
-          const jwpqt::qt::EdictLookupOptions&)
+          const jwpqt::qt::EdictLookupOptions&, bool)
           -> jwpqt::qt::EdictResourceSearchReport {
         ++searches;
         throw std::runtime_error("lookup exploded");
@@ -144,7 +144,7 @@ void test_empty_invalid_and_failed_search_are_contained() {
 
   jwpqt::qt::EdictLookupDialog unknown_search(
       [](const jwpqt::core::JwpText&,
-         const jwpqt::qt::EdictLookupOptions&)
+          const jwpqt::qt::EdictLookupOptions&, bool)
           -> jwpqt::qt::EdictResourceSearchReport { throw 7; });
   auto* unknown_query =
       unknown_search.findChild<QLineEdit*>(QStringLiteral("edictQuery"));
@@ -157,7 +157,7 @@ void test_empty_invalid_and_failed_search_are_contained() {
 
   jwpqt::qt::EdictLookupDialog unknown_insert(
       [](const jwpqt::core::JwpText&,
-         const jwpqt::qt::EdictLookupOptions&) {
+          const jwpqt::qt::EdictLookupOptions&, bool) {
         jwpqt::qt::EdictResourceSearchReport report;
         report.results = {result(0, QStringLiteral("Main"), U"cat", {},
                                  {U"feline"})};
@@ -181,7 +181,7 @@ void test_result_sorting() {
   bool fail = false;
   bool empty = false;
   std::u32string inserted;
-  const auto handler = [&](const core::JwpText&, const qt::EdictLookupOptions&) {
+  const auto handler = [&](const core::JwpText&, const qt::EdictLookupOptions&, bool) {
     ++searches;
     if (fail) throw std::runtime_error("failed replacement");
     qt::EdictResourceSearchReport report;
@@ -335,9 +335,11 @@ void test_search_controls() {
   using namespace jwpqt::qt;
   auto settings = std::make_shared<EdictLookupOptions>();
   EdictLookupOptions received;
+  bool forced = false;
   int searches = 0;
-  const auto search = [&](const jwpqt::core::JwpText&, const EdictLookupOptions& options) {
+  const auto search = [&](const jwpqt::core::JwpText&, const EdictLookupOptions& options, bool force) {
     received = options;
+    forced = force;
     ++searches;
     return EdictResourceSearchReport{};
   };
@@ -374,12 +376,21 @@ void test_search_controls() {
     require(!box("edictAdvancedShowAll")->isEnabled() && settings->advanced_show_all &&
                 !settings->advanced && searches == 1,
             "Disabling Advanced discarded its options or searched unexpectedly");
+    require(dialog.search(true) && forced && !received.contingent && !settings->contingent,
+            "Forced contingent search changed the persisted preference");
+    dialog.findChild<QPushButton*>(QStringLiteral("edictSearch"))->click();
+    require(!forced && !received.contingent, "One-shot forcing leaked into a normal search");
+    const int before = searches;
+    box("edictContingent")->click();
+    require(searches == before && settings->contingent && dialog.search() &&
+                received.contingent && !forced,
+            "Contingent preference searched immediately or was not forwarded");
   }
   EdictLookupDialog reopened(search, {}, nullptr, {}, settings);
   reopened.set_query(U"cat");
   require(reopened.findChild<QCheckBox*>(QStringLiteral("edictEnd"))->isChecked() &&
               !reopened.findChild<QCheckBox*>(QStringLiteral("edictBeginning"))->isChecked() &&
-              reopened.search() && received.full_ascii && received.jascii_to_ascii &&
+               reopened.search() && received.contingent && received.full_ascii && received.jascii_to_ascii &&
               received.advanced_show_all && !received.advanced && !received.advanced_always,
           "Closing the dictionary discarded its retained search policies");
   EdictLookupDialog independent(search);
@@ -396,7 +407,7 @@ void test_options_updates() {
   int searches = 0;
   int notifications = 0;
   std::u32string inserted;
-  const auto search = [&](const core::JwpText&, const qt::EdictLookupOptions&) {
+  const auto search = [&](const core::JwpText&, const qt::EdictLookupOptions&, bool) {
     ++searches;
     qt::EdictResourceSearchReport report;
     report.results = {result(0, QStringLiteral("Main"), U"\u3042", {}, {U"cat"})};
@@ -452,7 +463,7 @@ void test_query_input_modes() {
   int searches = 0;
   jwpqt::core::JwpText received;
   jwpqt::qt::EdictLookupDialog dialog(
-      [&](const jwpqt::core::JwpText& query, const jwpqt::qt::EdictLookupOptions&) {
+      [&](const jwpqt::core::JwpText& query, const jwpqt::qt::EdictLookupOptions&, bool) {
         ++searches;
         received = query;
         return jwpqt::qt::EdictResourceSearchReport{};
@@ -532,7 +543,7 @@ void test_query_input_modes() {
 void test_query_overwrite() {
   using namespace jwpqt::qt;
   int searches = 0;
-  EdictLookupDialog dialog([&](const auto&, const auto&) {
+  EdictLookupDialog dialog([&](const auto&, const auto&, bool) {
     ++searches;
     return EdictResourceSearchReport{};
   });
@@ -709,7 +720,7 @@ void test_query_history() {
   auto history = std::make_shared<core::QueryHistory>();
   int searches = 0;
   bool fail = false;
-  qt::EdictLookupDialog dialog([&](const core::JwpText&, const qt::EdictLookupOptions&) {
+  qt::EdictLookupDialog dialog([&](const core::JwpText&, const qt::EdictLookupOptions&, bool) {
     ++searches;
     if (fail) throw std::runtime_error("history search failure");
     qt::EdictResourceSearchReport report;
@@ -894,7 +905,7 @@ void test_query_history() {
   });
   dying->findChild<QPushButton*>(QStringLiteral("edictHistory"))->click();
   require(!dying && !popup, "History chooser retained a deleted resource owner");
-  dying = new qt::EdictLookupDialog([&](const core::JwpText&, const qt::EdictLookupOptions&) {
+  dying = new qt::EdictLookupDialog([&](const core::JwpText&, const qt::EdictLookupOptions&, bool) {
     delete dying.data();
     return qt::EdictResourceSearchReport{};
   }, {}, nullptr, {}, {}, history);
@@ -907,7 +918,7 @@ void test_query_history() {
   QPointer<qt::EdictLookupDialog> changing;
   int callbacks = 0;
   bool recursive_blocked = false;
-  changing = new qt::EdictLookupDialog([&](const core::JwpText&, const qt::EdictLookupOptions&) {
+  changing = new qt::EdictLookupDialog([&](const core::JwpText&, const qt::EdictLookupOptions&, bool) {
     if (++callbacks == 2) {
       recursive_blocked = !changing->search();
       changing->set_query(U"other");
@@ -934,7 +945,7 @@ void test_result_character_navigation() {
   std::vector<char32_t> inspected;
   int searches = 0;
   jwpqt::qt::EdictLookupDialog dialog(
-      [&](const jwpqt::core::JwpText&, const jwpqt::qt::EdictLookupOptions&) {
+      [&](const jwpqt::core::JwpText&, const jwpqt::qt::EdictLookupOptions&, bool) {
         if (++searches == 2) throw std::runtime_error("failed replacement");
         jwpqt::qt::EdictResourceSearchReport report;
         report.results = {result(0, QStringLiteral("Main"), U"\u611b", {U"\u3042\u3044"},
