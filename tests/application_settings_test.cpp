@@ -170,14 +170,15 @@ void test_dictionary_settings() {
               !defaults.dictionary.advanced && defaults.dictionary.advanced_always &&
               defaults.dictionary.i_adjectives && !defaults.dictionary.classical &&
                !defaults.dictionary.full_ascii && !defaults.dictionary.jascii_to_ascii &&
-               !defaults.dictionary.contingent && defaults.dictionary.automatic_search && !defaults.dictionary.compact,
+                !defaults.dictionary.contingent && defaults.dictionary.automatic_search && !defaults.dictionary.compact &&
+               !defaults.dictionary.link_advanced_names,
           "Dictionary defaults differ from the source");
   auto settings = read_application_settings(
       "dict_advanced=no\nDiCt_AdvancedSearches=yes\ndict_always=false\n"
       "dict_showall=true\ndict_iadj=false\ndict_classical=true\ndict_contingent=yes\ndict_auto=false\n"
       "dict_fullascii=true\ndict_jascii2ascii=true\ndict_bits=0x80000006\ndict_compress=yes\n"
-      "DICT_BITS=bad\nDict_PriorityEntriesFirst=true\nFuture=\xff\n");
-  require(settings.dictionary.compact && !settings.dictionary.automatic_search && settings.dictionary.contingent && settings.dictionary.advanced && !settings.dictionary.advanced_always &&
+      "dict_link_adv_noname=yes\nDICT_BITS=bad\nDict_PriorityEntriesFirst=true\nFuture=\xff\n");
+  require(settings.dictionary.link_advanced_names && settings.dictionary.compact && !settings.dictionary.automatic_search && settings.dictionary.contingent && settings.dictionary.advanced && !settings.dictionary.advanced_always &&
               settings.dictionary.advanced_show_all && !settings.dictionary.i_adjectives &&
               settings.dictionary.classical && settings.dictionary.full_ascii &&
               settings.dictionary.jascii_to_ascii && !settings.dictionary.require_beginning &&
@@ -188,7 +189,8 @@ void test_dictionary_settings() {
           "Dictionary aliases, mask inversion or unsupported-field reporting changed");
   const auto encoded = write_application_settings(settings);
   const auto restored = read_application_settings(encoded);
-  require(restored.dictionary.compact && restored.dictionary.contingent && write_application_settings(restored) == encoded &&
+  require(restored.dictionary.link_advanced_names && restored.dictionary.advanced && restored.dictionary.place_names &&
+              restored.dictionary.compact && restored.dictionary.contingent && write_application_settings(restored) == encoded &&
               encoded.find("Dict_ExclusionFilters = 0x80000006") != std::string::npos &&
               encoded.find("DICT_BITS=bad\n") != std::string::npos &&
               encoded.find("Dict_PriorityEntriesFirst=true\n") != std::string::npos &&
@@ -219,6 +221,7 @@ void test_dictionary_settings() {
                           "dict_contingent=2",
                           "Dict_AutoSearch=bad\nDict_AutoSearch=true", "dict_auto=2",
                           "Dict_Compact=bad\ndict_compress=true", "dict_compress=2",
+                          "Dict_Link_Adv_NoNames=bad\ndict_link_adv_noname=true", "dict_link_adv_noname=2",
                          "dict_always=2", "dict_showall=on", "dict_iadj=maybe",
                          "dict_classical=2", "dict_jascii2ascii=2", "dict_fullascii=2",
                          "dict_bits=bad\ndict_bits=13", "dict_bits=4294967296",

@@ -27,7 +27,7 @@ void rejects(const std::function<void()>& action) {
 void roundtrip(const QString& directory) {
   qt::ProjectWorkspace workspace;
   workspace.detect_formats = false;
-  workspace.settings = qt::read_application_settings("Future_Field = raw\r\nFile.Size = 23\r\n"
+  workspace.settings = qt::read_application_settings("Future_Field = raw\r\nFile.Size = 23\r\nDict_Link_Adv_NoNames=true\n"
       "Dict_Compact=true\nDict_AutoSearch=false\nDict_AdvancedSearches=true\nDict_ContingentSearches=true\nDict_ExclusionFilters=0x10002\nHistoryBuffers_NumChars=512\nSave_Histories=false\n");
   workspace.documents = {{directory + "/first.jwp", {}, core::LegacyCodePage::k1251, true},
       {directory + "/second.txt", core::TextEncoding::kUtf16Be, core::LegacyCodePage::k1252, false},
@@ -42,7 +42,7 @@ void roundtrip(const QString& directory) {
             "Native project lost its tab order or active file");
     require(decoded.settings.fonts[static_cast<int>(qt::JapaneseFontRole::kFile)].size == 23 &&
             decoded.settings.unapplied.contains("Future_Field"), "Project settings were not retained/applied");
-    require(decoded.settings.dictionary.compact && !decoded.settings.dictionary.automatic_search && decoded.settings.dictionary.contingent && decoded.settings.dictionary.advanced && decoded.settings.dictionary.require_end &&
+    require(decoded.settings.dictionary.link_advanced_names && decoded.settings.dictionary.compact && !decoded.settings.dictionary.automatic_search && decoded.settings.dictionary.contingent && decoded.settings.dictionary.advanced && decoded.settings.dictionary.require_end &&
             !decoded.settings.dictionary.require_beginning && decoded.settings.dictionary.personal_names &&
             decoded.settings.dictionary.place_names && decoded.settings.dictionary_extra_exclusions == 0x10000U,
             "Project lost dictionary policies or retained exclusion bits");

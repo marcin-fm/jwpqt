@@ -901,12 +901,28 @@ void test_real_resources(const QString& root, const QString& source,
   dictionary_results->setTextCursor(compact_cursor);
   dictionary_results->ensureCursorVisible();
   dictionary->copy_selected();
-  require(QApplication::clipboard()->text() == QString(QChar(0x611b)) && dictionary->insert_selected() &&
-              editor->toPlainText() != before_sorted_insert,
-          QStringLiteral("Compact real Copy/Insert lost the selected character or canonical entry"));
+  const auto keyboard_history = window.query_histories().dictionary.entries();
+  QKeyEvent insert_key(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+  QApplication::sendEvent(dictionary_results, &insert_key);
+  require(QApplication::clipboard()->text() == QString(QChar(0x611b)) &&
+               editor->toPlainText() != before_sorted_insert,
+           QStringLiteral("Real result Return lost Copy text or canonical entry insertion"));
   window.findChild<QAction*>(QStringLiteral("undoAction"))->trigger();
   require(editor->toPlainText() == before_sorted_insert && window.document_modified() == before_sorted_modified,
-          QStringLiteral("Compact real insertion did not undo cleanly"));
+           QStringLiteral("Compact real insertion did not undo cleanly"));
+  const auto old_query = dictionary->query();
+  const QPointer<QTextDocument> keyboard_results(dictionary_results->document());
+  query_edit->setCursorPosition(query_edit->text().size());
+  for (const auto& text : {QStringLiteral("k"), QStringLiteral("a")}) {
+    QKeyEvent typed(QEvent::KeyPress, text.front().toUpper().unicode(), Qt::NoModifier, text);
+    QApplication::sendEvent(dictionary_results, &typed);
+  }
+  require(dictionary->query() == old_query + U"\u304b" && keyboard_results &&
+              dictionary_results->document() == keyboard_results &&
+              window.query_histories().dictionary.entries() == keyboard_history &&
+              editor->toPlainText() == before_sorted_insert && window.document_modified() == before_sorted_modified,
+          QStringLiteral("Real result typing changed search/history/document instead of the local kana query"));
+  dictionary->set_query(old_query);
   capture(dictionary, QStringLiteral("lookup-dictionary-compact"));
   require(window.apply_application_settings(expanded_preferences) && dictionary->search(),
           QStringLiteral("Could not restore expanded real results"));

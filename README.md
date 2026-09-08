@@ -378,6 +378,25 @@ changes. Copy preserves exact selected Unicode text and rich text; Insert keeps
 the full canonical entries, including metadata, independently of display layout.
 Priority grouping and separator presentation remain separate porting work.
 
+The lookup's **Options** button opens the Dictionary settings tab; **User
+Dictionary** reuses the application-owned editor and follows its availability.
+Both commands are blocked during an active search and leave the query and results
+alone. Options supports cancellation, and the user-dictionary window remains
+independent when lookup closes.
+
+With results focused, `Enter` or keypad `Enter` inserts the selected canonical
+entries without searching again. With no selection it returns focus to the query.
+Printable typing moves to the local query and uses its Kanji/ASCII/JASCII mode,
+selection, overwrite and undo behavior; Copy and result navigation retain their
+normal shortcuts. Typing alone does not submit a search.
+
+**Options > Dictionary > Link Advanced with exclusion of personal and place
+names** persists as `Dict_Link_Adv_NoNames` (default off). When enabled, checking
+Advanced excludes both name categories; including either category turns Advanced
+off. Each user toggle publishes one complete policy update without searching or
+discarding pending kana/results/history. Imports preserve their specified values
+until a user toggles a control rather than silently normalizing combinations.
+
 Character Table places its code fields beside the full character grid. Lookup
 results use horizontal character strips with Information, Insert and Copy
 actions. Bushu, Stroke/Bushu, SKIP, Spahn-Hadamitzky, Four Corner and Index Lookup

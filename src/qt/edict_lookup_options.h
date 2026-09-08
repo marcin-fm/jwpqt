@@ -19,6 +19,7 @@ struct EdictLookupOptions {
   bool contingent = false;
   bool automatic_search = true;
   bool compact = false;
+  bool link_advanced_names = false;
 };
 
 }  // namespace jwpqt::qt

@@ -207,6 +207,16 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
     connect(checkbox, &QCheckBox::toggled, this,
             [this, member = binding.second](bool checked) {
               (*options_).*member = checked;
+              if (options_->link_advanced_names && checked) {
+                if (member == &EdictLookupOptions::advanced) {
+                  options_->personal_names = false;
+                  options_->place_names = false;
+                } else if (member == &EdictLookupOptions::personal_names ||
+                           member == &EdictLookupOptions::place_names) {
+                  options_->advanced = false;
+                }
+              }
+              set_options(*options_);
               if (options_changed_handler_) {
                 auto handler = options_changed_handler_;
                 const auto options = *options_;
@@ -215,7 +225,6 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
             });
   }
   advanced_controls->setEnabled(advanced_->isChecked());
-  connect(advanced_, &QCheckBox::toggled, advanced_controls, &QWidget::setEnabled);
 
   results_->setObjectName(QStringLiteral("edictResults"));
   results_->setReadOnly(true);

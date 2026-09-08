@@ -3573,6 +3573,7 @@ void test_edict_search_controls(const QString& directory) {
     if (begin) begin->setChecked(true);
     popup->findChild<QCheckBox*>("settingsDictionaryAutomatic")->setChecked(false);
     popup->findChild<QCheckBox*>("settingsDictionaryCompact")->setChecked(true);
+    popup->findChild<QCheckBox*>("settingsDictionaryLinkNames")->setChecked(true);
     popup->reject();
   });
   find_action(window, "applicationOptionsAction")->trigger();
@@ -3596,18 +3597,28 @@ void test_edict_search_controls(const QString& directory) {
     options_seen = popup->grab().save(QDir::current().filePath(QStringLiteral("application-options-dictionary.png")));
     popup->findChild<QCheckBox*>("settingsDictionaryAutomatic")->setChecked(false);
     popup->findChild<QCheckBox*>("settingsDictionaryCompact")->setChecked(true);
+    popup->findChild<QCheckBox*>("settingsDictionaryLinkNames")->setChecked(true);
     popup->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
   });
   dialog->findChild<QToolButton*>("edictOptions")->click();
   require(options_seen && window.application_settings().dictionary.require_beginning &&
                !window.application_settings().dictionary.automatic_search &&
-               window.application_settings().dictionary.compact && before_options_results &&
+                window.application_settings().dictionary.compact && window.application_settings().dictionary.link_advanced_names && before_options_results &&
                results->document() == before_options_results &&
               dialog->findChild<QCheckBox*>(QStringLiteral("edictBeginning"))->isChecked() &&
               dialog->report().results.size() == 5 && count(U"cat") == 4,
           "Accepted dictionary Options searched prematurely or failed to update live controls");
   require(results->document()->blockCount() == static_cast<int>(dialog->report().results.size()),
-          "Accepted Compact preference did not reach the next real dictionary search");
+           "Accepted Compact preference did not reach the next real dictionary search");
+  check("edictAdvanced", true);
+  check("edictPersonalNames", true);
+  require(!window.application_settings().dictionary.advanced && window.application_settings().dictionary.personal_names &&
+              dialog->report().results.size() == 4 && window.save_application_settings(),
+          "Linked name toggle did not update saved preferences without searching");
+  qt::MainWindow linked;
+  require(linked.load_application_settings(preferences_path) && linked.application_settings().dictionary.link_advanced_names &&
+              !linked.application_settings().dictionary.advanced && linked.application_settings().dictionary.personal_names,
+          "Linked dictionary policy did not survive a new application owner");
   QTimer::singleShot(0, [] {
     auto* popup = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
     if (popup) popup->button(QMessageBox::Yes)->click();
@@ -3615,7 +3626,8 @@ void test_edict_search_controls(const QString& directory) {
   find_action(window, "defaultSettingsAction")->trigger();
   require(window.application_settings().dictionary.require_beginning &&
                window.application_settings().dictionary.automatic_search &&
-               !window.application_settings().dictionary.compact &&
+                !window.application_settings().dictionary.compact &&
+                !window.application_settings().dictionary.link_advanced_names &&
               !window.application_settings().dictionary.require_end &&
               !window.application_settings().dictionary.full_ascii &&
               window.application_settings().dictionary_extra_exclusions == 0x80000000U &&
@@ -3625,8 +3637,16 @@ void test_edict_search_controls(const QString& directory) {
   const auto import_path = base + QStringLiteral("/import.cfg");
   write_bytes(import_path, "Dict_AdvancedSearches=bad\nDict_AdvancedSearches=true\n");
   require(!window.import_application_settings(import_path) &&
-              qt::write_application_settings(window.application_settings()) == before_bad_import,
-          "An invalid earlier dictionary setting changed live preferences");
+               qt::write_application_settings(window.application_settings()) == before_bad_import,
+           "An invalid earlier dictionary setting changed live preferences");
+  QPointer<qt::MainWindow> doomed = new qt::MainWindow;
+  require(doomed->load_edict_configuration(registry_path), "Could not prepare Options owner deletion");
+  find_action(*doomed, "edictLookupAction")->trigger();
+  auto* doomed_lookup = doomed->findChild<QDialog*>(QStringLiteral("edictLookupDialog"));
+  bool owner_deleted = false;
+  QTimer::singleShot(0, [&] { owner_deleted = true; delete doomed.data(); });
+  doomed_lookup->findChild<QToolButton*>("edictOptions")->click();
+  require(owner_deleted && !doomed, "Options did not tolerate deletion of its owning workspace");
 }
 
 void test_edict_user_dictionary_integration(const QString& directory) {

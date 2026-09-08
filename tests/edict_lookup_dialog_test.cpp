@@ -193,6 +193,67 @@ void test_result_keyboard_commands() {
   require(!disposable, "Result insertion callback did not safely delete its owner");
 }
 
+void test_linked_names() {
+  namespace qt = jwpqt::qt;
+  int searches = 0, notifications = 0;
+  qt::EdictLookupOptions seen;
+  auto history = std::make_shared<jwpqt::core::QueryHistory>();
+  qt::EdictLookupDialog dialog([&](const auto&, const auto& options, bool) {
+    ++searches; seen = options;
+    qt::EdictResourceSearchReport report;
+    report.results = {result(0, {}, U"cat", {}, {U"feline"})}; return report;
+  }, {}, nullptr, {}, {}, history);
+  dialog.set_options_changed_handler([&](const auto& options) { ++notifications; seen = options; });
+  dialog.set_query(U"cat");
+  require(dialog.search(), "Could not prepare linked-name policy fixture");
+  auto* results = dialog.findChild<QTextEdit*>("edictResults");
+  const QPointer<QTextDocument> document(results->document());
+  const int anchor = results->textCursor().anchor(), position = results->textCursor().position();
+  auto* query = dialog.findChild<QLineEdit*>("edictQuery");
+  auto* advanced = dialog.findChild<QCheckBox*>("edictAdvanced");
+  auto* personal = dialog.findChild<QCheckBox*>("edictPersonalNames");
+  auto* places = dialog.findChild<QCheckBox*>("edictPlaceNames");
+  auto* always = dialog.findChild<QCheckBox*>("edictAdvancedAlways");
+  auto options = seen;
+  options.link_advanced_names = true;
+  options.advanced = true; options.personal_names = true; options.place_names = true;
+  dialog.set_options(options);
+  require(advanced->isChecked() && personal->isChecked() && places->isChecked() && notifications == 0,
+          "Imported linked-name settings were silently normalized");
+  advanced->setChecked(false);
+  query->setCursorPosition(query->text().size());
+  QKeyEvent pending(QEvent::KeyPress, Qt::Key_K, Qt::NoModifier, QStringLiteral("k"));
+  QApplication::sendEvent(query, &pending);
+  advanced->setChecked(true);
+  require(notifications == 2 && seen.advanced && !seen.personal_names && !seen.place_names &&
+              !personal->isChecked() && !places->isChecked() && always->parentWidget()->isEnabled(),
+          "Enabling linked Advanced did not atomically exclude both name categories");
+  personal->setChecked(true);
+  require(notifications == 3 && !seen.advanced && seen.personal_names && !seen.place_names &&
+              !advanced->isChecked() && !always->parentWidget()->isEnabled(),
+          "Including personal names did not disable linked Advanced");
+  advanced->setChecked(true); places->setChecked(true);
+  require(notifications == 5 && !seen.advanced && !seen.personal_names && seen.place_names,
+          "Including place names did not disable linked Advanced");
+  require(searches == 1 && document && results->document() == document &&
+              results->textCursor().anchor() == anchor && results->textCursor().position() == position &&
+              history->entries() == std::vector<std::u32string>{U"cat"} && query->text() == QStringLiteral("cat"),
+          "Linked controls changed results, history or pending input");
+  QKeyEvent finish(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier, QStringLiteral("a"));
+  QApplication::sendEvent(query, &finish);
+  require(query->text() == QStringLiteral("cat\u304b"), "Linked controls discarded pending kana");
+  options = seen; options.link_advanced_names = false; options.personal_names = true; options.place_names = true;
+  dialog.set_options(options); advanced->setChecked(true);
+  require(seen.advanced && seen.personal_names && seen.place_names,
+          "Disabled linkage still coupled Advanced and name controls");
+  dialog.set_options_changed_handler([&](const auto& changed) {
+    auto replacement = changed; replacement.advanced = false; dialog.set_options(replacement);
+  });
+  advanced->setChecked(false); advanced->setChecked(true);
+  require(!advanced->isChecked() && !always->parentWidget()->isEnabled(),
+          "A stale toggle overwrote newer reentrant advanced-control state");
+}
+
 void test_search_render_status_copy_and_insert() {
   jwpqt::core::JwpText received_query;
   jwpqt::qt::EdictLookupOptions received_options;
@@ -1249,6 +1310,7 @@ int main(int argc, char** argv) {
   try {
     test_management_commands();
     test_result_keyboard_commands();
+    test_linked_names();
     test_search_render_status_copy_and_insert();
     test_compact_presentation();
     test_empty_invalid_and_failed_search_are_contained();
