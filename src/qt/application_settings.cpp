@@ -12,6 +12,7 @@
 #include <QSaveFile>
 
 #include "jwpqt/core/jwp_configuration.h"
+#include "jwpqt/core/edict_filter.h"
 #include "text_bridge.h"
 
 namespace jwpqt::qt {
@@ -113,7 +114,8 @@ ApplicationSettings read_application_settings(std::string_view text,
         result.dictionary.require_end = (bits & 2U) != 0;
         result.dictionary.personal_names = (bits & 4U) == 0;
         result.dictionary.place_names = (bits & 8U) == 0;
-        result.dictionary_extra_exclusions = bits & ~15U;
+        result.dictionary.category_exclusions = bits & core::kEdictCategoryMask;
+        result.dictionary_extra_exclusions = bits & ~(core::kEdictCategoryMask | 15U);
       }
       if (name.empty() && core::JwpConfigurationKey{"TranslationCodePage", "code_page"}.matches(entry.name)) {
         name = "TranslationCodePage";
@@ -179,10 +181,12 @@ std::string write_application_settings(const ApplicationSettings& settings) {
   for (const auto& setting : kDictionaryBooleans) {
     updates.push_back({{setting.name, setting.alias}, settings.dictionary.*(setting.member) ? "true" : "false"});
   }
-  if ((settings.dictionary_extra_exclusions & 15U) != 0)
+  if ((settings.dictionary_extra_exclusions & (core::kEdictCategoryMask | 15U)) != 0)
     throw core::JwpConfigurationError("Unsupported dictionary mask overlaps implemented filters");
   const auto& dictionary = settings.dictionary;
-  const std::uint32_t bits = settings.dictionary_extra_exclusions |
+  if ((dictionary.category_exclusions & ~core::kEdictCategoryMask) != 0)
+    throw core::JwpConfigurationError("Unknown dictionary category exclusion bits");
+  const std::uint32_t bits = settings.dictionary_extra_exclusions | dictionary.category_exclusions |
       (dictionary.require_beginning ? 1U : 0U) | (dictionary.require_end ? 2U : 0U) |
       (dictionary.personal_names ? 0U : 4U) | (dictionary.place_names ? 0U : 8U);
   updates.push_back({{"Dict_ExclusionFilters", "dict_bits"},

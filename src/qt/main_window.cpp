@@ -4180,6 +4180,7 @@ void MainWindow::show_edict_lookup_dialog() {
         search.search.direct.require_beginning = options.require_beginning;
         search.search.direct.require_end = options.require_end;
         search.search.direct.full_ascii_boundaries = options.full_ascii;
+        search.search.name_filter.category_exclusions = options.category_exclusions;
         search.search.adaptive = options.advanced;
         search.search.adaptive_always = options.advanced_always;
         search.search.adaptive_show_all = options.advanced_show_all;

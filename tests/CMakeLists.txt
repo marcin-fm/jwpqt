@@ -47,6 +47,12 @@ target_compile_options(jwpqt_query_history_window_tests PRIVATE -Wall -Wextra -W
 add_test(NAME qt_query_history_window COMMAND jwpqt_query_history_window_tests)
 set_tests_properties(qt_query_history_window PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 90)
 
+add_executable(jwpqt_category_exclusion_tests category_exclusion_test.cpp)
+target_link_libraries(jwpqt_category_exclusion_tests PRIVATE jwpqt_qt_ui)
+target_compile_options(jwpqt_category_exclusion_tests PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME qt_category_exclusion COMMAND jwpqt_category_exclusion_tests)
+set_tests_properties(qt_category_exclusion PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 90)
+
 add_executable(jwpqt_application_settings_tests application_settings_test.cpp)
 target_link_libraries(jwpqt_application_settings_tests PRIVATE jwpqt_qt_support)
 target_compile_options(jwpqt_application_settings_tests PRIVATE -Wall -Wextra -Wpedantic)

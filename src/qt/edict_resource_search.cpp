@@ -11,6 +11,8 @@ namespace jwpqt::qt {
 namespace {
 
 void validate_search_options(const EdictResourceSearchOptions& options) {
+  if ((options.search.name_filter.category_exclusions & ~core::kEdictCategoryMask) != 0)
+    throw core::EdictSearchError("Unknown EDICT category exclusion bits");
   if (options.search.queries == 0 ||
       options.search.candidate_matches == 0 || options.search.results == 0 ||
       options.search.lookup_steps == 0) {
@@ -253,11 +255,13 @@ EdictResourceSearchReport search_edict_resources(
     }
     if (effective.personal_names) {
       core::EdictNameFilterOptions filter;
+      filter.category_exclusions = effective.search.name_filter.category_exclusions;
       filter.reject_place_names = true;
       run_loaded_resource(*resource, plan, effective, filter, report);
     }
     if (effective.place_names) {
       core::EdictNameFilterOptions filter;
+      filter.category_exclusions = effective.search.name_filter.category_exclusions;
       filter.reject_personal_names = true;
       run_loaded_resource(*resource, plan, effective, filter, report);
     }

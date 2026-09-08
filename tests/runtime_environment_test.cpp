@@ -47,6 +47,7 @@
 #include "jis_table_dialog.h"
 #include "edict_resources.h"
 #include "jwpqt/core/edict_registry.h"
+#include "jwpqt/core/edict_filter.h"
 #include "jwpqt/core/edict_search.h"
 #include "jwpqt/core/jwp_text_codec.h"
 #include "jwpqt/core/kanji_bushu_selector.h"
@@ -926,6 +927,29 @@ void test_real_resources(const QString& root, const QString& source,
   capture(dictionary, QStringLiteral("lookup-dictionary-compact"));
   require(window.apply_application_settings(expanded_preferences) && dictionary->search(),
           QStringLiteral("Could not restore expanded real results"));
+  const auto unfiltered_categories = dictionary->report().results;
+  for (std::size_t i = 0; i < jwpqt::core::kEdictCategoryTags.size(); ++i) {
+    auto filtered_preferences = expanded_preferences;
+    filtered_preferences.dictionary.category_exclusions = std::uint32_t{1} << (i + 4);
+    require(window.apply_application_settings(filtered_preferences) && dictionary->search(),
+            QStringLiteral("Real category search failed"));
+    jwpqt::core::EdictNameFilterOptions filter;
+    filter.category_exclusions = filtered_preferences.dictionary.category_exclusions;
+    std::size_t kept = 0;
+    for (const auto& original : unfiltered_categories) {
+      const auto expected = jwpqt::core::filter_edict_name_types(original.result.record, filter);
+      if (!expected) continue;
+      require(kept < dictionary->report().results.size() &&
+                  dictionary->report().results[kept].registry_index == original.registry_index &&
+                  dictionary->report().results[kept].result.record == *expected,
+              QStringLiteral("Real category search changed surviving data or provenance"));
+      ++kept;
+    }
+    require(kept == dictionary->report().results.size(),
+            QStringLiteral("Real category search retained excluded records"));
+  }
+  require(window.apply_application_settings(expanded_preferences) && dictionary->search(),
+          QStringLiteral("Could not restore real lookup after category checks"));
 
   open("jisTableAction");
   auto* table = dynamic_cast<jwpqt::qt::JisTableDialog*>(

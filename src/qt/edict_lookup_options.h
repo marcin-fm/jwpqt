@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 namespace jwpqt::qt {
 
 struct EdictLookupOptions {
@@ -20,6 +22,7 @@ struct EdictLookupOptions {
   bool automatic_search = true;
   bool compact = false;
   bool link_advanced_names = false;
+  std::uint32_t category_exclusions = 0;
 };
 
 }  // namespace jwpqt::qt

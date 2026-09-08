@@ -12,6 +12,7 @@
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QLabel>
+#include <QListWidget>
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
@@ -21,7 +22,9 @@
 #include <QVBoxLayout>
 
 #include "jwpqt/core/jwp_configuration.h"
+#include "jwpqt/core/edict_filter.h"
 #include "kanji_info_options_dialog.h"
+#include "text_bridge.h"
 
 namespace jwpqt::qt {
 
@@ -149,8 +152,33 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   add_dictionary("settingsDictionaryAutomatic", tr("Search a document selection when opening dictionary lookup"), &EdictLookupOptions::automatic_search);
   add_dictionary("settingsDictionaryCompact", tr("Compact results: headword and definitions together"), &EdictLookupOptions::compact);
   add_dictionary("settingsDictionaryLinkNames", tr("Link Advanced with exclusion of personal and place names"), &EdictLookupOptions::link_advanced_names);
+  const char* category_labels[] = {
+      QT_TR_NOOP("Vulgar expressions"), QT_TR_NOOP("Rude or X-rated terms"),
+      QT_TR_NOOP("Colloquialisms"), QT_TR_NOOP("Manga slang"), QT_TR_NOOP("Slang"),
+      QT_TR_NOOP("Martial arts terms"), QT_TR_NOOP("Idiomatic expressions"),
+      QT_TR_NOOP("Archaisms"), QT_TR_NOOP("Obsolete terms"), QT_TR_NOOP("Obscure terms"),
+      QT_TR_NOOP("Outdated kana usage"), QT_TR_NOOP("Abbreviations"),
+      QT_TR_NOOP("Familiar language"), QT_TR_NOOP("Polite language"),
+      QT_TR_NOOP("Humble language"), QT_TR_NOOP("Honorific language"),
+      QT_TR_NOOP("Female terms or language"), QT_TR_NOOP("Male terms or language"),
+      QT_TR_NOOP("Prefixes"), QT_TR_NOOP("Suffixes"), QT_TR_NOOP("Outdated kanji usage")};
+  static_assert(std::size(category_labels) == core::kEdictCategoryTags.size());
+  auto* categories = new QListWidget(dictionary);
+  categories->setObjectName(QStringLiteral("settingsDictionaryCategories"));
+  categories->setAccessibleName(tr("Exclude dictionary categories"));
+  categories->setMinimumHeight(220);
+  for (std::size_t i = 0; i < core::kEdictCategoryTags.size(); ++i) {
+    auto* item = new QListWidgetItem(tr("%1 (%2)").arg(tr(category_labels[i]),
+        to_qstring(core::kEdictCategoryTags[i])), categories);
+    const auto bit = std::uint32_t{1} << (i + 4);
+    item->setData(Qt::UserRole, bit);
+    item->setCheckState((settings_.dictionary.category_exclusions & bit) ? Qt::Checked : Qt::Unchecked);
+  }
+  dictionary_form->addRow(tr("Exclude tagged senses:"), categories);
   auto* dictionary_note = new QLabel(tr("These settings apply to new searches. Existing queries and results stay unchanged. "
-      "Unimplemented exclusion bits and other dictionary policies remain retained and disclosed."), dictionary);
+      "A checked category removes matching senses, not unrelated definitions. Mixed recognized tags keep their allowed types. "
+      "Filtering stops at an unrecognized tag within a group. "
+      "Unknown exclusion bits and other dictionary policies remain retained and disclosed."), dictionary);
   dictionary_note->setWordWrap(true);
   dictionary_note->setObjectName(QStringLiteral("settingsDictionaryNote"));
   dictionary_form->addRow(dictionary_note);
@@ -193,10 +221,14 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   outer->addWidget(buttons);
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
   connect(buttons, &QDialogButtonBox::accepted, this,
-          [this, booleans, font_controls, dictionary_controls, code_page, history_size] {
+          [this, booleans, font_controls, dictionary_controls, code_page, history_size, categories] {
     auto next = settings_;
     for (const auto& control : booleans) next.*(control.member) = control.widget->isChecked();
     for (const auto& control : dictionary_controls) next.dictionary.*(control.member) = control.widget->isChecked();
+    next.dictionary.category_exclusions = 0;
+    for (int i = 0; i < categories->count(); ++i)
+      if (categories->item(i)->checkState() == Qt::Checked)
+        next.dictionary.category_exclusions |= categories->item(i)->data(Qt::UserRole).toUInt();
     for (std::size_t i = 0; i < font_controls.size(); ++i) {
       const auto& control = font_controls[i];
       next.fonts[i].family = control.family->currentText();

@@ -301,9 +301,32 @@ controls. These choices, plus personal/place-name inclusion and classical
 dictionaries, persist through application settings and projects. **Options >
 Dictionary** stages the same controls; accepted changes update an open lookup
 without searching, flushing pending kana or changing results and selection.
-Manual lookup changes also reach saved preferences. Legacy exclusion bits not
-yet implemented are retained and disclosed, including through Default Settings.
+Manual lookup changes also reach saved preferences. Unknown exclusion bits are
+retained and disclosed, including through Default Settings.
 Changing a checkbox does not discard results or start a search.
+
+**Options > Dictionary > Exclude tagged senses** implements all 21 legacy
+category exclusions, independently selectable:
+
+| Tag | Category | Tag | Category | Tag | Category |
+| --- | --- | --- | --- | --- | --- |
+| `vulg` | Vulgar expressions | `X` | Rude/X-rated terms | `col` | Colloquialisms |
+| `m-sl` | Manga slang | `sl` | Slang | `MA` | Martial arts |
+| `id` | Idioms | `arch` | Archaisms | `obs` | Obsolete terms |
+| `obsc` | Obscure terms | `ok` | Outdated kana | `abbr` | Abbreviations |
+| `fam` | Familiar language | `pol` | Polite language | `hum` | Humble language |
+| `hon` | Honorific language | `fem` | Female language | `male` | Male language |
+| `pref` | Prefixes | `suf` | Suffixes | `oK` | Outdated kanji |
+
+Filters use the dictionary's exact, case-sensitive tags, not text classification.
+They remove matching senses rather than unrelated meanings; mixed recognized
+groups retain allowed types. As in the source, an unrecognized tag stops filtering
+the rest of that group. Filtering applies before accepted-result limits and
+fallback decisions, including pattern, inflection, contingent and optional name
+searches. Settings and JPR preserve the original mask bits 4 through 24; only
+unknown bits 25 through 31 remain unapplied. Defaults resets these supported
+filters while retaining unknown bits. Cancel and accepted preferences leave the
+current query, pending kana, history and results intact until another search.
 
 **Contingent** enables the source-style retry after eligible exact Japanese
 searches fail. It requires Begin and End With and retains the engine's pattern,

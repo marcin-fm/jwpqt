@@ -210,7 +210,8 @@ void test_dictionary_settings() {
   }
   for (const auto* mask : {"-1", "0xFFFFFFFF", "4294967295"}) {
     const auto all = read_application_settings(std::string("dict_bits=") + mask);
-    require(all.dictionary_extra_exclusions == 0xfffffff0U && all.dictionary.require_end &&
+    require(all.dictionary_extra_exclusions == 0xfe000000U &&
+                all.dictionary.category_exclusions == 0x01fffff0U && all.dictionary.require_end &&
                 !all.dictionary.personal_names && !all.dictionary.place_names,
             "A source signed/unsigned 32-bit mask was truncated");
   }
@@ -235,6 +236,27 @@ void test_dictionary_settings() {
           "A dictionary overlay mutated its base or reset unspecified filters");
   settings.dictionary_extra_exclusions |= 1U;
   rejects([&] { (void)write_application_settings(settings); });
+  for (unsigned i = 4; i <= 24; ++i) {
+    const auto bit = std::uint32_t{1} << i;
+    auto category = read_application_settings("dict_bits=" + std::to_string(bit | 13U));
+    require(category.dictionary.category_exclusions == bit && category.unapplied.isEmpty() &&
+                category.dictionary_extra_exclusions == 0 && category.dictionary.require_beginning &&
+                !category.dictionary.personal_names && !category.dictionary.place_names,
+            "A newly supported category was lost, inverted or still reported unsupported");
+    const auto bytes = write_application_settings(category);
+    require(read_application_settings(bytes).dictionary.category_exclusions == bit &&
+                write_application_settings(read_application_settings(bytes)) == bytes,
+            "A category exclusion failed canonical persistence");
+    const auto overlaid = read_application_settings("Dict_Compact=true", category);
+    require(overlaid.dictionary.category_exclusions == bit, "Unrelated import reset a category");
+    category.dictionary_extra_exclusions = bit;
+    rejects([&] { (void)write_application_settings(category); });
+  }
+  for (const auto bit : {1U, 8U, 0x02000000U, 0x80000000U}) {
+    auto invalid = defaults;
+    invalid.dictionary.category_exclusions = bit;
+    rejects([&] { (void)write_application_settings(invalid); });
+  }
 }
 
 }  // namespace

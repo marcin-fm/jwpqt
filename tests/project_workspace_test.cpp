@@ -44,7 +44,8 @@ void roundtrip(const QString& directory) {
             decoded.settings.unapplied.contains("Future_Field"), "Project settings were not retained/applied");
     require(decoded.settings.dictionary.link_advanced_names && decoded.settings.dictionary.compact && !decoded.settings.dictionary.automatic_search && decoded.settings.dictionary.contingent && decoded.settings.dictionary.advanced && decoded.settings.dictionary.require_end &&
             !decoded.settings.dictionary.require_beginning && decoded.settings.dictionary.personal_names &&
-            decoded.settings.dictionary.place_names && decoded.settings.dictionary_extra_exclusions == 0x10000U,
+            decoded.settings.dictionary.place_names && decoded.settings.dictionary.category_exclusions == 0x10000U &&
+            decoded.settings.dictionary_extra_exclusions == 0,
             "Project lost dictionary policies or retained exclusion bits");
     require(decoded.settings.history_size == 512 && !decoded.settings.save_histories,
             "Project lost history capacity or persistence policy");
@@ -56,6 +57,16 @@ void roundtrip(const QString& directory) {
     }
     require(core::serialize_jwp_project(qt::encode_project_workspace(decoded)) == wire,
             "Project metadata grew or changed on repeated saves");
+  }
+  for (unsigned i = 4; i <= 24; ++i) {
+    workspace.settings.dictionary.category_exclusions = std::uint32_t{1} << i;
+    workspace.settings.dictionary_extra_exclusions = 0x80000000U;
+    const auto wire = core::serialize_jwp_project(qt::encode_project_workspace(workspace));
+    const auto restored = qt::decode_project_workspace(core::parse_jwp_project(wire), directory + "/category.jpr");
+    require(restored.settings.dictionary.category_exclusions == (std::uint32_t{1} << i) &&
+                restored.settings.dictionary_extra_exclusions == 0x80000000U &&
+                core::serialize_jwp_project(qt::encode_project_workspace(restored)) == wire,
+            "JPR lost an independent category filter or its retained unknown bits");
   }
   workspace.documents.clear(); workspace.current_document = 0;
   const auto empty = qt::decode_project_workspace(qt::encode_project_workspace(workspace), directory + "/empty.jpr");
