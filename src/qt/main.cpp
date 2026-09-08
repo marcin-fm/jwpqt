@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include <QApplication>
+#include <QAction>
+#include <QIcon>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QCoreApplication>
@@ -16,8 +18,10 @@
 int main(int argc, char* argv[]) {
   QApplication application(argc, argv);
   QCoreApplication::setApplicationName(QStringLiteral("jwpqt"));
-  QCoreApplication::setApplicationVersion(QStringLiteral("0.1.0"));
+  QCoreApplication::setApplicationVersion(QStringLiteral(JWPQT_VERSION));
   QCoreApplication::setOrganizationName(QStringLiteral("jwpqt"));
+  QApplication::setDesktopFileName(QStringLiteral("jwpqt"));
+  application.setWindowIcon(QIcon(QStringLiteral(":/jwpqt/mainicon.ico")));
 
   QCommandLineParser parser;
   parser.setApplicationDescription(
@@ -59,6 +63,9 @@ int main(int argc, char* argv[]) {
       QStringLiteral("resource-report"),
       QStringLiteral("Load resources, print their status and exit."));
   parser.addOption(resource_report_option);
+  const QCommandLineOption handbook_option(QStringLiteral("handbook"),
+      QStringLiteral("Open the bundled offline handbook."));
+  parser.addOption(handbook_option);
   parser.addPositionalArgument(QStringLiteral("file"),
                                QStringLiteral("Document or JWP project to open."),
                                QStringLiteral("[file]"));
@@ -203,6 +210,8 @@ int main(int argc, char* argv[]) {
     return 0;
   }
   window.show();
+  if (parser.isSet(handbook_option))
+    window.findChild<QAction*>(QStringLiteral("helpContentsAction"))->trigger();
 
   if (parser.isSet(smoke_test)) {
     QTimer::singleShot(0, &application, &QCoreApplication::quit);

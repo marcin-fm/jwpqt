@@ -13,7 +13,7 @@ under `src/core`; Qt-specific application code lives under `src/qt`. See
 On Fedora, install the native build dependencies:
 
 ```sh
-sudo dnf install gcc-c++ cmake ninja-build qt6-qtbase-devel poppler-utils
+sudo dnf install gcc-c++ cmake ninja-build qt6-qtbase-devel poppler-utils desktop-file-utils shared-mime-info
 ```
 
 Configure, build, and test out of tree:
@@ -26,12 +26,50 @@ nice ctest --test-dir /srv/tmp/jwpqt-build --output-on-failure
 
 The printing tests require `pdftotext` from `poppler-utils` to inspect actual PDF
 page content, not just file signatures. It is not an application runtime dependency.
+Installed-delivery tests also require `desktop-file-validate`, `update-mime-database`
+and CPack. They stage and extract packages under the build directory, without root
+installation or access to the user's configuration.
 
 Run the editor, optionally opening a document:
 
 ```sh
 /srv/tmp/jwpqt-build/src/qt/jwpqt [file]
 ```
+
+## Help And Installation
+
+Help > Contents opens the embedded offline handbook. Search matches topic titles
+and text; Back/Forward, Contents and zoom controls support navigation. F1 routes
+the owning editor/dialog to its relevant topic. About includes original credits,
+GPL terms and data notices, and About Qt identifies the system toolkit. Help
+reuses its own window without changing document text or undo. Only whitelisted
+embedded pages and resources can load, never arbitrary local files or websites.
+`jwpqt --handbook` opens the same handbook at startup without optional datasets.
+
+Build an installable release and matching source archive:
+
+```sh
+nice cmake -S . -B /srv/tmp/jwpqt-build/release -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+nice cmake --build /srv/tmp/jwpqt-build/release -j2
+nice cpack --config /srv/tmp/jwpqt-build/release/CPackConfig.cmake -B /srv/tmp/jwpqt-build/packages
+nice cpack --config /srv/tmp/jwpqt-build/release/CPackSourceConfig.cmake -B /srv/tmp/jwpqt-build/packages
+```
+
+The binary TGZ contains `bin/jwpqt`, the handbook, retained licenses, a desktop
+entry, application icon and JWP/JPR MIME definitions. Extract it into a private
+prefix and run its executable from any working directory. CMake also supports
+`cmake --install BUILD --prefix PREFIX` and DESTDIR staging. Desktop registration
+does not force a default application; put the executable on PATH and refresh
+desktop/MIME caches using the distribution's normal tools. Removing a private
+prefix must not remove separate user configuration or documents.
+
+This is a dynamically linked Linux package, not an AppImage or a universal
+binary. It requires a compatible architecture, system Qt 6 Widgets/PrintSupport,
+standard C++ libraries and Japanese fonts. Supply matching source and retained
+notices when redistributing binaries under the GPL. Source archives omit Git and
+local assistant metadata. Neither package adds optional dictionary corpora;
+their separate acquisition and license conditions still apply. The installed
+handbook explains paths, provisioning and uninstallation.
 
 ## Runtime data
 
@@ -223,7 +261,7 @@ portable direct, adaptive, wildcard, contingent, and name filters, and inserts
 selected rows into JWP with portable undo. Editable EDICT `user.dct` and native
 kanji lookup tools and project workspaces are available. Native document printing
 and preview are described below. Remaining configuration, input/lookup controls,
-legacy print tuning, help, and packaging remain in progress.
+legacy print tuning and other remaining command-parity gaps remain in progress.
 
 ### Document printing and preview
 
@@ -263,8 +301,9 @@ file. Settings, histories and the current project are also protected destination
 Paper size, page/format/run counts, copies and rendering work are bounded; oversized
 jobs report an error rather than silently truncating. Native spool errors are
 reported, but cancellation cannot recall pages already sent to a physical printer.
-Configured printer/backend and physical printer acceptance remain environment-
-dependent verification, separate from the automated PDF/image/preview tests.
+PDF text/image/preview verification is the accepted printing gate for this port;
+physical-printer testing is not required. This does not claim testing of every
+printer backend or remove the retained legacy-formatting limitations above.
 
 ### Input modes and shortcuts
 

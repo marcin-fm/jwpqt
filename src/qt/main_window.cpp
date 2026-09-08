@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "main_window.h"
+#include "help_window.h"
+#include <QApplication>
 #include "find_replace_dialog.h"
 #include "jwpqt/core/unicode_search.h"
 
@@ -2756,6 +2758,18 @@ void MainWindow::create_actions() {
   });
 
   QMenu* help_menu = menuBar()->addMenu(tr("&Help"));
+  auto* handbook = new HelpWindow(this);
+  auto* contents = help_menu->addAction(tr("&Contents and Search..."));
+  contents->setObjectName(QStringLiteral("helpContentsAction"));
+  contents->setToolTip(tr("Offline handbook (F1 opens help for the current tool)"));
+  connect(contents, &QAction::triggered, handbook, [handbook] { handbook->open_topic(); });
+  auto* about = help_menu->addAction(tr("&About and Licenses..."));
+  about->setObjectName(QStringLiteral("aboutAction"));
+  connect(about, &QAction::triggered, handbook, [handbook] { handbook->open_topic(QStringLiteral("about.md")); });
+  auto* about_qt = help_menu->addAction(tr("About &Qt..."));
+  about_qt->setObjectName(QStringLiteral("aboutQtAction"));
+  connect(about_qt, &QAction::triggered, qApp, &QApplication::aboutQt);
+  help_menu->addSeparator();
   QAction* resources = help_menu->addAction(tr("Runtime &Resources..."));
   resources->setObjectName(QStringLiteral("resourceStatusAction"));
   connect(resources, &QAction::triggered, this, [this] {

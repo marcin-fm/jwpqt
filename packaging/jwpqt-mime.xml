@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-jwp-document">
+    <comment>JWP Japanese document</comment>
+    <glob pattern="*.jwp"/>
+  </mime-type>
+  <mime-type type="application/x-jwp-project">
+    <comment>JWP project workspace</comment>
+    <glob pattern="*.jpr"/>
+    <magic priority="60"><match type="string" offset="0" value="\003\152\155\367"/></magic>
+  </mime-type>
+</mime-info>

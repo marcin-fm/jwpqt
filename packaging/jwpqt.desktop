@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=jwpqt
+GenericName=Japanese Word Processor
+Comment=Edit Japanese documents and search kanji and dictionaries
+Exec=jwpqt %f
+TryExec=jwpqt
+Icon=jwpqt
+Terminal=false
+Categories=Office;WordProcessor;
+Keywords=Japanese;Kanji;Dictionary;JWP;
+MimeType=application/x-jwp-document;application/x-jwp-project;
+StartupNotify=false

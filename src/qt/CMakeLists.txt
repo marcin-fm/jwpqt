@@ -43,6 +43,8 @@ target_compile_options(jwpqt_qt_support
 )
 
 add_library(jwpqt_qt_ui STATIC
+  help_window.cpp
+  help_window.h
   application_settings_dialog.cpp
   application_settings_dialog.h
   japanese_fonts.cpp
@@ -88,10 +90,31 @@ add_library(jwpqt_qt_ui STATIC
   wnn_user_dictionary_dialog.h
 )
 
+target_compile_definitions(jwpqt_qt_ui PUBLIC JWPQT_VERSION="${PROJECT_VERSION}")
+qt_add_resources(jwpqt_qt_ui handbook_assets
+  PREFIX "/jwpqt/help"
+  BASE "${PROJECT_SOURCE_DIR}/docs/handbook"
+  FILES
+    "${PROJECT_SOURCE_DIR}/docs/handbook/start.md"
+    "${PROJECT_SOURCE_DIR}/docs/handbook/files.md"
+    "${PROJECT_SOURCE_DIR}/docs/handbook/editing.md"
+    "${PROJECT_SOURCE_DIR}/docs/handbook/dictionary.md"
+    "${PROJECT_SOURCE_DIR}/docs/handbook/kanji.md"
+    "${PROJECT_SOURCE_DIR}/docs/handbook/printing.md"
+    "${PROJECT_SOURCE_DIR}/docs/handbook/settings.md"
+    "${PROJECT_SOURCE_DIR}/docs/handbook/installation.md"
+    "${PROJECT_SOURCE_DIR}/docs/handbook/about.md"
+)
+set_source_files_properties("${PROJECT_SOURCE_DIR}/gnugpl.txt" PROPERTIES QT_RESOURCE_ALIAS "gnugpl.txt")
+set_source_files_properties("${PROJECT_SOURCE_DIR}/_cpright.txt" PROPERTIES QT_RESOURCE_ALIAS "_cpright.txt")
+qt_add_resources(jwpqt_qt_ui notice_assets PREFIX "/jwpqt/help"
+  FILES "${PROJECT_SOURCE_DIR}/gnugpl.txt" "${PROJECT_SOURCE_DIR}/_cpright.txt")
+
 qt_add_resources(jwpqt_qt_ui toolbar_assets
   PREFIX "/jwpqt"
   BASE "${PROJECT_SOURCE_DIR}"
   FILES "${PROJECT_SOURCE_DIR}/toolbar.bmp"
+        "${PROJECT_SOURCE_DIR}/mainicon.ico"
         "${PROJECT_SOURCE_DIR}/hsradicals.bmp"
         "${PROJECT_SOURCE_DIR}/skiptype.bmp"
         "${PROJECT_SOURCE_DIR}/fourcorners.bmp"
@@ -118,4 +141,4 @@ qt_add_executable(jwpqt
 target_link_libraries(jwpqt PRIVATE jwpqt_qt_ui)
 target_compile_options(jwpqt PRIVATE -Wall -Wextra -Wpedantic)
 
-install(TARGETS jwpqt RUNTIME DESTINATION bin)
+install(TARGETS jwpqt RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
