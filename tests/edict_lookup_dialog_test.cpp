@@ -22,6 +22,7 @@
 #include <QListWidget>
 #include <QMenu>
 #include <QMimeData>
+#include <QMouseEvent>
 #include <QPointer>
 #include <QPushButton>
 #include <QTextDocument>
@@ -354,6 +355,31 @@ void test_priority_presentation() {
           "A label-only selection inserted an entry");
   dialog.copy_selected();
   require(QApplication::clipboard()->text() == "End of Priority Entries", "Label Copy differs from displayed text");
+  const auto double_click = [&](const QString& target, bool interfere = false) {
+    const auto found = view->document()->find(target);
+    QTextCursor position(view->document());
+    position.setPosition(found.selectionStart() + 1);
+    view->setTextCursor(position);
+    view->ensureCursorVisible();
+    const QPoint point = view->cursorRect(position).center();
+    bool armed = interfere;
+    const auto connection = QObject::connect(view, &QTextEdit::selectionChanged, view, [&] {
+      if (!armed) return;
+      armed = false;
+      view->setTextCursor(QTextCursor(view->document()));
+    });
+    QMouseEvent event(QEvent::MouseButtonDblClick, QPointF(point),
+        QPointF(view->viewport()->mapToGlobal(point)), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QApplication::sendEvent(view->viewport(), &event);
+    QObject::disconnect(connection);
+  };
+  double_click("a2");
+  require(inserted == U"a2 /ordinary/", "Double-click used old selection or backend index instead of clicked entry");
+  double_click("End of Priority Entries");
+  require(inserted == U"a2 /ordinary/", "Double-click on a presentation label inserted an entry");
+  double_click("p1", true);
+  require(inserted == U"a2 /ordinary/", "Double-click ignored a reentrant selection change");
+  view->setTextCursor(view->document()->find("End of Priority Entries"));
   const QPointer<QTextDocument> document = view->document();
   const int start = view->textCursor().selectionStart(), end = view->textCursor().selectionEnd();
   const auto remembered = history->entries();

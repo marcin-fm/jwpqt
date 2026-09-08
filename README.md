@@ -409,6 +409,9 @@ Explicit Sort removes presentation labels and starts from the displayed ordering
 later preference changes apply only to a new successful search. The three policies
 persist as `Dict_PriorityEntriesFirst`, `Dict_PrioritySeparator`, and
 `Dict_Adv_SeparatorMark` through Options, configuration and projects.
+Plain left double-click inserts the actual clicked entry, not an older selection.
+Section labels are never inserted; modified-click selection keeps its normal Qt
+behavior, and reentrant selection/document changes cancel insertion safely.
 
 The lookup's **Options** button opens the Dictionary settings tab; **User
 Dictionary** reuses the application-owned editor and follows its availability.

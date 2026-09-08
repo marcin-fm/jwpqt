@@ -806,6 +806,31 @@ bool EdictLookupDialog::eventFilter(QObject* watched, QEvent* event) {
     }
   }
   if (watched == results_ || watched == results_->viewport()) {
+    if (event->type() == QEvent::MouseButtonDblClick) {
+      auto* mouse = static_cast<QMouseEvent*>(event);
+      if (mouse->button() == Qt::LeftButton && mouse->modifiers() == Qt::NoModifier) {
+        event->accept();
+        if (query_busy_ || !insert_handler_) return true;
+        const QPoint point = watched == results_->viewport() ? mouse->position().toPoint() :
+            results_->viewport()->mapFrom(results_, mouse->position().toPoint());
+        const int position = results_->cursorForPosition(point).position();
+        for (std::size_t row : display_order_) {
+          const auto range = row_ranges_[row];
+          if (position < range.first || position >= range.second) continue;
+          const QPointer<EdictLookupDialog> self(this);
+          const QPointer<QTextDocument> document(results_->document());
+          QTextCursor selected(document);
+          selected.setPosition(range.first);
+          selected.setPosition(range.second, QTextCursor::KeepAnchor);
+          results_->setTextCursor(selected);
+          if (self && document && results_->document() == document &&
+              results_->textCursor().selectionStart() == range.first &&
+              results_->textCursor().selectionEnd() == range.second) insert_selected();
+          return true;
+        }
+        return true;
+      }
+    }
     if (event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress) {
       auto* key = static_cast<QKeyEvent*>(event);
       const bool plain = !(key->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier));

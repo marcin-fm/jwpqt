@@ -925,6 +925,16 @@ void test_real_resources(const QString& root, const QString& source,
   window.findChild<QAction*>(QStringLiteral("undoAction"))->trigger();
   require(editor->toPlainText() == before_sorted_insert && window.document_modified() == before_sorted_modified,
            QStringLiteral("Compact real insertion did not undo cleanly"));
+  const QPoint double_click_point = dictionary_results->cursorRect(compact_cursor).center();
+  QMouseEvent double_click(QEvent::MouseButtonDblClick, QPointF(double_click_point),
+      QPointF(dictionary_results->viewport()->mapToGlobal(double_click_point)),
+      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(dictionary_results->viewport(), &double_click);
+  require(editor->toPlainText() != before_sorted_insert,
+          QStringLiteral("Real result double-click did not insert the clicked entry"));
+  window.findChild<QAction*>(QStringLiteral("undoAction"))->trigger();
+  require(editor->toPlainText() == before_sorted_insert && window.document_modified() == before_sorted_modified,
+          QStringLiteral("Real double-click insertion did not undo cleanly"));
   const auto old_query = dictionary->query();
   const QPointer<QTextDocument> keyboard_results(dictionary_results->document());
   query_edit->setCursorPosition(query_edit->text().size());
