@@ -15,6 +15,7 @@
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QScrollArea>
 #include <QSpinBox>
 #include <QTabWidget>
 #include <QVBoxLayout>
@@ -116,6 +117,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   tabs->addTab(fonts, tr("Fonts"));
   auto* dictionary = new QWidget(tabs);
   auto* dictionary_form = new QFormLayout(dictionary);
+  dictionary_form->setSizeConstraint(QLayout::SetMinimumSize);
   struct DictionaryControl { QCheckBox* widget; bool EdictLookupOptions::*member; };
   std::vector<DictionaryControl> dictionary_controls;
   const auto add_dictionary = [&](const char* name, const QString& label, bool EdictLookupOptions::*member) {
@@ -142,11 +144,18 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   add_dictionary("settingsDictionaryFullAscii", tr("ASCII boundaries match the complete definition"), &EdictLookupOptions::full_ascii);
   add_dictionary("settingsDictionaryJascii", tr("Treat JASCII as ASCII"), &EdictLookupOptions::jascii_to_ascii);
   add_dictionary("settingsDictionaryContingent", tr("Contingent search after eligible exact searches fail"), &EdictLookupOptions::contingent);
+  add_dictionary("settingsDictionaryAutomatic", tr("Search a document selection when opening dictionary lookup"), &EdictLookupOptions::automatic_search);
   auto* dictionary_note = new QLabel(tr("These settings apply to new searches. Existing queries and results stay unchanged. "
       "Unimplemented exclusion bits and other dictionary policies remain retained and disclosed."), dictionary);
   dictionary_note->setWordWrap(true);
+  dictionary_note->setObjectName(QStringLiteral("settingsDictionaryNote"));
   dictionary_form->addRow(dictionary_note);
-  tabs->addTab(dictionary, tr("Dictionary"));
+  auto* dictionary_scroll = new QScrollArea(tabs);
+  dictionary_scroll->setObjectName(QStringLiteral("settingsDictionaryScroll"));
+  dictionary_scroll->setFrameShape(QFrame::NoFrame);
+  dictionary_scroll->setWidgetResizable(true);
+  dictionary_scroll->setWidget(dictionary);
+  tabs->addTab(dictionary_scroll, tr("Dictionary"));
   auto* history = new QWidget(tabs);
   auto* history_form = new QFormLayout(history);
   auto* history_size = new QSpinBox(history);

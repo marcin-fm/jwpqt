@@ -311,6 +311,13 @@ ASCII, name-filter and work-limit safeguards. **Shift+Search** requests a forced
 retry for that search only, relaxing the source's heuristic restrictions without
 changing the saved preference. Ordinary searches do not inherit that forcing.
 
+**Options > Dictionary > Search a document selection** defaults on. Opening
+lookup searches the selected first-paragraph span, leaving the document unchanged.
+It is not search-as-you-type. A new lookup still prefills the word under the cursor
+without searching it when there is no selection. An existing query, including
+pending kana, stays intact when automatic search is off or there is no selection.
+If showing the window changes the query, the original automatic request is skipped.
+
 Dictionary **History** opens a selectable query list; `Up` recalls older queries,
 and `Down` moves toward newer entries and a blank draft, or opens the list when
 the query has been edited. Recall resolves pending kana once, never starts a

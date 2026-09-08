@@ -43,6 +43,7 @@ class EdictLookupDialog : public QDialog {
                              std::shared_ptr<core::QueryHistory> shared_history = {});
 
   void set_query(std::u32string_view query);
+  std::u32string query() const;
   void set_overwrite_action(QAction* action);
   void set_options(const EdictLookupOptions& options);
   void reset_history_navigation() noexcept {

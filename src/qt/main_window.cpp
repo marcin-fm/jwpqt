@@ -4140,13 +4140,20 @@ void MainWindow::show_edict_lookup_dialog() {
   }
   finish_kana_input();
   const std::u32string seed = edict_query_seed();
+  const bool automatic = document_->editor_->textCursor().hasSelection() && !seed.empty() &&
+                         application_settings_.dictionary.automatic_search;
+  const QPointer<MainWindow> self(this);
   if (edict_lookup_dialog_ != nullptr) {
-    if (!seed.empty()) {
-      edict_lookup_dialog_->set_query(seed);
-    }
-    edict_lookup_dialog_->show();
-    edict_lookup_dialog_->raise();
-    edict_lookup_dialog_->activateWindow();
+    const QPointer<EdictLookupDialog> dialog(edict_lookup_dialog_);
+    if (automatic) dialog->set_query(seed);
+    if (!dialog || !self) return;
+    dialog->show();
+    if (!dialog || !self) return;
+    dialog->raise();
+    if (!dialog || !self) return;
+    dialog->activateWindow();
+    if (dialog && self && automatic && application_settings_.dictionary.automatic_search &&
+        dialog->isVisible() && dialog->query() == seed) dialog->search();
     return;
   }
 
@@ -4191,14 +4198,16 @@ void MainWindow::show_edict_lookup_dialog() {
     application_settings_.dictionary = options;
   });
   dialog->set_overwrite_action(overwrite_action_);
-  if (!seed.empty()) {
-    dialog->set_query(seed);
-  }
   dialog->setAttribute(Qt::WA_DeleteOnClose);
   connect(dialog, &QObject::destroyed, this,
           [this] { edict_lookup_dialog_ = nullptr; });
   edict_lookup_dialog_ = dialog;
+  const QPointer<EdictLookupDialog> guarded(dialog);
+  if (!seed.empty()) dialog->set_query(seed);
+  if (!guarded || !self) return;
   dialog->show();
+  if (guarded && self && automatic && application_settings_.dictionary.automatic_search &&
+      guarded->isVisible() && guarded->query() == seed) guarded->search();
 }
 
 void MainWindow::show_edict_results_window(bool show) {
@@ -4244,7 +4253,8 @@ std::u32string MainWindow::edict_query_seed() const {
     }
   }
   QString selected = cursor.selectedText();
-  selected.replace(QChar::ParagraphSeparator, QLatin1Char('\n'));
+  const int paragraph_end = selected.indexOf(QChar::ParagraphSeparator);
+  if (paragraph_end >= 0) selected.truncate(paragraph_end);
   return from_qstring(selected);
 }
 

@@ -36,6 +36,7 @@
 #include <QStatusBar>
 #include <QSignalBlocker>
 #include <QScrollBar>
+#include <QScrollArea>
 #include <QTabWidget>
 #include <QInputDialog>
 #include <QInputMethodEvent>
@@ -3080,6 +3081,10 @@ void test_edict_lookup_integration(const QString& directory) {
   QApplication::processEvents();
   editor->selectAll();
   auto* overwrite = find_action(window, "overwriteModeAction");
+  auto lookup_preferences = window.application_settings();
+  lookup_preferences.dictionary.automatic_search = false;
+  require(window.apply_application_settings(lookup_preferences),
+          "Could not isolate manual dictionary search from automatic selection lookup");
   overwrite->setChecked(true);
   lookup->trigger();
   QApplication::processEvents();
@@ -3248,6 +3253,97 @@ void test_edict_lookup_integration(const QString& directory) {
           "EDICT owner-destruction fixture did not create child windows");
   owner.reset();
   QApplication::processEvents();
+}
+
+void test_edict_automatic_search(const QString& directory) {
+  using namespace jwpqt;
+  const QString base = directory + QStringLiteral("/edict-automatic");
+  require(QDir().mkpath(base), "Could not create automatic-search fixture");
+  write_bytes(base + "/edict", QStringLiteral("\u3042 /cat/\n\u3044 /dog/\n").toUtf8());
+  core::EdictRegistry registry;
+  core::EdictRegistryEntry entry;
+  entry.label = u"Automatic"; entry.path = u"edict";
+  entry.encoding = core::EdictRegistryEncoding::kUtf8;
+  entry.searched = true; entry.keep = true;
+  registry.entries.push_back(entry);
+  qt::write_edict_registry_file(base + "/dict.cfg", registry);
+  qt::MainWindow window;
+  require(window.load_edict_configuration(base + "/dict.cfg"), "Could not load automatic-search fixture");
+  find_action(window, "newTextDocumentAction")->trigger();
+  auto* editor = window.active_editor();
+  editor->insertPlainText(QStringLiteral("cat\ndog"));
+  const auto select = [&](int first, int last) {
+    auto cursor = editor->textCursor();
+    cursor.setPosition(first); cursor.setPosition(last, QTextCursor::KeepAnchor);
+    editor->setTextCursor(cursor);
+  };
+  auto* action = find_action(window, "edictLookupAction");
+  const auto lookup = [&] {
+    return dynamic_cast<qt::EdictLookupDialog*>(window.findChild<QDialog*>("edictLookupDialog"));
+  };
+  select(0, 3);
+  action->trigger();
+  auto* dialog = lookup();
+  require(dialog && dialog->query() == U"cat" && dialog->report().results.size() == 1 &&
+              window.query_histories().dictionary.find(U"cat") &&
+              editor->textCursor().selectionStart() == 0 && editor->textCursor().selectionEnd() == 3,
+          "New lookup did not search its selection without changing the document");
+  auto preferences = window.application_settings();
+  preferences.dictionary.automatic_search = false;
+  require(window.apply_application_settings(preferences), "Could not disable automatic lookup");
+  dialog->set_query(U"");
+  auto* query = dialog->findChild<QLineEdit*>("edictQuery");
+  QKeyEvent k(QEvent::KeyPress, Qt::Key_K, Qt::NoModifier, "k");
+  QApplication::sendEvent(query, &k);
+  select(4, 7);
+  action->trigger();
+  QKeyEvent a(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier, "a");
+  QApplication::sendEvent(query, &a);
+  require(dialog->query() == U"\u304b" && dialog->report().results.size() == 1 &&
+              !window.query_histories().dictionary.find(U"dog"),
+          "Disabled automatic lookup replaced a pending draft or searched");
+  dialog->close(); QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+  action->trigger(); dialog = lookup();
+  require(dialog && dialog->query() == U"dog" && dialog->report().results.empty(),
+          "New disabled lookup failed to prefill or searched unexpectedly");
+  preferences.dictionary.automatic_search = true;
+  require(window.apply_application_settings(preferences), "Could not enable automatic lookup");
+  action->trigger();
+  require(dialog->report().results.size() == 1 && window.query_histories().dictionary.find(U"dog"),
+          "Existing lookup did not automatically search a new selection");
+  select(1, 1);
+  dialog->set_query(U"draft"); action->trigger();
+  require(dialog->query() == U"draft", "Unselected invocation overwrote an existing query");
+  dialog->close(); QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+  action->trigger(); dialog = lookup();
+  require(dialog && dialog->query() == U"cat" && dialog->report().results.empty(),
+          "Native word-under-cursor prefill was lost or searched automatically");
+  select(0, 7); action->trigger();
+  require(dialog->query() == U"cat" && dialog->report().results.size() == 1,
+          "Automatic lookup did not use the selected first-paragraph span");
+  auto* results = dialog->findChild<QTextEdit*>("edictResults");
+  const QPointer<QTextDocument> old_results(results->document());
+  select(0, 2); action->trigger();
+  require(old_results && results->document() == old_results &&
+              !window.query_histories().dictionary.find(U"ca"),
+          "Failed automatic lookup discarded results or remembered an invalid query");
+  class ShowObserver final : public QObject {
+   public:
+    qt::EdictLookupDialog* dialog = nullptr;
+    bool eventFilter(QObject*, QEvent* event) override {
+      if (event->type() == QEvent::Show) dialog->set_query(U"external");
+      return false;
+    }
+  } observer;
+  observer.dialog = dialog;
+  dialog->hide(); dialog->installEventFilter(&observer);
+  select(0, 3); action->trigger();
+  require(dialog->query() == U"external" && old_results && results->document() == old_results &&
+              !window.query_histories().dictionary.find(U"external"),
+          "Automatic lookup searched a query changed while showing its window");
+  dialog->removeEventFilter(&observer);
+  require(editor->toPlainText() == QStringLiteral("cat\ndog") && window.document_modified(),
+          "Automatic lookup changed document text or its dirty state");
 }
 
 void test_edict_search_controls(const QString& directory) {
@@ -3474,6 +3570,7 @@ void test_edict_search_controls(const QString& directory) {
     auto* begin = popup->findChild<QCheckBox*>(QStringLiteral("settingsDictionaryBegin"));
     options_seen = begin != nullptr;
     if (begin) begin->setChecked(true);
+    popup->findChild<QCheckBox*>("settingsDictionaryAutomatic")->setChecked(false);
     popup->reject();
   });
   find_action(window, "applicationOptionsAction")->trigger();
@@ -3484,11 +3581,22 @@ void test_edict_search_controls(const QString& directory) {
     if (!popup) return;
     popup->findChild<QCheckBox*>(QStringLiteral("settingsDictionaryBegin"))->setChecked(true);
     popup->findChild<QTabWidget*>()->setCurrentIndex(2);
+    auto* scroll = popup->findChild<QScrollArea*>("settingsDictionaryScroll");
+    auto* note = popup->findChild<QLabel*>("settingsDictionaryNote");
+    QApplication::processEvents();
+    require(scroll && note && note->height() >= note->heightForWidth(note->width()),
+            "Dictionary settings clipped their wrapped explanation");
+    scroll->ensureWidgetVisible(note);
+    require(scroll->viewport()->rect().contains(note->mapTo(scroll->viewport(), note->rect().bottomRight())),
+            "Dictionary settings explanation could not be scrolled into view");
+    scroll->verticalScrollBar()->setValue(0);
     options_seen = popup->grab().save(QDir::current().filePath(QStringLiteral("application-options-dictionary.png")));
+    popup->findChild<QCheckBox*>("settingsDictionaryAutomatic")->setChecked(false);
     popup->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
   });
   find_action(window, "applicationOptionsAction")->trigger();
   require(options_seen && window.application_settings().dictionary.require_beginning &&
+               !window.application_settings().dictionary.automatic_search &&
               dialog->findChild<QCheckBox*>(QStringLiteral("edictBeginning"))->isChecked() &&
               dialog->report().results.size() == 5 && count(U"cat") == 4,
           "Accepted dictionary Options searched prematurely or failed to update live controls");
@@ -3498,6 +3606,7 @@ void test_edict_search_controls(const QString& directory) {
   });
   find_action(window, "defaultSettingsAction")->trigger();
   require(window.application_settings().dictionary.require_beginning &&
+               window.application_settings().dictionary.automatic_search &&
               !window.application_settings().dictionary.require_end &&
               !window.application_settings().dictionary.full_ascii &&
               window.application_settings().dictionary_extra_exclusions == 0x80000000U &&
@@ -5214,6 +5323,7 @@ int main(int argc, char* argv[]) {
     test_jwp_wnn_user_dictionary_dialog(directory.path());
     test_edict_lookup_integration(directory.path());
     test_edict_search_controls(directory.path());
+    test_edict_automatic_search(directory.path());
     test_unicode_lookup_insertion(directory.path());
     test_edict_user_dictionary_integration(directory.path());
     test_jwp_wnn_preference_write_failure(directory.path());

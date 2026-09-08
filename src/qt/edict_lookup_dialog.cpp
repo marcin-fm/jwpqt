@@ -254,8 +254,14 @@ void EdictLookupDialog::set_options(const EdictLookupOptions& options) {
 }
 
 void EdictLookupDialog::set_query(std::u32string_view query) {
-  query_edit_->setText(to_qstring(query));
-  query_edit_->selectAll();
+  const QPointer<EdictLookupDialog> self(this);
+  const QString text = to_qstring(query);
+  query_edit_->setText(text);
+  if (self && query_edit_->text() == text) query_edit_->selectAll();
+}
+
+std::u32string EdictLookupDialog::query() const {
+  return from_qstring(query_edit_->text());
 }
 
 bool EdictLookupDialog::search(bool force_contingent) {

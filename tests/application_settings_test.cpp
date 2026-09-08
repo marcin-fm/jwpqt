@@ -170,14 +170,14 @@ void test_dictionary_settings() {
               !defaults.dictionary.advanced && defaults.dictionary.advanced_always &&
               defaults.dictionary.i_adjectives && !defaults.dictionary.classical &&
                !defaults.dictionary.full_ascii && !defaults.dictionary.jascii_to_ascii &&
-               !defaults.dictionary.contingent,
+               !defaults.dictionary.contingent && defaults.dictionary.automatic_search,
           "Dictionary defaults differ from the source");
   auto settings = read_application_settings(
       "dict_advanced=no\nDiCt_AdvancedSearches=yes\ndict_always=false\n"
-      "dict_showall=true\ndict_iadj=false\ndict_classical=true\ndict_contingent=yes\n"
+      "dict_showall=true\ndict_iadj=false\ndict_classical=true\ndict_contingent=yes\ndict_auto=false\n"
       "dict_fullascii=true\ndict_jascii2ascii=true\ndict_bits=0x80000006\n"
       "DICT_BITS=bad\nDict_PriorityEntriesFirst=true\nFuture=\xff\n");
-  require(settings.dictionary.contingent && settings.dictionary.advanced && !settings.dictionary.advanced_always &&
+  require(!settings.dictionary.automatic_search && settings.dictionary.contingent && settings.dictionary.advanced && !settings.dictionary.advanced_always &&
               settings.dictionary.advanced_show_all && !settings.dictionary.i_adjectives &&
               settings.dictionary.classical && settings.dictionary.full_ascii &&
               settings.dictionary.jascii_to_ascii && !settings.dictionary.require_beginning &&
@@ -217,6 +217,7 @@ void test_dictionary_settings() {
   for (const auto* bad : {"Dict_AdvancedSearches=bad\nDict_AdvancedSearches=true",
                           "Dict_ContingentSearches=bad\nDict_ContingentSearches=true",
                           "dict_contingent=2",
+                          "Dict_AutoSearch=bad\nDict_AutoSearch=true", "dict_auto=2",
                          "dict_always=2", "dict_showall=on", "dict_iadj=maybe",
                          "dict_classical=2", "dict_jascii2ascii=2", "dict_fullascii=2",
                          "dict_bits=bad\ndict_bits=13", "dict_bits=4294967296",

@@ -49,6 +49,7 @@ constexpr BooleanDescriptor<ApplicationSettings> kBooleans[] = {
     {"Save_Histories", "save_history", &ApplicationSettings::save_histories}};
 
 constexpr BooleanDescriptor<EdictLookupOptions> kDictionaryBooleans[] = {
+    {"Dict_AutoSearch", "dict_auto", &EdictLookupOptions::automatic_search},
     {"Dict_AdvancedSearches", "dict_advanced", &EdictLookupOptions::advanced},
     {"Dict_ContingentSearches", "dict_contingent", &EdictLookupOptions::contingent},
     {"Dict_AlwaysAdvancedSearch", "dict_always", &EdictLookupOptions::advanced_always},
