@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "kanji_reading_lookup_dialog.h"
+#include "auxiliary_find.h"
 #include "kanji_result_keys.h"
 
 #include <exception>
@@ -164,6 +165,7 @@ KanjiReadingLookupDialog::KanjiReadingLookupDialog(
   update_mode();
   update_actions();
   new KanjiResultKeys(results_, insert_button_, info_button_, copy_button_, this);
+  new AuxiliaryFind(results_, {}, false);
 }
 
 void KanjiReadingLookupDialog::set_query(

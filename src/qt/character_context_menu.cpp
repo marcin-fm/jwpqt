@@ -12,6 +12,7 @@
 #include <QTextBlock>
 #include <QTextEdit>
 #include <QTextLayout>
+#include <QVariant>
 
 #include "jwp_editor.h"
 
@@ -68,7 +69,7 @@ void show_character_context_menu(
   const bool keyboard = event.reason() == QContextMenuEvent::Keyboard;
   const auto target = character_target(
       editor, keyboard ? std::nullopt : std::optional<QPoint>(event.pos()));
-  if (target && event.modifiers().testFlag(Qt::ShiftModifier) && !keyboard) {
+  if (target && show_information && event.modifiers().testFlag(Qt::ShiftModifier) && !keyboard) {
     show_information(*target);
     return;
   }
@@ -78,11 +79,13 @@ void show_character_context_menu(
   QAction* information = menu->addAction(
       QTextEdit::tr("Character &Information"));
   information->setObjectName(QStringLiteral("characterInfoContextAction"));
-  information->setEnabled(target.has_value());
+  information->setEnabled(target.has_value() && static_cast<bool>(show_information));
+  for (auto* action : editor.actions())
+    if (action->property("jwpqtAuxiliaryFind").toBool()) menu->addAction(action);
   const QPoint location = keyboard
       ? editor.viewport()->mapToGlobal(editor.cursorRect().center())
       : event.globalPos();
-  if (menu->exec(location) == information && target) show_information(*target);
+  if (menu->exec(location) == information && target && show_information) show_information(*target);
 }
 
 }  // namespace jwpqt::qt

@@ -30,6 +30,7 @@ class FindReplaceDialog : public QDialog {
                     Handler handler, QWidget* parent = nullptr);
   void set_text(const QString& text, const QString& replacement);
   void set_overwrite_action(QAction* action);
+  void set_auxiliary_scope();
  protected:
   bool eventFilter(QObject* object, QEvent* event) override;
  private:

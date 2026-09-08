@@ -285,6 +285,7 @@ class MainWindow : public QMainWindow {
   prompt_for_kanji_color_list_edit();
 
  private:
+  friend class AuxiliaryFind;
   struct DocumentState;
   struct WnnResources;
   struct EdictUserResources;

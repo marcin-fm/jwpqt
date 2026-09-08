@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "edict_results_window.h"
+#include "auxiliary_find.h"
+#include "text_bridge.h"
 #include "japanese_fonts.h"
 
 #include <algorithm>
@@ -16,6 +18,7 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QPushButton>
+#include <QPointer>
 #include <QShortcut>
 #include <QVBoxLayout>
 
@@ -23,7 +26,7 @@ namespace jwpqt::qt {
 namespace {
 
 QString from_utf32(std::u32string_view text) {
-  return QString::fromUcs4(text.data(), static_cast<qsizetype>(text.size()));
+  return to_qstring(text);
 }
 
 std::u32string render_record(const core::EdictRecord& record) {
@@ -69,6 +72,7 @@ EdictResultsWindow::EdictResultsWindow(QWidget* parent)
 
   results_->setObjectName(QStringLiteral("edictResultsList"));
   assign_japanese_font(*results_, JapaneseFontRole::kList);
+  new AuxiliaryFind(results_);
   results_->setSelectionMode(QAbstractItemView::ExtendedSelection);
   status_->setObjectName(QStringLiteral("edictResultsStatus"));
   copy_button_->setObjectName(QStringLiteral("edictResultsCopy"));
@@ -118,9 +122,11 @@ void EdictResultsWindow::append_report(EdictResourceSearchReport report) {
   }
 
   std::vector<StoredResult> additions;
+  std::vector<QString> rendered;
   additions.reserve(report.results.size());
   for (const EdictResourceSearchResult& result : report.results) {
     additions.push_back({render_record(result.result.record), result.label});
+    rendered.push_back(from_utf32(additions.back().text));
   }
   std::size_t new_rejected = rejected_;
   checked_add(new_rejected, report.rejected, "EDICT rejected count overflows");
@@ -134,8 +140,9 @@ void EdictResultsWindow::append_report(EdictResourceSearchReport report) {
   checked_add(new_failures, visible_failures,
               "EDICT failure count overflows");
 
-  for (StoredResult& result : additions) {
-    auto* item = new QListWidgetItem(from_utf32(result.text));
+  for (std::size_t index = 0; index < additions.size(); ++index) {
+    auto& result = additions[index];
+    auto* item = new QListWidgetItem(rendered[index]);
     item->setToolTip(result.source);
     results_->addItem(item);
     stored_results_.push_back(std::move(result));
@@ -197,15 +204,17 @@ void EdictResultsWindow::insert_selected() {
   if (text.empty()) {
     return;
   }
+  const QPointer<EdictResultsWindow> self(this);
+  auto handler = insert_handler_;
   try {
-    if (!insert_handler_(text)) {
+    if (!handler(text) && self) {
       status_->setText(tr("Could not insert the selected result"));
     }
   } catch (const std::exception& error) {
-    status_->setText(tr("Insert failed: %1")
+    if (self) status_->setText(tr("Insert failed: %1")
                          .arg(QString::fromUtf8(error.what())));
   } catch (...) {
-    status_->setText(tr("Insert failed: unknown error"));
+    if (self) status_->setText(tr("Insert failed: unknown error"));
   }
 }
 

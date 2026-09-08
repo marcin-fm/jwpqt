@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "edict_lookup_dialog.h"
+#include "auxiliary_find.h"
 
 #include <algorithm>
 #include <exception>
@@ -368,6 +369,12 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
   status_->setText(tr("Enter a search term."));
+  new AuxiliaryFind(results_, [this] {
+    std::vector<std::pair<int, int>> ranges;
+    ranges.reserve(display_order_.size());
+    for (const auto row : display_order_) ranges.push_back(row_ranges_.at(row));
+    return ranges;
+  });
   update_actions();
 }
 
@@ -998,9 +1005,11 @@ bool EdictLookupDialog::eventFilter(QObject* watched, QEvent* event) {
     }
     if (event->type() == QEvent::MouseButtonPress &&
         static_cast<QMouseEvent*>(event)->button() == Qt::RightButton) return true;
-    if (event->type() == QEvent::ContextMenu && info_handler_) {
+    if (event->type() == QEvent::ContextMenu) {
+      std::function<void(CharacterTarget)> callback;
+      if (auto handler = info_handler_) callback = [handler](CharacterTarget target) { handler(target.character); };
       show_character_context_menu(*results_, *static_cast<QContextMenuEvent*>(event),
-          [this](CharacterTarget target) { info_handler_(target.character); });
+          callback);
       return true;
     }
   }

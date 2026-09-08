@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "edict_user_dictionary_dialog.h"
+#include "auxiliary_find.h"
 #include "japanese_fonts.h"
 
 #include <algorithm>
@@ -74,6 +75,7 @@ EdictUserDictionaryDialog::EdictUserDictionaryDialog(
   auto* content = new QHBoxLayout();
   entries_list_->setObjectName(QStringLiteral("edictUserEntries"));
   assign_japanese_font(*entries_list_, JapaneseFontRole::kList);
+  new AuxiliaryFind(entries_list_);
   entries_list_->setAlternatingRowColors(true);
   content->addWidget(entries_list_, 1);
 

@@ -38,4 +38,19 @@ Read-only documents, invalid encodings, changed selections or documents during
 confirmation stop unsafe replacement. Content and work limits fail explicitly
 instead of truncating a large search silently.
 
+## Find In Results
+
+Focus dictionary results, accumulated results, kanji lookup/count results or a
+user-dictionary list and press Ctrl+F. The context menu offers Find, Next and
+Previous as well. Japanese input, search history, case and width preferences,
+direction, wrap and keep-open behavior are shared with document search, but
+replacement and all-files controls are not available here.
+
+Find advances past the current logical entry and selects the whole next match.
+It does not match across unrelated entries or turn grouping labels into records.
+If only the current entry matches, it reports no other match. F3/Shift+F3 repeat
+in ordinary lists; kanji result strips retain F3 navigation, with repeated Find
+available in the context menu. Finding leaves documents and canonical insertion
+unchanged, including after results are sorted or refreshed.
+
 [Documents](files.md) | [Settings and histories](settings.md) | [Contents](start.md)

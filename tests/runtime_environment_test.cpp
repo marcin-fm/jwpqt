@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "file_io.h"
+#include "auxiliary_find.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -858,10 +859,27 @@ void test_real_resources(const QString& root, const QString& source,
   const int sorted_love = dictionary_results->toPlainText().indexOf(QChar(0x611b));
   require(sorted_love >= 0, QStringLiteral("Sorting real dictionary results lost Love"));
   QTextCursor sorted_cursor(dictionary_results->document());
-  sorted_cursor.setPosition(sorted_love);
-  sorted_cursor.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
+  sorted_cursor.movePosition(QTextCursor::End);
   dictionary_results->setTextCursor(sorted_cursor);
-  dictionary_results->ensureCursorVisible();
+  jwpqt::qt::AuxiliaryFind* auxiliary = nullptr;
+  for (auto* child : dictionary_results->children())
+    if (auto* finder = dynamic_cast<jwpqt::qt::AuxiliaryFind*>(child)) auxiliary = finder;
+  const QPointer<QTextDocument> before_find_document(dictionary_results->document());
+  const QString before_find_editor = editor->document()->toRawText();
+  jwpqt::qt::FindReplaceRequest find_request;
+  find_request.text = QString(QChar(0x611b));
+  require(auxiliary && auxiliary->find(find_request).valid &&
+              dictionary_results->document() == before_find_document &&
+              dictionary_results->textCursor().selectionStart() <= sorted_love &&
+              dictionary_results->textCursor().selectionEnd() > sorted_love &&
+              editor->document()->toRawText() == before_find_editor &&
+              window.query_histories().search.find(U"\u611b").has_value(),
+          QStringLiteral("Real auxiliary Find lost sorted entry ownership or changed the document"));
+  auxiliary->open();
+  auto* auxiliary_dialog = dictionary->findChild<QDialog*>(QStringLiteral("auxiliaryFindDialog"));
+  require(auxiliary_dialog && auxiliary_dialog->isVisible(), QStringLiteral("Real auxiliary Find dialog did not open"));
+  capture(auxiliary_dialog, QStringLiteral("lookup-auxiliary-find"));
+  auxiliary_dialog->close();
   const QString before_sorted_insert = editor->toPlainText();
   const bool before_sorted_modified = window.document_modified();
   require(dictionary->insert_selected() && editor->toPlainText() != before_sorted_insert,
@@ -1107,7 +1125,7 @@ void test_real_resources(const QString& root, const QString& source,
               window.accept_conversion(),
           QStringLiteral("Real replayed kana did not enter the ordinary WNN workflow"));
   std::cout << "Real-data workflow: romanized input -> WNN Japan -> save/reopen; "
-               "EDICT indexed lookup, sorting/insertion/undo and persisted query history; Love metadata and independent character navigation; "
+                "EDICT indexed lookup, auxiliary Find, sorting/insertion/undo and persisted query history; Love metadata and independent character navigation; "
                "all lookup reference modes; conversion candidate strip; selected-romaji replay and undo.\n";
 }
 

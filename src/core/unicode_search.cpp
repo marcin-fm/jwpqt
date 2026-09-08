@@ -4,7 +4,8 @@
 namespace jwpqt::core {
 std::vector<std::pair<std::size_t, std::size_t>> find_unicode_text(
     std::u32string_view source, std::u32string_view pattern,
-    JwpSearchOptions options, std::size_t maximum_matches, std::size_t* remaining_work, bool overlapping) {
+    JwpSearchOptions options, std::size_t maximum_matches, std::size_t* remaining_work, bool overlapping,
+    bool first_only) {
   if (pattern.empty()) throw JwpSearchError("Enter text to find");
   if (source.size() > 33554432 || pattern.size() > 65535)
     throw JwpSearchError("Search text exceeds its size limit");
@@ -35,6 +36,7 @@ std::vector<std::pair<std::size_t, std::size_t>> find_unicode_text(
     if (n == pattern.size()) {
       if (matches.size() == maximum_matches) throw JwpSearchError("Too many search matches");
       matches.emplace_back(at, at + n);
+      if (first_only) return matches;
       at += overlapping ? 1 : n;
     } else ++at;
   }

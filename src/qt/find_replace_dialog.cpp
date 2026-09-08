@@ -56,6 +56,7 @@ FindReplaceDialog::FindReplaceDialog(bool replacing, const ApplicationSettings& 
   wrap_->setEnabled(!all_->isChecked());
   connect(all_, &QCheckBox::toggled, wrap_, [this](bool all) { wrap_->setEnabled(!all); });
   status_ = new QLabel(this); status_->setObjectName(QStringLiteral("searchStatus"));
+  status_->setTextFormat(Qt::PlainText);
   status_->setWordWrap(true); layout->addWidget(status_);
   auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, this);
   auto command = [&](const char* name, const QString& label, SearchOperation operation) {
@@ -85,6 +86,12 @@ void FindReplaceDialog::set_text(const QString& text, const QString& replacement
 }
 void FindReplaceDialog::set_overwrite_action(QAction* action) {
   for (auto* field : fields_) if (field) field->set_overwrite_action(action);
+}
+void FindReplaceDialog::set_auxiliary_scope() {
+  setWindowTitle(tr("Find in Results"));
+  all_->setChecked(false);
+  all_->hide();
+  wrap_->setEnabled(true);
 }
 void FindReplaceDialog::submit(SearchOperation operation) {
   if (busy_) return;

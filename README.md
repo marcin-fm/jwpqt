@@ -517,8 +517,24 @@ confirmation cancel unprocessed replacements rather than editing stale positions
 Read-only documents and active conversions are protected. Each accepted edit is
 undoable in its document's native or Unicode history, preserving encoding and
 metadata. Cancel leaves already accepted edits undoable and remaining text intact;
-this is not an atomic cross-document transaction. Find in auxiliary result lists
-is a separate remaining porting task.
+this is not an atomic cross-document transaction.
+
+### Find In Results
+
+With a dictionary, accumulated-results, kanji lookup/count or user-dictionary list
+focused, **Ctrl+F** opens a modeless Japanese-input Find window. Its context menu
+also offers Find, Next and Previous. Searches advance past the current logical
+entry, support backward traversal and optional wrap, and select the whole matching
+entry. They never match across separate entries or select dictionary grouping
+labels as records. A list containing only the current match reports no other match.
+
+Search history and accepted case/width/wrap/keep-open preferences are shared with
+the workspace; replacement and all-files controls are omitted. F3/Shift+F3 repeat
+in ordinary lists. Kanji result strips retain their existing F3 navigation and
+offer repeated Find through the context menu. Finding does not search dictionaries,
+edit documents or alter canonical insertion ownership. Sorting and refreshed
+results supply fresh entry ranges. Invalid or oversized searches preserve selection;
+newer selections or owner destruction during callbacks are not overwritten.
 
 ### Dictionary Result Ordering
 
