@@ -37,6 +37,9 @@ class JwpEditor final : public QTextEdit {
   int character_page_width() const;
   void apply_jwp_layout(const core::JwpDocument& document);
   void apply_jwp_fonts(const core::JwpDocument& document, core::LegacyCodePage code_page);
+  void apply_margin_relaxation(const core::JwpDocument& document,
+                               core::LegacyCodePage code_page,
+                               bool punctuation, bool small_kana);
   void clear_jwp_layout();
   void apply_kanji_colors(
       const core::JwpDocument& document,

@@ -46,6 +46,8 @@ struct ApplicationSettings {
   bool metric_units = false;
   LineWidthMode line_width_mode = LineWidthMode::kDynamic;
   int fixed_line_width = 35;
+  bool relax_margin_punctuation = true;
+  bool relax_margin_small_kana = true;
   // Absent legacy overrides leave the existing native color store authoritative.
   std::array<std::optional<std::uint32_t>, 3> color_refs; // Highlight, list, uncommon (COLORREF).
   std::optional<int> color_kanji_mode;

@@ -574,6 +574,73 @@ void test_character_line_width() {
           "Dynamic character width did not restore viewport wrapping");
 }
 
+void test_margin_relaxation() {
+  using namespace jwpqt;
+  core::JwpDocument source;
+  source.paragraphs.resize(1);
+  source.paragraphs[0].text =
+      {0x467c, 0x467c, 0x467c, 0x467c, 0x2123};
+  const std::u32string decoded =
+      core::decode_jwp_text(source.paragraphs[0].text);
+  qt::JwpEditor editor;
+  editor.setPlainText(QString::fromUcs4(
+      decoded.data(), static_cast<qsizetype>(decoded.size())));
+  editor.apply_jwp_layout(source);
+  editor.apply_jwp_fonts(source, core::kDefaultLegacyCodePage);
+  editor.set_character_line_width(4);
+  editor.document()->setModified(true);
+
+  editor.apply_margin_relaxation(source, core::kDefaultLegacyCodePage, true,
+                                 true);
+  const QTextBlock block = editor.document()->begin();
+  QTextCursor first_period(editor.document());
+  first_period.setPosition(4);
+  first_period.setPosition(5, QTextCursor::KeepAnchor);
+  require(block.layout()->lineAt(0).textLength() == 5 &&
+              editor.toPlainText().size() == 5 &&
+              editor.document()->isModified(),
+          "Closing punctuation did not hang beyond the right margin: " +
+              std::to_string(block.layout()->lineAt(0).textLength()) + "/" +
+              std::to_string(first_period.charFormat().fontStretch()) +
+              "/" + std::to_string(editor.lineWrapColumnOrWidth()) + "/" +
+              std::to_string(block.layout()->lineAt(0).naturalTextWidth()));
+  require(first_period.charFormat().fontStretch() == 1,
+          "Planned punctuation was not marked for custom rendering");
+  QPalette palette = editor.palette();
+  palette.setColor(QPalette::Base, Qt::white);
+  palette.setColor(QPalette::Text, Qt::black);
+  editor.setPalette(palette);
+  editor.resize(180, 80);
+  editor.show();
+  QApplication::processEvents();
+  QTextCursor pair_start(editor.document());
+  pair_start.setPosition(3);
+  const QRect pair_rect = editor.cursorRect(pair_start);
+  const QImage rendering = editor.viewport()->grab().toImage();
+  int painted_pixels = 0;
+  const QRect sample(pair_rect.left(), pair_rect.top(),
+                     std::min(40, rendering.width() - pair_rect.left()),
+                     std::min(editor.fontMetrics().height() + 4,
+                              rendering.height() - pair_rect.top()));
+  for (int y = sample.top(); y < sample.bottom(); ++y)
+    for (int x = sample.left(); x < sample.right(); ++x)
+      if (rendering.pixelColor(x, y).value() < 128) ++painted_pixels;
+  require(painted_pixels > 20 &&
+              rendering.save(QStringLiteral("margin-relaxation.png")),
+          "Relaxed margin glyphs were not painted at their full size");
+
+  editor.apply_margin_relaxation(source, core::kDefaultLegacyCodePage, false,
+                                 false);
+  require(block.layout()->lineAt(0).textLength() < 5 &&
+              first_period.charFormat().fontStretch() != 1 &&
+              editor.toPlainText().size() == 5 &&
+              editor.document()->isModified(),
+          "Disabling margin relaxation did not restore ordinary wrapping");
+  editor.clear_jwp_layout();
+  require(first_period.charFormat().fontStretch() != 1,
+          "Clearing JWP presentation retained margin relaxation");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -587,6 +654,7 @@ int main(int argc, char** argv) {
     test_composed_overwrite();
     test_selection_autoscroll();
     test_character_line_width();
+    test_margin_relaxation();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return EXIT_FAILURE;

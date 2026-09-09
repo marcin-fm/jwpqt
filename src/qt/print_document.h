@@ -40,6 +40,8 @@ struct PrintOptions {
   bool colors = false;
   core::KanjiColorList color_list;
   core::KanjiColorPolicy color_policy;
+  bool relax_margin_punctuation = true;
+  bool relax_margin_small_kana = true;
   bool preview = false;
   std::function<bool(int, int)> progress;
 };

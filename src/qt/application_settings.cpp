@@ -57,6 +57,8 @@ constexpr BooleanDescriptor<ApplicationSettings> kBooleans[] = {
     {"InsertOnSeparateLines", "paste_newpara", &ApplicationSettings::insert_on_separate_lines},
     {"ShowAllFonts", "all_fonts", &ApplicationSettings::show_all_fonts},
     {"MetricUnits", "units_cm", &ApplicationSettings::metric_units},
+    {"RelaxMargins_Punctuation", "relax_punctuation", &ApplicationSettings::relax_margin_punctuation},
+    {"RelaxMargins_SmallKana", "relax_smallkana", &ApplicationSettings::relax_margin_small_kana},
     {"AutoScroll", "auto_scroll", &ApplicationSettings::auto_scroll},
     {"KeepBackupCopyWhenSaving", "backup_files", &ApplicationSettings::keep_backup_copy},
     {"CloseButton_Closes_File", "close_does_file", &ApplicationSettings::close_button_closes_file},

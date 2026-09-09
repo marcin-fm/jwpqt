@@ -419,6 +419,16 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
                 static_cast<int>(LineWidthMode::kFixed));
           });
   defaults_form->addRow(tr("Fixed line width"), fixed_line_width);
+  auto* relax_punctuation = new QCheckBox(
+      tr("Allow closing punctuation beyond the right margin"), defaults_page);
+  relax_punctuation->setObjectName(QStringLiteral("settingsRelaxPunctuation"));
+  relax_punctuation->setChecked(settings_.relax_margin_punctuation);
+  defaults_form->addRow(relax_punctuation);
+  auto* relax_small_kana = new QCheckBox(
+      tr("Allow small kana beyond the right margin"), defaults_page);
+  relax_small_kana->setObjectName(QStringLiteral("settingsRelaxSmallKana"));
+  relax_small_kana->setChecked(settings_.relax_margin_small_kana);
+  defaults_form->addRow(relax_small_kana);
   std::array<QDoubleSpinBox*, 4> default_margins{};
   const char* margin_labels[] = {"Left", "Right", "Top", "Bottom"};
   for (std::size_t i = 0; i < 4; ++i) {
@@ -588,7 +598,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   connect(buttons, &QDialogButtonBox::accepted, this,
           [this, booleans, font_controls, dictionary_controls, code_page, history_size, conversion_choices, undo_levels, categories,
            print_family, print_size, print_auto, print_justify, ascii_family, print_patterns, print_positions, original_patterns,
-           index_type, reading_type, duplicate_open, auto_scroll_speed, default_margins, metric_units, line_width_mode, fixed_line_width,
+           index_type, reading_type, duplicate_open, auto_scroll_speed, default_margins, metric_units, line_width_mode, fixed_line_width, relax_punctuation, relax_small_kana,
            default_landscape, default_vertical,
            color_fields, original_colors, color_mode, uncommon] {
     auto next = settings_;
@@ -601,6 +611,8 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
     next.line_width_mode = static_cast<LineWidthMode>(
         line_width_mode->currentData().toInt());
     next.fixed_line_width = fixed_line_width->value();
+    next.relax_margin_punctuation = relax_punctuation->isChecked();
+    next.relax_margin_small_kana = relax_small_kana->isChecked();
     next.default_page.landscape = default_landscape->isChecked();
     next.default_page.vertical = default_vertical->isChecked();
     for (const auto& control : booleans) next.*(control.member) = control.widget->isChecked();

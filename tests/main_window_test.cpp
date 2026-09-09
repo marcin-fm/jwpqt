@@ -579,35 +579,55 @@ void test_document_line_width_policy(const QString& directory) {
   auto settings = window.application_settings();
   require(settings.line_width_mode == LineWidthMode::kDynamic &&
               settings.fixed_line_width == 35 &&
+              settings.relax_margin_punctuation &&
+              settings.relax_margin_small_kana &&
               !window.active_editor()->configured_character_line_width().has_value(),
-          "Document line-width defaults differ from the source");
+          "Document line-width or margin defaults differ from the source");
 
   ApplicationSettingsDialog cancelled(settings);
   auto* cancelled_mode =
       cancelled.findChild<QComboBox*>(QStringLiteral("settingsLineWidthMode"));
   auto* cancelled_width =
       cancelled.findChild<QSpinBox*>(QStringLiteral("settingsFixedLineWidth"));
-  require(cancelled_mode != nullptr && cancelled_width != nullptr,
-          "Document line-width Options controls are missing");
+  auto* cancelled_punctuation =
+      cancelled.findChild<QCheckBox*>(QStringLiteral("settingsRelaxPunctuation"));
+  auto* cancelled_small_kana =
+      cancelled.findChild<QCheckBox*>(QStringLiteral("settingsRelaxSmallKana"));
+  require(cancelled_mode != nullptr && cancelled_width != nullptr &&
+              cancelled_punctuation != nullptr && cancelled_small_kana != nullptr,
+          "Document line-width or margin Options controls are missing");
   cancelled_mode->setCurrentIndex(cancelled_mode->findData(
       static_cast<int>(LineWidthMode::kFixed)));
   cancelled_width->setValue(12);
+  cancelled_punctuation->setChecked(false);
+  cancelled_small_kana->setChecked(false);
   cancelled.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Cancel)->click();
   require(cancelled.settings().line_width_mode == LineWidthMode::kDynamic &&
-              cancelled.settings().fixed_line_width == 35,
-          "Cancelling Options changed document line width");
+              cancelled.settings().fixed_line_width == 35 &&
+              cancelled.settings().relax_margin_punctuation &&
+              cancelled.settings().relax_margin_small_kana,
+          "Cancelling Options changed document line or margin policy");
 
   ApplicationSettingsDialog options(settings);
   auto* mode = options.findChild<QComboBox*>(QStringLiteral("settingsLineWidthMode"));
   auto* width = options.findChild<QSpinBox*>(QStringLiteral("settingsFixedLineWidth"));
-  require(mode != nullptr && width != nullptr && !width->isEnabled(),
-          "Fixed line width started enabled in dynamic mode");
+  auto* punctuation =
+      options.findChild<QCheckBox*>(QStringLiteral("settingsRelaxPunctuation"));
+  auto* small_kana =
+      options.findChild<QCheckBox*>(QStringLiteral("settingsRelaxSmallKana"));
+  require(mode != nullptr && width != nullptr && punctuation != nullptr &&
+              small_kana != nullptr && !width->isEnabled(),
+          "Document line-width or margin controls are incomplete");
   mode->setCurrentIndex(mode->findData(static_cast<int>(LineWidthMode::kFixed)));
   require(width->isEnabled(), "Fixed mode did not enable its width control");
   width->setValue(12);
+  punctuation->setChecked(false);
+  small_kana->setChecked(false);
   options.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
   settings = options.settings();
   require(window.apply_application_settings(settings) &&
+              !settings.relax_margin_punctuation &&
+              !settings.relax_margin_small_kana &&
               window.active_editor()->configured_character_line_width() == 12 &&
               window.active_editor()->character_page_width() == 12 &&
               *window.current_jwp_document() == original &&
@@ -662,8 +682,10 @@ void test_document_line_width_policy(const QString& directory) {
   require(restored.open_project_path(project_path, {}, OpenMode::kNonInteractive) &&
               restored.application_settings().line_width_mode == LineWidthMode::kFixed &&
               restored.application_settings().fixed_line_width == 19 &&
+              !restored.application_settings().relax_margin_punctuation &&
+              !restored.application_settings().relax_margin_small_kana &&
               restored.active_editor()->configured_character_line_width() == 19,
-          "Document line width did not survive JPR restoration");
+          "Document line width or margin policy did not survive JPR restoration");
 }
 
 void test_document_tabs(const QString& directory) {

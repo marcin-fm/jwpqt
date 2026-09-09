@@ -230,6 +230,37 @@ void test_line_width_settings() {
   rejects([&] { (void)write_application_settings(invalid); });
 }
 
+void test_margin_relaxation_settings() {
+  using namespace jwpqt::qt;
+  const auto defaults = read_application_settings("");
+  require(defaults.relax_margin_punctuation &&
+              defaults.relax_margin_small_kana,
+          "Margin-relaxation defaults differ from the source");
+  const auto settings = read_application_settings(
+      "relax_punctuation=true\nRelaxMargins_Punctuation=false\n"
+      "relax_smallkana=true\nRelaxMargins_SmallKana=false\n"
+      "Future_Relax=retained");
+  const auto encoded = write_application_settings(settings);
+  require(!settings.relax_margin_punctuation &&
+              !settings.relax_margin_small_kana &&
+              encoded.find("relax_punctuation=") == std::string::npos &&
+              encoded.find("relax_smallkana=") == std::string::npos &&
+              encoded.find("RelaxMargins_Punctuation = false") !=
+                  std::string::npos &&
+              encoded.find("RelaxMargins_SmallKana = false") !=
+                  std::string::npos &&
+              encoded.find("Future_Relax=retained") != std::string::npos &&
+              write_application_settings(read_application_settings(encoded)) ==
+                  encoded,
+          "Margin-relaxation settings did not canonicalize and round-trip");
+  for (const auto* invalid : {
+           "RelaxMargins_Punctuation=maybe",
+           "relax_punctuation=bad\nRelaxMargins_Punctuation=true",
+           "RelaxMargins_SmallKana=maybe",
+           "relax_smallkana=bad\nRelaxMargins_SmallKana=true"})
+    rejects([&] { (void)read_application_settings(invalid); });
+}
+
 void test_files(const QString& directory) {
   using namespace jwpqt::qt;
   const QString path = directory + QStringLiteral("/settings-\u65e5.cfg");
@@ -432,6 +463,7 @@ int main(int argc, char** argv) {
     test_autoscroll_settings();
     test_metric_unit_settings();
     test_line_width_settings();
+    test_margin_relaxation_settings();
     test_information_settings();
     test_dictionary_settings();
     test_files(directory.path());

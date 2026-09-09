@@ -1292,6 +1292,7 @@ bool MainWindow::apply_application_settings(const ApplicationSettings& settings,
           state->editor_->apply_jwp_layout(state->jwp_document_->document());
           state->editor_->apply_jwp_fonts(state->jwp_document_->document(), state->jwp_code_page_);
           apply_document_line_width(*state);
+          apply_document_margin_relaxation(*state);
           state->editor_->apply_kanji_colors(state->jwp_document_->document(),
               kanji_color_list_, kanji_color_policy_, state->jwp_code_page_);
         }
@@ -3504,6 +3505,10 @@ void MainWindow::apply_jwp_presentation(const core::JwpDocument& document,
   document_->editor_->apply_jwp_fonts(document, code_page);
   document_->editor_->set_character_line_width(
       document_line_width(*document_, document));
+  document_->editor_->apply_margin_relaxation(
+      document, code_page,
+      document_->jwp_format_ && application_settings_.relax_margin_punctuation,
+      document_->jwp_format_ && application_settings_.relax_margin_small_kana);
   document_->editor_->apply_kanji_colors(document, kanji_color_list_,
                                kanji_color_policy_, code_page);
 }
@@ -3542,6 +3547,14 @@ void MainWindow::apply_document_line_width(DocumentState& state) {
       state.jwp_document_.has_value()
           ? document_line_width(state, state.jwp_document_->document())
           : std::nullopt);
+}
+
+void MainWindow::apply_document_margin_relaxation(DocumentState& state) {
+  if (!state.jwp_document_) return;
+  state.editor_->apply_margin_relaxation(
+      state.jwp_document_->document(), state.jwp_code_page_,
+      state.jwp_format_ && application_settings_.relax_margin_punctuation,
+      state.jwp_format_ && application_settings_.relax_margin_small_kana);
 }
 
 void MainWindow::clear_jwp_presentation() {
@@ -3994,6 +4007,28 @@ void MainWindow::show_automatic_conversion_range() {
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
   if (watched == main_toolbar_ && event->type() == QEvent::Move && !updating_toolbar_) {
     QTimer::singleShot(0, this, [this] { sync_toolbar_position(); });
+  }
+  if ((watched == document_->editor_ ||
+       watched == document_->editor_->viewport()) &&
+      event->type() == QEvent::Resize && document_->jwp_format_ &&
+      document_->jwp_document_ &&
+      application_settings_.line_width_mode == LineWidthMode::kDynamic) {
+    const QPointer<JwpEditor> target(document_->editor_);
+    QTimer::singleShot(0, this, [this, target] {
+      if (!target || target != document_->editor_ ||
+          document_->updating_editor_ || !document_->jwp_format_ ||
+          !document_->jwp_document_ ||
+          application_settings_.line_width_mode != LineWidthMode::kDynamic)
+        return;
+      try {
+        apply_document_margin_relaxation(*document_);
+      } catch (const std::exception& error) {
+        statusBar()->showMessage(
+            tr("Could not update margin relaxation: %1")
+                .arg(QString::fromUtf8(error.what())),
+            5000);
+      }
+    });
   }
   if (watched == document_->editor_ || watched == document_->editor_->viewport()) {
     if (event->type() == QEvent::ContextMenu) {
@@ -5567,6 +5602,7 @@ void MainWindow::load_document(const QString& path,
     load_jwp_document(path, imported, code_page, new_tab);
     document_->jwp_format_ = false;
     apply_document_line_width(*document_);
+    apply_document_margin_relaxation(*document_);
     document_->encoding_ = file.encoding;
     document_->has_byte_order_mark_ = file.has_byte_order_mark;
     document_->saved_text_file_ = std::move(normalized);
@@ -5793,6 +5829,7 @@ bool MainWindow::save_as_path(const QString& path,
       document_->saved_text_file_ = std::move(text_file);
       document_->current_path_ = path;
       apply_document_line_width(*document_);
+      apply_document_margin_relaxation(*document_);
       document_->editor_->document()->setModified(false);
       update_encoding_display();
       update_title();
@@ -6460,6 +6497,10 @@ void MainWindow::print_current_document(bool preview) {
     options.colors = application_settings_.color_printing;
     options.color_list = kanji_color_list_;
     options.color_policy = kanji_color_policy_;
+    options.relax_margin_punctuation =
+        application_settings_.relax_margin_punctuation;
+    options.relax_margin_small_kana =
+        application_settings_.relax_margin_small_kana;
     options.font = japanese_print_font(source->defaultFont(), application_settings_.print_font,
         QFileInfo(application_settings_path_).path());
     const auto cursor = document_->editor_->textCursor();

@@ -28,16 +28,21 @@
 #include <QStatusTipEvent>
 #include <QTextBlock>
 #include <QTextBlockFormat>
+#include <QTextCharFormat>
 #include <QTextCursor>
 #include <QTextDocument>
+#include <QTextFormat>
 #include <QTimer>
 
+#include "jwpqt/core/line_relaxation.h"
 #include "jwpqt/core/jwp_text_codec.h"
 #include "japanese_fonts.h"
 #include "jwp_text_drawing.h"
 
 namespace jwpqt::qt {
 namespace {
+
+constexpr int kRelaxedMarginCharacter = QTextFormat::UserProperty + 0x4a02;
 
 class DocumentStateGuard {
  public:
@@ -480,18 +485,163 @@ void JwpEditor::apply_jwp_fonts(const core::JwpDocument& source, core::LegacyCod
   preserve_document_state(document(), [&] { apply_jwp_character_fonts(*document(), source, code_page); });
 }
 
+void JwpEditor::apply_margin_relaxation(const core::JwpDocument& source,
+                                        core::LegacyCodePage code_page,
+                                        bool punctuation,
+                                        bool small_kana) {
+  if (source.paragraphs.size() !=
+      static_cast<std::size_t>(document()->blockCount())) {
+    throw std::invalid_argument(
+        "JWP relaxation paragraph count does not match the editor document");
+  }
+
+  constexpr qreal kMetricScale = 64.0;
+  const auto fixed_metric = [](qreal value) {
+    if (!std::isfinite(value) || value <= 0.0 || value > 1'000'000.0) {
+      throw std::length_error("JWP relaxation metric is out of range");
+    }
+    return std::max<std::int64_t>(
+        1, static_cast<std::int64_t>(std::llround(value * kMetricScale)));
+  };
+  const std::int64_t cell = fixed_metric(indent_unit());
+  const qreal dynamic_width = std::max<qreal>(
+      1.0, viewport()->width() - 2.0 * document()->documentMargin());
+  const std::int64_t base_width = character_line_width_.has_value()
+      ? static_cast<std::int64_t>(*character_line_width_) * cell
+      : fixed_metric(dynamic_width);
+
+  struct PlannedCharacter {
+    int position;
+    int length;
+  };
+  std::vector<PlannedCharacter> planned;
+  QTextBlock block = document()->begin();
+  for (std::size_t paragraph_index = 0;
+       paragraph_index < source.paragraphs.size();
+       ++paragraph_index, block = block.next()) {
+    const core::JwpParagraph& paragraph = source.paragraphs[paragraph_index];
+    const std::u32string decoded =
+        core::decode_jwp_text(paragraph.text, code_page);
+    if (block.text() != to_qstring(decoded)) {
+      throw std::invalid_argument(
+          "JWP relaxation text does not match the editor document");
+    }
+
+    std::vector<std::int64_t> advances;
+    advances.reserve(paragraph.text.size());
+    for (std::size_t index = 0; index < paragraph.text.size(); ++index) {
+      if (paragraph.text[index] == static_cast<core::JisCode>('\t')) {
+        advances.push_back(1);
+      } else if (paragraph.text[index] > 0xff) {
+        advances.push_back(cell);
+      } else {
+        advances.push_back(fixed_metric(QFontMetricsF(jwp_representation_font(
+            document()->defaultFont(), 1))
+                                                    .horizontalAdvance(to_qstring(
+                                                        std::u32string_view(decoded)
+                                                            .substr(index, 1)))));
+      }
+    }
+
+    core::LineRelaxationOptions options;
+    const std::int64_t left =
+        static_cast<std::int64_t>(paragraph.left_indent) * cell;
+    const std::int64_t right =
+        static_cast<std::int64_t>(paragraph.right_indent) * cell;
+    const std::int64_t first =
+        static_cast<std::int64_t>(paragraph.first_indent) * cell;
+    options.first_line_width =
+        std::max<std::int64_t>(1, base_width - left - right - first);
+    options.continuation_line_width =
+        std::max<std::int64_t>(1, base_width - left - right);
+    options.jis_advance = cell;
+    options.punctuation = punctuation;
+    options.small_kana = small_kana;
+    const auto indices =
+        core::plan_line_relaxation(paragraph.text, advances, options);
+
+    int utf16_offset = 0;
+    std::size_t token = 0;
+    for (const std::size_t index : indices) {
+      while (token < index) {
+        utf16_offset += decoded[token] <= 0xffffU ? 1 : 2;
+        ++token;
+      }
+      if (index == 0) continue;
+      const int previous_length = decoded[index - 1] <= 0xffffU ? 1 : 2;
+      const int current_length = decoded[index] <= 0xffffU ? 1 : 2;
+      planned.push_back({block.position() + utf16_offset - previous_length,
+                         previous_length + current_length});
+    }
+  }
+
+  preserve_document_state(document(), [&] {
+    struct ExistingFormat {
+      int position;
+      int length;
+      QTextCharFormat format;
+    };
+    std::vector<ExistingFormat> existing;
+    for (QTextBlock current = document()->begin(); current.isValid();
+         current = current.next()) {
+      for (auto fragment = current.begin(); !fragment.atEnd(); ++fragment) {
+        const auto part = fragment.fragment();
+        if (!part.charFormat().hasProperty(kRelaxedMarginCharacter)) continue;
+        existing.push_back({part.position(), part.length(), part.charFormat()});
+      }
+    }
+    for (ExistingFormat& item : existing) {
+      QTextCursor cursor(document());
+      cursor.setPosition(item.position);
+      cursor.setPosition(item.position + item.length, QTextCursor::KeepAnchor);
+      QTextCharFormat& format = item.format;
+      const bool relaxed = format.hasProperty(kRelaxedMarginCharacter);
+      format.clearProperty(kRelaxedMarginCharacter);
+      if (relaxed) format.clearProperty(QTextFormat::FontStretch);
+      format.clearProperty(QTextFormat::FontLetterSpacing);
+      format.clearProperty(QTextFormat::FontLetterSpacingType);
+      if (relaxed) format.clearProperty(QTextFormat::ForegroundBrush);
+      cursor.setCharFormat(format);
+    }
+    for (const PlannedCharacter& character : planned) {
+      QTextCursor cursor(document());
+      cursor.setPosition(character.position);
+      cursor.setPosition(character.position + character.length,
+                         QTextCursor::KeepAnchor);
+      QTextCharFormat format;
+      format.setProperty(kRelaxedMarginCharacter, character.position);
+      format.setFontStretch(1);
+      format.setFontLetterSpacingType(QFont::AbsoluteSpacing);
+      format.setFontLetterSpacing(-1.0);
+      format.setForeground(Qt::transparent);
+      cursor.mergeCharFormat(format);
+    }
+  });
+  viewport()->update();
+}
+
 void JwpEditor::clear_jwp_layout() {
   preserve_document_state(document(), [this] {
     for (QTextBlock block = document()->begin(); block.isValid(); block = block.next()) {
       QList<QTextCursor> marked;
       for (auto it = block.begin(); !it.atEnd(); ++it) {
         const auto part = it.fragment();
-        if (!part.charFormat().hasProperty(kJwpCharacterKind)) continue;
+        if (!part.charFormat().hasProperty(kJwpCharacterKind) &&
+            !part.charFormat().hasProperty(kRelaxedMarginCharacter))
+          continue;
         QTextCursor cursor(document()); cursor.setPosition(part.position());
         cursor.setPosition(part.position() + part.length(), QTextCursor::KeepAnchor); marked.push_back(cursor);
       }
       for (auto cursor : marked) {
-        auto format = cursor.charFormat(); format.clearProperty(kJwpCharacterKind);
+        auto format = cursor.charFormat();
+        format.clearProperty(kJwpCharacterKind);
+        if (format.hasProperty(kRelaxedMarginCharacter)) {
+          format.clearProperty(kRelaxedMarginCharacter);
+          format.clearProperty(QTextFormat::FontStretch);
+          format.clearProperty(QTextFormat::FontLetterSpacing);
+          format.clearProperty(QTextFormat::FontLetterSpacingType);
+          format.clearProperty(QTextFormat::ForegroundBrush);
+        }
         format.clearProperty(QTextFormat::FontFamilies); cursor.setCharFormat(format);
       }
     }
@@ -616,6 +766,7 @@ void JwpEditor::paintEvent(QPaintEvent* event) {
   QTextEdit::paintEvent(event);
 
   QPainter painter(viewport());
+  painter.setClipRect(event->rect());
   const qreal inset = 12.0;
   QAbstractTextDocumentLayout* layout = document()->documentLayout();
   const QPointF scroll(horizontalScrollBar()->value(),
@@ -631,10 +782,73 @@ void JwpEditor::paintEvent(QPaintEvent* event) {
     if (geometry.top() > event->rect().bottom()) {
       break;
     }
-    if (geometry.bottom() < event->rect().top() ||
-        !block.blockFormat().property(kPageBreakProperty).toBool()) {
+    if (geometry.bottom() < event->rect().top()) {
       continue;
     }
+    for (auto fragment = block.begin(); !fragment.atEnd(); ++fragment) {
+      const auto part = fragment.fragment();
+      if (!part.charFormat().hasProperty(kRelaxedMarginCharacter)) continue;
+      const int group_start =
+          part.charFormat().intProperty(kRelaxedMarginCharacter);
+      const auto original_font = [&](int position) {
+        QTextCursor cursor(document());
+        cursor.setPosition(position);
+        cursor.movePosition(QTextCursor::NextCharacter,
+                            QTextCursor::KeepAnchor);
+        QFont font = cursor.charFormat().font().resolve(document()->defaultFont());
+        font.setStretch(QFont::Unstretched);
+        font.setLetterSpacing(QFont::AbsoluteSpacing, 0.0);
+        return font;
+      };
+      QTextCursor group_cursor(document());
+      group_cursor.setPosition(group_start);
+      qreal draw_x = cursorRect(group_cursor).left();
+      for (int prior = group_start; prior < part.position();) {
+        const int length = prior + 1 < document()->characterCount() &&
+                                   document()->characterAt(prior).isHighSurrogate() &&
+                                   document()->characterAt(prior + 1).isLowSurrogate()
+                               ? 2
+                               : 1;
+        QString character(document()->characterAt(prior));
+        if (length == 2) character.append(document()->characterAt(prior + 1));
+        draw_x += QFontMetricsF(original_font(prior)).horizontalAdvance(character);
+        prior += length;
+      }
+      const QTextCursor selection = textCursor();
+      int position = part.position();
+      const QString text = part.text();
+      for (qsizetype index = 0; index < text.size();) {
+        const int length = text[index].isHighSurrogate() &&
+                                   index + 1 < text.size() &&
+                                   text[index + 1].isLowSurrogate()
+                               ? 2
+                               : 1;
+        const QFont font = original_font(position);
+        const QFontMetricsF metrics(font);
+        painter.setFont(font);
+        QTextCursor cursor(document());
+        cursor.setPosition(group_start);
+        const QRect cursor_rect = cursorRect(cursor);
+        const bool selected = selection.hasSelection() &&
+            selection.selectionStart() <= position &&
+            position < selection.selectionEnd();
+        const QColor paper = palette().color(
+            selected ? QPalette::Highlight : QPalette::Base);
+        const QColor ink = palette().color(
+            selected ? QPalette::HighlightedText : QPalette::Text);
+        const QString character = text.mid(index, length);
+        const qreal width = metrics.horizontalAdvance(character);
+        painter.fillRect(QRectF(draw_x, cursor_rect.top(), width,
+                               metrics.height()), paper);
+        painter.setPen(ink);
+        painter.drawText(QPointF(draw_x, cursor_rect.top() + metrics.ascent()),
+                         character);
+        draw_x += width;
+        position += length;
+        index += length;
+      }
+    }
+    if (!block.blockFormat().property(kPageBreakProperty).toBool()) continue;
     const qreal center = geometry.center().y();
     const QRectF bar(inset, center - 2.0,
                      std::max<qreal>(0.0, viewport()->width() - 2.0 * inset),

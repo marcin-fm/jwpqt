@@ -4,6 +4,7 @@
 #include "japanese_fonts.h"
 #include "jwpqt/core/jwp_text_codec.h"
 #include "jwpqt/core/jis_unicode.h"
+#include "jwpqt/core/line_relaxation.h"
 #include "text_bridge.h"
 #include <algorithm>
 #include <cmath>
@@ -285,7 +286,41 @@ PrintLayout::PrintLayout(const QTextDocument& source, const QPageLayout& page,
           qreal actual = 0; (void)d.grid(*layout, block.text(), kind, &actual, n, false);
           return actual <= available + 0.01;
         };
-        if (!fits(available)) {
+        bool extended = false;
+        if (d.options.relax_margin_punctuation ||
+            d.options.relax_margin_small_kana) {
+          line.setLineWidth(available + new_unit);
+          work += line.textLength();
+          if (work > 100000000)
+            throw PrintDocumentError("Print grid layout work limit exceeded");
+          qreal actual = 0;
+          (void)d.grid(*layout, block.text(), kind, &actual, n, false);
+          if (actual <= available + 0.01) {
+            extended = true;
+          } else if (actual <= available + new_unit + 0.01 &&
+                     actual - new_unit <= available + 0.01 &&
+                     line.textLength() > 0) {
+            int at = line.textStart() + line.textLength() - 1;
+            if (block.text()[at].isLowSurrogate() && at > line.textStart() &&
+                block.text()[at - 1].isHighSurrogate())
+              --at;
+            const int length = block.text()[at].isHighSurrogate() ? 2 : 1;
+            const char32_t scalar =
+                from_qstring(block.text().mid(at, length)).front();
+            const int representation = kind(at);
+            const auto code = representation == 2
+                ? core::unicode_to_jis_x0208(scalar)
+                : representation == 1
+                    ? std::optional<core::JisCode>{}
+                    : core::unicode_to_jwp_code(scalar, d.options.code_page);
+            core::LineRelaxationOptions relaxation;
+            relaxation.punctuation = d.options.relax_margin_punctuation;
+            relaxation.small_kana = d.options.relax_margin_small_kana;
+            extended = code && *code > 0xff &&
+                core::is_relaxable_margin_character(*code, relaxation);
+          }
+        }
+        if (!extended && !fits(available)) {
           qreal low = 0, high = available;
           if (!fits(0)) throw PrintDocumentError("A print character does not fit the paragraph");
           for (int step = 0; step < 20; ++step) {

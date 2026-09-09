@@ -16,6 +16,8 @@ in tenths of a point), not screen pixels. Options > Printing can enable kanji
 colors when a list-color mode is active. The job captures the list and policy;
 later changes do not change its body or header colors. Transient editor
 highlights and arbitrary rich-text colors are not copied into print output.
+The margin-relaxation settings also apply to print: one eligible closing
+punctuation or small-kana cell may extend into the physical right margin.
 
 ## Headers and Footers
 

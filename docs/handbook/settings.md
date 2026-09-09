@@ -42,6 +42,11 @@ margins and the configured print font, and updates after Page Layout changes.
 Changing width only reformats the view: document text, paragraph metadata, saved
 state and Undo are unchanged.
 
+The two margin-relaxation controls allow the original closing punctuation and
+small-kana sets to hang one character beyond a full Japanese line. They apply to
+JWP screen and print layout, not imported text containers. Turning either off
+restores ordinary wrapping for that character set without editing the document.
+
 Bitmap controls the image included when copying document text; Automatic inherits
 File. Omit bitmap removes only that representation, not text or rich formats.
 Images have white paper and preserve the selected text without changing the

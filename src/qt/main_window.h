@@ -382,6 +382,7 @@ class MainWindow : public QMainWindow {
   std::optional<int> document_line_width(const DocumentState& state,
                                          const core::JwpDocument& document) const;
   void apply_document_line_width(DocumentState& state);
+  void apply_document_margin_relaxation(DocumentState& state);
   void clear_jwp_presentation();
   void find_document();
   void show_find_replace(bool replacing, const QString& text, const QString& replacement);

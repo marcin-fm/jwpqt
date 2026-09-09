@@ -9,6 +9,7 @@
 #include <string_view>
 
 #include <QApplication>
+#include <QCoreApplication>
 #include <QFile>
 #include <QPageLayout>
 #include <QPageRanges>
@@ -482,6 +483,73 @@ void test_print_grid(const QString& directory) {
   require(greek == QString(200, QChar(0x03a3)), "Grid-aware wrapping lost or repeated Japanese-font glyphs");
 }
 
+void test_print_margin_relaxation() {
+  using namespace jwpqt;
+  qt::PrintOptions options;
+  options.font = QFont(QStringLiteral("Noto Sans CJK JP"), 20);
+  QImage metrics(1, 1, QImage::Format_ARGB32);
+  metrics.setDotsPerMeterX(2835);
+  metrics.setDotsPerMeterY(2835);
+  const qreal unit =
+      QFontMetricsF(options.font, &metrics).horizontalAdvance(QChar(0x3000));
+  require(unit > 8.0, "Print relaxation fixture has no Japanese cell width");
+  const QPageLayout page(
+      QPageSize(QSizeF(unit * 6.0, 180.0), QPageSize::Point,
+                QStringLiteral("margin-relaxation")),
+      QPageLayout::Portrait, QMarginsF(0.0, 0.0, unit * 2.0, 0.0),
+      QPageLayout::Point);
+  core::JwpDocument metadata;
+  metadata.paragraphs.resize(1);
+
+  const auto render = [&](const core::JwpText& text, bool punctuation,
+                          bool small_kana) {
+    metadata.paragraphs[0].text = text;
+    QTextDocument source;
+    source.setDefaultFont(options.font);
+    source.setPlainText(qt::to_qstring(
+        core::decode_jwp_text(metadata.paragraphs[0].text)));
+    options.relax_margin_punctuation = punctuation;
+    options.relax_margin_small_kana = small_kana;
+    qt::PrintLayout layout(source, page, &metadata, options);
+    QImage image(layout.page_size().toSize(), QImage::Format_RGB32);
+    image.fill(Qt::white);
+    QPainter painter(&image);
+    layout.paint_page(painter, 1);
+    painter.end();
+    int bottom = -1;
+    for (int y = 0; y < image.height(); ++y)
+      for (int x = 0; x < image.width(); ++x)
+        if (qGray(image.pixel(x, y)) < 128) bottom = y;
+    return std::pair<QImage, int>{image, bottom};
+  };
+
+  const core::JwpText punctuation =
+      {0x467c, 0x467c, 0x467c, 0x467c, 0x2123};
+  const core::JwpText small =
+      {0x467c, 0x467c, 0x467c, 0x467c, 0x2463};
+  const auto punctuation_on = render(punctuation, true, false);
+  const auto punctuation_off = render(punctuation, false, false);
+  const auto small_on = render(small, false, true);
+  const auto small_off = render(small, false, false);
+  const auto consecutive = render(
+      {0x467c, 0x467c, 0x467c, 0x467c, 0x2123, 0x2122}, true,
+      false);
+  require(punctuation_on.second >= 0 && small_on.second >= 0 &&
+              punctuation_on.second < punctuation_off.second &&
+              small_on.second < small_off.second &&
+              consecutive.second > punctuation_on.second,
+          "Print margin-relaxation policies did not keep the source glyph on the full line: " +
+              std::to_string(punctuation_on.second) + "/" +
+              std::to_string(punctuation_off.second) + "/" +
+              std::to_string(small_on.second) + "/" +
+              std::to_string(small_off.second));
+  const QString screenshot = QCoreApplication::applicationDirPath() +
+      QStringLiteral("/print-margin-relaxation.png");
+  require(punctuation_on.first.save(screenshot) && QFileInfo::exists(screenshot),
+          "Could not capture print margin relaxation: " +
+              screenshot.toStdString());
+}
+
 void test_window_workflow(const QString& directory) {
   using namespace jwpqt;
   const QString source_path = directory + QStringLiteral("/snapshot.txt");
@@ -622,5 +690,6 @@ int main(int argc, char* argv[]) {
   test_window_workflow(directory.path());
   test_print_policies(directory.path());
   test_print_grid(directory.path());
+  test_print_margin_relaxation();
   return EXIT_SUCCESS;
 }
