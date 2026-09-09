@@ -105,6 +105,10 @@ ApplicationSettings read_application_settings(std::string_view text,
   for (const auto& entry : entries) {
     std::string name;
     try {
+      if (core::JwpConfigurationKey{"Printing_Justify_ASCII", "print_justify"}.matches(entry.name)) {
+        name = "Printing_Justify_ASCII";
+        result.print_formatting.justify_ascii = core::parse_jwp_setting_bool(entry.value);
+      }
       for (std::size_t i = 0; i < 4; ++i) {
         if (core::JwpConfigurationKey{kPrintPatterns[i].name, kPrintPatterns[i].alias}.matches(entry.name)) {
           name = kPrintPatterns[i].name;
@@ -229,6 +233,7 @@ std::string write_application_settings(const ApplicationSettings& settings) {
     throw core::JwpConfigurationError("Unknown translation code page");
   }
   std::vector<core::JwpConfigurationUpdate> updates;
+  updates.push_back({{"Printing_Justify_ASCII", "print_justify"}, settings.print_formatting.justify_ascii ? "true" : "false"});
   std::string toolbar_bytes;
   constexpr char digits[] = "0123456789ABCDEF";
   for (std::size_t i = 0; i < 4; ++i) {

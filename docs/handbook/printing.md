@@ -52,13 +52,20 @@ Left/right header extensions are measured in characters; header/footer distances
 are measured in lines, in hundredths, from 0 to 10. Preview uses these same
 settings. Excessive offsets that place text outside the paper fail safely.
 
-Vertical follows the original physical-paper convention: Japanese glyphs are
-counter-rotated, while Latin and specified punctuation stay horizontal, for
-reading after turning the sheet clockwise. This is not a different top-to-bottom
-document model. Exact old bitmap/vertical-font placement is not promised.
+The ASCII grid control defaults on. For native JWP documents it distributes
+next-cell padding before tabs and on wrapped lines. Final paragraph ends and
+ASCII directly followed by JIS text are not padded. Japanese characters occupy
+fixed cells and tabs advance one cell, even with padding off. Grid-aware wrapping
+preserves text; unrestricted Unicode documents retain ordinary Qt layout.
+
+Vertical follows the original physical-paper convention, for reading after turning
+the sheet clockwise. TrueType vertical alternates rotate Japanese punctuation as
+well as letters; raster fonts use their source exception and ink-position rules.
+Latin stays upright. This is not a different top-to-bottom document model or a
+promise of pixel-identical Win32 rounding.
 
 PDF text, geometry, pagination and cancellation are the project's printing
-acceptance criteria. ASCII grid justification and exact original raster vertical
-substitutions remain separate fidelity work.
+acceptance criteria; physical-printer testing is waived. Captured fonts, colors,
+header patterns and grid preferences do not change with later Options edits.
 
 [Document formatting](files.md) | [Contents](start.md)

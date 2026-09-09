@@ -15,6 +15,21 @@ void rejects(const std::function<void()>& operation) {
 int main() {
   try {
     JwpPrintFormatting format;
+    require(format.justify_ascii);
+    require(print_grid_positions({}, {}, 10, true, true) == std::vector<int>{0});
+    require(print_grid_positions({'a','b'}, {3,4}, 10, true, true) == std::vector<int>({0,3,7}));
+    require(print_grid_positions({'a','b'}, {3,4}, 10, true, false) == std::vector<int>({1,4,8}));
+    require(print_grid_positions({'a',' ','b'}, {3,2,2}, 10, true, false) == std::vector<int>({1,4,8,10}));
+    require(print_grid_positions({'a',' ','b'}, {3,2,2}, 10, false, false) == std::vector<int>({0,3,5,7}));
+    require(print_grid_positions({'a','\t',0x3026}, {3,99,1}, 10, true, true) == std::vector<int>({3,6,10,20}));
+    require(print_grid_positions({'a',0x3026}, {3,1}, 10, true, false) == std::vector<int>({0,3,13}));
+    require(print_grid_positions({'\t','\t'}, {0,0}, 10, false, true) == std::vector<int>({0,10,20}));
+    require(print_grid_positions({'a'}, {10}, 10, true, false) == std::vector<int>({5,15}));
+    rejects([] { print_grid_positions({'a'}, {}, 10, true, false); });
+    rejects([] { print_grid_positions({0xffff}, {1}, 10, true, false); });
+    rejects([] { print_grid_positions({'a'}, {-1}, 10, true, false); });
+    rejects([] { print_grid_positions({}, {}, 0, true, false); });
+    rejects([] { print_grid_positions(JwpText(65535, 0x3026), std::vector<int>(65535), 65536, true, true); });
     const auto text = [&](bool time, int hour, int year = 2024, int month = 2, int day = 3) {
       const auto value = expand_print_pattern(format, time, year, month, day, hour, 5);
       return std::string(value.begin(), value.end());

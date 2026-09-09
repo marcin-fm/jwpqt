@@ -2,10 +2,57 @@
 #include "jwpqt/core/print_format.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <stdexcept>
 #include <string>
 
 namespace jwpqt::core {
+
+std::vector<int> print_grid_positions(const JwpText& text, const std::vector<int>& advances,
+                                    int cell, bool justify, bool paragraph_end) {
+  if (text.size() > 65535 || advances.size() != text.size() || cell < 1 || cell > 65536)
+    throw std::invalid_argument("Invalid print grid dimensions");
+  for (std::size_t i = 0; i < text.size(); ++i)
+    if (advances[i] < 0 || advances[i] > 65536 ||
+        (text[i] >= 256 && !is_jis_x0208_pair(text[i])))
+      throw std::invalid_argument("Invalid print grid character or advance");
+  std::vector<int> positions(text.size() + 1);
+  std::int64_t x = 0;
+  const auto checked = [](std::int64_t value) {
+    if (value > 0x3fffffff) throw std::invalid_argument("Print grid advance exceeds its limit");
+    return static_cast<int>(value);
+  };
+  for (std::size_t i = 0; i < text.size();) {
+    positions[i] = checked(x);
+    if (text[i] >= 256) { x += cell; ++i; }
+    else if (text[i] == '\t') { x = (x / cell + 1) * cell; ++i; }
+    else {
+      auto end = i;
+      std::int64_t natural = x, spaces = 2;
+      while (end < text.size() && text[end] < 256 && text[end] != '\t') {
+        natural += advances[end];
+        if (text[end] == ' ') ++spaces;
+        ++end;
+      }
+      std::int64_t extra = (natural / cell + 1) * cell - natural;
+      if (!justify || ((end != text.size() || paragraph_end) &&
+                       (end == text.size() || text[end] != '\t'))) extra = 0;
+      if (end == text.size() && spaces != 2) --spaces;
+      const auto padding = [&](std::int64_t n) { return extra * (n + 1) / spaces - extra * n / spaces; };
+      x += padding(0);
+      std::int64_t n = 1;
+      while (i < end) {
+        positions[i] = checked(x);
+        x += advances[i];
+        if (text[i] == ' ') x += padding(n++);
+        ++i;
+      }
+    }
+    checked(x);
+  }
+  positions.back() = checked(x);
+  return positions;
+}
 
 JwpPrintFormatting::JwpPrintFormatting() {
   for (std::size_t i = 0; i < patterns.size(); ++i) patterns[i].resize(i < 2 ? 20 : 10);

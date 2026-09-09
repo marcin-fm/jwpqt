@@ -364,7 +364,12 @@ font family; explicit families use Qt's native font fallback. **ColorKanji_Print
 enables kanji colors only with an active list mode, including header/footer text;
 list colors retain precedence over uncommon colors. Neither later preference
 changes nor transient editor highlighting alter a captured print job.
-ASCII grid-justification settings remain retained and disclosed as unapplied.
+**Printing_Justify_ASCII** (default on) applies the source's next-cell padding
+before tabs and on eligible wrapped lines, not at final paragraph ends or before
+JIS text. Native JWP output uses fixed Japanese cells and one-cell tab stops even
+when ASCII padding is off. A bounded grid-aware line-fitting pass keeps narrow JIS
+glyphs inside the paragraph while retaining Qt word boundaries, styles, selection,
+hard page breaks and the original text. Unicode-only documents keep Qt layout.
 
 PDF output is completed in a temporary file beside its destination and published
 atomically. Invalid geometry/ranges, cancellation (including the final checkpoint)

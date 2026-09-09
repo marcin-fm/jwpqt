@@ -281,6 +281,11 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   print_colors->setChecked(settings_.color_printing);
   print_form->addRow(print_colors);
   booleans.push_back({print_colors, &ApplicationSettings::color_printing});
+  auto* print_justify = new QCheckBox(tr("Align ASCII runs to the Japanese print grid"), printing);
+  print_justify->setObjectName(QStringLiteral("settingsPrintJustifyAscii"));
+  print_justify->setChecked(settings_.print_formatting.justify_ascii);
+  print_justify->setToolTip(tr("Adjust spacing before tabs and on wrapped lines, not at the final paragraph end. Native JWP tabs advance one Japanese cell."));
+  print_form->addRow(print_justify);
   std::array<KanaInputField*, 4> print_patterns{};
   std::array<QString, 4> original_patterns{};
   std::array<QDoubleSpinBox*, 4> print_positions{};
@@ -347,7 +352,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
   connect(buttons, &QDialogButtonBox::accepted, this,
           [this, booleans, font_controls, dictionary_controls, code_page, history_size, categories,
-           print_family, print_size, print_auto, ascii_family, print_patterns, print_positions, original_patterns] {
+           print_family, print_size, print_auto, print_justify, ascii_family, print_patterns, print_positions, original_patterns] {
     auto next = settings_;
     for (const auto& control : booleans) next.*(control.member) = control.widget->isChecked();
     for (const auto& control : dictionary_controls) next.dictionary.*(control.member) = control.widget->isChecked();
@@ -365,6 +370,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
     next.history_size = history_size->value();
     next.print_font = {print_family->currentText(), qRound(print_size->value() * 10), print_auto->isChecked()};
     next.ascii_font.family = ascii_family->currentText();
+    next.print_formatting.justify_ascii = print_justify->isChecked();
     const QPointer<ApplicationSettingsDialog> self(this);
     try {
       const auto encoding = next.translation_code_page ? static_cast<core::LegacyCodePage>(next.translation_code_page) : core::kDefaultLegacyCodePage;

@@ -349,16 +349,19 @@ void test_print_policies(const QString& directory) {
   require(bytes(path) == saved && source.toRawText() == original && source.availableUndoSteps() == undo,
       "Print policy changed disk/source on failure");
 
-  auto settings = qt::read_application_settings("colorkanji_print=true\nhead_left=50\nhead_top=75\n");
+  auto settings = qt::read_application_settings("colorkanji_print=true\nhead_left=50\nhead_top=75\nprint_justify=false\n");
   settings.print_formatting.patterns[0][19] = 0xffff;
   const auto encoded = qt::write_application_settings(settings);
   const auto restored = qt::read_application_settings(encoded);
-  require(restored.color_printing && restored.print_formatting.patterns == settings.print_formatting.patterns &&
+  require(!restored.print_formatting.justify_ascii && restored.color_printing && restored.print_formatting.patterns == settings.print_formatting.patterns &&
       restored.print_formatting.position == settings.print_formatting.position && qt::write_application_settings(restored) == encoded,
       "Print configuration round trip lost raw JIS tail or units");
   bool failed = false;
   try { (void)qt::read_application_settings("head_top=bad\nhead_top=100\n"); } catch (const std::exception&) { failed = true; }
   require(failed, "Later header setting hid invalid input");
+  failed = false;
+  try { (void)qt::read_application_settings("print_justify=bad\nPrinting_Justify_ASCII=true\n"); } catch (const std::exception&) { failed = true; }
+  require(failed, "Later grid setting hid invalid input");
   failed = false;
   try { (void)qt::read_application_settings("Printing_Formatting_Date=" + std::string(80, '4') + "\n" + encoded); }
   catch (const std::exception&) { failed = true; }
@@ -379,14 +382,16 @@ void test_print_policies(const QString& directory) {
   dialog.findChild<QLineEdit*>(QStringLiteral("settingsPrintPattern0"))->setText(QStringLiteral("&Y"));
   dialog.findChild<QDoubleSpinBox*>(QStringLiteral("settingsPrintPosition2"))->setValue(1.25);
   dialog.findChild<QCheckBox*>(QStringLiteral("settingsPrintColors"))->setChecked(false);
+  dialog.findChild<QCheckBox*>(QStringLiteral("settingsPrintJustifyAscii"))->setChecked(true);
   QMetaObject::invokeMethod(dialog.findChild<QDialogButtonBox*>(), "accepted", Qt::DirectConnection);
-  require(!dialog.settings().color_printing && dialog.settings().print_formatting.position[2] == 125 &&
+  require(dialog.settings().print_formatting.justify_ascii && !dialog.settings().color_printing && dialog.settings().print_formatting.position[2] == 125 &&
       dialog.settings().print_formatting.patterns[0][2] == 0 && dialog.settings().print_formatting.patterns[0][19] == 0xffff,
       "Print Options lost edits or preserved tail");
   qt::ApplicationSettingsDialog cancelled(settings);
   cancelled.findChild<QCheckBox*>(QStringLiteral("settingsPrintColors"))->setChecked(false);
+  cancelled.findChild<QCheckBox*>(QStringLiteral("settingsPrintJustifyAscii"))->setChecked(true);
   cancelled.reject();
-  require(cancelled.settings().color_printing, "Cancelled print preferences were applied");
+  require(cancelled.settings().color_printing && !cancelled.settings().print_formatting.justify_ascii, "Cancelled print preferences were applied");
 
   auto native = metadata; native.paragraphs.resize(1); native.paragraphs[0].text = {0x3026, 'A', 0x5021};
   const auto native_path = directory + QStringLiteral("/policy.jwp"); qt::write_jwp_file(native_path, native);
@@ -402,9 +407,13 @@ void test_print_policies(const QString& directory) {
       window.set_kanji_color_list(options.color_list, qt::OpenMode::kNonInteractive) &&
       window.set_kanji_color_policy(options.color_policy, qt::OpenMode::kNonInteractive), "Print policies could not be applied");
   qt::MainWindow restarted;
-  require(restarted.load_application_settings(config) && restarted.application_settings().color_printing &&
+  require(restarted.load_application_settings(config) && !restarted.application_settings().print_formatting.justify_ascii && restarted.application_settings().color_printing &&
       restarted.application_settings().print_formatting.patterns == accepted.print_formatting.patterns,
-      "Print preferences did not survive restart");
+       "Print preferences did not survive restart");
+  const auto project = directory + QStringLiteral("/print-grid.jpr");
+  qt::MainWindow project_window;
+  require(window.save_project_path(project, false) && project_window.open_project_path(project) &&
+      !project_window.application_settings().print_formatting.justify_ascii, "Print grid preference did not survive JPR");
   const auto model_before = *window.current_jwp_document();
   const auto captured_path = directory + QStringLiteral("/captured-policy.pdf");
   window.prompt = [&](QPrinter& device) {
@@ -422,6 +431,55 @@ void test_print_policies(const QString& directory) {
   require(raster.waitForFinished(30000) && raster.exitCode() == 0, "Captured PDF rasterization failed");
   const QImage captured(png + QStringLiteral(".png"));
   require(colored(captured, true, 0, captured.height()) > 0, "Modal print lost its captured color policy");
+}
+
+void test_print_grid(const QString& directory) {
+  using namespace jwpqt;
+  qt::PrintOptions options; options.font = QFont(QStringLiteral("Noto Sans CJK JP"), 20);
+  core::JwpDocument metadata; metadata.margins = {1,1,1,1};
+  QPageLayout page(QPageSize(QPageSize::A4), QPageLayout::Portrait, {72,72,72,72}, QPageLayout::Point);
+  QTextDocument source; source.setPlainText(QStringLiteral("A\tB"));
+  const auto original = source.toRawText(); const auto undo = source.availableUndoSteps();
+  const auto render = [&] {
+    qt::PrintLayout layout(source, page, &metadata, options);
+    QImage image(layout.page_size().toSize(), QImage::Format_RGB32); image.fill(Qt::white);
+    QPainter painter(&image); layout.paint_page(painter, 1); painter.end(); return image;
+  };
+  const auto on = render(); options.formatting.justify_ascii = false; const auto off = render();
+  require(on != off, "ASCII grid preference did not change tab-adjacent output");
+  // Padding shifts A, not B: the following tab still lands on the same one-cell stop.
+  require(on.copy(94, 72, 60, 40) == off.copy(94, 72, 60, 40), "ASCII padding changed the next tab stop");
+  int near = 0, far = 0;
+  for (int y = 72; y < 112; ++y) for (int x = 94; x < 200; ++x)
+    if (qGray(on.pixel(x, y)) < 100) { if (x < 115) ++near; else if (x >= 130) ++far; }
+  require(near > 0 && far == 0, "Native tab did not advance one Japanese cell");
+  require(on.save(QDir::current().filePath(QStringLiteral("print-ascii-grid.png"))), "Grid capture failed");
+  QPrinter printer(QPrinter::HighResolution); printer.setOutputFormat(QPrinter::PdfFormat);
+  for (bool vertical : {false, true}) for (bool justify : {false, true}) {
+    metadata.vertical = vertical; options.formatting.justify_ascii = justify;
+    const auto path = directory + QStringLiteral("/grid-%1-%2.pdf").arg(vertical).arg(justify);
+    printer.setOutputFileName(path); qt::print_document(printer, source, &metadata, options);
+    auto text = pdf_text(path); text.remove(' '); text.remove('\t'); text.remove('\n'); text.remove('\f');
+    require(text == QStringLiteral("AB"), "Print grid lost PDF Unicode");
+  }
+  require(source.toRawText() == original && source.availableUndoSteps() == undo, "Print grid modified the source");
+  metadata.vertical = false;
+  for (const auto& text : {QStringLiteral("A B"), QStringLiteral("A B\u611b")}) {
+    source.setPlainText(text); options.formatting.justify_ascii = true; const auto final_on = render();
+    options.formatting.justify_ascii = false;
+    require(final_on == render(), "ASCII grid justified a final paragraph or JIS boundary");
+  }
+  source.setPlainText(QStringLiteral("word word word word ").repeated(40));
+  options.formatting.justify_ascii = true; const auto wrapped_on = render();
+  options.formatting.justify_ascii = false;
+  require(wrapped_on != render(), "ASCII grid did not justify wrapped lines");
+  source.setPlainText(QString(200, QChar(0x03a3)));
+  require(!render().isNull(), "Fixed-width JIS aliases did not participate in line wrapping");
+  printer.setOutputFileName(directory + QStringLiteral("/grid-wrapped-jis.pdf"));
+  qt::print_document(printer, source, &metadata, options);
+  auto greek = pdf_text(printer.outputFileName());
+  greek.remove(' '); greek.remove('\n'); greek.remove('\f');
+  require(greek == QString(200, QChar(0x03a3)), "Grid-aware wrapping lost or repeated Japanese-font glyphs");
 }
 
 void test_window_workflow(const QString& directory) {
@@ -563,5 +621,6 @@ int main(int argc, char* argv[]) {
   test_selection_and_vertical(directory.path());
   test_window_workflow(directory.path());
   test_print_policies(directory.path());
+  test_print_grid(directory.path());
   return EXIT_SUCCESS;
 }

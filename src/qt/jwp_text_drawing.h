@@ -21,6 +21,7 @@ void draw_jwp_text_layout(QPainter& painter, QTextLayout& layout, const QString&
                           const QPointF& origin, bool vertical,
                           core::LegacyCodePage code_page,
                           const std::function<QColor(int)>& foreground = {},
-                          const std::function<int(int)>& representation = {});
+                          const std::function<int(int)>& representation = {},
+                          const std::function<qreal(int)>& horizontal_offset = {});
 
 }  // namespace jwpqt::qt

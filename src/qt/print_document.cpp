@@ -23,6 +23,7 @@
 #include <QTextBlock>
 #include <QTextCursor>
 #include <QTextLayout>
+#include <QTextBoundaryFinder>
 #include <QVector>
 
 namespace jwpqt::qt {
@@ -55,6 +56,54 @@ struct PrintLayout::Data {
   QSizeF paper;
   QRectF body;
   int pages = 0;
+  struct NativeBlock { QTextBlock block; std::unique_ptr<QTextLayout> layout; };
+  std::vector<NativeBlock> native_blocks;
+
+  QVector<qreal> grid(QTextLayout& layout, const QString& text,
+                     const std::function<int(int)>& representation, qreal* width = nullptr,
+                     int only_line = -1, bool need_offsets = true) const {
+    QVector<qreal> offsets(need_offsets ? text.size() : 0);
+    const qreal unit = QFontMetricsF(options.font, &metrics).horizontalAdvance(QStringLiteral("\u3000"));
+    if (!std::isfinite(unit) || unit <= 0 || unit * 64 > 65536)
+      throw PrintDocumentError("Invalid Japanese print cell width");
+    const int cell = qRound(unit * 64);
+    QTextBoundaryFinder boundaries(QTextBoundaryFinder::Grapheme, text);
+    if (width) *width = 0;
+    for (int n = 0; n < layout.lineCount(); ++n) {
+      if (only_line >= 0 && n != only_line) continue;
+      const auto line = layout.lineAt(n);
+      const int end = line.textStart() + line.textLength();
+      core::JwpText codes;
+      std::vector<int> advances, starts;
+      for (int at = line.textStart(); at < end;) {
+        boundaries.setPosition(at);
+        int next = boundaries.toNextBoundary();
+        if (next <= at || next > end) next = end;
+        if (representation) for (int p = at + 1; p < next; ++p)
+          if (representation(p) != representation(at)) { next = p; break; }
+        const auto scalar = from_qstring(text.mid(at, next - at)).front();
+        const int kind = representation ? representation(at) : 0;
+        const auto code = kind == 2 ? core::unicode_to_jis_x0208(scalar)
+            : kind == 1 ? std::optional<core::JisCode>{}
+                        : core::unicode_to_jwp_code(scalar, options.code_page);
+        codes.push_back(code && *code >= 256 ? *code : scalar == '\t' ? '\t' : scalar == ' ' ? ' ' : '?');
+        const qreal advance = std::abs(line.cursorToX(next) - line.cursorToX(at)) * 64;
+        if (!std::isfinite(advance) || advance > 65536)
+          throw PrintDocumentError("Print character advance exceeds its limit");
+        advances.push_back(qRound(advance));
+        starts.push_back(at); at = next;
+      }
+      std::vector<int> positions;
+      try { positions = core::print_grid_positions(codes, advances, cell,
+          options.formatting.justify_ascii, end == text.size()); }
+      catch (const std::invalid_argument& error) { throw PrintDocumentError(error.what()); }
+      if (need_offsets) for (std::size_t i = 0; i < starts.size(); ++i)
+        offsets[starts[i]] = line.x() + positions[i] / 64.0 - line.cursorToX(starts[i]);
+      const qreal advance = positions.back() / 64.0;
+      if (width) *width = std::max(*width, line.x() + advance);
+    }
+    return offsets;
+  }
 
   QString header(const core::JwpText& source, int page, QVector<int>* kinds = nullptr) const {
     const QString input = to_qstring(core::decode_jwp_text(source, options.code_page));
@@ -112,7 +161,13 @@ struct PrintLayout::Data {
         return color ? QColor(color->red, color->green, color->blue) : QColor(Qt::black);
       };
     }
-    draw_jwp_text_layout(painter, layout, text, origin, vertical, options.code_page, foreground, representation);
+    qreal width = 0;
+    const auto offsets = jwp ? grid(layout, text, representation, &width) : QVector<qreal>{};
+    if (jwp && origin.x() + width > paper.width())
+      throw PrintDocumentError("Print grid line exceeds the paper width; use a smaller font or wider page");
+    std::function<qreal(int)> shift;
+    if (jwp) shift = [&offsets](int at) { return offsets.at(at); };
+    draw_jwp_text_layout(painter, layout, text, origin, vertical, options.code_page, foreground, representation, shift);
   }
 };
 
@@ -137,6 +192,7 @@ PrintLayout::PrintLayout(const QTextDocument& source, const QPageLayout& page,
   if (d.options.font.pointSizeF() < 1 || d.options.font.pointSizeF() > 144)
     throw PrintDocumentError("Print font size is outside the supported range");
   d.options.font = ensure_ascii_font(d.options.font);
+  if (jwp) d.options.font.setKerning(false);
   d.document.reset(source.clone());
   if (to_qstring(from_qstring(raw_text(source))) != raw_text(source))
     throw PrintDocumentError("Invalid Unicode in print document");
@@ -166,6 +222,7 @@ PrintLayout::PrintLayout(const QTextDocument& source, const QPageLayout& page,
       QFont font = format.font().resolve(d.options.font);
       font.setFamilies(jwp_representation_font(d.options.font, format.intProperty(kJwpCharacterKind)).families());
       font.setPointSizeF(d.options.font.pointSizeF());
+      if (jwp) { font.setKerning(false); font.setLetterSpacing(QFont::AbsoluteSpacing, 0); }
       format.setFont(font); format.setForeground(Qt::black); format.setBackground(Qt::NoBrush);
       formats.push_back({part.position(), part.position() + part.length(), format});
     }
@@ -184,8 +241,74 @@ PrintLayout::PrintLayout(const QTextDocument& source, const QPageLayout& page,
     cursor.setBlockFormat(format);
   }
   d.document->setDocumentMargin(0);
+  if (jwp) {
+    auto text_options = d.document->defaultTextOption();
+    text_options.setTabStopDistance(new_unit);
+    d.document->setDefaultTextOption(text_options);
+  }
   d.document->setPageSize(d.body.size());
-  d.pages = d.document->pageCount();
+  d.pages = jwp ? 0 : d.document->pageCount();
+  if (jwp) {
+    qreal y = 0, last_bottom = 0;
+    std::size_t work = 0;
+    for (auto block = d.document->begin(); block.isValid(); block = block.next()) {
+      const auto format = block.blockFormat();
+      if ((format.pageBreakPolicy() & QTextFormat::PageBreak_AlwaysBefore) && y > 0)
+        y = std::ceil(y / d.body.height()) * d.body.height();
+      y += format.topMargin();
+      auto layout = std::make_unique<QTextLayout>(block.text(), d.options.font, &d.metrics);
+      auto text_option = d.document->defaultTextOption();
+      text_option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+      layout->setTextOption(text_option);
+      QList<QTextLayout::FormatRange> ranges;
+      for (auto fragment = block.begin(); !fragment.atEnd(); ++fragment) {
+        const auto part = fragment.fragment();
+        ranges.push_back({part.position() - block.position(), part.length(), part.charFormat()});
+      }
+      layout->setFormats(ranges);
+      const auto kind = [block](int at) {
+        QTextCursor cursor(block); cursor.setPosition(block.position() + at);
+        cursor.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
+        return cursor.charFormat().intProperty(kJwpCharacterKind);
+      };
+      layout->beginLayout();
+      for (int n = 0;; ++n) {
+        auto line = layout->createLine(); if (!line.isValid()) break;
+        const qreal left = format.leftMargin() + (n == 0 ? format.textIndent() : 0);
+        const qreal available = d.body.width() - left - format.rightMargin();
+        if (!std::isfinite(available) || available < new_unit)
+          throw PrintDocumentError("Print paragraph margins leave no Japanese cell");
+        const auto fits = [&](qreal width) {
+          line.setLineWidth(width);
+          work += line.textLength();
+          if (work > 100000000) throw PrintDocumentError("Print grid layout work limit exceeded");
+          qreal actual = 0; (void)d.grid(*layout, block.text(), kind, &actual, n, false);
+          return actual <= available + 0.01;
+        };
+        if (!fits(available)) {
+          qreal low = 0, high = available;
+          if (!fits(0)) throw PrintDocumentError("A print character does not fit the paragraph");
+          for (int step = 0; step < 20; ++step) {
+            const qreal middle = (low + high) / 2;
+            if (fits(middle)) low = middle; else high = middle;
+          }
+          (void)fits(low);
+        }
+        if (line.height() > d.body.height()) throw PrintDocumentError("Print line exceeds page height");
+        if (std::fmod(y, d.body.height()) + line.height() > d.body.height())
+          y = std::ceil(y / d.body.height()) * d.body.height();
+        line.setPosition({left, y}); last_bottom = y + line.height();
+        y += std::max(qreal(1), format.lineHeight(line.height(), 1));
+        if (last_bottom > d.body.height() * 10000) throw PrintDocumentError("Print page count exceeds its limit");
+      }
+      layout->endLayout();
+      y += format.bottomMargin();
+      if (format.pageBreakPolicy() & QTextFormat::PageBreak_AlwaysAfter)
+        y = std::ceil(y / d.body.height()) * d.body.height();
+      d.native_blocks.push_back({block, std::move(layout)});
+    }
+    d.pages = std::max(1, static_cast<int>(std::ceil(last_bottom / d.body.height())));
+  }
   if (d.pages < 1 || d.pages > 10000) throw PrintDocumentError("Print page count exceeds its limit");
   if (static_cast<qint64>(d.pages) * d.document->characterCount() > 100000000)
     throw PrintDocumentError("Print layout exceeds its work limit; use a smaller selection");
@@ -206,7 +329,14 @@ void PrintLayout::paint_page(QPainter& painter, int page) const {
   // Preserve hanging indents outside the nominal text margin, but not paper.
   painter.setClipRect(QRectF(0, d.body.top(), d.paper.width(), d.body.height()));
   const QPointF origin(d.body.left(), d.body.top() - (page - 1) * d.body.height());
-  for (auto block = d.document->begin(); block.isValid(); block = block.next()) {
+  if (d.jwp) for (const auto& item : d.native_blocks) {
+    d.draw_layout(painter, *item.layout, item.block.text(), origin, vertical, [block = item.block](int at) {
+      QTextCursor cursor(block); cursor.setPosition(block.position() + at);
+      cursor.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
+      return cursor.charFormat().intProperty(kJwpCharacterKind);
+    });
+  }
+  else for (auto block = d.document->begin(); block.isValid(); block = block.next()) {
     const auto rect = d.document->documentLayout()->blockBoundingRect(block).translated(origin);
     if (rect.intersects(d.body)) d.draw_layout(painter, *block.layout(), block.text(), rect.topLeft(), vertical, [block](int at) {
       QTextCursor cursor(block); cursor.setPosition(block.position() + at);
@@ -235,10 +365,12 @@ void PrintLayout::paint_page(QPainter& painter, int page) const {
     const qreal unit = QFontMetricsF(d.options.font, &d.metrics).horizontalAdvance(QStringLiteral("\u3000"));
     const qreal left = d.body.left() - unit * position[0] / 100;
     const qreal width = d.body.width() + unit * (position[0] + position[1]) / 100;
-    const qreal x = left + (width - line.naturalTextWidth()) * alignment / 2;
+    qreal text_width = line.naturalTextWidth();
+    (void)d.grid(header, text, [&kinds](int at) { return kinds.at(at); }, &text_width);
+    const qreal x = left + (width - text_width) * alignment / 2;
     const qreal y = footer ? d.body.bottom() + line.height() * position[3] / 100
         : d.body.top() - line.height() * (100 + position[2]) / 100;
-    if (x < 0 || x + line.naturalTextWidth() > d.paper.width() || y < 0 || y + line.height() > d.paper.height())
+    if (x < 0 || x + text_width > d.paper.width() || y < 0 || y + line.height() > d.paper.height())
       throw PrintDocumentError("Header or footer does not fit the page margins");
     painter.save(); painter.setPen(Qt::black);
     d.draw_layout(painter, header, text, {x, y}, vertical, [&kinds](int at) { return kinds.at(at); });

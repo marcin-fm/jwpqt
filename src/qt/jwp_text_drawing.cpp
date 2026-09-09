@@ -115,7 +115,8 @@ void draw_jwp_text_layout(QPainter& painter, QTextLayout& layout, const QString&
                           const QPointF& origin, bool vertical,
                           core::LegacyCodePage code_page,
                           const std::function<QColor(int)>& foreground,
-                          const std::function<int(int)>& representation) {
+                          const std::function<int(int)>& representation,
+                          const std::function<qreal(int)>& horizontal_offset) {
   // TrueType vert faces rotate all Japanese glyphs. Raster/fallback faces use
   // the source exception list and (for raster fonts) ink-position corrections.
   std::vector<std::pair<QRawFont, QRawFont>> prepared;
@@ -145,7 +146,7 @@ void draw_jwp_text_layout(QPainter& painter, QTextLayout& layout, const QString&
       const qreal middle = line.rect().translated(origin).center().y();
       if (middle < painter.clipBoundingRect().top() || middle >= painter.clipBoundingRect().bottom()) continue;
     }
-    if (!vertical && !foreground) { line.draw(&painter, origin); continue; }
+    if (!vertical && !foreground && !horizontal_offset) { line.draw(&painter, origin); continue; }
     const int end = line.textStart() + line.textLength();
     for (int at = line.textStart(); at < end;) {
       boundaries.setPosition(at);
@@ -157,6 +158,7 @@ void draw_jwp_text_layout(QPainter& painter, QTextLayout& layout, const QString&
       painter.save();
       const auto restore = qScopeGuard([&] { painter.restore(); });
       painter.setPen(color);
+      if (horizontal_offset) painter.translate(horizontal_offset(at), 0);
       auto runs = line.glyphRuns(at, next - at);
       bool true_type = false;
       const auto code = jis_code(text.mid(at, next - at), at);
@@ -212,7 +214,7 @@ void draw_jwp_text_layout(QPainter& painter, QTextLayout& layout, const QString&
         const QPointF center = origin + QPointF(x + width / 2, line.y() + line.height() / 2);
         painter.translate(center); painter.rotate(-90); painter.translate(-center);
       } else {
-        while (next < end) {
+        while (!horizontal_offset && next < end) {
           boundaries.setPosition(next);
           const int after = boundaries.toNextBoundary();
           if (after <= next || after > end) break;
