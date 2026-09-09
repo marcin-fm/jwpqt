@@ -27,6 +27,7 @@ struct EdictResourceSearchResult {
   std::size_t registry_index = 0;
   QString label;
   core::EdictSearchResult result;
+  bool highlighted = false;  // Source registry role, not part of record identity.
 };
 
 struct EdictResourceSearchReport {

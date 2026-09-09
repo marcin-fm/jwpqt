@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <QDialog>
+#include <QColor>
 
 #include "edict_resource_search.h"
 #include "edict_lookup_options.h"
@@ -46,6 +47,7 @@ class EdictLookupDialog : public QDialog {
                              std::shared_ptr<core::QueryHistory> shared_history = {});
 
   void set_query(std::u32string_view query);
+  void set_highlight_color(const QColor& color);
   std::u32string query() const;
   void set_overwrite_action(QAction* action);
   void set_management_actions(QAction* options, QAction* user_dictionary, QAction* registry = nullptr);
@@ -83,6 +85,8 @@ class EdictLookupDialog : public QDialog {
                        const core::EdictPresentationOptions* presentation = nullptr);
   void update_actions();
   void show_status();
+  void update_highlights();
+  QColor highlight_color_;
   bool search_clipboard_text(const QString& text);
 
   SearchHandler search_handler_;

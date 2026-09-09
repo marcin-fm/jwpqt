@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <QWidget>
+#include <QColor>
 
 #include "edict_resource_search.h"
 
@@ -22,9 +23,13 @@ class EdictResultsWindow : public QWidget {
   explicit EdictResultsWindow(QWidget* parent = nullptr);
 
   void set_insert_handler(InsertHandler handler);
+  void set_highlight_color(const QColor& color);
   void append_report(EdictResourceSearchReport report);
   void clear_results();
   std::size_t result_count() const noexcept;
+
+ protected:
+  bool eventFilter(QObject* watched, QEvent* event) override;
 
  private:
   struct StoredResult {
@@ -37,6 +42,8 @@ class EdictResultsWindow : public QWidget {
   std::vector<int> selected_rows() const;
   std::u32string selected_text() const;
   void update_status();
+  void update_highlights();
+  QColor highlight_color_;
 
   QListWidget* results_;
   QLabel* status_;

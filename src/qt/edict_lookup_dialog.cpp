@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+#include "source_highlight.h"
+#include <QTextBlock>
+#include <QTextFragment>
 
 #include "edict_lookup_dialog.h"
 #include "auxiliary_find.h"
@@ -623,6 +626,7 @@ bool EdictLookupDialog::publish_results(EdictResourceSearchReport candidate,
       cursor.setBlockFormat(heading);
       QTextCharFormat style;
       style.setFontWeight(QFont::Bold);
+      style.setProperty(kSourceHighlight, item.kind == core::EdictPresentationKind::kAdaptive);
       const QString label = item.kind == core::EdictPresentationKind::kPriorityEnd ? tr("End of Priority Entries") :
           item.kind == core::EdictPresentationKind::kContingent ? tr("No Exact Matches") : tr("Advanced");
       cursor.insertText(label, style);
@@ -633,6 +637,7 @@ bool EdictLookupDialog::publish_results(EdictResourceSearchReport candidate,
     cursor.setBlockFormat(QTextBlockFormat{});
     QTextCharFormat format;
     format.setToolTip(result.label);
+    format.setProperty(kSourceHighlight, result.highlighted);
     const auto& record = result.result.record;
     QString headword = to_qstring(record.headword);
     if (!record.readings.empty()) {
@@ -675,6 +680,8 @@ bool EdictLookupDialog::publish_results(EdictResourceSearchReport candidate,
   document->setParent(results_);
   results_->setDocument(document.release());
   if (!self) return false;
+  update_highlights();
+  if (!self) return false;
   if (previous && previous->parent() == results_) delete previous.data();
   if (!self) return false;
   if (!rendered_rows_.empty()) {
@@ -689,6 +696,29 @@ bool EdictLookupDialog::publish_results(EdictResourceSearchReport candidate,
     query_edit_->setFocus();
   }
   return self != nullptr;
+}
+
+void EdictLookupDialog::set_highlight_color(const QColor& color) {
+  highlight_color_ = color;
+  update_highlights();
+}
+
+void EdictLookupDialog::update_highlights() {
+  QList<QTextEdit::ExtraSelection> selections;
+  const auto color = source_highlight_color(results_->palette(), highlight_color_);
+  for (auto block = results_->document()->begin(); block.isValid(); block = block.next()) {
+    for (auto it = block.begin(); !it.atEnd(); ++it) {
+      const auto fragment = it.fragment();
+      if (!fragment.isValid() || !fragment.charFormat().property(kSourceHighlight).toBool()) continue;
+      QTextEdit::ExtraSelection selection;
+      selection.cursor = QTextCursor(results_->document());
+      selection.cursor.setPosition(fragment.position());
+      selection.cursor.setPosition(fragment.position() + fragment.length(), QTextCursor::KeepAnchor);
+      selection.format.setForeground(color);
+      selections.push_back(selection);
+    }
+  }
+  results_->setExtraSelections(selections);
 }
 
 bool EdictLookupDialog::recall_history(std::u32string_view text, int index,
@@ -940,6 +970,7 @@ void EdictLookupDialog::hideEvent(QHideEvent* event) {
 }
 
 bool EdictLookupDialog::eventFilter(QObject* watched, QEvent* event) {
+  if (watched == results_ && event->type() == QEvent::PaletteChange) update_highlights();
   if (watched == query_edit_ && (event->type() == QEvent::KeyPress || event->type() == QEvent::InputMethod))
     clipboard_timer_->stop();
   if (watched == query_edit_ && (event->type() == QEvent::ShortcutOverride ||

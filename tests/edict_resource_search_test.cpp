@@ -203,6 +203,7 @@ void test_classical_opt_in(const QString& directory) {
   const auto both = jwpqt::qt::search_edict_resources(
       resources, directory, query(U"cat"), options);
   require(both.results.size() == 2 &&
+              !both.results[0].highlighted && both.results[1].highlighted &&
               both.results[0].label == QStringLiteral("Modern") &&
               both.results[1].label == QStringLiteral("Classical"),
           "Classical opt-in did not preserve registry order");
@@ -252,6 +253,7 @@ void test_classical_names_require_opt_in(const QString& directory) {
   const auto classical = jwpqt::qt::search_edict_resources(
       resources, directory, query(U"alice"), options);
   require(classical.results.size() == 1 &&
+              classical.results[0].highlighted &&
               classical.results[0].registry_index == 0 &&
               classical.results[0].result.record.definitions ==
                   std::vector<std::u32string>{U"(s) classical"},

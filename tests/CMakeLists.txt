@@ -1,5 +1,11 @@
 find_package(Qt6 REQUIRED COMPONENTS Test)
 
+add_executable(jwpqt_dictionary_highlight_tests dictionary_highlight_test.cpp)
+target_link_libraries(jwpqt_dictionary_highlight_tests PRIVATE jwpqt_qt_ui)
+target_compile_options(jwpqt_dictionary_highlight_tests PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME qt_dictionary_highlight COMMAND jwpqt_dictionary_highlight_tests)
+set_tests_properties(qt_dictionary_highlight PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;TMPDIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 90)
+
 add_executable(jwpqt_color_integration_tests color_integration_test.cpp)
 target_link_libraries(jwpqt_color_integration_tests PRIVATE jwpqt_qt_ui)
 target_compile_options(jwpqt_color_integration_tests PRIVATE -Wall -Wextra -Wpedantic)

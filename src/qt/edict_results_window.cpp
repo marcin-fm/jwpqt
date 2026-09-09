@@ -4,6 +4,9 @@
 #include "auxiliary_find.h"
 #include "text_bridge.h"
 #include "japanese_fonts.h"
+#include "source_highlight.h"
+#include <QEvent>
+#include <QSignalBlocker>
 
 #include <algorithm>
 #include <exception>
@@ -71,6 +74,7 @@ EdictResultsWindow::EdictResultsWindow(QWidget* parent)
   resize(760, 420);
 
   results_->setObjectName(QStringLiteral("edictResultsList"));
+  results_->installEventFilter(this);
   assign_japanese_font(*results_, JapaneseFontRole::kList);
   new AuxiliaryFind(results_);
   results_->setSelectionMode(QAbstractItemView::ExtendedSelection);
@@ -144,12 +148,33 @@ void EdictResultsWindow::append_report(EdictResourceSearchReport report) {
     auto& result = additions[index];
     auto* item = new QListWidgetItem(rendered[index]);
     item->setToolTip(result.source);
+    item->setData(kSourceHighlight, report.results[index].highlighted);
+    if (report.results[index].highlighted)
+      item->setForeground(source_highlight_color(results_->palette(), highlight_color_));
     results_->addItem(item);
     stored_results_.push_back(std::move(result));
   }
   rejected_ = new_rejected;
   failures_ = new_failures;
   update_status();
+}
+
+void EdictResultsWindow::set_highlight_color(const QColor& color) {
+  highlight_color_ = color;
+  update_highlights();
+}
+
+void EdictResultsWindow::update_highlights() {
+  const QSignalBlocker blocker(results_->model());
+  const auto color = source_highlight_color(results_->palette(), highlight_color_);
+  for (int i = 0; i < results_->count(); ++i)
+    if (results_->item(i)->data(kSourceHighlight).toBool()) results_->item(i)->setForeground(color);
+  results_->viewport()->update();
+}
+
+bool EdictResultsWindow::eventFilter(QObject* watched, QEvent* event) {
+  if (watched == results_ && event->type() == QEvent::PaletteChange) update_highlights();
+  return QWidget::eventFilter(watched, event);
 }
 
 void EdictResultsWindow::clear_results() {

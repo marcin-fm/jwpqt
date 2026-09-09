@@ -71,8 +71,11 @@ heading/list references are disclosed, and uncommon color uses the source green
 fallback. Inherit can explicitly clear such a reference. Uncommon-character marks
 are small dots in conversion and lookup bars, not characters added to copied text.
 Rare-radical deemphasis starts enabled, matching the source; explicit saved values
-are retained. Highlighting special dictionary entries is a remaining implementation
-gap, separate from the information-heading setting.
+are retained. The heading color also highlights entries from classical and user
+dictionaries, and the Advanced search label. Priority and contingent labels stay
+ordinary. Sorting keeps each retained entry's source highlight; accumulated results
+keep it too. Changing the color or theme does not rerun a query, replace its results,
+or change selected/copied/inserted text.
 
 ## Customize the Toolbar
 

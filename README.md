@@ -362,8 +362,11 @@ Absent fields inherit the existing native INI color store; explicit fields win,
 and Inherit restores that store without restarting. Information heading colors
 adapt for theme contrast. Optional uncommon-character dots decorate conversion
 and lookup bars without changing their text, Copy or Insert. Special palette
-references remain preserved and disclosed; dictionary special-entry highlighting
-is still an explicit remaining use of the source highlight color.
+references remain preserved and disclosed. The same readable highlight color marks
+classical/user dictionary entries and Advanced labels, while priority/contingent
+labels remain ordinary. Source provenance survives sorting and first-record
+deduplication; accumulated results retain it too. Live preference/theme changes
+preserve result text, selection, canonical insertion and document undo.
 
 The native modeless EDICT tool loads
 ordered indexed or unindexed resources from `dict.cfg`, searches with the

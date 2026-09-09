@@ -131,7 +131,7 @@ void merge_report(EdictResourceSearchReport& destination,
   }
   for (core::EdictSearchResult& result : source.results) {
     destination.results.push_back(
-        {resource.registry_index, resource.label, std::move(result)});
+        {resource.registry_index, resource.label, std::move(result), resource.entry.special != core::EdictRegistrySpecial::kNormal});
   }
 }
 
@@ -156,7 +156,7 @@ void merge_multi_report(
     }
     const EdictLoadedResource& resource = *resources[result.source_index];
     destination.results.push_back(
-        {resource.registry_index, resource.label, std::move(result)});
+        {resource.registry_index, resource.label, std::move(result), resource.entry.special != core::EdictRegistrySpecial::kNormal});
   }
 }
 

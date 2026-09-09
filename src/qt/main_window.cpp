@@ -1278,6 +1278,11 @@ bool MainWindow::apply_application_settings(const ApplicationSettings& settings,
     conversion_candidates_->setFixedHeight(conversion_candidates_->fontMetrics().height() + 12 +
         (application_settings_.kanji_bar_scrollbar ? style()->pixelMetric(QStyle::PM_ScrollBarExtent) : 0));
     application_settings_warning_.clear();
+    const auto source_color = application_settings_.color_refs[0];
+    const QColor highlight = source_color && !(*source_color & 0xff000000U)
+        ? QColor(*source_color & 255, (*source_color >> 8) & 255, (*source_color >> 16) & 255) : QColor{};
+    if (edict_lookup_dialog_) edict_lookup_dialog_->set_highlight_color(highlight);
+    if (edict_results_window_) edict_results_window_->set_highlight_color(highlight);
     for (auto* child : findChildren<QDialog*>(QStringLiteral("kanjiInfoDialog"),
                                              Qt::FindDirectChildrenOnly))
       if (auto* info = dynamic_cast<KanjiInfoDialog*>(child)) {
@@ -4698,6 +4703,9 @@ void MainWindow::show_edict_lookup_dialog() {
   connect(dialog, &QObject::destroyed, this,
           [this] { edict_lookup_dialog_ = nullptr; });
   edict_lookup_dialog_ = dialog;
+  const auto highlight = application_settings_.color_refs[0];
+  dialog->set_highlight_color(highlight && !(*highlight & 0xff000000U)
+      ? QColor(*highlight & 255, (*highlight >> 8) & 255, (*highlight >> 16) & 255) : QColor{});
   const QPointer<EdictLookupDialog> guarded(dialog);
   if (!seed.empty()) dialog->set_query(seed);
   if (!guarded || !self) return;
@@ -4727,6 +4735,9 @@ void MainWindow::show_edict_results_window(bool show) {
     }
   });
   edict_results_window_ = results;
+  const auto highlight = application_settings_.color_refs[0];
+  results->set_highlight_color(highlight && !(*highlight & 0xff000000U)
+      ? QColor(*highlight & 255, (*highlight >> 8) & 255, (*highlight >> 16) & 255) : QColor{});
   if (edict_results_action_ != nullptr) {
     edict_results_action_->setEnabled(true);
   }

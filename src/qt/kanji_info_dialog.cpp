@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+#include "source_highlight.h"
 
 #include "kanji_info_dialog.h"
 
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <utility>
 #include <vector>
 
@@ -465,27 +465,7 @@ void KanjiInfoDialog::set_heading_color(const QColor& color) {
 }
 
 void KanjiInfoDialog::update_reading_colors() {
-  const auto luminance = [](const QColor& color) {
-    const auto linear = [](qreal value) {
-      return value <= 0.04045 ? value / 12.92 : std::pow((value + 0.055) / 1.055, 2.4);
-    };
-    return 0.2126 * linear(color.redF()) + 0.7152 * linear(color.greenF()) +
-           0.0722 * linear(color.blueF());
-  };
-  const auto background = luminance(readings_->palette().color(QPalette::Base));
-  QColor color;
-  for (const QColor& candidate : {heading_color_, QColor(QStringLiteral("#b00020")),
-                                  QColor(QStringLiteral("#ff8080")),
-                                  readings_->palette().color(QPalette::Text),
-                                  QColor(Qt::black), QColor(Qt::white)}) {
-    if (!candidate.isValid()) continue;
-    const auto foreground = luminance(candidate);
-    if ((std::max(background, foreground) + 0.05) /
-        (std::min(background, foreground) + 0.05) >= 4.5) {
-      color = candidate;
-      break;
-    }
-  }
+  const QColor color = source_highlight_color(readings_->palette(), heading_color_);
   for (auto block = readings_->document()->begin(); block.isValid(); block = block.next()) {
     if (block.length() <= 1) continue;
     QTextCursor cursor(block);
