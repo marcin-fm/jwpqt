@@ -208,8 +208,22 @@ nonbreaking spaces and Unicode signatures) and Qt's rich formats, and add a
 white-background native text image. **Clipboard_Omit_Bitmap** disables only the
 image. Rendering uses a separate document, bounded at 262,144 selected UTF-16
 positions, 8,192 pixels per edge and 16 million pixels; oversized images are
-omitted with a status message while text remains available. This does not yet
-implement vertical or color-list bitmap policies or independent ASCII font runs.
+omitted with a status message while text remains available. Vertical and
+color-list bitmap policies remain separate fidelity work.
+
+**Options > Fonts > ASCII and legacy extensions** selects an independent
+single-byte font at the Japanese role's height, without changing desktop menus
+or document formatting. A private character-restricted face prevents a font
+that also contains CJK from taking over Japanese glyphs. An unavailable family
+uses the native default with a diagnostic; original names persist through
+settings and projects. Source `ASCII.Size` and `ASCII.Auto` are retained but do
+not override the matched height. Printing and clipboard images use the same
+selection. Optional Latin ligatures are disabled for source-style individual
+characters and reliable PDF text. Original outlines, copyright/license records
+and embedding flags are preserved; no font is installed globally or bundled.
+Private copies are bounded at 16 faces and 64 MiB per application cache.
+Unicode shared by both a legacy byte and a JIS code currently takes the Japanese
+route; distinguishing those original representations remains a fidelity gap.
 
 Legacy **`.f00` font files** can be entered instead of a font family, including
 the separate Print role. Relative paths resolve from the application settings

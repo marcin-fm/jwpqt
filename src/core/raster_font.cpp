@@ -136,6 +136,13 @@ std::string RasterFont::native_face(std::string_view family) const {
   auto& os2 = tables["OS/2"];
   for (int v : {0,advance,400,5,2}) u16(os2, v);  // Restricted font embedding.
   os2.append(52, '\0'); u16(os2, 0x40); u16(os2, 0x21); u16(os2, 0xffef);
+  // Script metadata participates in Qt fallback ordering as well as cmap.
+  // Advertise the Japanese coverage actually supplied by the JIS mapping.
+  std::string ranges;
+  u32(ranges, (1U << 7) | (1U << 9) | (1U << 31));
+  u32(ranges, (1U << 16) | (1U << 17) | (1U << 18) | (1U << 27));
+  u32(ranges, 1U << 4); u32(ranges, 0);
+  os2.replace(42, 16, ranges);
   for (int v : {em,0,leading_ * 64,em,0}) u16(os2, v);
   auto& post = tables["post"]; u32(post, 0x30000); post.append(28, '\0');
   std::map<char32_t, std::uint32_t> mappings;

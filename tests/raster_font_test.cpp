@@ -113,12 +113,14 @@ int main(int argc, char** argv) {
     system.family = QStringLiteral("test.f00"); system.size = 42;
     require(window.apply_application_settings(settings) && window.application_settings_warning().isEmpty(), "Native raster preferences failed");
     const auto native = qt::japanese_font(window, qt::JapaneseFontRole::kFile);
-    require(native.family().startsWith(QStringLiteral("JwpqtRaster-")) && native.pixelSize() == 16,
+    const auto raster_family = native.families().last();
+    require(raster_family.startsWith(QStringLiteral("JwpqtRaster-")) && native.pixelSize() == 16,
             "Native role did not use raster height/family");
-    require(QRawFont::fromFont(native).supportsCharacter(0x611b), "Registered raster face cannot render Love");
+    QFont raster_font(raster_family); raster_font.setPixelSize(native.pixelSize());
+    require(QRawFont::fromFont(raster_font).supportsCharacter(0x611b), "Registered raster face cannot render Love");
     QTextLayout layout(QStringLiteral("\u611b"), native);
     layout.beginLayout(); layout.createLine().setLineWidth(100); layout.endLayout();
-    require(!layout.glyphRuns().empty() && layout.glyphRuns().front().rawFont().familyName() == native.family(),
+    require(!layout.glyphRuns().empty() && layout.glyphRuns().front().rawFont().familyName() == raster_family,
             "Japanese shaping silently substituted a different font");
     qt::ApplicationSettingsDialog options(settings, &window);
     auto* families = options.findChild<QComboBox*>(QStringLiteral("settingsFont0"));
@@ -126,7 +128,7 @@ int main(int argc, char** argv) {
     for (int i = 0; i < families->count(); ++i)
       require(!families->itemText(i).startsWith(QStringLiteral("JwpqtRaster-")), "Private face identity was offered as a persistent family");
     const auto print_font = qt::japanese_print_font(native, {QStringLiteral("test.f00"), 240, false}, directory.path());
-    require(print_font.family() == native.family() && print_font.pointSizeF() == 24,
+    require(print_font.families() == native.families() && print_font.pointSizeF() == 24,
             "Print raster face did not retain physical size");
     QPrinter printer(QPrinter::HighResolution);
     printer.setOutputFormat(QPrinter::PdfFormat);
@@ -149,7 +151,7 @@ int main(int argc, char** argv) {
     require(window.save_application_settings(), "Could not save raster settings");
     qt::MainWindow restored;
     require(restored.load_application_settings(directory.filePath(QStringLiteral("jwpqt.cfg"))) &&
-                qt::japanese_font(restored, qt::JapaneseFontRole::kFile).family() == native.family(), "Raster settings restart failed");
+                qt::japanese_font(restored, qt::JapaneseFontRole::kFile).families() == native.families(), "Raster settings restart failed");
     system.family = QStringLiteral("missing.f00");
     require(window.apply_application_settings(settings) && window.resource_report().contains(QStringLiteral("Raster font 'missing.f00'")), "Missing raster font fallback wasn't disclosed");
     for (int i = 1; i < argc; ++i) {
@@ -160,7 +162,7 @@ int main(int argc, char** argv) {
       system.family = source.fileName();
       require(window.apply_application_settings(settings), "Could not apply actual raster file");
       const auto real_font = qt::japanese_font(window, qt::JapaneseFontRole::kFile);
-      require(real_font.family().startsWith(QStringLiteral("JwpqtRaster-")) &&
+      require(real_font.families().last().startsWith(QStringLiteral("JwpqtRaster-")) &&
                   real_font.pixelSize() == core::RasterFont(real).height(), "Actual raster file did not reach the native role");
     }
     system.family = QStringLiteral("test.f00");

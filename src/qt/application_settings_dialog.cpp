@@ -83,7 +83,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   const char* labels[] = {"System", "Query fields", "Lists and readings", "Candidate bar", "Document", "Large character", "Character Table", "Clipboard bitmap"};
   auto families = QFontDatabase::families();
   for (auto it = families.begin(); it != families.end();)
-    if (it->startsWith(QStringLiteral("JwpqtRaster-"))) it = families.erase(it); else ++it;
+    if (it->startsWith(QStringLiteral("JwpqtRaster-")) || it->startsWith(QStringLiteral("JwpqtAscii-"))) it = families.erase(it); else ++it;
   struct FontControl { QComboBox* family; QSpinBox* size; QCheckBox* automatic; };
   std::vector<FontControl> font_controls;
   for (std::size_t i = 0; i < settings_.fonts.size(); ++i) {
@@ -120,9 +120,18 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
     font_controls.push_back({family, size, automatic});
   }
   auto* explanation = new QLabel(tr("Automatic query/document fonts inherit System; lists and candidates inherit query fields. "
-      "These settings do not change desktop menu fonts. Unavailable or legacy bitmap families use a native fallback; their names remain stored."), fonts);
+      "These settings do not change desktop menu fonts. Unavailable families or invalid raster files use a native fallback; their names remain stored."), fonts);
   explanation->setWordWrap(true);
-  const int last_font_row = static_cast<int>(settings_.fonts.size()) + 1;
+  const int ascii_row = static_cast<int>(settings_.fonts.size()) + 1;
+  auto* ascii_family = new QComboBox(fonts);
+  ascii_family->setObjectName(QStringLiteral("settingsAsciiFont"));
+  ascii_family->addItems(families);
+  ascii_family->setEditable(true);
+  ascii_family->setEditText(settings_.ascii_font.family);
+  grid->addWidget(new QLabel(tr("ASCII and legacy extensions"), fonts), ascii_row, 0);
+  grid->addWidget(ascii_family, ascii_row, 1);
+  grid->addWidget(new QLabel(tr("Matched height"), fonts), ascii_row, 2, 1, 2);
+  const int last_font_row = ascii_row + 1;
   grid->addWidget(explanation, last_font_row, 0, 1, 4);
   auto* omit_bitmap = new QCheckBox(tr("Omit bitmap images when copying document text"), fonts);
   omit_bitmap->setObjectName(QStringLiteral("settingsOmitClipboardBitmap"));
@@ -276,7 +285,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
   connect(buttons, &QDialogButtonBox::accepted, this,
           [this, booleans, font_controls, dictionary_controls, code_page, history_size, categories,
-           print_family, print_size, print_auto] {
+           print_family, print_size, print_auto, ascii_family] {
     auto next = settings_;
     for (const auto& control : booleans) next.*(control.member) = control.widget->isChecked();
     for (const auto& control : dictionary_controls) next.dictionary.*(control.member) = control.widget->isChecked();
@@ -293,6 +302,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
     next.translation_code_page = code_page->currentData().toInt();
     next.history_size = history_size->value();
     next.print_font = {print_family->currentText(), qRound(print_size->value() * 10), print_auto->isChecked()};
+    next.ascii_font.family = ascii_family->currentText();
     try {
       (void)write_application_settings(next);
       settings_ = std::move(next);

@@ -40,7 +40,7 @@ void test_fallback_and_big() {
           settings.fonts[2].size == 90, "Missing List font did not inherit Edit size without rewriting settings");
   settings.fonts[1].family = QStringLiteral("missing-jwpqt-edit-456");
   qt::set_japanese_fonts(owner, settings);
-  require(list->font().pixelSize() == 19 && list->font().family() == settings.fonts[0].family,
+  require(list->font().pixelSize() == 19 && list->font().families().contains(settings.fonts[0].family),
           "Nested missing font fallback lost System family or size");
   settings.fonts[4] = {{}, 31, false};
   qt::set_japanese_fonts(owner, settings);

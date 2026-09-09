@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "print_document.h"
+#include "japanese_fonts.h"
 #include "jwpqt/core/jwp_text_codec.h"
 #include "text_bridge.h"
 #include <algorithm>
@@ -153,6 +154,7 @@ PrintLayout::PrintLayout(const QTextDocument& source, const QPageLayout& page,
   if (d.options.font.pointSizeF() <= 0) d.options.font.setPointSizeF(12);
   if (d.options.font.pointSizeF() < 1 || d.options.font.pointSizeF() > 144)
     throw PrintDocumentError("Print font size is outside the supported range");
+  d.options.font = ensure_ascii_font(d.options.font);
   d.document.reset(source.clone());
   if (to_qstring(from_qstring(raw_text(source))) != raw_text(source))
     throw PrintDocumentError("Invalid Unicode in print document");

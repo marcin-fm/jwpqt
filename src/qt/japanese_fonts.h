@@ -11,6 +11,7 @@ namespace jwpqt::qt {
 
 void assign_japanese_font(QWidget& widget, JapaneseFontRole role, bool horizontal_strip = false);
 QFont japanese_font(const QWidget& widget, JapaneseFontRole role);
+QFont ensure_ascii_font(QFont font);
 bool clipboard_bitmap_enabled(const QWidget& widget);
 QFont japanese_print_font(QFont base, const JapaneseFontSetting& setting, const QString& directory);
 QStringList set_japanese_fonts(QWidget& owner, const ApplicationSettings& settings,

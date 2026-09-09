@@ -17,9 +17,19 @@ File. Omit bitmap removes only that representation, not text or rich formats.
 Images have white paper and preserve the selected text without changing the
 document or undo. Images are bounded at 262,144 selected UTF-16 positions,
 8,192 pixels per edge and 16 million pixels; an omitted oversized image is
-reported while the text is still copied. Independent ASCII runs,
-vertical/color-list bitmap policies and some other font tuning
-remain unimplemented.
+reported while the text is still copied. Vertical/color-list bitmap policies
+and some other font tuning remain unimplemented.
+
+ASCII and legacy extensions selects a separate single-byte font at the Japanese
+role's height. Even when that family contains Japanese, its private restricted
+face cannot replace Japanese glyphs. The original family name is saved, and
+missing families report a native fallback. Legacy ASCII Size/Auto values are
+retained but do not change the matched height. Copy images and printing share
+this selection; optional Latin ligatures are disabled for individual-character
+rendering and PDF text. No system fonts are modified or redistributed, and their
+original licensing and embedding restrictions remain. Unicode shared by both
+legacy bytes and JIS codes currently uses the Japanese face; exact distinction
+between those original representations remains a separate fidelity gap.
 
 You can enter a legacy .f00 filename instead of a font family, including Print.
 Relative names use the settings directory, not a guessed Windows directory.

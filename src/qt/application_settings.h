@@ -30,6 +30,7 @@ struct ApplicationSettings {
 
   std::array<JapaneseFontSetting, static_cast<std::size_t>(JapaneseFontRole::kCount)> fonts;
   JapaneseFontSetting print_font{{}, 120, true}; // Size is tenths of a point, not screen pixels.
+  JapaneseFontSetting ascii_font{{}, 0, true}; // Source size/automatic are retained; height follows each Japanese role.
   bool show_toolbar = true;
   bool omit_clipboard_bitmap = false;
   ToolbarSettings toolbar;
