@@ -339,13 +339,18 @@ void test_integration(const QString& directory) {
   count_results->item(0)->setSelected(true);
   count_dialog->findChild<QPushButton*>(QStringLiteral("kanjiCountInsert"))
       ->click();
-  require(window.current_jwp_document()->paragraphs[0].text.size() == 4,
+  std::size_t inserted_cells = 0;
+  for (const auto& paragraph : window.current_jwp_document()->paragraphs)
+    inserted_cells += paragraph.text.size();
+  require(inserted_cells == 4 &&
+              window.current_jwp_document()->paragraphs.size() == 2,
           "Count Kanji insertion did not mutate the JWP document");
   QAction* undo = window.findChild<QAction*>(QStringLiteral("undoAction"));
   require(undo != nullptr && undo->isEnabled(),
           "Count Kanji insertion did not create a history entry");
   undo->trigger();
-  require(window.current_jwp_document()->paragraphs[0].text.size() == 3,
+  require(window.current_jwp_document()->paragraphs.size() == 1 &&
+              window.current_jwp_document()->paragraphs[0].text.size() == 3,
           "Count Kanji insertion could not be undone");
 
   QAction* radical_action =
@@ -399,8 +404,11 @@ void test_integration(const QString& directory) {
     unicode->setTextCursor(selected);
     require(button != nullptr && button->isEnabled(), "Lookup has no available insert control");
     button->click();
+    const QString inserted = button->objectName() == QStringLiteral("kanjiCountInsert")
+                                 ? QString::fromStdU32String(U"\U0001f600\u4e9c\n")
+                                 : QString::fromStdU32String(U"\U0001f600\u4e9c");
     require(!window.is_jwp_document() && unicode->toPlainText() ==
-                QString::fromStdU32String(U"\U0001f600\u4e9c"),
+                inserted,
             "A modeless lookup inserted into its old document instead of the Unicode selection");
     undo->trigger();
     require(unicode->toPlainText() == before_lookup && !window.document_modified(),

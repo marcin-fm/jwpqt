@@ -12,6 +12,15 @@ role, including its size; the stored unavailable name and a diagnostic remain.
 Large characters fit their pane on resize. Table remains 16 logical pixels.
 Print has a separate physical font role.
 
+Insert complete result-list entries on separate lines follows the original list
+insertion policy and starts enabled. Dictionary, accumulated-result, count and
+user-dictionary rows then become separate paragraphs, including the terminating
+paragraph after the final row. Disable it to join complete rows compactly: eligible
+ASCII boundaries use a tab, while Japanese or already-spaced boundaries join
+directly. Character-level insertion from information and kanji lookup controls is
+not changed. The whole insertion remains one Undo operation in native Japanese and
+unrestricted Unicode documents.
+
 Bitmap controls the image included when copying document text; Automatic inherits
 File. Omit bitmap removes only that representation, not text or rich formats.
 Images have white paper and preserve the selected text without changing the

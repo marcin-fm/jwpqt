@@ -4311,7 +4311,7 @@ void MainWindow::show_kanji_count_dialog() {
       const core::JwpDocument empty;
       auto* dialog = new KanjiCountDialog(
           {&empty}, kanji_color_list_, kanji_info_database_.get(),
-          [this](std::u32string text) { insert_edict_text(std::move(text)); },
+          [this](std::u32string text) { insert_list_text(std::move(text)); },
           [this](core::JisCode code) { show_kanji_info_code(code); }, this);
       dialog->set_document_provider([this] {
         if (conversion_active() || !finish_document_input())
@@ -4552,7 +4552,7 @@ bool MainWindow::insert_edict_user_entry(const core::EdictUserEntry& entry) {
     return false;
   }
   try {
-    return insert_edict_text(core::render_edict_user_entry(entry));
+    return insert_list_text(core::render_edict_user_entry(entry));
   } catch (const std::exception& error) {
     statusBar()->showMessage(
         tr("Could not insert user dictionary entry: %1")
@@ -4575,7 +4575,7 @@ bool MainWindow::insert_wnn_user_entry(const core::WnnUserEntry& entry) {
   try {
     const core::JwpText inserted = core::render_wnn_user_entry(entry);
     if (!document_->jwp_document_) {
-      return insert_edict_text(core::decode_jwp_text(inserted, document_->jwp_code_page_));
+      return insert_list_text(core::decode_jwp_text(inserted, document_->jwp_code_page_));
     }
     const QString original_text = document_plain_text(*document_->editor_->document());
     const QTextCursor original_cursor = document_->editor_->textCursor();
@@ -4596,8 +4596,10 @@ bool MainWindow::insert_wnn_user_entry(const core::WnnUserEntry& entry) {
     const core::JwpPosition insertion =
         candidate.erase({selection_begin, selection_end});
     candidate.insert(insertion, inserted);
-    const core::JwpPosition following{
+    core::JwpPosition following{
         insertion.paragraph, insertion.offset + inserted.size()};
+    if (application_settings_.insert_on_separate_lines)
+      following = candidate.split_paragraph(following);
     if (!history.commit(candidate, following)) {
       return false;
     }
@@ -4710,7 +4712,7 @@ void MainWindow::show_edict_lookup_dialog() {
         }
         return report;
       },
-      [this](const std::u32string& text) { return insert_edict_text(text); },
+      [this](const std::u32string& text) { return insert_list_text(text); },
       this, [this](char32_t character) {
         show_kanji_info_dialog(CharacterTarget{character, -1});
       }, edict_lookup_options_, edict_query_history_);
@@ -4750,7 +4752,7 @@ void MainWindow::show_edict_results_window(bool show) {
 
   auto* results = new EdictResultsWindow(this);
   results->set_insert_handler(
-      [this](const std::u32string& text) { return insert_edict_text(text); });
+      [this](const std::u32string& text) { return insert_list_text(text); });
   results->setAttribute(Qt::WA_DeleteOnClose);
   connect(results, &QObject::destroyed, this, [this] {
     edict_results_window_ = nullptr;
@@ -4791,6 +4793,34 @@ std::u32string MainWindow::edict_query_seed() const {
 
 bool MainWindow::insert_edict_text(std::u32string_view text) {
   return !text.empty() && replace_editor_selection(text);
+}
+
+bool MainWindow::insert_list_text(std::u32string_view text) {
+  if (text.empty()) return false;
+  std::u32string formatted(text);
+  if (application_settings_.insert_on_separate_lines) {
+    if (formatted.back() != U'\n') formatted.push_back(U'\n');
+  } else {
+    std::u32string joined;
+    joined.reserve(formatted.size());
+    for (std::size_t i = 0; i < formatted.size(); ++i) {
+      if (formatted[i] != U'\n') {
+        joined.push_back(formatted[i]);
+        continue;
+      }
+      std::size_t next = i + 1;
+      while (next < formatted.size() && formatted[next] == U'\n') ++next;
+      if (next == formatted.size()) break;
+      if (formatted[next] == U'\t') ++next;
+      if (!joined.empty() && next < formatted.size() && formatted[next] != U' ') {
+        const auto previous = core::unicode_to_jwp_code(joined.back(), document_->jwp_code_page_);
+        if (joined.back() != U' ' && (!previous || *previous <= 0xff)) joined.push_back(U'\t');
+      }
+      i = next - 1;
+    }
+    formatted = std::move(joined);
+  }
+  return insert_edict_text(formatted);
 }
 
 bool MainWindow::replace_editor_selection(std::u32string_view text) {

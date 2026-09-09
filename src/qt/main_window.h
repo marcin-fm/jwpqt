@@ -249,6 +249,7 @@ class MainWindow : public QMainWindow {
       OpenMode mode = OpenMode::kInteractive);
   bool insert_edict_user_entry(const core::EdictUserEntry& entry);
   bool insert_edict_text(std::u32string_view text);
+  bool insert_list_text(std::u32string_view text);
   bool set_kanji_color_policy(
       const core::KanjiColorPolicy& policy,
       OpenMode mode = OpenMode::kInteractive);

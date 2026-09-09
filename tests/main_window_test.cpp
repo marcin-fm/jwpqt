@@ -2807,6 +2807,98 @@ void test_undo_depth_policy(const QString& directory) {
           "Restored project editor did not apply its undo limit");
 }
 
+void test_result_list_insertion_policy(const QString& directory) {
+  using namespace jwpqt::core;
+  using namespace jwpqt::qt;
+  require(ApplicationSettings{}.insert_on_separate_lines &&
+              !read_application_settings("paste_newpara = false\n").insert_on_separate_lines &&
+              write_application_settings(ApplicationSettings{}).find("InsertOnSeparateLines = true") !=
+                  std::string::npos,
+          "Result-list insertion source defaults or alias changed");
+  bool invalid = false;
+  try {
+    (void)read_application_settings(
+        "InsertOnSeparateLines = invalid\npaste_newpara = true\n");
+  } catch (const std::exception&) {
+    invalid = true;
+  }
+  require(invalid, "Invalid earlier result-list insertion policy accepted");
+
+  const QString root = directory + QStringLiteral("/result-list-insertion");
+  require(QDir().mkpath(root), "Could not create result-list insertion fixture directory");
+  JwpDocument original;
+  original.paragraphs = {paragraph(U"source")};
+  original.paragraphs[0].first_indent = 2;
+  original.summary[0] = {'I'};
+  const QString native_path = root + QStringLiteral("/native.jwp");
+  write_jwp_file(native_path, original);
+  MainWindow window;
+  require(window.open_jwp_path(native_path), "Could not open native insertion fixture");
+  auto* editor = window.active_editor();
+  editor->selectAll();
+  require(window.insert_list_text(U"A\nB") &&
+              document_plain_text(*editor->document()) == QStringLiteral("A\nB\n") &&
+              window.current_jwp_document()->paragraphs.size() == 3,
+          "Separate-line insertion did not retain complete logical rows and trailing paragraph");
+  find_action(window, "undoAction")->trigger();
+  require(*window.current_jwp_document() == original && !window.document_modified(),
+          "Separate-line insertion was not one clean native undo transaction");
+
+  auto joined = window.application_settings();
+  joined.insert_on_separate_lines = false;
+  require(window.apply_application_settings(joined), "Could not disable separate-line insertion");
+  editor->selectAll();
+  require(window.insert_list_text(U"A\nB") &&
+              document_plain_text(*editor->document()) == QStringLiteral("A\tB") &&
+              window.current_jwp_document()->paragraphs.size() == 1,
+          "Joined ASCII rows did not use the source tab separator");
+  find_action(window, "undoAction")->trigger();
+  editor->selectAll();
+  require(window.insert_list_text(U"\u65e5\nB") &&
+              document_plain_text(*editor->document()) == QStringLiteral("\u65e5B"),
+          "Joined rows inserted spacing after a Japanese source row");
+  find_action(window, "undoAction")->trigger();
+  editor->selectAll();
+  require(window.insert_list_text(U"single") &&
+              document_plain_text(*editor->document()) == QStringLiteral("single"),
+          "Joined single-row insertion added a trailing separator");
+  find_action(window, "undoAction")->trigger();
+
+  ApplicationSettingsDialog options(window.application_settings());
+  auto* separate = options.findChild<QCheckBox*>(QStringLiteral("settingsInsertLines"));
+  require(separate && !separate->isChecked(), "Result-list insertion option is missing or stale");
+  separate->setChecked(true);
+  options.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+  require(window.apply_application_settings(options.settings()) &&
+              window.application_settings().insert_on_separate_lines,
+          "Result-list insertion option did not apply");
+
+  const QString unicode_path = root + QStringLiteral("/unicode.txt");
+  const std::u32string unicode_original = U"\ufeff\U0001f600\u00a0";
+  write_text_file(unicode_path, {unicode_original, TextEncoding::kUtf16Be, true});
+  require(window.open_path(unicode_path, TextEncoding::kUtf16Be, OpenMode::kNonInteractive, true),
+          "Could not open Unicode insertion fixture");
+  editor = window.active_editor();
+  editor->selectAll();
+  require(window.insert_list_text(U"X\nY") &&
+              document_plain_text(*editor->document()) == QStringLiteral("X\nY\n"),
+          "Separate-line insertion failed in an unrestricted Unicode document");
+  find_action(window, "undoAction")->trigger();
+  require(from_qstring(document_plain_text(*editor->document())) == unicode_original &&
+              !window.document_modified(),
+          "Unicode result-list insertion did not undo to its exact source");
+
+  require(window.save_application_settings(root + QStringLiteral("/settings.cfg")) &&
+              window.save_project_path(root + QStringLiteral("/workspace.jpr"), false),
+          "Could not persist result-list insertion preference");
+  MainWindow restored;
+  require(restored.load_application_settings(root + QStringLiteral("/settings.cfg")) &&
+              restored.application_settings().insert_on_separate_lines &&
+              restored.open_project_path(root + QStringLiteral("/workspace.jpr")) &&
+              restored.application_settings().insert_on_separate_lines,
+          "Settings restart or JPR changed result-list insertion preference");
+}
+
 void test_selected_romaji(const QString& directory) {
   using namespace jwpqt::core;
   using namespace jwpqt::qt;
@@ -3449,10 +3541,11 @@ void test_jwp_wnn_user_dictionary_dialog(const QString& directory) {
   require(dialog->insert_selected(),
           "Dialog could not insert the selected user conversion");
   jwpqt::core::JwpText expected = jwpqt::core::render_wnn_user_entry(entry);
-  expected.push_back(static_cast<std::uint16_t>('B'));
-  require(window.current_jwp_document()->paragraphs[0].text == expected &&
-              editor->textCursor().position() ==
-                  static_cast<int>(expected.size() - 1),
+  require(window.current_jwp_document()->paragraphs.size() == 2 &&
+              window.current_jwp_document()->paragraphs[0].text == expected &&
+              window.current_jwp_document()->paragraphs[1].text ==
+                  jwpqt::core::JwpText{static_cast<std::uint16_t>('B')} &&
+              editor->textCursor().position() == static_cast<int>(expected.size() + 1),
           "Insert to File did not replace selection with the display row");
 
   QAction* undo = find_action(window, "undoAction");
@@ -3491,9 +3584,9 @@ void test_jwp_wnn_user_dictionary_dialog(const QString& directory) {
   plain.active_editor()->moveCursor(QTextCursor::End);
   const auto plain_before = plain.active_editor()->toPlainText();
   require(plain.insert_wnn_user_entry(entry) && !plain.is_jwp_document() &&
-              plain.active_editor()->toPlainText() == plain_before +
-                  jwpqt::qt::to_qstring(jwpqt::core::decode_jwp_text(
-                      jwpqt::core::render_wnn_user_entry(entry))),
+               plain.active_editor()->toPlainText() == plain_before +
+                   jwpqt::qt::to_qstring(jwpqt::core::decode_jwp_text(
+                       jwpqt::core::render_wnn_user_entry(entry))) + QStringLiteral("\n"),
           "User-conversion insertion did not preserve unrestricted Unicode");
   find_action(plain, "undoAction")->trigger();
   require(plain.active_editor()->toPlainText() == plain_before && !plain.document_modified(),
@@ -3631,8 +3724,10 @@ void test_edict_lookup_integration(const QString& directory) {
           "Native EDICT result could not be inserted into JWP");
   const jwpqt::core::JwpText expected =
       jwpqt::core::encode_jwp_text(U"cat /feline/");
-  require(window.current_jwp_document()->paragraphs[0].text == expected &&
-              editor->toPlainText() == QStringLiteral("cat /feline/"),
+  require(window.current_jwp_document()->paragraphs.size() == 2 &&
+              window.current_jwp_document()->paragraphs[0].text == expected &&
+              window.current_jwp_document()->paragraphs[1].text.empty() &&
+              editor->toPlainText() == QStringLiteral("cat /feline/\n"),
           "Native EDICT insertion did not replace the selected JWP text");
   QAction* undo = find_action(window, "undoAction");
   require(undo != nullptr && undo->isEnabled(),
@@ -3683,7 +3778,7 @@ void test_edict_lookup_integration(const QString& directory) {
   plain_dialog->set_query(U"cat");
   require(plain_dialog->search() && plain_dialog->insert_selected() &&
               !plain.is_jwp_document() && plain.active_editor()->toPlainText() ==
-                  QString::fromStdU32String(U"plain \U0001f600cat /feline/"),
+                  QString::fromStdU32String(U"plain \U0001f600cat /feline/\n"),
           "Dictionary result did not reach the unrestricted Unicode target");
   find_action(plain, "undoAction")->trigger();
   require(!plain.document_modified() && plain.active_editor()->toPlainText() ==
@@ -3864,8 +3959,8 @@ void test_edict_search_controls(const QString& directory) {
           "Native dictionary Sort did not reverse reading order");
   dialog->copy_selected();
   require(QApplication::clipboard()->text() == QStringLiteral("\u3055\ncat food") &&
-              dialog->insert_selected() &&
-              window.active_editor()->toPlainText() == QStringLiteral("\u3055 /cat food/"),
+               dialog->insert_selected() &&
+               window.active_editor()->toPlainText() == QStringLiteral("\u3055 /cat food/\n"),
           "Sorted native dictionary selection lost its copy/insertion mapping");
   find_action(window, "undoAction")->trigger();
   require(!window.document_modified() && window.active_editor()->toPlainText().isEmpty(),
@@ -4229,7 +4324,7 @@ void test_edict_user_dictionary_integration(const QString& directory) {
   editor->selectAll();
   require(window.insert_edict_user_entry(replacement) &&
               editor->toPlainText() ==
-                  QStringLiteral("\u72ac [\u3044\u306c]\tdog"),
+                  QStringLiteral("\u72ac [\u3044\u306c]\tdog\n"),
           "User dictionary row was not inserted into JWP");
   QAction* undo = find_action(window, "undoAction");
   require(undo != nullptr && undo->isEnabled(),
@@ -5839,6 +5934,7 @@ int main(int argc, char* argv[]) {
     test_katakana_policy(directory.path());
     test_control_arrow_conversion(directory.path());
     test_undo_depth_policy(directory.path());
+    test_result_list_insertion_policy(directory.path());
     test_selected_romaji(directory.path());
     test_jwp_wnn_conversion(directory.path());
     test_jwp_wnn_conversion_boundaries(directory.path());

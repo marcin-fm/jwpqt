@@ -73,6 +73,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   add_boolean("settingsRevertToKanji", tr("Switch to Kanji input on explicit conversion"), &ApplicationSettings::revert_to_kanji_mode);
   add_boolean("settingsOldKatakana", tr("Use old katakana vowel quote handling"), &ApplicationSettings::old_katakana_input);
   add_boolean("settingsCtrlConvert", tr("Use Ctrl+Up/Down to convert selected kana"), &ApplicationSettings::ctrl_up_down_convert);
+  add_boolean("settingsInsertLines", tr("Insert complete result-list entries on separate lines"), &ApplicationSettings::insert_on_separate_lines);
   add_boolean("settingsKeepBackup", tr("Keep the previous disk version as filename_BAK when saving"), &ApplicationSettings::keep_backup_copy);
   add_boolean("settingsRestoreWindow", tr("Restore main window position, size and maximized state on startup"), &ApplicationSettings::restore_window);
   add_boolean("settingsCloseButtonFile", tr("Window close button closes the current document"), &ApplicationSettings::close_button_closes_file);
