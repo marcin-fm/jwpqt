@@ -49,6 +49,7 @@ struct ApplicationSettings {
   bool save_recent_files = true;
   bool save_histories = true;
   bool startup_dictionary = false;
+  bool reload_previous_files = false;
   bool restore_window = false;
   bool maximize_window = false;
   // Main, Character Info, Dictionary, Count, More Info, User Conversion, User Dictionary.

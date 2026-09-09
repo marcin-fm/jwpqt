@@ -1,5 +1,11 @@
 find_package(Qt6 REQUIRED COMPONENTS Test)
 
+add_executable(jwpqt_session_tests session_test.cpp)
+target_link_libraries(jwpqt_session_tests PRIVATE jwpqt_qt_ui)
+target_compile_options(jwpqt_session_tests PRIVATE -Wall -Wextra -Wpedantic)
+add_dependencies(jwpqt_session_tests jwpqt)
+add_test(NAME qt_session COMMAND jwpqt_session_tests $<TARGET_FILE:jwpqt>)
+set_tests_properties(qt_session PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;TMPDIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 90)
 add_executable(jwpqt_window_geometry_tests window_geometry_test.cpp)
 target_link_libraries(jwpqt_window_geometry_tests PRIVATE jwpqt_qt_ui)
 target_compile_options(jwpqt_window_geometry_tests PRIVATE -Wall -Wextra -Wpedantic)

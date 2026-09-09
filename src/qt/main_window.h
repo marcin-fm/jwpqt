@@ -136,6 +136,9 @@ class MainWindow : public QMainWindow {
   bool close_document(int index, OpenMode mode = OpenMode::kInteractive);
   bool close_application();
   bool open_startup_dictionary(bool explicit_document = false);
+  bool load_previous_session(const QString& path, bool restore = true);
+  bool save_previous_session();
+  QString session_warning() const;
   bool close_all_documents(OpenMode mode = OpenMode::kInteractive);
   bool save_all_documents(OpenMode mode = OpenMode::kInteractive);
   bool load_recent_file_configuration(
@@ -339,6 +342,7 @@ class MainWindow : public QMainWindow {
   std::optional<core::JisCode> jwp_character_target() const;
   std::u32string edict_query_seed() const;
   void new_document();
+  bool open_workspace_path(const QString& path, const ProjectOpenOptions& options, OpenMode mode, bool session);
   void connect_editor(JwpEditor* editor);
   void refresh_document_view();
   bool finish_document_input();
@@ -429,6 +433,10 @@ class MainWindow : public QMainWindow {
   bool application_settings_persistence_enabled_ = true;
   QString project_path_;
   QString project_warning_;
+  QString session_path_;
+  QString session_warning_;
+  std::optional<std::string> session_source_;
+  bool session_source_known_ = false;
   std::shared_ptr<core::QueryHistories> query_histories_ = std::make_shared<core::QueryHistories>();
   std::optional<QueryHistorySnapshot> query_history_snapshot_;
   QString query_history_path_;

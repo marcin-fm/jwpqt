@@ -22,7 +22,18 @@ settings does not relocate windows already open. Independent information windows
 remain independent, with the last moved/resized one supplying the next default.
 Placement uses native logical pixels and is clamped to an available screen when
 an old monitor is absent. Dimensions and restore flags travel with settings and
-projects; this does not yet reopen the previous session's document tabs.
+projects.
+
+**Restore named files from the previous session** separately enables `last-session.jpr`
+in the application configuration directory. Files reopen in their saved formats
+and tab order before command-line files are opened or activated. Current preferences
+remain authoritative; this archive does not become the current project. Missing or
+invalid files are reported while usable entries open. Existing buffers are retained.
+Exit records only currently named files after save/discard checks, never unsaved text
+or unnamed buffers. Skipped references are omitted on the next successful save.
+Disabling this option leaves the archive unchanged. A corrupt or externally changed
+archive is preserved; failed saving offers Cancel or exit without updating it.
+Resource-report does not restore tabs, and query-history saving is independent.
 
 ## Formats
 

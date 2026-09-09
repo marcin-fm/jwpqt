@@ -2,6 +2,8 @@
 
 #include "main_window.h"
 #include "window_geometry.h"
+#include "session_io.h"
+#include <new>
 #include <QStringView>
 #include "toolbar_dialog.h"
 #include <QTimer>
@@ -776,6 +778,10 @@ QString MainWindow::current_project_path() const { return project_path_; }
 QString MainWindow::project_warning() const { return project_warning_; }
 
 bool MainWindow::open_project_path(const QString& path, const ProjectOpenOptions& options, OpenMode mode) {
+  return open_workspace_path(path, options, mode, false);
+}
+
+bool MainWindow::open_workspace_path(const QString& path, const ProjectOpenOptions& options, OpenMode mode, bool session) {
   try {
     const auto project_bytes = read_file_bytes(path, core::JwpProjectLimits{}.encoded_bytes);
     const auto project = core::parse_jwp_project(project_bytes);
@@ -783,7 +789,7 @@ bool MainWindow::open_project_path(const QString& path, const ProjectOpenOptions
     ProjectWorkspace workspace;
     for (;;) {
       try {
-        workspace = decode_project_workspace(project, path, application_settings_, mappings);
+        workspace = decode_project_workspace(project, path, application_settings_, mappings, !session);
         break;
       } catch (const ProjectPathError& error) {
         if (mode == OpenMode::kNonInteractive) throw;
@@ -793,7 +799,8 @@ bool MainWindow::open_project_path(const QString& path, const ProjectOpenOptions
         mappings.push_back({error.source_directory(), directory});
       }
     }
-    if (!workspace.settings.unapplied.empty() && !options.allow_unapplied_settings) {
+    if (session && workspace.detect_formats) throw core::JwpProjectError("Session has no explicit file formats");
+    if (!session && !workspace.settings.unapplied.empty() && !options.allow_unapplied_settings) {
       if (mode == OpenMode::kNonInteractive)
         throw core::JwpProjectError("Project contains unapplied settings; explicit consent is required");
       QMessageBox warning(QMessageBox::Warning, tr("Project settings"),
@@ -813,12 +820,22 @@ bool MainWindow::open_project_path(const QString& path, const ProjectOpenOptions
 
     constexpr std::size_t maximum_bytes = 64U * 1024U * 1024U;
     std::vector<std::string> bytes(workspace.documents.size());
+    std::vector<bool> available(bytes.size(), true);
+    QStringList read_warnings;
     const auto read_documents = [&] {
       std::size_t remaining = maximum_bytes;
       for (std::size_t i = 0; i < bytes.size(); ++i) {
         if (options.append && find_document_path(workspace.documents[i].path) >= 0) continue;
-        bytes[i] = read_file_bytes(workspace.documents[i].path, remaining);
-        remaining -= bytes[i].size();
+        try {
+          bytes[i] = read_file_bytes(workspace.documents[i].path, remaining);
+          remaining -= bytes[i].size();
+        } catch (const std::bad_alloc&) {
+          throw;
+        } catch (const std::exception& error) {
+          if (!session) throw;
+          available[i] = false;
+          read_warnings << tr("Session file skipped: %1: %2").arg(workspace.documents[i].path, QString::fromUtf8(error.what()));
+        }
       }
     };
     read_documents();
@@ -860,6 +877,7 @@ bool MainWindow::open_project_path(const QString& path, const ProjectOpenOptions
       std::size_t characters = 0;
       warnings.clear();
       for (std::size_t i = 0; i < workspace.documents.size(); ++i) {
+        if (!available[i]) continue;
         const auto& entry = workspace.documents[i];
         const int existing = options.append ? find_document_path(entry.path) : -1;
         if (existing >= 0) {
@@ -878,7 +896,15 @@ bool MainWindow::open_project_path(const QString& path, const ProjectOpenOptions
             if (!entry.japanese_editing && !staged->set_japanese_editing(false))
               warnings << tr("Japanese editing retained to preserve document metadata: %1").arg(entry.path);
           }
+        } catch (const std::bad_alloc&) {
+          throw;
         } catch (const std::exception& error) {
+          if (session) {
+            warnings << tr("Session file skipped: %1: %2").arg(entry.path, QString::fromUtf8(error.what()));
+            staged->new_document();
+            if (incoming_count != 0) staged->close_document(staged->current_document_index(), OpenMode::kNonInteractive);
+            continue;
+          }
           throw core::JwpProjectError((entry.path + QStringLiteral(": ") + QString::fromUtf8(error.what())).toStdString());
         }
         if (entry.japanese_editing && !staged->is_jwp_document())
@@ -940,13 +966,20 @@ bool MainWindow::open_project_path(const QString& path, const ProjectOpenOptions
       }
       staged = stage_documents();
       warnings += saved_formats;
-    } else if (!targets.empty() && targets[workspace.current_document] != document_ && !finish_document_input()) return false;
-
-    documents_.reserve((options.append ? documents_.size() : 0) + std::max<std::size_t>(1, incoming_count));
-    if (!apply_application_settings(workspace.settings))
-      throw core::JwpProjectError(application_settings_warning().toStdString());
+    }
     DocumentState* selected = targets.empty() ? (options.append ? document_ : staged->document_)
-                                             : targets[workspace.current_document];
+                                              : targets[workspace.current_document];
+    if (!selected) {
+      selected = document_;
+      for (std::size_t n = 0; n < targets.size(); ++n) {
+        const auto i = (workspace.current_document + targets.size() - n) % targets.size();
+        if (targets[i]) { selected = targets[i]; break; }
+      }
+    }
+    if (options.append && selected != document_ && !finish_document_input()) return false;
+    documents_.reserve((options.append ? documents_.size() : 0) + std::max<std::size_t>(1, incoming_count));
+    if (!session && !apply_application_settings(workspace.settings))
+      throw core::JwpProjectError(application_settings_warning().toStdString());
     std::vector<std::unique_ptr<DocumentState>> retired;
     if (!options.append) retired.reserve(std::max<std::size_t>(1, incoming_count));
     {
@@ -986,21 +1019,95 @@ bool MainWindow::open_project_path(const QString& path, const ProjectOpenOptions
       document_tabs_->setCurrentIndex(current_document_index());
     }
     refresh_document_view();
-    project_path_ = absolute_document_path(path);
-    project_warning_ = warnings.join(QLatin1Char('\n'));
+    if (session) session_warning_ = (read_warnings + warnings).join(QLatin1Char('\n'));
+    else {
+      project_path_ = absolute_document_path(path);
+      project_warning_ = warnings.join(QLatin1Char('\n'));
+    }
     for (const auto& state : retired) {
       record_recent_document(*state);
       delete state->editor_;
     }
-    for (auto* target : targets) record_recent_document(*target);
-    record_recent_file({project_path_, {}, default_jwp_code_page(), true});
+    for (auto* target : targets) if (target) record_recent_document(*target);
+    if (!session) record_recent_file({project_path_, {}, default_jwp_code_page(), true});
     update_resource_status();
-    statusBar()->showMessage(tr("Opened project %1 (%2 documents)").arg(path).arg(workspace.documents.size()), 5000);
+    statusBar()->showMessage(session
+        ? tr("Restored previous session (%1 documents)").arg(std::count_if(targets.begin(), targets.end(), [](auto* target) { return target != nullptr; }))
+        : tr("Opened project %1 (%2 documents)").arg(path).arg(workspace.documents.size()), 5000);
     return true;
   } catch (const std::exception& error) {
-    project_warning_ = tr("Could not open project: %1").arg(QString::fromUtf8(error.what()));
+    (session ? session_warning_ : project_warning_) = tr("Could not open workspace: %1").arg(QString::fromUtf8(error.what()));
     update_resource_status();
     if (mode == OpenMode::kInteractive) show_error(tr("Could not open project %1").arg(path), error);
+    return false;
+  }
+}
+
+QString MainWindow::session_warning() const { return session_warning_; }
+
+bool MainWindow::load_previous_session(const QString& path, bool restore) {
+  try {
+    session_path_ = absolute_document_path(path);
+    session_source_known_ = false;
+    session_source_ = read_session_source(session_path_);
+    session_source_known_ = true;
+    session_warning_.clear();
+    if (!restore || !application_settings_.reload_previous_files || !session_source_) {
+      update_resource_status();
+      return true;
+    }
+    DocumentState* blank = document_count() == 1 && document_->current_path_.isEmpty() &&
+        !document_modified() && !document_->kana_input_.pending() && !document_->jwp_conversion_ &&
+        document_plain_text(*document_->editor_->document()).isEmpty() ? document_ : nullptr;
+    ProjectOpenOptions options;
+    options.append = true;
+    if (!open_workspace_path(session_path_, options, OpenMode::kNonInteractive, true)) {
+      session_source_known_ = false;
+      return false;
+    }
+    if (blank && document_count() > 1) {
+      auto* selected = document_;
+      close_document(0, OpenMode::kNonInteractive);
+      for (int i = 0; i < document_count(); ++i)
+        if (documents_[i].get() == selected) { activate_document(i); break; }
+    }
+    return true;
+  } catch (const std::exception& error) {
+    session_warning_ = tr("Could not read previous session: %1").arg(QString::fromUtf8(error.what()));
+    update_resource_status();
+    return false;
+  }
+}
+
+bool MainWindow::save_previous_session() {
+  try {
+    if (session_path_.isEmpty()) return true;
+    if (!session_source_known_) throw core::JwpProjectError("Session source is unknown; reload before saving");
+    if (find_document_path(session_path_) >= 0) throw core::JwpProjectError("Session cannot overwrite an open document");
+    for (const auto& other : {application_settings_path_, recent_files_path_, project_path_, query_history_path_, edict_registry_path_})
+      if (!other.isEmpty() && document_path_identity(other) == document_path_identity(session_path_))
+        throw core::JwpProjectError("Session cannot overwrite another application data file");
+    ProjectWorkspace workspace;
+    workspace.detect_formats = false;
+    bool preceding = false;
+    const auto current = current_document_index();
+    for (int i = 0; i < document_count(); ++i) {
+      const auto& state = *documents_[i];
+      if (state.current_path_.isEmpty()) continue;
+      if (i <= current) { workspace.current_document = workspace.documents.size(); preceding = true; }
+      const auto encoding = state.jwp_format_ ? std::nullopt : std::optional{
+          state.saved_text_file_ ? state.saved_text_file_->encoding : state.encoding_};
+      workspace.documents.push_back({absolute_document_path(state.current_path_), encoding,
+                                     state.jwp_code_page_, state.jwp_document_.has_value()});
+    }
+    if (!preceding && !workspace.documents.empty()) workspace.current_document = workspace.documents.size() - 1;
+    session_source_ = write_session_source(session_path_, workspace, session_source_);
+    session_warning_.clear();
+    update_resource_status();
+    return true;
+  } catch (const std::exception& error) {
+    session_warning_ = tr("Could not save previous session: %1").arg(QString::fromUtf8(error.what()));
+    update_resource_status();
     return false;
   }
 }
@@ -1008,6 +1115,8 @@ bool MainWindow::open_project_path(const QString& path, const ProjectOpenOptions
 bool MainWindow::save_project_path(const QString& path, bool save_documents, OpenMode mode) {
   try {
     sync_toolbar_position();
+    if (!session_path_.isEmpty() && document_path_identity(path) == document_path_identity(session_path_))
+      throw core::JwpProjectError("A project cannot overwrite the session archive");
     if (path.isEmpty() || find_document_path(path) >= 0)
       throw core::JwpProjectError("A project cannot overwrite an open document");
     const int original = current_document_index();
@@ -1216,6 +1325,8 @@ bool MainWindow::save_application_settings(const QString& path, OpenMode mode) {
     destination = QFileDialog::getSaveFileName(this, tr("Save Settings"), {}, tr("JWP settings (*.cfg);;All files (*)"));
   if (destination.isEmpty()) return false;
   try {
+    if (!session_path_.isEmpty() && document_path_identity(destination) == document_path_identity(session_path_))
+      throw core::JwpConfigurationError("Settings cannot overwrite the session archive");
     if (find_document_path(destination) >= 0)
       throw core::JwpConfigurationError("Close the settings document before overwriting it");
     auto next = read_application_settings(write_application_settings(application_settings_));
@@ -1273,7 +1384,7 @@ bool MainWindow::confirm_query_history_change(const QString& message, OpenMode m
 void MainWindow::check_history_destination(const QString& path) const {
   if (find_document_path(path) >= 0)
     throw core::QueryHistoryError("History cannot overwrite an open document");
-  for (const auto& other : {application_settings_path_, recent_files_path_, project_path_, edict_registry_path_})
+  for (const auto& other : {application_settings_path_, recent_files_path_, project_path_, edict_registry_path_, session_path_})
     if (!other.isEmpty() && document_path_identity(other) == document_path_identity(path))
       throw core::QueryHistoryError("History cannot overwrite settings, recent files, the current project or dictionary registry");
 }
@@ -1885,7 +1996,7 @@ bool MainWindow::configure_edict_registry(const QString& registry_path, core::Ed
         throw core::EdictRegistryError("Close the User Dictionary editor before replacing its resources");
       if (find_document_path(registry_path) >= 0)
         throw core::EdictRegistryError("The registry cannot overwrite an open document");
-      for (const auto& other : {application_settings_path_, recent_files_path_, project_path_, query_history_path_})
+      for (const auto& other : {application_settings_path_, recent_files_path_, project_path_, query_history_path_, session_path_})
         if (!other.isEmpty() && document_path_identity(other) == document_path_identity(registry_path))
           throw core::EdictRegistryError("The registry cannot overwrite another application state file");
     }
@@ -3175,6 +3286,8 @@ QString MainWindow::resource_report() const {
   if (!query_history_warning_.isEmpty()) lines << query_history_warning_;
   if (!project_path_.isEmpty()) lines << tr("Project: %1").arg(project_path_);
   if (!project_warning_.isEmpty()) lines << project_warning_;
+  if (!session_warning_.isEmpty()) lines << session_warning_;
+  lines << (session_path_.isEmpty() ? tr("Previous session: memory only") : tr("Previous session: %1").arg(session_path_));
   lines << application_font_warnings_;
   if (!application_settings_.unapplied.isEmpty())
     lines << tr("Retained settings not applied by the native interface: %1")
@@ -3218,11 +3331,12 @@ void MainWindow::update_resource_status() {
           ? (record_warnings || !recent_file_warning_.isEmpty() ||
              !application_settings_warning_.isEmpty() || !query_history_warning_.isEmpty() ||
               !application_font_warnings_.isEmpty() ||
-              !application_settings_.unapplied.isEmpty() || !project_warning_.isEmpty()
+              !application_settings_.unapplied.isEmpty() || !project_warning_.isEmpty() || !session_warning_.isEmpty()
                  ? tr("Resources: warnings") : tr("Resources: loaded"))
           : tr("Resources: incomplete"));
   resource_status_button_->setToolTip(
       !project_warning_.isEmpty() ? project_warning_ :
+      !session_warning_.isEmpty() ? session_warning_ :
       !application_settings_warning_.isEmpty() ? application_settings_warning_ :
       !query_history_warning_.isEmpty() ? query_history_warning_ :
       !recent_file_warning_.isEmpty() ? recent_file_warning_ :
@@ -6116,7 +6230,7 @@ void MainWindow::print_current_document(bool preview) {
       const auto check_output = [self, output] {
         if (!self || output.isEmpty()) return;
         if (self->find_document_path(output) >= 0) throw PrintDocumentError("Print output cannot overwrite an open document");
-        for (const auto& path : {self->application_settings_path_, self->query_history_path_, self->recent_files_path_, self->project_path_})
+        for (const auto& path : {self->application_settings_path_, self->query_history_path_, self->recent_files_path_, self->project_path_, self->session_path_})
           if (!path.isEmpty() && document_path_identity(path) == document_path_identity(output))
             throw PrintDocumentError("Print output cannot overwrite application settings, history or the current project");
       };
@@ -6953,7 +7067,10 @@ void MainWindow::closeEvent(QCloseEvent* event) {
     close_document_command(current_document_index());
     return;
   }
+  auto* original_document = document_;
   if (approve_close_all(OpenMode::kInteractive)) {
+    for (int i = 0; i < document_count(); ++i)
+      if (documents_[i].get() == original_document) { activate_document(i); break; }
     if (application_settings_.save_settings_on_exit && application_settings_persistence_enabled_ &&
         !application_settings_path_.isEmpty()) {
       bool saved = false;
@@ -6980,6 +7097,35 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         event->ignore();
         return;
       }
+    }
+    if (application_settings_.reload_previous_files && !save_previous_session()) {
+      const QPointer<MainWindow> self(this);
+      struct PendingClose {
+        DocumentState* state;
+        int revision;
+        QString path;
+        core::TextEncoding encoding;
+        bool jwp;
+        bool bom;
+      };
+      std::vector<PendingClose> before;
+      for (const auto& state : documents_)
+        before.push_back({state.get(), state->editor_->document()->revision(), state->current_path_,
+                          state->encoding_, state->jwp_format_, state->has_byte_order_mark_});
+      QPointer<QMessageBox> question = new QMessageBox(QMessageBox::Warning, tr("Previous Session"),
+          session_warning_ + tr("\n\nExit without saving the session? The existing archive will be preserved."),
+          QMessageBox::Discard | QMessageBox::Cancel, this);
+      question->setDefaultButton(QMessageBox::Cancel);
+      const auto result = question->exec();
+      if (question) delete question.data();
+      if (!self) return;
+      bool unchanged = before.size() == documents_.size();
+      for (std::size_t i = 0; unchanged && i < before.size(); ++i)
+        unchanged = before[i].state == documents_[i].get() &&
+            before[i].revision == documents_[i]->editor_->document()->revision() &&
+            before[i].path == documents_[i]->current_path_ && before[i].encoding == documents_[i]->encoding_ &&
+            before[i].jwp == documents_[i]->jwp_format_ && before[i].bom == documents_[i]->has_byte_order_mark_;
+      if (result != QMessageBox::Discard || !unchanged) { event->ignore(); return; }
     }
     for (const auto& state : documents_) record_recent_document(*state);
     event->accept();

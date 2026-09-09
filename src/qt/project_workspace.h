@@ -49,8 +49,8 @@ class ProjectPathError : public core::JwpProjectError {
 ProjectWorkspace decode_project_workspace(
     const core::JwpProject& project, const QString& project_path,
     const ApplicationSettings& base = {},
-    const std::vector<ProjectPathMapping>& mappings = {});
-core::JwpProject encode_project_workspace(const ProjectWorkspace& workspace);
+    const std::vector<ProjectPathMapping>& mappings = {}, bool include_settings = true);
+core::JwpProject encode_project_workspace(const ProjectWorkspace& workspace, bool include_settings = true);
 
 }  // namespace jwpqt::qt
 

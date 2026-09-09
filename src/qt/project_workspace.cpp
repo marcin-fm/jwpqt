@@ -91,13 +91,13 @@ ProjectPathError::ProjectPathError(QString source_directory)
 
 ProjectWorkspace decode_project_workspace(const core::JwpProject& project,
     const QString& project_path, const ApplicationSettings& base,
-    const std::vector<ProjectPathMapping>& mappings) {
+    const std::vector<ProjectPathMapping>& mappings, bool include_settings) {
   if (project.paths.size() > kMaximumWorkspaceDocuments ||
       mappings.size() > kMaximumWorkspaceDocuments || project_path.isEmpty())
     throw core::JwpProjectError("Invalid project location or workspace size");
   (void)scalar_path(project_path);
   ProjectWorkspace result;
-  result.settings = read_application_settings(project.configuration, base);
+  result.settings = include_settings ? read_application_settings(project.configuration, base) : base;
   std::optional<std::string> metadata;
   (void)metadata_lines(project.configuration, metadata);
   QJsonArray formats;
@@ -222,14 +222,14 @@ ProjectWorkspace decode_project_workspace(const core::JwpProject& project,
   return result;
 }
 
-core::JwpProject encode_project_workspace(const ProjectWorkspace& workspace) {
+core::JwpProject encode_project_workspace(const ProjectWorkspace& workspace, bool include_settings) {
   const auto count = workspace.documents.size();
   if (workspace.detect_formats || count > kMaximumWorkspaceDocuments ||
       (count == 0 ? workspace.current_document != 0 : workspace.current_document >= count))
     throw core::JwpProjectError("Cannot save an invalid or undetected workspace");
   core::JwpProject result;
   std::optional<std::string> previous;
-  result.configuration = metadata_lines(write_application_settings(workspace.settings), previous);
+  if (include_settings) result.configuration = metadata_lines(write_application_settings(workspace.settings), previous);
   result.current_directory = scalar_path(QDir::currentPath());
   QJsonArray formats;
   QSet<QString> identities;

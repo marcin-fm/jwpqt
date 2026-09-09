@@ -173,18 +173,21 @@ int main(int argc, char* argv[]) {
       return 1;
     }
   }
+  window.load_previous_session(config.filePath(QStringLiteral("last-session.jpr")), !parser.isSet(resource_report_option));
+  if (!window.session_warning().isEmpty()) QTextStream(stderr) << window.session_warning() << '\n';
   if (!positional_arguments.isEmpty()) {
     jwpqt::qt::ProjectOpenOptions project_options;
     project_options.legacy_encoding = encoding;
+    project_options.append = window.document_count() > 1 || !window.current_path().isEmpty();
     const bool opened =
         parser.isSet(project_option)
             ? window.open_project_path(positional_arguments.constFirst(),
                                        project_options, interaction_mode)
             : encoding.has_value()
             ? window.open_path(positional_arguments.constFirst(), *encoding,
-                               interaction_mode)
+                               interaction_mode, project_options.append)
             : window.open_path_detected(positional_arguments.constFirst(),
-                                        interaction_mode);
+                                        interaction_mode, project_options.append);
     if (!opened) {
       if (interaction_mode == jwpqt::qt::OpenMode::kNonInteractive) {
         if (!window.project_warning().isEmpty()) {

@@ -18,6 +18,8 @@ add_library(jwpqt_qt_support STATIC
   project_workspace.h
   query_history_io.cpp
   query_history_io.h
+  session_io.cpp
+  session_io.h
   recent_files.cpp
   recent_files.h
   text_bridge.cpp

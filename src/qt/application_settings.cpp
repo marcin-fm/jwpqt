@@ -49,6 +49,7 @@ constexpr BooleanDescriptor<ApplicationSettings> kBooleans[] = {
     {"RareKanjiLast", "rare_last", &ApplicationSettings::rare_kanji_last},
     {"Bushu_MatchNelson", "bushu_nelson", &ApplicationSettings::bushu_nelson},
     {"OpenDictionary", "startup_dict", &ApplicationSettings::startup_dictionary},
+    {"ReloadPreviousFiles", "reload_files", &ApplicationSettings::reload_previous_files},
     {"CloseButton_Closes_File", "close_does_file", &ApplicationSettings::close_button_closes_file},
     {"LastFileConfirmExit", "confirm_exit", &ApplicationSettings::confirm_last_file_exit},
     {"Bushu_MatchClassical", "bushu_classical", &ApplicationSettings::bushu_classical},

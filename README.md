@@ -151,8 +151,19 @@ dictionary resources are reported. Resource-report mode never opens startup UI.
 minimized geometry. Six source dialog roles independently remember their placement;
 existing windows are not relocated by importing settings. New placements are bounded
 and clamped to available native screens, and independent information viewers remain
-independent. Geometry is included in settings/JPR; previous-session document reload
-remains a separate unfinished policy.
+independent. Geometry is included in settings/JPR.
+
+**Restore named files from the previous session** is opt-in. It reads app-scoped
+`last-session.jpr` before command-line files, preserving saved formats and active
+tab order while keeping current preferences. Missing or invalid references are
+reported; usable files still open. Named files are recorded after exit save/discard
+checks, independently of query-history saving. Unnamed buffers and unsaved text
+are never serialized. The next successful save records currently open named files,
+so skipped references are omitted. Disabling restoration leaves the archive unchanged.
+Corrupt, locked or externally changed archives are not overwritten; failed exit saving
+offers Cancel or exit without saving. The archive is not added to project history.
+Resource-report reads its status without reopening the workspace. This is native
+typed storage, not automatic import of the Windows history file's path tail.
 **Save All** visits every document, including unnamed files, and stops on the
 first cancellation or error. **Close All** and Quit check every document before
 discarding any. **Window > Next/Previous File** (`Ctrl+Tab`/`Ctrl+Shift+Tab`, also
