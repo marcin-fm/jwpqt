@@ -30,6 +30,15 @@ the next explicit Convert changes the mode and continues the conversion. Automat
 conversion and unrestricted Unicode editing keep their existing behavior. This is
 an input-mode policy, not a document edit, and persists in settings and projects.
 
+The optional Ctrl+Up/Down conversion policy is off by default. In a native
+Japanese document with selected text or a conversion range, Ctrl+Up converts or
+cycles forward and Ctrl+Down cycles backward. The initial conversion uses the
+normal first candidate in either direction. Shift does not reverse these rules.
+Candidate cycling preserves the live preview and its single undo transaction.
+Without a selection, with the option off, or in an unrestricted Unicode document,
+the existing native navigation remains available. Query and result-list shortcuts
+are independent. The setting is retained by settings and projects.
+
 ## Find and Replace
 
 Edit > Find and Replace open modeless dialogs with their own Japanese input

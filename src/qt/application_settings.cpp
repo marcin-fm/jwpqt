@@ -53,6 +53,7 @@ constexpr BooleanDescriptor<ApplicationSettings> kBooleans[] = {
     {"ReloadPreviousFiles", "reload_files", &ApplicationSettings::reload_previous_files},
     {"RevertToKanjiMode", "revert_to_K_mode", &ApplicationSettings::revert_to_kanji_mode},
     {"OldKatakanaVowelHandling", "old_katakana_input", &ApplicationSettings::old_katakana_input},
+    {"CtrlUpDownConvertKanji", "ctrl_up_down_convert", &ApplicationSettings::ctrl_up_down_convert},
     {"KeepBackupCopyWhenSaving", "backup_files", &ApplicationSettings::keep_backup_copy},
     {"CloseButton_Closes_File", "close_does_file", &ApplicationSettings::close_button_closes_file},
     {"LastFileConfirmExit", "confirm_exit", &ApplicationSettings::confirm_last_file_exit},

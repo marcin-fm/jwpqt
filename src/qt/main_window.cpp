@@ -3936,6 +3936,22 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
         static_cast<QMouseEvent*>(event)->button() == Qt::RightButton)
       return true;
   }
+  if (watched == document_->editor_ && document_->jwp_document_ &&
+      application_settings_.ctrl_up_down_convert && !document_->updating_editor_ &&
+      !document_->applying_kana_input_ &&
+      (conversion_active() || (!document_->editor_->isReadOnly() &&
+       (document_->editor_->textCursor().hasSelection() || document_->automatic_conversion_range_)))) {
+    if (event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress) {
+      const auto* key = static_cast<QKeyEvent*>(event);
+      if ((key->modifiers() & Qt::ControlModifier) &&
+          !(key->modifiers() & (Qt::AltModifier | Qt::MetaModifier)) &&
+          (key->key() == Qt::Key_Up || key->key() == Qt::Key_Down)) {
+        event->accept();
+        if (event->type() == QEvent::KeyPress) convert_selection(key->key() == Qt::Key_Down);
+        return true;
+      }
+    }
+  }
   if (watched != document_->editor_ || !document_->jwp_document_.has_value() ||
       conversion_active() || document_->editor_->isReadOnly()) {
     return QMainWindow::eventFilter(watched, event);
@@ -4870,7 +4886,7 @@ bool MainWindow::conversion_active() const noexcept {
   return document_->jwp_conversion_ != nullptr && document_->jwp_conversion_->active();
 }
 
-bool MainWindow::convert_selection() {
+bool MainWindow::convert_selection(bool previous) {
   if (document_->updating_editor_ || document_->applying_kana_input_) return false;
   if (document_->editor_->isReadOnly() && !conversion_active()) return false;
   if (document_->jwp_document_ && application_settings_.revert_to_kanji_mode &&
@@ -4885,7 +4901,7 @@ bool MainWindow::convert_selection() {
     if (!self || document_ != original) return false;
   }
   if (conversion_active()) {
-    return cycle_conversion();
+    return cycle_conversion(previous);
   }
   if (document_->editor_->isReadOnly()) return false;
   const QTextCursor original_cursor = document_->editor_->textCursor();

@@ -209,7 +209,7 @@ class MainWindow : public QMainWindow {
       OpenMode mode = OpenMode::kInteractive);
   const core::WnnUserDictionary* wnn_user_dictionary() const noexcept;
   bool insert_wnn_user_entry(const core::WnnUserEntry& entry);
-  bool convert_selection();
+  bool convert_selection(bool previous = false);
   bool cycle_conversion(bool previous = false);
   bool accept_conversion();
   bool conversion_active() const noexcept;

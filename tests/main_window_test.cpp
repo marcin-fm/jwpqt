@@ -2664,6 +2664,76 @@ void test_katakana_policy(const QString& directory) {
   }
 }
 
+void test_control_arrow_conversion(const QString& directory) {
+  using namespace jwpqt::qt;
+  using namespace jwpqt::core;
+  require(!ApplicationSettings{}.ctrl_up_down_convert &&
+              read_application_settings("ctrl_up_down_convert = true\n").ctrl_up_down_convert,
+          "Control conversion source policy changed");
+  bool rejected = false;
+  try { (void)read_application_settings("CtrlUpDownConvertKanji = invalid\nctrl_up_down_convert = true\n"); }
+  catch (const std::exception&) { rejected = true; }
+  require(rejected, "Invalid earlier control conversion policy accepted");
+  const QString root = directory + "/control-conversion";
+  require(QDir().mkpath(root), "Could not isolate control conversion preferences");
+  const auto fixture = write_wnn_fixture(root);
+  JwpDocument source; source.paragraphs.resize(1); source.paragraphs[0].text = {0x2422};
+  const auto path = root + "/reading.jwp";
+  write_jwp_file(path, source);
+  MainWindow window;
+  require(window.open_jwp_path(path) && window.load_wnn_resources(fixture.index_path, fixture.data_path, fixture.preferences_path),
+          "Could not prepare control conversion");
+  auto* editor = window.active_editor();
+  const auto key = [&](int code, Qt::KeyboardModifiers modifiers = Qt::ControlModifier) {
+    QKeyEvent override(QEvent::ShortcutOverride, code, modifiers);
+    QApplication::sendEvent(editor, &override);
+    QKeyEvent press(QEvent::KeyPress, code, modifiers);
+    QApplication::sendEvent(editor, &press);
+  };
+  editor->selectAll(); key(Qt::Key_Up);
+  require(!window.conversion_active() && *window.current_jwp_document() == source,
+          "Disabled control conversion altered the document");
+  ApplicationSettingsDialog options(window.application_settings());
+  options.findChild<QCheckBox*>("settingsCtrlConvert")->setChecked(true);
+  require(!window.application_settings().ctrl_up_down_convert, "Staged control setting changed live policy");
+  options.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+  require(window.apply_application_settings(options.settings()), "Could not apply control conversion policy");
+  editor->moveCursor(QTextCursor::End); key(Qt::Key_Up);
+  require(!window.conversion_active(), "Unselected control arrow started conversion");
+  editor->selectAll(); key(Qt::Key_Down, Qt::ControlModifier | Qt::AltModifier);
+  require(!window.conversion_active() && *window.current_jwp_document() == source, "Alt-modified arrow started conversion");
+  editor->setReadOnly(true); editor->selectAll(); key(Qt::Key_Down);
+  require(!window.conversion_active() && *window.current_jwp_document() == source, "Read-only document started conversion");
+  editor->setReadOnly(false);
+  editor->selectAll(); key(Qt::Key_Down);
+  require(window.conversion_active() && window.current_jwp_document()->paragraphs[0].text == JwpText{0x3021},
+          "Control Down did not start the normal first candidate");
+  key(Qt::Key_Up);
+  require(window.conversion_active() && window.current_jwp_document()->paragraphs[0].text == JwpText{0x3022},
+          "Control Up did not cycle forward without acceptance");
+  key(Qt::Key_Down, Qt::ControlModifier | Qt::ShiftModifier);
+  require(window.conversion_active() && window.current_jwp_document()->paragraphs[0].text == JwpText{0x3021},
+          "Control Shift Down did not cycle backward without acceptance");
+  key(Qt::Key_Down);
+  require(window.conversion_active() && *window.current_jwp_document() == source, "Backward cycling skipped the original kana");
+  key(Qt::Key_Up);
+  require(window.conversion_active() && window.current_jwp_document()->paragraphs[0].text == JwpText{0x3021},
+          "Forward cycling did not wrap from original kana");
+  require(window.accept_conversion(), "Could not finish control conversion");
+  find_action(window, "undoAction")->trigger();
+  require(*window.current_jwp_document() == source && !window.document_modified(), "Control cycling damaged undo or metadata");
+  require(window.save_application_settings(root + "/settings.cfg") &&
+              window.save_project_path(root + "/project.jpr", false), "Could not persist control policy");
+  MainWindow restored;
+  require(restored.load_application_settings(root + "/settings.cfg") && restored.application_settings().ctrl_up_down_convert &&
+              restored.open_project_path(root + "/project.jpr") && restored.application_settings().ctrl_up_down_convert,
+          "Control conversion policy did not survive restart/project");
+  find_action(window, "newTextDocumentAction")->trigger();
+  editor = window.active_editor(); editor->insertPlainText("a"); editor->selectAll(); key(Qt::Key_Down);
+  require(!window.conversion_active() && document_plain_text(*editor->document()) == "a",
+          "Control policy changed an unrestricted Unicode document");
+}
+
 void test_selected_romaji(const QString& directory) {
   using namespace jwpqt::core;
   using namespace jwpqt::qt;
@@ -5694,6 +5764,7 @@ int main(int argc, char* argv[]) {
     test_jwp_paragraph_formatting(directory.path());
     test_jwp_page_break_insertion(directory.path());
     test_katakana_policy(directory.path());
+    test_control_arrow_conversion(directory.path());
     test_selected_romaji(directory.path());
     test_jwp_wnn_conversion(directory.path());
     test_jwp_wnn_conversion_boundaries(directory.path());
