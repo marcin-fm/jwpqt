@@ -2605,6 +2605,14 @@ void test_selected_romaji(const QString& directory) {
   using namespace jwpqt::qt;
   const QString root = directory + QStringLiteral("/selected-romaji");
   require(QDir().mkpath(root), "Could not create isolated romaji fixture directory");
+  require(!read_application_settings("revert_to_K_mode = false\n").revert_to_kanji_mode &&
+              read_application_settings("RevertToKanjiMode = true\n").revert_to_kanji_mode &&
+              write_application_settings(ApplicationSettings{}).find("RevertToKanjiMode") != std::string::npos,
+          "Conversion mode configuration did not round trip");
+  bool invalid_mode = false;
+  try { (void)read_application_settings("RevertToKanjiMode = invalid\nrevert_to_K_mode = true\n"); }
+  catch (const std::exception&) { invalid_mode = true; }
+  require(invalid_mode, "Invalid earlier conversion mode preference accepted");
   const auto select = [](QTextEdit* editor, int begin, int end, bool reversed = false) {
     QTextCursor cursor(editor->document());
     cursor.setPosition(reversed ? end : begin);
@@ -2626,6 +2634,18 @@ void test_selected_romaji(const QString& directory) {
     write_jwp_file(native_path, original);
     MainWindow window;
     require(window.open_jwp_path(native_path), "Could not open romaji document");
+    auto mode_policy = window.application_settings();
+    require(mode_policy.revert_to_kanji_mode, "Source conversion mode default changed");
+    ApplicationSettingsDialog mode_options(mode_policy);
+    auto* reset = mode_options.findChild<QCheckBox*>(QStringLiteral("settingsRevertToKanji"));
+    require(reset && reset->isChecked(), "Conversion mode option missing");
+    reset->setChecked(!reversed);
+    mode_options.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+    mode_policy = mode_options.settings();
+    require(window.application_settings().revert_to_kanji_mode && mode_policy.revert_to_kanji_mode == !reversed,
+            "Conversion mode options changed live preferences prematurely");
+    require(window.apply_application_settings(mode_policy), "Could not apply conversion mode policy");
+    find_action(window, reversed ? "jasciiInputAction" : "asciiInputAction")->trigger();
     auto* editor = window.active_editor();
     auto* action = find_action(window, "convertSelectionAction");
     require(!action->isEnabled(), "Convert was enabled without input or resources");
@@ -2633,6 +2653,8 @@ void test_selected_romaji(const QString& directory) {
     select(editor, 2, 7, reversed);
     require(action->isEnabled(), "Selected romaji was gated on WNN resources");
     action->trigger();
+    require(find_action(window, reversed ? "jasciiInputAction" : "kanaInputAction")->isChecked(),
+            "Explicit conversion did not honor input-mode policy");
     require(!window.conversion_active() && *window.current_jwp_document() == converted &&
                 editor->textCursor().selectedText() == QStringLiteral("\u306b\u307b\u3093") &&
                 editor->textCursor().position() == (reversed ? 2 : 5) &&
@@ -2649,6 +2671,14 @@ void test_selected_romaji(const QString& directory) {
     find_action(window, "redoAction")->trigger();
     require(*window.current_jwp_document() == converted && window.save_as_path(native_path, std::nullopt) &&
                 read_jwp_file(native_path) == converted, "Romaji redo/save lost metadata or content");
+    require(window.save_application_settings(root + "/mode.cfg") &&
+                window.save_project_path(root + "/mode.jpr", false), "Could not save conversion mode preferences");
+    MainWindow restored;
+    require(restored.load_application_settings(root + "/mode.cfg") &&
+                restored.application_settings().revert_to_kanji_mode == !reversed &&
+                restored.open_project_path(root + "/mode.jpr") &&
+                restored.application_settings().revert_to_kanji_mode == !reversed,
+            "Conversion mode settings/restart/JPR changed the policy");
   }
 
   const QString unicode_path = root + QStringLiteral("/unicode.txt");
@@ -2730,6 +2760,28 @@ void test_selected_romaji(const QString& directory) {
   find_action(wnn, "undoAction")->trigger();
   require(*wnn.current_jwp_document() == reading && !wnn.document_modified(),
           "Undo after original-kana acceptance did not restore selected romaji");
+  const auto mode_root = root + QStringLiteral("/mode-wnn");
+  require(QDir().mkpath(mode_root), "Could not isolate conversion mode learning");
+  const auto mode_fixture = write_wnn_fixture(mode_root);
+  MainWindow mode_window;
+  require(mode_window.load_wnn_resources(mode_fixture.index_path, mode_fixture.data_path, mode_fixture.preferences_path) &&
+              mode_window.open_jwp_path(reading_path), "Could not load mode conversion fixture");
+  auto mode_policy = mode_window.application_settings();
+  mode_policy.revert_to_kanji_mode = false;
+  require(mode_window.apply_application_settings(mode_policy), "Could not disable conversion mode reset");
+  find_action(mode_window, "asciiInputAction")->trigger();
+  mode_window.active_editor()->selectAll();
+  require(mode_window.convert_selection() && mode_window.convert_selection() && mode_window.conversion_active() &&
+              find_action(mode_window, "asciiInputAction")->isChecked(), "Disabled mode reset changed WNN input mode");
+  mode_policy.revert_to_kanji_mode = true;
+  require(mode_window.apply_application_settings(mode_policy) && mode_window.conversion_active() &&
+              find_action(mode_window, "asciiInputAction")->isChecked() && mode_window.convert_selection() &&
+              mode_window.conversion_active() && find_action(mode_window, "kanaInputAction")->isChecked(),
+          "Mode reset accepted or lost the active conversion preview");
+  require(mode_window.accept_conversion(), "Could not accept mode-reset preview");
+  find_action(mode_window, "undoAction")->trigger();
+  if (find_action(mode_window, "undoAction")->isEnabled()) find_action(mode_window, "undoAction")->trigger();
+  require(*mode_window.current_jwp_document() == reading && !mode_window.document_modified(), "Mode reset added a document edit");
 
   reading.paragraphs[0].text = {'L', ' ', 'A', 'k', 'a', ' ', 'R'};
   write_jwp_file(reading_path, reading);

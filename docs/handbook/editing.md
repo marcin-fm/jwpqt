@@ -15,6 +15,13 @@ does not delete the selection. Lowercase unselected words are not scanned
 backward implicitly. Accept an active conversion before operations that would
 invalidate its source.
 
+Options > Display and Files controls whether an explicit Convert returns native
+Japanese documents to Kanji input mode (enabled by default). Disable it to retain
+ASCII or JASCII. Changing this preference does not accept an active preview;
+the next explicit Convert changes the mode and continues the conversion. Automatic
+conversion and unrestricted Unicode editing keep their existing behavior. This is
+an input-mode policy, not a document edit, and persists in settings and projects.
+
 ## Find and Replace
 
 Edit > Find and Replace open modeless dialogs with their own Japanese input

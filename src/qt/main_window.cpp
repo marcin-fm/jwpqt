@@ -4870,6 +4870,18 @@ bool MainWindow::conversion_active() const noexcept {
 
 bool MainWindow::convert_selection() {
   if (document_->updating_editor_ || document_->applying_kana_input_) return false;
+  if (document_->editor_->isReadOnly() && !conversion_active()) return false;
+  if (document_->jwp_document_ && application_settings_.revert_to_kanji_mode &&
+      document_->input_mode_ != InputMode::kKanji) {
+    const QPointer<MainWindow> self(this);
+    const auto* original = document_;
+    // The ordinary mode command accepts previews. Conversion must keep its live
+    // transaction, selection and pending automatic range until the command runs.
+    document_->input_mode_ = InputMode::kKanji;
+    document_->jwp_history_.break_coalescing();
+    update_kana_input_state();
+    if (!self || document_ != original) return false;
+  }
   if (conversion_active()) {
     return cycle_conversion();
   }
