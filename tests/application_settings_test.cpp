@@ -34,11 +34,16 @@ void test_model() {
   using namespace jwpqt::qt;
   constexpr auto file = static_cast<std::size_t>(JapaneseFontRole::kFile);
   const std::string source = "# retained\r\nShow_Toolbar=false\nfile_font.size=19\r"
-      "fIlE.sIzE=20\nFile.Auto=no\nFuture = \xff\nFILE_FONT.size=bad\n";
+      "fIlE.sIzE=20\nFile.Auto=no\nDictionaryBuffer_Size=12345\n"
+      "ParagraphMemory_BlockSize=64\nCache_KanjiInfoFile=false\n"
+      "Future = \xff\nFILE_FONT.size=bad\n";
   auto settings = read_application_settings(source);
   require(!settings.show_toolbar && settings.fonts[file].size == 20 &&
           !settings.fonts[file].automatic && settings.source == source &&
-          settings.unapplied == QStringList({QStringLiteral("Future"), QStringLiteral("FILE_FONT.size")}),
+          settings.unapplied == QStringList({QStringLiteral("DictionaryBuffer_Size"),
+              QStringLiteral("ParagraphMemory_BlockSize"),
+              QStringLiteral("Cache_KanjiInfoFile"), QStringLiteral("Future"),
+              QStringLiteral("FILE_FONT.size")}),
           "Settings aliases, ordered values or unknown source were lost");
   settings.fonts[file].family = QString(QChar(0xfeff)) + QStringLiteral("\u65e5\U0001f600");
   settings.save_recent_files = false;

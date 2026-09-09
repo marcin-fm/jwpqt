@@ -3509,6 +3509,13 @@ QString MainWindow::resource_report() const {
         << (radical_sheet_.isNull()
                 ? tr("Radical graphics: unavailable (radicals.bmp)")
                 : tr("Radical graphics: loaded"));
+  const core::KanjiInfoLimits information_limits;
+  const EdictResourceLoadOptions dictionary_limits;
+  lines << tr("Native resource bounds: %1 MiB kanji information, %2 MiB dictionary data, %3 MiB dictionary indexes")
+               .arg(information_limits.encoded_bytes / (1024U * 1024U))
+               .arg(dictionary_limits.dictionary_bytes / (1024U * 1024U))
+               .arg(dictionary_limits.index_bytes / (1024U * 1024U))
+        << tr("Legacy allocation controls are retained but not applicable: ParagraphMemory_BlockSize, DictionaryBuffer_Size, Cache_KanjiInfoFile");
   if (edict_resources_ == nullptr) {
     lines << tr("Word dictionaries: not configured (dict.cfg)");
   } else {
