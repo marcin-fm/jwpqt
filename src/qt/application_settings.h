@@ -6,6 +6,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -15,6 +16,7 @@
 #include "kanji_info_options.h"
 #include "edict_lookup_options.h"
 #include "jwpqt/core/print_format.h"
+#include "jwpqt/core/kanji_color.h"
 
 namespace jwpqt::qt {
 
@@ -39,6 +41,11 @@ struct ApplicationSettings {
   bool color_printing = false;
   core::JwpPrintFormatting print_formatting;
   core::JwpPageDefaults default_page;
+  // Absent legacy overrides leave the existing native color store authoritative.
+  std::array<std::optional<std::uint32_t>, 3> color_refs; // Highlight, list, uncommon (COLORREF).
+  std::optional<int> color_kanji_mode;
+  std::optional<bool> colorize_rare;
+  bool mark_rare_kanji = false;
   ToolbarSettings toolbar;
   bool show_status_bar = true;
   bool show_kanji_bar = true;
@@ -67,7 +74,7 @@ struct ApplicationSettings {
   bool partial_meanings = false;
   bool skip_miscodes = false;
   bool reduce_radical_choices = false;
-  bool deemphasize_rare_radicals = false;
+  bool deemphasize_rare_radicals = true;
   int index_type = 0;
   int reading_type = 2;
   bool search_all_files = false;
@@ -86,6 +93,8 @@ struct ApplicationSettings {
 
 ApplicationSettings read_application_settings(std::string_view text,
                                                const ApplicationSettings& base = {});
+core::KanjiColorPolicy effective_kanji_color_policy(
+    const ApplicationSettings& settings, core::KanjiColorPolicy base);
 std::string write_application_settings(const ApplicationSettings& settings);
 ApplicationSettings read_application_settings_file(
     const QString& path, const ApplicationSettings& base = {});

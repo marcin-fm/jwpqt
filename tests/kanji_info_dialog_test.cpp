@@ -300,6 +300,13 @@ void test_dialog() {
   selection.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor, 4);
   readings->setTextCursor(selection);
   require(insert->isEnabled(), "Selecting readings did not enable Insert to File");
+  dialog.set_heading_color(QColor("#0000cc"));
+  QTextCursor colored_heading(readings->document());
+  colored_heading.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
+  require(colored_heading.charFormat().foreground().color() == QColor("#0000cc") &&
+              readings->textCursor().selectedText() == QStringLiteral("love"),
+          "Configured heading color reset selection or was not applied");
+  dialog.set_heading_color(QColor{});
   for (const bool dark : {true, false, true}) {
     QPalette palette = dialog.palette();
     palette.setColor(QPalette::Base, dark ? QColor("#151515") : QColor(Qt::white));

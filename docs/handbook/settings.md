@@ -55,6 +55,25 @@ fonts fail before output is written. Files stay unchanged and are not installed
 system-wide or included with the program. Their original licensing still applies.
 Private font caching is bounded; closing the application releases it.
 
+## Colors
+
+Options > Colors stages information-heading, kanji-list and uncommon-kanji colors,
+list mode and uncommon coloring. Enter #RRGGBB, use Choose, or select Inherit.
+Absent source overrides leave the existing native INI color store authoritative;
+explicit imported values take precedence. Inherit immediately returns to the
+stored native policy. Settings and projects retain these choices; Cancel does
+not change them. Existing and inactive native documents update without editing
+text or undo. Kanji Color Options also updates the corresponding stored choices.
+
+Information headings adapt when necessary for readable theme contrast. Special
+Windows palette references are preserved rather than mistaken for RGB; unsupported
+heading/list references are disclosed, and uncommon color uses the source green
+fallback. Inherit can explicitly clear such a reference. Uncommon-character marks
+are small dots in conversion and lookup bars, not characters added to copied text.
+Rare-radical deemphasis starts enabled, matching the source; explicit saved values
+are retained. Highlighting special dictionary entries is a remaining implementation
+gap, separate from the information-heading setting.
+
 ## Customize the Toolbar
 
 View or Tools > Customize Toolbar opens the complete command catalog. Select a

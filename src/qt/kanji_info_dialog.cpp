@@ -458,6 +458,12 @@ void KanjiInfoDialog::populate_readings(const core::KanjiInfoRecord* record) {
   update_reading_colors();
 }
 
+void KanjiInfoDialog::set_heading_color(const QColor& color) {
+  if (heading_color_ == color) return;
+  heading_color_ = color;
+  update_reading_colors();
+}
+
 void KanjiInfoDialog::update_reading_colors() {
   const auto luminance = [](const QColor& color) {
     const auto linear = [](qreal value) {
@@ -468,10 +474,11 @@ void KanjiInfoDialog::update_reading_colors() {
   };
   const auto background = luminance(readings_->palette().color(QPalette::Base));
   QColor color;
-  for (const QColor& candidate : {QColor(QStringLiteral("#b00020")),
+  for (const QColor& candidate : {heading_color_, QColor(QStringLiteral("#b00020")),
                                   QColor(QStringLiteral("#ff8080")),
                                   readings_->palette().color(QPalette::Text),
                                   QColor(Qt::black), QColor(Qt::white)}) {
+    if (!candidate.isValid()) continue;
     const auto foreground = luminance(candidate);
     if ((std::max(background, foreground) + 0.05) /
         (std::min(background, foreground) + 0.05) >= 4.5) {

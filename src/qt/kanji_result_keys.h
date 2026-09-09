@@ -14,6 +14,7 @@
 
 #include "jwpqt/core/jwp_text_codec.h"
 #include "text_bridge.h"
+#include "rare_kanji_delegate.h"
 
 namespace jwpqt::qt {
 
@@ -23,6 +24,7 @@ class KanjiResultKeys final : public QObject {
   KanjiResultKeys(QListWidget* list, QPushButton* insert, QPushButton* info,
                   QPushButton* copy, QDialog* dialog)
       : QObject(list), list_(list), insert_(insert), info_(info), copy_(copy), dialog_(dialog) {
+    install_rare_kanji_marks(list);
     list->installEventFilter(this);
     copy->installEventFilter(this);
   }

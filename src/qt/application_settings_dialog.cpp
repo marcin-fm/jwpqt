@@ -10,6 +10,8 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QColorDialog>
+#include <QHBoxLayout>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QFontDatabase>
@@ -86,6 +88,62 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   });
   form->addRow(information);
   tabs->addTab(display, tr("Display And Files"));
+
+  auto* colors = new QWidget(tabs);
+  auto* color_form = new QFormLayout(colors);
+  std::array<QLineEdit*, 3> color_fields{};
+  std::array<QString, 3> original_colors;
+  const QString color_labels[] = {tr("Information headings"), tr("Kanji list"), tr("Uncommon kanji")};
+  for (std::size_t i = 0; i < 3; ++i) {
+    const auto raw = settings_.color_refs[i];
+    if (raw && !(*raw & 0xff000000U))
+      original_colors[i] = QColor(*raw & 255, (*raw >> 8) & 255, (*raw >> 16) & 255).name();
+    auto* row = new QWidget(colors);
+    auto* layout = new QHBoxLayout(row);
+    layout->setContentsMargins(0, 0, 0, 0);
+    auto* edit = color_fields[i] = new QLineEdit(original_colors[i], row);
+    edit->setObjectName(QStringLiteral("settingsColor%1").arg(i));
+    edit->setMaxLength(7);
+    edit->setPlaceholderText(raw ? tr("Special COLORREF retained") : tr("Inherited / theme default"));
+    auto* choose = new QPushButton(tr("Choose..."), row);
+    auto* inherit = new QPushButton(tr("Inherit"), row);
+    inherit->setObjectName(QStringLiteral("settingsColorInherit%1").arg(i));
+    connect(inherit, &QPushButton::clicked, edit, [edit] {
+      edit->setProperty("jwpqtColorCleared", true);
+      edit->clear();
+    });
+    layout->addWidget(edit); layout->addWidget(choose); layout->addWidget(inherit);
+    connect(choose, &QPushButton::clicked, this, [this, edit] {
+      const QPointer<QLineEdit> target(edit);
+      QPointer<QColorDialog> dialog = new QColorDialog(QColor(edit->text()), this);
+      if (dialog->exec() == QDialog::Accepted && dialog && target)
+        target->setText(dialog->selectedColor().name());
+      if (dialog) delete dialog.data();
+    });
+    color_form->addRow(color_labels[i], row);
+  }
+  auto* color_mode = new QComboBox(colors);
+  color_mode->setObjectName(QStringLiteral("settingsColorMode"));
+  color_mode->addItem(tr("Use native color store"), -1);
+  color_mode->addItem(tr("Off"), 0); color_mode->addItem(tr("Color listed kanji"), 1);
+  color_mode->addItem(tr("Color unlisted kanji"), 2);
+  if (settings_.color_kanji_mode && *settings_.color_kanji_mode > 2)
+    color_mode->addItem(tr("Source mode %1 (unlisted)").arg(*settings_.color_kanji_mode), *settings_.color_kanji_mode);
+  color_mode->setCurrentIndex(color_mode->findData(settings_.color_kanji_mode.value_or(-1)));
+  color_form->addRow(tr("List coloring"), color_mode);
+  auto* uncommon = new QComboBox(colors);
+  uncommon->setObjectName(QStringLiteral("settingsColorUncommon"));
+  uncommon->addItem(tr("Use native color store"), -1); uncommon->addItem(tr("Off"), 0); uncommon->addItem(tr("On"), 1);
+  uncommon->setCurrentIndex(uncommon->findData(settings_.colorize_rare ? int(*settings_.colorize_rare) : -1));
+  color_form->addRow(tr("Uncommon coloring"), uncommon);
+  auto* rare_marks = new QCheckBox(tr("Mark uncommon characters in conversion and lookup bars"), colors);
+  rare_marks->setObjectName(QStringLiteral("settingsMarkRare"));
+  rare_marks->setChecked(settings_.mark_rare_kanji);
+  booleans.push_back({rare_marks, &ApplicationSettings::mark_rare_kanji});
+  color_form->addRow(rare_marks);
+  auto* color_note = new QLabel(tr("Colors use #RRGGBB. Empty values inherit existing native settings. "
+      "Heading colors adapt when necessary for readable theme contrast. Marks do not change copied text."), colors);
+  color_note->setWordWrap(true); color_form->addRow(color_note);
 
   auto* fonts = new QWidget(tabs);
   auto* grid = new QGridLayout(fonts);
@@ -398,6 +456,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   lookup_note->setWordWrap(true);
   lookup_form->addRow(lookup_note);
   tabs->addTab(lookup, tr("Kanji Lookup"));
+  tabs->addTab(colors, tr("Colors"));
   if (!settings_.unapplied.isEmpty()) {
     auto* retained = new QPlainTextEdit(tabs);
     retained->setReadOnly(true);
@@ -410,7 +469,8 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   connect(buttons, &QDialogButtonBox::accepted, this,
           [this, booleans, font_controls, dictionary_controls, code_page, history_size, categories,
            print_family, print_size, print_auto, print_justify, ascii_family, print_patterns, print_positions, original_patterns,
-            index_type, reading_type, default_margins, displayed_margins, default_landscape, default_vertical] {
+           index_type, reading_type, default_margins, displayed_margins, default_landscape, default_vertical,
+           color_fields, original_colors, color_mode, uncommon] {
     auto next = settings_;
     for (std::size_t i = 0; i < 4; ++i)
       if (default_margins[i]->value() != displayed_margins[i])
@@ -438,6 +498,20 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
     next.print_formatting.justify_ascii = print_justify->isChecked();
     const QPointer<ApplicationSettingsDialog> self(this);
     try {
+      for (std::size_t i = 0; i < 3; ++i) if (color_fields[i]->text() != original_colors[i] || color_fields[i]->property("jwpqtColorCleared").toBool()) {
+        const auto text = color_fields[i]->text();
+        if (text.isEmpty()) next.color_refs[i].reset();
+        else {
+          const QColor color(text);
+          if (text.size() != 7 || !text.startsWith(QLatin1Char('#')) || !color.isValid())
+            throw core::JwpConfigurationError("Color must be #RRGGBB");
+          next.color_refs[i] = std::uint32_t(color.red()) | (std::uint32_t(color.green()) << 8) | (std::uint32_t(color.blue()) << 16);
+        }
+      }
+      if (color_mode->currentData().toInt() < 0) next.color_kanji_mode.reset();
+      else next.color_kanji_mode = color_mode->currentData().toInt();
+      if (uncommon->currentData().toInt() < 0) next.colorize_rare.reset();
+      else next.colorize_rare = uncommon->currentData().toInt() != 0;
       const auto encoding = next.translation_code_page ? static_cast<core::LegacyCodePage>(next.translation_code_page) : core::kDefaultLegacyCodePage;
       for (std::size_t i = 0; i < 4; ++i) {
         print_patterns[i]->finish_input();

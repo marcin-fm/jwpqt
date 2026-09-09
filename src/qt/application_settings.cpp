@@ -47,6 +47,7 @@ constexpr BooleanDescriptor<ApplicationSettings> kBooleans[] = {
     {"ColorKanji_Clipboard", "colorkanji_bitmap", &ApplicationSettings::color_clipboard_bitmap},
     {"AutoSearch_KanjiLookup", "auto_lookup", &ApplicationSettings::automatic_kanji_lookup},
     {"RareKanjiLast", "rare_last", &ApplicationSettings::rare_kanji_last},
+    {"MarkRareKanjiInKanjiBars", "mark_rare_kanji", &ApplicationSettings::mark_rare_kanji},
     {"Bushu_MatchNelson", "bushu_nelson", &ApplicationSettings::bushu_nelson},
     {"OpenDictionary", "startup_dict", &ApplicationSettings::startup_dictionary},
     {"ReloadPreviousFiles", "reload_files", &ApplicationSettings::reload_previous_files},
@@ -193,6 +194,24 @@ ApplicationSettings read_application_settings(std::string_view text,
         name = setting.name;
         result.dictionary.*(setting.member) = core::parse_jwp_setting_bool(entry.value);
       }
+      const core::JwpConfigurationKey color_keys[] = {{"Color_Highlight", "info_color"},
+          {"Color_KanjiList", "colorkanji_color"}, {"Color_RareKanji", "rarekanji_color"}};
+      for (std::size_t i = 0; i < 3 && name.empty(); ++i) {
+        if (!color_keys[i].matches(entry.name)) continue;
+        name = color_keys[i].name;
+        const auto bytes = core::parse_jwp_setting_bytes(entry.value, 4);
+        std::uint32_t value = 0;
+        for (unsigned j = 0; j < 4; ++j) value |= std::uint32_t(bytes[j]) << (j * 8);
+        result.color_refs[i] = value;
+      }
+      if (name.empty() && core::JwpConfigurationKey{"ColorKanji_Mode", "colorkanji_mode"}.matches(entry.name)) {
+        name = "ColorKanji_Mode";
+        result.color_kanji_mode = static_cast<int>(core::parse_jwp_setting_integer(entry.value, 0, 255));
+      }
+      if (name.empty() && core::JwpConfigurationKey{"ColorizeRareKanji", "colorize_rare"}.matches(entry.name)) {
+        name = "ColorizeRareKanji";
+        result.colorize_rare = core::parse_jwp_setting_bool(entry.value);
+      }
       if (name.empty() && core::JwpConfigurationKey{"Printing_DefaultLayout", "page"}.matches(entry.name)) {
         name = "Printing_DefaultLayout";
         result.default_page = core::decode_page_defaults(core::parse_jwp_setting_bytes(entry.value, 20));
@@ -276,7 +295,22 @@ ApplicationSettings read_application_settings(std::string_view text,
         .arg(result.dictionary_extra_exclusions, 0, 16));
   }
   validate_toolbar(result.toolbar);
+  for (std::size_t i = 0; i < 2; ++i)
+    if (result.color_refs[i] && (*result.color_refs[i] & 0xff000000U))
+      result.unapplied.push_back(i == 0 ? QStringLiteral("Color_Highlight (non-RGB palette reference)")
+                                       : QStringLiteral("Color_KanjiList (non-RGB palette reference)"));
   return result;
+}
+
+core::KanjiColorPolicy effective_kanji_color_policy(const ApplicationSettings& settings,
+                                                   core::KanjiColorPolicy base) {
+  if (settings.color_kanji_mode) base.list_mode = *settings.color_kanji_mode == 0
+      ? core::KanjiListColorMode::kOff : *settings.color_kanji_mode == 1
+      ? core::KanjiListColorMode::kMatch : core::KanjiListColorMode::kNoMatch;
+  if (settings.color_refs[1]) base.list_color = core::decode_legacy_color_ref(*settings.color_refs[1], base.list_color);
+  if (settings.color_refs[2]) base.uncommon_color = core::decode_legacy_color_ref(*settings.color_refs[2], {0, 250, 0});
+  if (settings.colorize_rare) base.colorize_uncommon = *settings.colorize_rare;
+  return base;
 }
 
 std::string write_application_settings(const ApplicationSettings& settings) {
@@ -308,6 +342,23 @@ std::string write_application_settings(const ApplicationSettings& settings) {
   updates.push_back({{"Printing_Justify_ASCII", "print_justify"}, settings.print_formatting.justify_ascii ? "true" : "false"});
   std::string toolbar_bytes;
   constexpr char digits[] = "0123456789ABCDEF";
+  const core::JwpConfigurationKey color_keys[] = {{"Color_Highlight", "info_color"},
+      {"Color_KanjiList", "colorkanji_color"}, {"Color_RareKanji", "rarekanji_color"}};
+  for (std::size_t i = 0; i < 3; ++i) if (settings.color_refs[i]) {
+    std::string bytes;
+    for (unsigned j = 0; j < 4; ++j) {
+      const auto byte = (*settings.color_refs[i] >> (j * 8)) & 255U;
+      bytes.push_back(digits[byte >> 4]); bytes.push_back(digits[byte & 15]);
+    }
+    updates.push_back({color_keys[i], bytes});
+  }
+  if (settings.color_kanji_mode) {
+    if (*settings.color_kanji_mode < 0 || *settings.color_kanji_mode > 255)
+      throw core::JwpConfigurationError("Invalid color-kanji mode");
+    updates.push_back({{"ColorKanji_Mode", "colorkanji_mode"}, std::to_string(*settings.color_kanji_mode)});
+  }
+  if (settings.colorize_rare)
+    updates.push_back({{"ColorizeRareKanji", "colorize_rare"}, *settings.colorize_rare ? "true" : "false"});
   std::string page_bytes;
   for (const auto byte : defaults_bytes) {
     page_bytes.push_back(digits[byte >> 4]); page_bytes.push_back(digits[byte & 15]);
@@ -378,7 +429,12 @@ std::string write_application_settings(const ApplicationSettings& settings) {
   auto source = settings.source;
   const auto entries = core::parse_jwp_configuration(source);
   for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
-    if (core::JwpConfigurationKey{"MonitorClipboard", ""}.matches(it->name))
+    bool remove = core::JwpConfigurationKey{"MonitorClipboard", ""}.matches(it->name);
+    for (std::size_t i = 0; i < 3; ++i)
+      if (!settings.color_refs[i] && color_keys[i].matches(it->name)) remove = true;
+    if (!settings.color_kanji_mode && core::JwpConfigurationKey{"ColorKanji_Mode", "colorkanji_mode"}.matches(it->name)) remove = true;
+    if (!settings.colorize_rare && core::JwpConfigurationKey{"ColorizeRareKanji", "colorize_rare"}.matches(it->name)) remove = true;
+    if (remove)
       source.erase(it->begin, it->end - it->begin);
   }
   return core::rewrite_jwp_configuration(source, updates);

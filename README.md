@@ -356,7 +356,16 @@ color policy and `colkanji.lst` are loaded strictly from the application configu
 directory and applied to raw JWP tokens without mutating document formatting;
 Kanji Color Options updates the screen policy atomically while preserving
 active WNN highlights. Make, Append, Add/Remove, View, and Clear manage the
-global color list with atomic persistence. The native modeless EDICT tool loads
+global color list with atomic persistence. Options > Colors also imports source
+COLORREF values, list mode and uncommon-color policy through settings and JPR.
+Absent fields inherit the existing native INI color store; explicit fields win,
+and Inherit restores that store without restarting. Information heading colors
+adapt for theme contrast. Optional uncommon-character dots decorate conversion
+and lookup bars without changing their text, Copy or Insert. Special palette
+references remain preserved and disclosed; dictionary special-entry highlighting
+is still an explicit remaining use of the source highlight color.
+
+The native modeless EDICT tool loads
 ordered indexed or unindexed resources from `dict.cfg`, searches with the
 portable direct, adaptive, wildcard, contingent, and name filters, and inserts
 selected rows into JWP with portable undo. Editable EDICT `user.dct` and native

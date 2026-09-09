@@ -498,6 +498,7 @@ class MainWindow : public QMainWindow {
   QMenu* jwp_code_page_menu_;
   std::vector<QAction*> jwp_code_page_actions_;
   core::KanjiColorPolicy kanji_color_policy_;
+  core::KanjiColorPolicy stored_kanji_color_policy_;
   core::KanjiColorList kanji_color_list_;
   QString kanji_color_settings_path_;
   QString kanji_color_list_path_;

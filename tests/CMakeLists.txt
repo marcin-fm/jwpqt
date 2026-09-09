@@ -1,4 +1,10 @@
 find_package(Qt6 REQUIRED COMPONENTS Test)
+
+add_executable(jwpqt_color_integration_tests color_integration_test.cpp)
+target_link_libraries(jwpqt_color_integration_tests PRIVATE jwpqt_qt_ui)
+target_compile_options(jwpqt_color_integration_tests PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME qt_color_integration COMMAND jwpqt_color_integration_tests)
+set_tests_properties(qt_color_integration PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;TMPDIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 90)
 add_executable(jwpqt_default_page_tests default_page_test.cpp)
 target_link_libraries(jwpqt_default_page_tests PRIVATE jwpqt_qt_ui)
 target_compile_options(jwpqt_default_page_tests PRIVATE -Wall -Wextra -Wpedantic)

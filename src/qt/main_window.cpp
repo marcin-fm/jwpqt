@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "main_window.h"
+#include "rare_kanji_delegate.h"
 #include "window_geometry.h"
 #include "session_io.h"
 #include <new>
@@ -429,6 +430,7 @@ MainWindow::MainWindow(QWidget* parent)
   document_->editor_->setFont(content_font);
   document_->editor_->setLineWrapMode(QTextEdit::WidgetWidth);
   conversion_candidates_->setObjectName(QStringLiteral("conversionCandidates"));
+  install_rare_kanji_marks(conversion_candidates_);
   conversion_candidates_->setAccessibleName(tr("Conversion candidates"));
   conversion_candidates_->setFont(content_font);
   assign_japanese_font(*conversion_candidates_, JapaneseFontRole::kKanjiBar, true);
@@ -871,6 +873,7 @@ bool MainWindow::open_workspace_path(const QString& path, const ProjectOpenOptio
       staged->application_settings_persistence_enabled_ = false;
       staged->kanji_color_list_ = kanji_color_list_;
       staged->kanji_color_policy_ = kanji_color_policy_;
+      staged->stored_kanji_color_policy_ = stored_kanji_color_policy_;
       if (!staged->apply_application_settings(workspace.settings))
         throw core::JwpProjectError(staged->application_settings_warning().toStdString());
       staged->new_document();
@@ -1210,6 +1213,13 @@ bool MainWindow::apply_application_settings(const ApplicationSettings& settings,
         }
       } restore{views};
       application_settings_ = std::move(next);
+      kanji_color_policy_ = effective_kanji_color_policy(application_settings_, stored_kanji_color_policy_);
+      setProperty("jwpqtMarkRareKanji", application_settings_.mark_rare_kanji);
+      for (auto* list : findChildren<QListWidget*>())
+        if (dynamic_cast<RareKanjiDelegate*>(list->itemDelegate())) {
+          list->doItemsLayout();
+          list->viewport()->update();
+        }
       apply_toolbar();
       if (histories) {
         if (query_history_snapshot_ && query_history_snapshot_->source &&
@@ -1270,8 +1280,12 @@ bool MainWindow::apply_application_settings(const ApplicationSettings& settings,
     application_settings_warning_.clear();
     for (auto* child : findChildren<QDialog*>(QStringLiteral("kanjiInfoDialog"),
                                              Qt::FindDirectChildrenOnly))
-      if (auto* info = dynamic_cast<KanjiInfoDialog*>(child))
+      if (auto* info = dynamic_cast<KanjiInfoDialog*>(child)) {
         info->set_options(application_settings_.kanji_info);
+        const auto value = application_settings_.color_refs[0];
+        info->set_heading_color(value && !(*value & 0xff000000U)
+            ? QColor(*value & 255, (*value >> 8) & 255, (*value >> 16) & 255) : QColor{});
+      }
     update_encoding_display();
     update_conversion_actions();
     update_undo_actions();
@@ -1354,7 +1368,14 @@ bool MainWindow::save_application_settings(const QString& path, OpenMode mode) {
 
 void MainWindow::configure_application_settings(bool dictionary_page) {
   const QPointer<MainWindow> self(this);
-  QPointer<ApplicationSettingsDialog> dialog = new ApplicationSettingsDialog(application_settings_, this, dictionary_page);
+  auto displayed = application_settings_;
+  if (!displayed.color_kanji_mode) displayed.color_kanji_mode = static_cast<int>(kanji_color_policy_.list_mode);
+  if (!displayed.colorize_rare) displayed.colorize_rare = kanji_color_policy_.colorize_uncommon;
+  for (std::size_t i = 1; i < 3; ++i) if (!displayed.color_refs[i]) {
+    const auto color = i == 1 ? kanji_color_policy_.list_color : kanji_color_policy_.uncommon_color;
+    displayed.color_refs[i] = std::uint32_t(color.red) | (std::uint32_t(color.green) << 8) | (std::uint32_t(color.blue) << 16);
+  }
+  QPointer<ApplicationSettingsDialog> dialog = new ApplicationSettingsDialog(displayed, this, dictionary_page);
   const int result = dialog->exec();
   if (!self || !dialog) return;
   const auto settings = dialog->settings();
@@ -2233,7 +2254,8 @@ bool MainWindow::load_kanji_color_configuration(const QString& settings_path,
                                                 OpenMode mode) {
   try {
     QSettings settings(settings_path, QSettings::IniFormat);
-    const core::KanjiColorPolicy policy = read_kanji_color_policy(settings);
+    const auto stored_policy = read_kanji_color_policy(settings);
+    const core::KanjiColorPolicy policy = effective_kanji_color_policy(application_settings_, stored_policy);
     const std::optional<core::KanjiColorList> loaded_list =
         read_kanji_color_list_file(list_path);
     const core::KanjiColorList list =
@@ -2248,9 +2270,12 @@ bool MainWindow::load_kanji_color_configuration(const QString& settings_path,
       document_->editor_->clear_kanji_colors();
     }
     kanji_color_policy_ = policy;
+    stored_kanji_color_policy_ = stored_policy;
     kanji_color_list_ = list;
     kanji_color_settings_path_.swap(retained_settings_path);
     kanji_color_list_path_.swap(retained_list_path);
+    for (const auto& state : documents_) if (state.get() != document_ && state->jwp_document_)
+      state->editor_->apply_kanji_colors(state->jwp_document_->document(), list, policy, state->jwp_code_page_);
     update_kanji_color_actions();
     statusBar()->showMessage(tr("Loaded kanji color configuration"), 3000);
     return true;
@@ -2302,6 +2327,17 @@ bool MainWindow::set_kanji_color_policy(const core::KanjiColorPolicy& policy,
     }
 
     kanji_color_policy_ = policy;
+    stored_kanji_color_policy_ = policy;
+    const auto color_ref = [](core::RgbColor color) {
+      return std::uint32_t(color.red) | (std::uint32_t(color.green) << 8) | (std::uint32_t(color.blue) << 16);
+    };
+    application_settings_.color_refs[1] = color_ref(policy.list_color);
+    application_settings_.color_refs[2] = color_ref(policy.uncommon_color);
+    application_settings_.color_kanji_mode = policy.list_mode == core::KanjiListColorMode::kOff ? 0 :
+        policy.list_mode == core::KanjiListColorMode::kMatch ? 1 : 2;
+    application_settings_.colorize_rare = policy.colorize_uncommon;
+    for (const auto& state : documents_) if (state.get() != document_ && state->jwp_document_)
+      state->editor_->apply_kanji_colors(state->jwp_document_->document(), kanji_color_list_, policy, state->jwp_code_page_);
     statusBar()->showMessage(tr("Updated kanji color options"), 3000);
     return true;
   } catch (const std::exception& error) {
@@ -2338,6 +2374,8 @@ bool MainWindow::set_kanji_color_list(core::KanjiColorList color_list,
     if (document_->jwp_document_.has_value()) {
       document_->editor_->set_kanji_color_selections(std::move(prepared_colors));
     }
+    for (const auto& state : documents_) if (state.get() != document_ && state->jwp_document_)
+      state->editor_->apply_kanji_colors(state->jwp_document_->document(), kanji_color_list_, kanji_color_policy_, state->jwp_code_page_);
     update_kanji_color_actions();
     statusBar()->showMessage(tr("Updated kanji color list"), 3000);
     return true;
@@ -2741,6 +2779,9 @@ void MainWindow::create_actions() {
         tr("Reset native options to defaults? Retained legacy-only settings will be kept."),
         QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Yes) return;
     ApplicationSettings defaults;
+    defaults.color_refs = {{0x000000ffU, 0x00ff0000U, 0x00585858U}};
+    defaults.color_kanji_mode = 0;
+    defaults.colorize_rare = false;
     defaults.source = application_settings_.source;
     defaults.dictionary_extra_exclusions = application_settings_.dictionary_extra_exclusions;
     std::copy(application_settings_.toolbar.buttons.begin() + defaults.toolbar.count,
@@ -4171,6 +4212,9 @@ void MainWindow::show_kanji_info_dialog(std::optional<CharacterTarget> target,
       [this](char32_t character) { show_kanji_info_dialog(CharacterTarget{character, -1}); },
       this, [this](std::u32string text) { return insert_edict_text(std::move(text)); });
   dialog->set_options(application_settings_.kanji_info);
+  const auto highlight = application_settings_.color_refs[0];
+  dialog->set_heading_color(highlight && !(*highlight & 0xff000000U)
+      ? QColor(*highlight & 255, (*highlight >> 8) & 255, (*highlight >> 16) & 255) : QColor{});
   if (!(code ? dialog->set_code(*code, document_->jwp_code_page_)
              : dialog->set_character(target->character, document_->jwp_code_page_))) {
     delete dialog;
