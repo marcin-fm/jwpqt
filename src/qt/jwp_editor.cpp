@@ -405,7 +405,31 @@ void JwpEditor::keyPressEvent(QKeyEvent* event) {
   }
 }
 
+void JwpEditor::set_character_line_width(std::optional<int> characters) {
+  if (characters.has_value() && (*characters < 1 || *characters > 1000)) {
+    throw std::out_of_range("Document line width is outside 1..1000 characters");
+  }
+  if (!characters.has_value()) {
+    character_line_width_.reset();
+    setLineWrapMode(QTextEdit::WidgetWidth);
+    return;
+  }
+  const qreal pixels = 2.0 * document()->documentMargin() +
+                       static_cast<qreal>(*characters) * indent_unit();
+  if (!std::isfinite(pixels) || pixels > std::numeric_limits<int>::max()) {
+    throw std::overflow_error("Document line width exceeds Qt limits");
+  }
+  character_line_width_ = characters;
+  setLineWrapMode(QTextEdit::FixedPixelWidth);
+  setLineWrapColumnOrWidth(std::max(1, static_cast<int>(std::ceil(pixels))));
+}
+
+std::optional<int> JwpEditor::configured_character_line_width() const noexcept {
+  return character_line_width_;
+}
+
 int JwpEditor::character_page_width() const {
+  if (character_line_width_.has_value()) return *character_line_width_;
   if (!isVisible()) {
     return 0;
   }

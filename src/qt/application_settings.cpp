@@ -263,6 +263,16 @@ ApplicationSettings read_application_settings(std::string_view text,
         result.auto_scroll_speed = static_cast<int>(
             core::parse_jwp_setting_integer(entry.value, 0, 10000));
       }
+      if (name.empty() && core::JwpConfigurationKey{"LineWidth_Mode", "width_mode"}.matches(entry.name)) {
+        name = "LineWidth_Mode";
+        result.line_width_mode = static_cast<LineWidthMode>(
+            core::parse_jwp_setting_integer(entry.value, 0, 2));
+      }
+      if (name.empty() && core::JwpConfigurationKey{"LineWidth_Fixed", "char_width"}.matches(entry.name)) {
+        name = "LineWidth_Fixed";
+        result.fixed_line_width = static_cast<int>(
+            core::parse_jwp_setting_integer(entry.value, 5, 1000));
+      }
       if (name.empty() && core::JwpConfigurationKey{"IndexType", "index_type"}.matches(entry.name)) {
         name = "IndexType";
         result.index_type = static_cast<int>(core::parse_jwp_setting_integer(entry.value, 0, 20));
@@ -360,6 +370,11 @@ std::string write_application_settings(const ApplicationSettings& settings) {
   if (settings.duplicate_open < DuplicateOpenBehavior::kOpenAnother ||
       settings.duplicate_open > DuplicateOpenBehavior::kPrompt)
     throw core::JwpConfigurationError("Unknown duplicate-open behavior");
+  if (settings.line_width_mode < LineWidthMode::kDynamic ||
+      settings.line_width_mode > LineWidthMode::kPrinter)
+    throw core::JwpConfigurationError("Unknown document line-width mode");
+  if (settings.fixed_line_width < 5 || settings.fixed_line_width > 1000)
+    throw core::JwpConfigurationError("Fixed document line width must be between 5 and 1000 characters");
   if (settings.translation_code_page != 0 &&
       (settings.translation_code_page < 1250 || settings.translation_code_page > 1258)) {
     throw core::JwpConfigurationError("Unknown translation code page");
@@ -456,6 +471,10 @@ std::string write_application_settings(const ApplicationSettings& settings) {
   updates.push_back({{"AutoScroll_Speed", "scroll_speed"}, std::to_string(settings.auto_scroll_speed)});
   updates.push_back({{"DoubleOpenBehavior", "double_open"},
                      std::to_string(static_cast<int>(settings.duplicate_open))});
+  updates.push_back({{"LineWidth_Mode", "width_mode"},
+                     std::to_string(static_cast<int>(settings.line_width_mode))});
+  updates.push_back({{"LineWidth_Fixed", "char_width"},
+                     std::to_string(settings.fixed_line_width)});
   validate_kanji_info_options(settings.kanji_info);
   std::string fields;
   constexpr char hex[] = "0123456789ABCDEF";

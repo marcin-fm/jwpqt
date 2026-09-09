@@ -34,6 +34,14 @@ delay. Disable it to keep an edge drag within the visible page. A delay of zero
 uses Qt's shortest event-loop interval. The setting applies to every existing
 and new document without changing text, selection, scroll position or undo.
 
+Document line width can follow the editor window, use a fixed 5-1000 full-width
+character count, or match the current printable page and physical print font.
+The setting applies to JWP documents; imported text remains window-wrapped even
+when it has Japanese editing enabled. Printer matching follows page orientation,
+margins and the configured print font, and updates after Page Layout changes.
+Changing width only reformats the view: document text, paragraph metadata, saved
+state and Undo are unchanged.
+
 Bitmap controls the image included when copying document text; Automatic inherits
 File. Omit bitmap removes only that representation, not text or rich formats.
 Images have white paper and preserve the selected text without changing the

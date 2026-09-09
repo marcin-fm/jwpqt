@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string_view>
 
 #include <QList>
@@ -31,6 +32,8 @@ class JwpEditor final : public QTextEdit {
   explicit JwpEditor(QWidget* parent = nullptr);
 
   void insert_composed_text(std::u32string_view text, bool allow_overwrite = true);
+  void set_character_line_width(std::optional<int> characters);
+  std::optional<int> configured_character_line_width() const noexcept;
   int character_page_width() const;
   void apply_jwp_layout(const core::JwpDocument& document);
   void apply_jwp_fonts(const core::JwpDocument& document, core::LegacyCodePage code_page);
@@ -81,6 +84,7 @@ class JwpEditor final : public QTextEdit {
   int selection_scroll_interval_ = 100;
   int selection_scroll_direction_ = 0;
   int selection_scroll_x_ = 0;
+  std::optional<int> character_line_width_;
 };
 
 }  // namespace jwpqt::qt

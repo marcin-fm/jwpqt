@@ -394,6 +394,31 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   metric_units->setObjectName(QStringLiteral("settingsMetricUnits"));
   metric_units->setChecked(settings_.metric_units);
   defaults_form->addRow(metric_units);
+  auto* line_width_mode = new QComboBox(defaults_page);
+  line_width_mode->setObjectName(QStringLiteral("settingsLineWidthMode"));
+  line_width_mode->addItem(tr("Follow the document window"),
+                           static_cast<int>(LineWidthMode::kDynamic));
+  line_width_mode->addItem(tr("Fixed character width"),
+                           static_cast<int>(LineWidthMode::kFixed));
+  line_width_mode->addItem(tr("Match the printed page"),
+                           static_cast<int>(LineWidthMode::kPrinter));
+  line_width_mode->setCurrentIndex(line_width_mode->findData(
+      static_cast<int>(settings_.line_width_mode)));
+  defaults_form->addRow(tr("Document line width"), line_width_mode);
+  auto* fixed_line_width = new QSpinBox(defaults_page);
+  fixed_line_width->setObjectName(QStringLiteral("settingsFixedLineWidth"));
+  fixed_line_width->setRange(5, 1000);
+  fixed_line_width->setSuffix(tr(" characters"));
+  fixed_line_width->setValue(settings_.fixed_line_width);
+  fixed_line_width->setEnabled(settings_.line_width_mode ==
+                               LineWidthMode::kFixed);
+  connect(line_width_mode, &QComboBox::currentIndexChanged, this,
+          [line_width_mode, fixed_line_width] {
+            fixed_line_width->setEnabled(
+                line_width_mode->currentData().toInt() ==
+                static_cast<int>(LineWidthMode::kFixed));
+          });
+  defaults_form->addRow(tr("Fixed line width"), fixed_line_width);
   std::array<QDoubleSpinBox*, 4> default_margins{};
   const char* margin_labels[] = {"Left", "Right", "Top", "Bottom"};
   for (std::size_t i = 0; i < 4; ++i) {
@@ -563,7 +588,8 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   connect(buttons, &QDialogButtonBox::accepted, this,
           [this, booleans, font_controls, dictionary_controls, code_page, history_size, conversion_choices, undo_levels, categories,
            print_family, print_size, print_auto, print_justify, ascii_family, print_patterns, print_positions, original_patterns,
-           index_type, reading_type, duplicate_open, auto_scroll_speed, default_margins, metric_units, default_landscape, default_vertical,
+           index_type, reading_type, duplicate_open, auto_scroll_speed, default_margins, metric_units, line_width_mode, fixed_line_width,
+           default_landscape, default_vertical,
            color_fields, original_colors, color_mode, uncommon] {
     auto next = settings_;
     for (std::size_t i = 0; i < 4; ++i)
@@ -572,6 +598,9 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
             default_margins[i]->value() /
             (metric_units->isChecked() ? kCentimetersPerInch : 1));
     next.metric_units = metric_units->isChecked();
+    next.line_width_mode = static_cast<LineWidthMode>(
+        line_width_mode->currentData().toInt());
+    next.fixed_line_width = fixed_line_width->value();
     next.default_page.landscape = default_landscape->isChecked();
     next.default_page.vertical = default_vertical->isChecked();
     for (const auto& control : booleans) next.*(control.member) = control.widget->isChecked();

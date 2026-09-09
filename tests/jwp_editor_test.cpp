@@ -546,6 +546,34 @@ void test_selection_autoscroll() {
           "Invalid autoscroll delay changed the editor policy");
 }
 
+void test_character_line_width() {
+  jwpqt::qt::JwpEditor editor;
+  editor.setPlainText(QStringLiteral("one two three four five six seven"));
+  editor.document()->setModified(false);
+  editor.set_character_line_width(12);
+  require(editor.configured_character_line_width() == 12 &&
+              editor.character_page_width() == 12 &&
+              editor.lineWrapMode() == QTextEdit::FixedPixelWidth &&
+              editor.lineWrapColumnOrWidth() > 0 &&
+              !editor.document()->isModified(),
+          "Fixed character width did not configure the editor without modifying text");
+  const int width = editor.lineWrapColumnOrWidth();
+  bool rejected = false;
+  try {
+    editor.set_character_line_width(1001);
+  } catch (const std::out_of_range&) {
+    rejected = true;
+  }
+  require(rejected && editor.configured_character_line_width() == 12 &&
+              editor.lineWrapColumnOrWidth() == width,
+          "Invalid character width changed the editor policy");
+  editor.set_character_line_width(std::nullopt);
+  require(!editor.configured_character_line_width().has_value() &&
+              editor.lineWrapMode() == QTextEdit::WidgetWidth &&
+              !editor.document()->isModified(),
+          "Dynamic character width did not restore viewport wrapping");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -558,6 +586,7 @@ int main(int argc, char** argv) {
     test_kanji_color_validation_is_atomic();
     test_composed_overwrite();
     test_selection_autoscroll();
+    test_character_line_width();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return EXIT_FAILURE;

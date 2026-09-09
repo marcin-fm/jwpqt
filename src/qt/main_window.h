@@ -378,7 +378,10 @@ class MainWindow : public QMainWindow {
   void set_text_encoding(core::TextEncoding encoding, bool mark_modified);
   void set_jwp_code_page(core::LegacyCodePage code_page);
   void apply_jwp_presentation(const core::JwpDocument& document,
-                              core::LegacyCodePage code_page);
+                               core::LegacyCodePage code_page);
+  std::optional<int> document_line_width(const DocumentState& state,
+                                         const core::JwpDocument& document) const;
+  void apply_document_line_width(DocumentState& state);
   void clear_jwp_presentation();
   void find_document();
   void show_find_replace(bool replacing, const QString& text, const QString& replacement);

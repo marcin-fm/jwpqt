@@ -22,6 +22,7 @@ namespace jwpqt::qt {
 
 enum class JapaneseFontRole { kSystem, kEdit, kList, kKanjiBar, kFile, kBig, kTable, kBitmap, kCount };
 enum class DuplicateOpenBehavior { kOpenAnother = 0, kActivateExisting = 1, kPrompt = 2 };
+enum class LineWidthMode { kDynamic = 0, kFixed = 1, kPrinter = 2 };
 
 struct JapaneseFontSetting {
   QString family;
@@ -43,6 +44,8 @@ struct ApplicationSettings {
   core::JwpPrintFormatting print_formatting;
   core::JwpPageDefaults default_page;
   bool metric_units = false;
+  LineWidthMode line_width_mode = LineWidthMode::kDynamic;
+  int fixed_line_width = 35;
   // Absent legacy overrides leave the existing native color store authoritative.
   std::array<std::optional<std::uint32_t>, 3> color_refs; // Highlight, list, uncommon (COLORREF).
   std::optional<int> color_kanji_mode;

@@ -552,6 +552,120 @@ void test_duplicate_open_policy(const QString& directory) {
           "Duplicate-open policy did not survive JPR restoration");
 }
 
+void test_document_line_width_policy(const QString& directory) {
+  using jwpqt::qt::ApplicationSettingsDialog;
+  using jwpqt::qt::LineWidthMode;
+  using jwpqt::qt::MainWindow;
+  using jwpqt::qt::OpenMode;
+
+  auto portrait = sample_jwp_document();
+  portrait.margins[0] = 0.25F;
+  portrait.margins[2] = 0.25F;
+  auto narrow = portrait;
+  narrow.margins[0] = 2.0F;
+  narrow.margins[2] = 2.0F;
+  const QString portrait_path = directory + QStringLiteral("/line-width.jwp");
+  const QString narrow_path = directory + QStringLiteral("/line-width-narrow.jwp");
+  const QString text_path = directory + QStringLiteral("/line-width.txt");
+  jwpqt::qt::write_jwp_file(portrait_path, portrait);
+  jwpqt::qt::write_jwp_file(narrow_path, narrow);
+  write_bytes(text_path, QByteArray("Unicode"));
+
+  MainWindow window;
+  require(window.open_jwp_path(portrait_path, jwpqt::core::kDefaultLegacyCodePage,
+                               OpenMode::kNonInteractive),
+          "Could not open line-width fixture");
+  const auto original = *window.current_jwp_document();
+  auto settings = window.application_settings();
+  require(settings.line_width_mode == LineWidthMode::kDynamic &&
+              settings.fixed_line_width == 35 &&
+              !window.active_editor()->configured_character_line_width().has_value(),
+          "Document line-width defaults differ from the source");
+
+  ApplicationSettingsDialog cancelled(settings);
+  auto* cancelled_mode =
+      cancelled.findChild<QComboBox*>(QStringLiteral("settingsLineWidthMode"));
+  auto* cancelled_width =
+      cancelled.findChild<QSpinBox*>(QStringLiteral("settingsFixedLineWidth"));
+  require(cancelled_mode != nullptr && cancelled_width != nullptr,
+          "Document line-width Options controls are missing");
+  cancelled_mode->setCurrentIndex(cancelled_mode->findData(
+      static_cast<int>(LineWidthMode::kFixed)));
+  cancelled_width->setValue(12);
+  cancelled.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Cancel)->click();
+  require(cancelled.settings().line_width_mode == LineWidthMode::kDynamic &&
+              cancelled.settings().fixed_line_width == 35,
+          "Cancelling Options changed document line width");
+
+  ApplicationSettingsDialog options(settings);
+  auto* mode = options.findChild<QComboBox*>(QStringLiteral("settingsLineWidthMode"));
+  auto* width = options.findChild<QSpinBox*>(QStringLiteral("settingsFixedLineWidth"));
+  require(mode != nullptr && width != nullptr && !width->isEnabled(),
+          "Fixed line width started enabled in dynamic mode");
+  mode->setCurrentIndex(mode->findData(static_cast<int>(LineWidthMode::kFixed)));
+  require(width->isEnabled(), "Fixed mode did not enable its width control");
+  width->setValue(12);
+  options.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+  settings = options.settings();
+  require(window.apply_application_settings(settings) &&
+              window.active_editor()->configured_character_line_width() == 12 &&
+              window.active_editor()->character_page_width() == 12 &&
+              *window.current_jwp_document() == original &&
+              !window.document_modified(),
+          "Fixed line width changed the document or failed to reflow it");
+  const QString converted_text = directory + QStringLiteral("/line-width-converted.txt");
+  const QString converted_jwp = directory + QStringLiteral("/line-width-converted.jwp");
+  require(window.save_as_path(converted_text, jwpqt::core::TextEncoding::kUtf8,
+                              true, false, OpenMode::kNonInteractive) &&
+              !window.active_editor()->configured_character_line_width().has_value() &&
+              window.save_as_path(converted_jwp, std::nullopt, true, false,
+                                  OpenMode::kNonInteractive) &&
+              window.active_editor()->configured_character_line_width() == 12,
+          "Changing a document container did not update its line-width policy");
+
+  settings.line_width_mode = LineWidthMode::kPrinter;
+  require(window.apply_application_settings(settings),
+          "Could not apply printer-based line width");
+  const auto portrait_width =
+      window.active_editor()->configured_character_line_width();
+  require(portrait_width.has_value() && *portrait_width > 0 &&
+              *portrait_width <= 1000,
+          "Printer-based line width was not derived from the page");
+  require(window.open_jwp_path(narrow_path, jwpqt::core::kDefaultLegacyCodePage,
+                               OpenMode::kNonInteractive, true),
+          "Could not open narrow printer-width fixture");
+  const auto narrow_width = window.active_editor()->configured_character_line_width();
+  require(narrow_width.has_value() && *narrow_width < *portrait_width,
+          "Printer-based line width ignored document margins");
+
+  require(window.open_path(text_path, jwpqt::core::TextEncoding::kUtf8,
+                           OpenMode::kNonInteractive, true) &&
+              !window.active_editor()->configured_character_line_width().has_value() &&
+              window.active_editor()->lineWrapMode() == QTextEdit::WidgetWidth,
+          "JWP line-width policy changed an unrestricted Unicode document");
+
+  settings.line_width_mode = LineWidthMode::kFixed;
+  settings.fixed_line_width = 19;
+  const QString settings_path = directory + QStringLiteral("/line-width.cfg");
+  jwpqt::qt::write_application_settings_file(settings_path, settings);
+  MainWindow restarted;
+  require(restarted.load_application_settings(settings_path) &&
+              restarted.open_jwp_path(portrait_path, jwpqt::core::kDefaultLegacyCodePage,
+                                      OpenMode::kNonInteractive) &&
+              restarted.active_editor()->configured_character_line_width() == 19,
+          "Document line width did not survive settings restart");
+
+  const QString project_path = directory + QStringLiteral("/line-width.jpr");
+  require(restarted.save_project_path(project_path, true, OpenMode::kNonInteractive),
+          "Could not save line-width project settings");
+  MainWindow restored;
+  require(restored.open_project_path(project_path, {}, OpenMode::kNonInteractive) &&
+              restored.application_settings().line_width_mode == LineWidthMode::kFixed &&
+              restored.application_settings().fixed_line_width == 19 &&
+              restored.active_editor()->configured_character_line_width() == 19,
+          "Document line width did not survive JPR restoration");
+}
+
 void test_document_tabs(const QString& directory) {
   using jwpqt::qt::OpenMode;
   using jwpqt::core::TextEncoding;
@@ -6138,6 +6252,7 @@ int main(int argc, char* argv[]) {
     require(directory.isValid(), "Could not create temporary test directory");
     test_new_document_workflow(directory.path());
     test_duplicate_open_policy(directory.path());
+    test_document_line_width_policy(directory.path());
     test_document_tabs(directory.path());
     test_workspace_kanji_count();
     test_tab_conversion_lifetimes(directory.path());

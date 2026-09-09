@@ -41,6 +41,7 @@
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QFontDatabase>
+#include <QFontMetricsF>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QIcon>
@@ -57,6 +58,7 @@
 #include <QMouseEvent>
 #include <QPalette>
 #include <QPageSetupDialog>
+#include <QPageSize>
 #include <QPrintDialog>
 #include <QPrintPreviewWidget>
 #include <QProgressDialog>
@@ -1289,6 +1291,7 @@ bool MainWindow::apply_application_settings(const ApplicationSettings& settings,
         if (state->jwp_document_) {
           state->editor_->apply_jwp_layout(state->jwp_document_->document());
           state->editor_->apply_jwp_fonts(state->jwp_document_->document(), state->jwp_code_page_);
+          apply_document_line_width(*state);
           state->editor_->apply_kanji_colors(state->jwp_document_->document(),
               kanji_color_list_, kanji_color_policy_, state->jwp_code_page_);
         }
@@ -3499,11 +3502,50 @@ void MainWindow::apply_jwp_presentation(const core::JwpDocument& document,
                                         core::LegacyCodePage code_page) {
   document_->editor_->apply_jwp_layout(document);
   document_->editor_->apply_jwp_fonts(document, code_page);
+  document_->editor_->set_character_line_width(
+      document_line_width(*document_, document));
   document_->editor_->apply_kanji_colors(document, kanji_color_list_,
-                              kanji_color_policy_, code_page);
+                               kanji_color_policy_, code_page);
+}
+
+std::optional<int> MainWindow::document_line_width(
+    const DocumentState& state, const core::JwpDocument& document) const {
+  if (!state.jwp_format_ ||
+      application_settings_.line_width_mode == LineWidthMode::kDynamic)
+    return std::nullopt;
+  if (application_settings_.line_width_mode == LineWidthMode::kFixed)
+    return application_settings_.fixed_line_width;
+
+  const QSizeF page = printer_->pageLayout().pageSize().size(QPageSize::Point);
+  const qreal page_width = document.landscape
+      ? std::max(page.width(), page.height())
+      : std::min(page.width(), page.height());
+  const qreal body_width =
+      page_width - 72.0 * (static_cast<qreal>(document.margins[0]) +
+                           static_cast<qreal>(document.margins[2]));
+  const QFont font = japanese_print_font(
+      state.editor_->font(), application_settings_.print_font,
+      QFileInfo(state.current_path_).absolutePath());
+  const QFontMetricsF metrics(font, printer_.get());
+  const qreal cell_width =
+      metrics.horizontalAdvance(QChar(0x65e5)) * 72.0 /
+      static_cast<qreal>(printer_->logicalDpiX());
+  if (!std::isfinite(body_width) || !std::isfinite(cell_width) ||
+      body_width <= 0.0 || cell_width <= 0.0)
+    return 1;
+  return std::clamp(static_cast<int>(std::floor(body_width / cell_width)), 1,
+                    1000);
+}
+
+void MainWindow::apply_document_line_width(DocumentState& state) {
+  state.editor_->set_character_line_width(
+      state.jwp_document_.has_value()
+          ? document_line_width(state, state.jwp_document_->document())
+          : std::nullopt);
 }
 
 void MainWindow::clear_jwp_presentation() {
+  document_->editor_->set_character_line_width(std::nullopt);
   document_->editor_->clear_jwp_layout();
   document_->editor_->clear_kanji_colors();
 }
@@ -5524,6 +5566,7 @@ void MainWindow::load_document(const QString& path,
     application_settings_.default_page.apply(imported);
     load_jwp_document(path, imported, code_page, new_tab);
     document_->jwp_format_ = false;
+    apply_document_line_width(*document_);
     document_->encoding_ = file.encoding;
     document_->has_byte_order_mark_ = file.has_byte_order_mark;
     document_->saved_text_file_ = std::move(normalized);
@@ -5749,6 +5792,7 @@ bool MainWindow::save_as_path(const QString& path,
       }
       document_->saved_text_file_ = std::move(text_file);
       document_->current_path_ = path;
+      apply_document_line_width(*document_);
       document_->editor_->document()->setModified(false);
       update_encoding_display();
       update_title();

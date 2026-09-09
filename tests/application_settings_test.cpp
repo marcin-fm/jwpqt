@@ -195,6 +195,41 @@ void test_metric_unit_settings() {
     rejects([&] { (void)read_application_settings(invalid); });
 }
 
+void test_line_width_settings() {
+  using namespace jwpqt::qt;
+  const auto defaults = read_application_settings("");
+  require(defaults.line_width_mode == LineWidthMode::kDynamic &&
+              defaults.fixed_line_width == 35,
+          "Document line-width defaults differ from the source");
+  for (int mode = 0; mode <= 2; ++mode) {
+    const auto settings = read_application_settings(
+        "width_mode=0\nLineWidth_Mode=" + std::to_string(mode) +
+        "\nchar_width=5\nLineWidth_Fixed=1000\nFuture_Width=retained");
+    const auto encoded = write_application_settings(settings);
+    require(settings.line_width_mode == static_cast<LineWidthMode>(mode) &&
+                settings.fixed_line_width == 1000 &&
+                read_application_settings(encoded).line_width_mode ==
+                    static_cast<LineWidthMode>(mode) &&
+                read_application_settings(encoded).fixed_line_width == 1000 &&
+                encoded.find("width_mode=") == std::string::npos &&
+                encoded.find("char_width=") == std::string::npos &&
+                encoded.find("Future_Width=retained") != std::string::npos &&
+                write_application_settings(read_application_settings(encoded)) == encoded,
+            "Document line-width settings did not canonicalize and round-trip");
+  }
+  for (const auto* invalid : {"LineWidth_Mode=-1", "width_mode=3",
+                               "LineWidth_Fixed=4", "char_width=1001",
+                               "width_mode=bad\nLineWidth_Mode=0",
+                               "char_width=bad\nLineWidth_Fixed=35"})
+    rejects([&] { (void)read_application_settings(invalid); });
+  auto invalid = defaults;
+  invalid.line_width_mode = static_cast<LineWidthMode>(3);
+  rejects([&] { (void)write_application_settings(invalid); });
+  invalid = defaults;
+  invalid.fixed_line_width = 4;
+  rejects([&] { (void)write_application_settings(invalid); });
+}
+
 void test_files(const QString& directory) {
   using namespace jwpqt::qt;
   const QString path = directory + QStringLiteral("/settings-\u65e5.cfg");
@@ -396,6 +431,7 @@ int main(int argc, char** argv) {
     test_duplicate_open_settings();
     test_autoscroll_settings();
     test_metric_unit_settings();
+    test_line_width_settings();
     test_information_settings();
     test_dictionary_settings();
     test_files(directory.path());
