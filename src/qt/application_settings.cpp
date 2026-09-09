@@ -193,6 +193,10 @@ ApplicationSettings read_application_settings(std::string_view text,
         name = setting.name;
         result.dictionary.*(setting.member) = core::parse_jwp_setting_bool(entry.value);
       }
+      if (name.empty() && core::JwpConfigurationKey{"Printing_DefaultLayout", "page"}.matches(entry.name)) {
+        name = "Printing_DefaultLayout";
+        result.default_page = core::decode_page_defaults(core::parse_jwp_setting_bytes(entry.value, 20));
+      }
       if (name.empty() && core::JwpConfigurationKey{"Dict_ExclusionFilters", "dict_bits"}.matches(entry.name)) {
         name = "Dict_ExclusionFilters";
         const auto bits = static_cast<std::uint32_t>(core::parse_jwp_setting_integer(entry.value,
@@ -276,7 +280,11 @@ ApplicationSettings read_application_settings(std::string_view text,
 }
 
 std::string write_application_settings(const ApplicationSettings& settings) {
-  try { core::validate_print_formatting(settings.print_formatting); }
+  std::vector<std::uint8_t> defaults_bytes;
+  try {
+    core::validate_print_formatting(settings.print_formatting);
+    defaults_bytes = core::encode_page_defaults(settings.default_page);
+  }
   catch (const std::invalid_argument& error) { throw core::JwpConfigurationError(error.what()); }
   validate_toolbar(settings.toolbar);
   if (settings.index_type < 0 || settings.index_type > 20 || settings.reading_type < 0 || settings.reading_type > 6)
@@ -300,6 +308,11 @@ std::string write_application_settings(const ApplicationSettings& settings) {
   updates.push_back({{"Printing_Justify_ASCII", "print_justify"}, settings.print_formatting.justify_ascii ? "true" : "false"});
   std::string toolbar_bytes;
   constexpr char digits[] = "0123456789ABCDEF";
+  std::string page_bytes;
+  for (const auto byte : defaults_bytes) {
+    page_bytes.push_back(digits[byte >> 4]); page_bytes.push_back(digits[byte & 15]);
+  }
+  updates.push_back({{"Printing_DefaultLayout", "page"}, page_bytes});
   for (std::size_t i = 0; i < 4; ++i) {
     std::string bytes;
     for (auto code : settings.print_formatting.patterns[i]) {

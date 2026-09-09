@@ -410,6 +410,7 @@ class MainWindow : public QMainWindow {
   std::shared_ptr<QPrinter> printer_;
   bool print_busy_ = false;
   bool force_application_close_ = false;
+  std::optional<core::JwpPageDefaults> pending_page_defaults_;
   bool print_selection_available_ = false;
   QLabel* encoding_label_;
   QAction* undo_action_;

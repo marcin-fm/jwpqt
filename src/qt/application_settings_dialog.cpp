@@ -267,6 +267,29 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   history_note->setWordWrap(true);
   history_form->addRow(history_note);
   tabs->addTab(history, tr("History"));
+  auto* defaults_page = new QWidget(tabs);
+  auto* defaults_form = new QFormLayout(defaults_page);
+  std::array<QDoubleSpinBox*, 4> default_margins{};
+  std::array<double, 4> displayed_margins{};
+  const char* margin_labels[] = {"Left", "Right", "Top", "Bottom"};
+  for (std::size_t i = 0; i < 4; ++i) {
+    auto* spin = new QDoubleSpinBox(defaults_page);
+    spin->setObjectName(QStringLiteral("settingsDefaultMargin%1").arg(i));
+    spin->setRange(0, 10); spin->setDecimals(8); spin->setSingleStep(0.1); spin->setSuffix(tr(" in"));
+    spin->setValue(settings_.default_page.margins[i]);
+    default_margins[i] = spin; displayed_margins[i] = spin->value();
+    defaults_form->addRow(tr(margin_labels[i]), spin);
+  }
+  auto* default_landscape = new QCheckBox(tr("Landscape"), defaults_page);
+  auto* default_vertical = new QCheckBox(tr("Vertical printing"), defaults_page);
+  default_landscape->setObjectName(QStringLiteral("settingsDefaultLandscape"));
+  default_vertical->setObjectName(QStringLiteral("settingsDefaultVertical"));
+  default_landscape->setChecked(settings_.default_page.landscape);
+  default_vertical->setChecked(settings_.default_page.vertical);
+  defaults_form->addRow(default_landscape); defaults_form->addRow(default_vertical);
+  auto* defaults_note = new QLabel(tr("Defaults apply to new Japanese documents. Existing documents keep their layout. Page Layout can copy defaults into the current document or stage its margins as new defaults."), defaults_page);
+  defaults_note->setWordWrap(true); defaults_form->addRow(defaults_note);
+  tabs->addTab(defaults_page, tr("Default Page"));
   auto* printing = new QWidget(tabs);
   auto* print_form = new QFormLayout(printing);
   auto* print_family = new QComboBox(printing);
@@ -387,8 +410,13 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   connect(buttons, &QDialogButtonBox::accepted, this,
           [this, booleans, font_controls, dictionary_controls, code_page, history_size, categories,
            print_family, print_size, print_auto, print_justify, ascii_family, print_patterns, print_positions, original_patterns,
-           index_type, reading_type] {
+            index_type, reading_type, default_margins, displayed_margins, default_landscape, default_vertical] {
     auto next = settings_;
+    for (std::size_t i = 0; i < 4; ++i)
+      if (default_margins[i]->value() != displayed_margins[i])
+        next.default_page.margins[i] = static_cast<float>(default_margins[i]->value());
+    next.default_page.landscape = default_landscape->isChecked();
+    next.default_page.vertical = default_vertical->isChecked();
     for (const auto& control : booleans) next.*(control.member) = control.widget->isChecked();
     for (const auto& control : dictionary_controls) next.dictionary.*(control.member) = control.widget->isChecked();
     next.dictionary.category_exclusions = 0;

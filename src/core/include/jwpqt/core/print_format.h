@@ -2,10 +2,21 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <vector>
 #include "jwpqt/core/jwp_document.h"
 
 namespace jwpqt::core {
+
+struct JwpPageDefaults {
+  std::array<float, 4> margins{{1, 1, 1, 1}};
+  bool vertical = false;
+  bool landscape = false;
+  std::array<unsigned char, 2> padding{};
+  void apply(JwpDocument& document) const;
+};
+JwpPageDefaults decode_page_defaults(const std::vector<std::uint8_t>& bytes);
+std::vector<std::uint8_t> encode_page_defaults(const JwpPageDefaults& page);
 
 struct JwpPrintFormatting {
   std::array<JwpText, 4> patterns{{{'&','y','/','&','M','/','&','D'},

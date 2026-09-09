@@ -873,6 +873,7 @@ bool MainWindow::open_workspace_path(const QString& path, const ProjectOpenOptio
       staged->kanji_color_policy_ = kanji_color_policy_;
       if (!staged->apply_application_settings(workspace.settings))
         throw core::JwpProjectError(staged->application_settings_warning().toStdString());
+      staged->new_document();
       incoming_count = 0;
       std::size_t characters = 0;
       warnings.clear();
@@ -1287,6 +1288,7 @@ bool MainWindow::apply_application_settings(const ApplicationSettings& settings,
 }
 
 bool MainWindow::load_application_settings(const QString& path, OpenMode mode) {
+  const bool initial = application_settings_path_.isEmpty() && !isVisible();
   application_settings_path_ = absolute_document_path(path);
   application_settings_persistence_enabled_ = false;
   try {
@@ -1295,6 +1297,10 @@ bool MainWindow::load_application_settings(const QString& path, OpenMode mode) {
     const auto next = !file.exists() && !file.isSymLink()
         ? ApplicationSettings{} : read_application_settings_file(path);
     if (!apply_application_settings(next, mode)) return false;
+    if (initial && document_count() == 1 && document_->jwp_document_ && document_->current_path_.isEmpty() &&
+        !document_modified() && !document_->jwp_history_.can_undo() && !document_->jwp_history_.can_redo() &&
+        !document_->kana_input_.pending() && !document_->jwp_conversion_ &&
+        document_plain_text(*document_->editor_->document()).isEmpty()) new_document();
     application_settings_persistence_enabled_ = true;
     return true;
   } catch (const std::exception& error) {
@@ -5057,7 +5063,7 @@ void MainWindow::new_document() {
     return;
   }
   core::JwpDocument document;
-  document.margins.fill(1.0F);  // Recovered default_config: one-inch margins.
+  application_settings_.default_page.apply(document);
   document.paragraphs.emplace_back();
   load_jwp_document({}, std::move(document), document_->jwp_code_page_);
 }
@@ -5326,7 +5332,9 @@ void MainWindow::load_document(const QString& path,
     }
   }
   if (model) {
-    load_jwp_document(path, model->document(), code_page, new_tab);
+    auto imported = model->document();
+    application_settings_.default_page.apply(imported);
+    load_jwp_document(path, imported, code_page, new_tab);
     document_->jwp_format_ = false;
     document_->encoding_ = file.encoding;
     document_->has_byte_order_mark_ = file.has_byte_order_mark;
@@ -5508,8 +5516,13 @@ bool MainWindow::save_as_path(const QString& path,
       } else {
         const auto model = core::import_jwp_plain_text(
             from_qstring(document_plain_text(*document_->editor_->document())), document_->jwp_code_page_);
-        if (!export_copy) saved_document = model.document();
-        write_jwp_file(path, model.document(), application_settings_.keep_backup_copy);
+        auto imported = model.document();
+        if (document_->jwp_format_ && document_->saved_jwp_document_) {
+          const auto& saved = *document_->saved_jwp_document_;
+          core::JwpPageDefaults{saved.margins, saved.vertical, saved.landscape, {}}.apply(imported);
+        } else application_settings_.default_page.apply(imported);
+        if (!export_copy) saved_document = imported;
+        write_jwp_file(path, imported, application_settings_.keep_backup_copy);
       }
     } else {
       auto report = document_->jwp_document_ ? core::export_jwp_plain_text(*document_->jwp_document_, document_->jwp_code_page_)
@@ -5855,10 +5868,14 @@ MainWindow::prompt_for_paragraph_format(
 
 std::optional<core::JwpDocument> MainWindow::prompt_for_page_layout(
     const core::JwpDocument& initial) {
-  PageLayoutDialog dialog(initial, document_->jwp_code_page_, this);
-  if (dialog.exec() != QDialog::Accepted)
-    return std::nullopt;
-  return dialog.document();
+  const QPointer<MainWindow> self(this);
+  QPointer<PageLayoutDialog> dialog = new PageLayoutDialog(initial, document_->jwp_code_page_, this, &application_settings_.default_page);
+  const auto answer = dialog->exec();
+  if (!self || !dialog) return std::nullopt;
+  const auto cleanup = qScopeGuard([dialog] { if (dialog) delete dialog; });
+  if (answer != QDialog::Accepted) return std::nullopt;
+  pending_page_defaults_ = dialog->default_page();
+  return dialog->document();
 }
 
 bool MainWindow::prompt_for_print(QPrinter& printer) {
@@ -6129,15 +6146,29 @@ void MainWindow::format_file_paragraphs() {
 }
 
 void MainWindow::format_page_layout() {
+  if (pending_page_defaults_) return;
+  const QPointer<MainWindow> self(this);
   finish_kana_input();
-  if (conversion_active() || !document_->jwp_document_.has_value())
+  if (!self || conversion_active() || !document_->jwp_document_.has_value())
     return;
+  const QPointer<JwpEditor> target = document_->editor_;
+  const auto revision = target->document()->revision();
+  const auto path = document_->current_path_;
+  const auto defaults = core::encode_page_defaults(application_settings_.default_page);
+  pending_page_defaults_ = application_settings_.default_page;
+  const auto cleanup = qScopeGuard([self] { if (self) self->pending_page_defaults_.reset(); });
   try {
     const std::optional<core::JwpDocument> requested =
         prompt_for_page_layout(document_->jwp_document_->document());
-    if (requested.has_value() && apply_page_layout(*requested))
+    if (!self || !target || document_->editor_ != target || !document_->jwp_document_ || document_->current_path_ != path || target->document()->revision() != revision) return;
+    if (requested && (*requested == document_->jwp_document_->document() || apply_page_layout(*requested))) {
+      if (!self) return;
+      if (pending_page_defaults_ && core::encode_page_defaults(application_settings_.default_page) == defaults)
+        application_settings_.default_page = *pending_page_defaults_;
       statusBar()->showMessage(tr("Page layout applied"), 2000);
+    }
   } catch (const std::exception& error) {
+    if (!self) return;
     statusBar()->showMessage(
         tr("Could not apply page layout: %1")
             .arg(QString::fromUtf8(error.what())),
@@ -6932,15 +6963,21 @@ bool MainWindow::set_japanese_editing(bool enabled, bool allow_information_loss,
     if (!allow_information_loss && (has_history || !report.lossless())) return false;
 
     std::optional<core::JwpDocumentModel> model;
-    if (enabled) model = core::import_jwp_plain_text(report.text, document_->jwp_code_page_);
     auto saved_jwp = document_->saved_jwp_document_;
     if (enabled && !saved_jwp && document_->saved_text_file_) {
       try {
         saved_jwp = core::import_jwp_plain_text(document_->saved_text_file_->text, document_->jwp_code_page_)
                         .document();
+        application_settings_.default_page.apply(*saved_jwp);
       } catch (const core::JwpPlainTextError&) {
         // An unrepresentable saved version cannot be an unchanged native model.
       }
+    }
+    if (enabled) {
+      auto imported = core::import_jwp_plain_text(report.text, document_->jwp_code_page_).document();
+      if (saved_jwp) core::JwpPageDefaults{saved_jwp->margins, saved_jwp->vertical, saved_jwp->landscape, {}}.apply(imported);
+      else application_settings_.default_page.apply(imported);
+      model.emplace(std::move(imported));
     }
     auto saved_text = document_->saved_text_file_;
     auto pristine = document_->pristine_jwp_document_;

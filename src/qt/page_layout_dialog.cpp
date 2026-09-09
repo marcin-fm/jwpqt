@@ -11,6 +11,7 @@
 #include <QFormLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPushButton>
 #include <QTabWidget>
 #include <QVBoxLayout>
 
@@ -36,7 +37,7 @@ QDoubleSpinBox* margin_spin(const char* name, QWidget* parent) {
   auto* spin = new QDoubleSpinBox(parent);
   spin->setObjectName(QString::fromLatin1(name));
   spin->setRange(0.0, 10.0);
-  spin->setDecimals(2);
+  spin->setDecimals(8);
   spin->setSingleStep(0.1);
   spin->setSuffix(PageLayoutDialog::tr(" in"));
   return spin;
@@ -46,7 +47,7 @@ QDoubleSpinBox* margin_spin(const char* name, QWidget* parent) {
 
 PageLayoutDialog::PageLayoutDialog(const core::JwpDocument& document,
                                    core::LegacyCodePage code_page,
-                                   QWidget* parent)
+                                   QWidget* parent, const core::JwpPageDefaults* defaults)
     : QDialog(parent),
       document_(document),
       code_page_(code_page),
@@ -59,6 +60,7 @@ PageLayoutDialog::PageLayoutDialog(const core::JwpDocument& document,
       separate_headers_(new QCheckBox(tr("Separate odd and even"), this)),
       suppress_first_(new QCheckBox(tr("Suppress on first page"), this)),
       status_(new QLabel(this)) {
+  if (defaults) { (void)core::encode_page_defaults(*defaults); defaults_ = *defaults; }
   setObjectName(QStringLiteral("pageLayoutDialog"));
   setWindowTitle(tr("Page Layout"));
   resize(620, 520);
@@ -76,6 +78,7 @@ PageLayoutDialog::PageLayoutDialog(const core::JwpDocument& document,
                                              tr("Top"), tr("Bottom")};
   for (std::size_t index = 0; index < margins_.size(); ++index) {
     margins_[index]->setValue(document_.margins[index]);
+    connect(margins_[index], &QDoubleSpinBox::valueChanged, this, [this, index] { margins_changed_[index] = true; });
     margins_layout->addRow(margin_labels[index], margins_[index]);
   }
   landscape_->setObjectName(QStringLiteral("layoutLandscape"));
@@ -84,6 +87,24 @@ PageLayoutDialog::PageLayoutDialog(const core::JwpDocument& document,
   vertical_->setChecked(document_.vertical);
   margins_layout->addRow(landscape_);
   margins_layout->addRow(vertical_);
+  if (defaults_) {
+    auto* load = new QPushButton(tr("From Default"), margins_page);
+    auto* save = new QPushButton(tr("Set as Default"), margins_page);
+    load->setObjectName(QStringLiteral("layoutFromDefault"));
+    save->setObjectName(QStringLiteral("layoutSetDefault"));
+    margins_layout->addRow(load, save);
+    connect(load, &QPushButton::clicked, this, [this] {
+      document_.margins = defaults_->margins;
+      for (std::size_t i = 0; i < 4; ++i) { margins_[i]->setValue(document_.margins[i]); margins_changed_[i] = false; }
+      landscape_->setChecked(defaults_->landscape); vertical_->setChecked(defaults_->vertical);
+    });
+    connect(save, &QPushButton::clicked, this, [this] {
+      for (std::size_t i = 0; i < 4; ++i)
+        defaults_->margins[i] = margins_changed_[i] ? static_cast<float>(margins_[i]->value()) : document_.margins[i];
+      defaults_->landscape = landscape_->isChecked(); defaults_->vertical = vertical_->isChecked();
+      status_->setText(tr("New defaults are staged. Accept this dialog to keep them."));
+    });
+  }
   tabs->addTab(margins_page, tr("Margins"));
 
   auto* headers_page = new QWidget(tabs);
@@ -146,7 +167,7 @@ bool PageLayoutDialog::apply_changes() {
   try {
     core::JwpDocument candidate = document_;
     for (std::size_t index = 0; index < candidate.margins.size(); ++index)
-      candidate.margins[index] = static_cast<float>(margins_[index]->value());
+      if (margins_changed_[index]) candidate.margins[index] = static_cast<float>(margins_[index]->value());
     candidate.landscape = landscape_->isChecked();
     candidate.vertical = vertical_->isChecked();
     candidate.separate_left_right_headers = separate_headers_->isChecked();

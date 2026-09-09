@@ -38,6 +38,7 @@ struct ApplicationSettings {
   bool color_clipboard_bitmap = false;
   bool color_printing = false;
   core::JwpPrintFormatting print_formatting;
+  core::JwpPageDefaults default_page;
   ToolbarSettings toolbar;
   bool show_status_bar = true;
   bool show_kanji_bar = true;

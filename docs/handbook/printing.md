@@ -19,6 +19,15 @@ highlights and arbitrary rich-text colors are not copied into print output.
 
 ## Headers and Footers
 
+Options > Default Page sets the margins and orientation for fresh Japanese
+documents and newly imported text. Existing JWP files retain their stored layout.
+Page Layout > From Default copies the defaults into the current document;
+Set as Default stages the current margins and orientation as the next defaults.
+Cancel discards both staged changes. Accepting a page change is undoable in the
+document; undo does not revert application preferences. Headers, summary and
+body text are not copied into the defaults. Text exports still require approval
+when page layout cannot be retained by their file format.
+
 JWP supports separate odd/even header and footer fields and first-page
 suppression. The substitutions are case-insensitive:
 

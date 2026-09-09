@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "jwpqt/core/print_format.h"
+#include <cmath>
+#include <cstring>
+#include <limits>
 
 #include <algorithm>
 #include <cstdint>
@@ -7,6 +10,44 @@
 #include <string>
 
 namespace jwpqt::core {
+
+std::vector<std::uint8_t> encode_page_defaults(const JwpPageDefaults& page) {
+  static_assert(sizeof(float) == 4 && std::numeric_limits<float>::is_iec559);
+  std::vector<std::uint8_t> bytes(20);
+  for (std::size_t i = 0; i < 4; ++i) {
+    const float value = page.margins[i];
+    if (!std::isfinite(value) || value < 0 || value > 10)
+      throw std::invalid_argument("Default page margin is outside 0..10 inches");
+    std::uint32_t bits;
+    std::memcpy(&bits, &value, sizeof(bits));
+    for (std::size_t j = 0; j < 4; ++j) bytes[i * 4 + j] = static_cast<std::uint8_t>(bits >> (8 * j));
+  }
+  bytes[16] = page.vertical; bytes[17] = page.landscape;
+  bytes[18] = page.padding[0]; bytes[19] = page.padding[1];
+  return bytes;
+}
+
+JwpPageDefaults decode_page_defaults(const std::vector<std::uint8_t>& bytes) {
+  if (bytes.size() != 20 || bytes[16] > 1 || bytes[17] > 1)
+    throw std::invalid_argument("Invalid default page layout record");
+  JwpPageDefaults page;
+  for (std::size_t i = 0; i < 4; ++i) {
+    std::uint32_t bits = 0;
+    for (std::size_t j = 0; j < 4; ++j) bits |= static_cast<std::uint32_t>(bytes[i * 4 + j]) << (8 * j);
+    std::memcpy(&page.margins[i], &bits, sizeof(bits));
+  }
+  page.vertical = bytes[16] != 0; page.landscape = bytes[17] != 0;
+  page.padding = {bytes[18], bytes[19]};
+  (void)encode_page_defaults(page);
+  return page;
+}
+
+void JwpPageDefaults::apply(JwpDocument& document) const {
+  (void)encode_page_defaults(*this);
+  document.margins = margins;
+  document.vertical = vertical;
+  document.landscape = landscape;
+}
 
 std::vector<int> print_grid_positions(const JwpText& text, const std::vector<int>& advances,
                                     int cell, bool justify, bool paragraph_end) {

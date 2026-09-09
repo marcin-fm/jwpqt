@@ -379,6 +379,13 @@ cancellation. Selected/ranged PDF output does not merely hide unwanted text behi
 a clip: it omits that text from the PDF stream. Printer Setup applies accepted JWP
 margins and orientation as one undoable change, only to its original document.
 
+Options > Default Page persists source-compatible default margins and orientation
+for new Japanese documents and text imports. Page Layout provides From Default
+and Set as Default, staged until acceptance; Cancel preserves both document and
+preferences. Existing JWP files keep their saved layout. The legacy 20-byte
+little-endian record is validated explicitly and retains its two padding bytes.
+Unchanged fractional margins are not silently rounded by the dialog.
+
 JWP odd/even headers and footers support first-page suppression and the source
 `&A`, `&C`, `&D`, `&F`, `&K`, `&L`, `&N`, `&S`, `&T`, `&P` and `&&` substitutions.
 Date/time and output policies are captured once for the job. **Options > Printing**
