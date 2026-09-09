@@ -10,6 +10,9 @@
 #include <QFile>
 #include <QString>
 #include <QTemporaryDir>
+#ifdef Q_OS_UNIX
+#include <sys/stat.h>
+#endif
 
 #include "file_io.h"
 #include "jwpqt/core/edict_registry.h"
@@ -37,6 +40,64 @@ QByteArray read_bytes(const QString& path) {
     throw std::runtime_error(input.errorString().toStdString());
   }
   return input.readAll();
+}
+
+void test_backups(const QString& directory) {
+  using namespace jwpqt;
+  const auto path = directory + QStringLiteral("/backup-愛.txt");
+  const auto backup = path + QStringLiteral("_BAK");
+  const core::TextFile first{U"first\ufeff愛", core::TextEncoding::kUtf16Be, true};
+  const core::TextFile second{U"second", core::TextEncoding::kUtf8, false};
+  qt::write_text_file(path, first, true);
+  require(!QFile::exists(backup), "New file unexpectedly created a backup");
+  const auto first_bytes = read_bytes(path);
+  qt::write_text_file(path, second, true);
+  require(read_bytes(backup) == first_bytes && qt::read_text_file(path, second.encoding).text == second.text,
+          "Backup did not preserve exact prior encoding/BOM bytes");
+  const auto second_bytes = read_bytes(path);
+  qt::write_text_file(path, first, true);
+  require(read_bytes(backup) == second_bytes, "Repeated save retained the wrong generation");
+  qt::write_text_file(path, second);
+  require(read_bytes(backup) == second_bytes, "Disabled backup policy changed backup");
+  const auto fails = [](auto&& write) { try { write(); } catch (const std::exception&) { return true; } return false; };
+  require(fails([&] { qt::write_text_file(path, {U"\U0001f600", core::TextEncoding::kEucJp, false}, true); }) &&
+          read_bytes(path) == second_bytes && read_bytes(backup) == second_bytes,
+          "Encoding failure changed source or backup");
+  require(QFile::remove(backup) && QDir().mkdir(backup), "Backup directory fixture failed");
+  require(fails([&] { qt::write_text_file(path, first, true); }) && read_bytes(path) == second_bytes,
+          "Failed backup published new document");
+  require(QDir().rmdir(backup) && QFile::link(path, backup), "Backup alias fixture failed");
+  require(fails([&] { qt::write_text_file(path, first, true); }) && read_bytes(path) == second_bytes,
+          "Backup followed an alias to its source");
+  require(QFile::remove(backup), "Could not clear backup alias");
+#ifdef Q_OS_UNIX
+  require(::mkfifo(QFile::encodeName(backup).constData(), 0600) == 0, "Backup FIFO fixture failed");
+  require(fails([&] { qt::write_text_file(path, first, true); }) && read_bytes(path) == second_bytes,
+          "Backup replaced a special file");
+  struct stat type {};
+  require(::lstat(QFile::encodeName(backup).constData(), &type) == 0 && S_ISFIFO(type.st_mode), "Backup destroyed FIFO");
+  require(QFile::remove(backup), "Could not clear backup FIFO");
+#endif
+  QFile large(path);
+  const QByteArray original(2 * 1024 * 1024 + 3, 'x');
+  require(large.open(QIODevice::WriteOnly) && large.write(original) == original.size(), "Large fixture failed");
+  large.close();
+  qt::write_text_file(path, second, true);
+  require(read_bytes(backup) == original, "Streaming backup lost bytes across chunks");
+  require(QFile::remove(path), "Remove source fixture failed");
+  qt::write_text_file(path, first, true);
+  require(read_bytes(backup) == original, "New target erased an existing backup");
+  core::JwpDocument document;
+  document.paragraphs.push_back({});
+  document.paragraphs.front().text = {0x2422};
+  qt::write_jwp_file(path, document, true);
+  require(read_bytes(backup) == first_bytes && qt::read_jwp_file(path) == document,
+          "JWP save did not back up old text bytes");
+  const auto jwp_bytes = read_bytes(path);
+  document.summary[0] = {0};
+  require(fails([&] { qt::write_jwp_file(path, document, true); }) &&
+          read_bytes(path) == jwp_bytes && read_bytes(backup) == first_bytes,
+          "Invalid JWP changed source or backup");
 }
 
 void test_text_bridge() {
@@ -732,6 +793,7 @@ int main(int argc, char* argv[]) {
     QTemporaryDir directory(QDir::tempPath() +
                             QStringLiteral("/jwpqt-io-test-XXXXXX"));
     require(directory.isValid(), "Could not create temporary test directory");
+    test_backups(directory.path());
     test_file_round_trip(directory.path(),
                          jwpqt::core::TextEncoding::kUtf8, true);
     test_file_round_trip(directory.path(),

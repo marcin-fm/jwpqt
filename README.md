@@ -300,6 +300,16 @@ destination is changed. **File > Export Copy** writes another format without
 changing the current path, saved baseline, dirty state, or undo history; finish
 pending input/conversion first. A copy cannot overwrite its own source.
 
+**Options > Keep the previous disk version** enables source-compatible `_BAK`
+backups (off by default). A successful overwrite copies the exact previous disk
+bytes to the appended name, e.g. `notes.jwp_BAK`, before atomically publishing
+the new document. Invalid encoding or failed backup creation leaves the document
+and old backup intact. Backup symlinks, open documents and protected application
+data are rejected; new files do not remove an existing backup. This is not a
+two-file transaction: if final document publication fails after backup succeeds,
+the backup contains the still-current disk version. Backup copying uses bounded
+memory and retains file permissions, not all filesystem-specific metadata.
+
 The native editor opens and atomically saves UTF-8, UTF-7, UTF-16LE/BE, JFC,
 EUC-JP, Shift-JIS, New/Old/NEC JIS, and JWP B1/B2/J1.20 documents. JFC files are plain text:
 opening prefers UTF-8, with a strict fallback for the recovered old-EUC

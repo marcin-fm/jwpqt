@@ -2,6 +2,7 @@
 
 #include "file_io.h"
 
+#include <algorithm>
 #include <filesystem>
 #include <limits>
 #include <stdexcept>
@@ -30,7 +31,7 @@ std::runtime_error io_error(const char* action, const QString& path,
   return std::runtime_error(message.toUtf8().toStdString());
 }
 
-void write_file_bytes(const QString& path, std::string_view bytes) {
+void write_file_bytes(const QString& path, std::string_view bytes, bool keep_backup = false) {
   if (bytes.size() >
       static_cast<std::size_t>(std::numeric_limits<qint64>::max())) {
     throw std::runtime_error("Document is too large to save");
@@ -45,6 +46,33 @@ void write_file_bytes(const QString& path, std::string_view bytes) {
   if (output.write(bytes.data(), size) != size) {
     output.cancelWriting();
     throw io_error("Could not write", path, output.errorString());
+  }
+  if (keep_backup && (QFileInfo::exists(path) || QFileInfo(path).isSymLink())) {
+    const QFileInfo source_info(path);
+    const QString backup_path = path + QStringLiteral("_BAK");
+    const QFileInfo backup_info(backup_path);
+    if (!source_info.isFile() || backup_info.isSymLink() ||
+        (backup_info.exists() && !backup_info.isFile()) ||
+        source_info.canonicalFilePath() == backup_info.canonicalFilePath())
+      throw io_error("Could not back up", path, "Expected a regular source and distinct backup destination");
+    QFile source(path);
+    if (!source.open(QIODevice::ReadOnly)) throw io_error("Could not read backup source", path, source.errorString());
+    const qint64 original_size = source.size();
+    if (original_size < 0) throw io_error("Could not back up", path, "Invalid source size");
+    QSaveFile backup(backup_path);
+    if (!backup.open(QIODevice::WriteOnly) || !backup.setPermissions(source.permissions()))
+      throw io_error("Could not open backup", backup_path, backup.errorString());
+    qint64 remaining = original_size;
+    while (remaining != 0) {
+      const auto chunk = source.read(std::min<qint64>(remaining, 1024 * 1024));
+      if (chunk.isEmpty() || source.error() != QFileDevice::NoError ||
+          backup.write(chunk) != chunk.size())
+        throw io_error("Could not copy backup", backup_path, "Incomplete read or write");
+      remaining -= chunk.size();
+    }
+    if (source.size() != original_size || !source.atEnd())
+      throw io_error("Could not back up", path, "Source size changed while copying");
+    if (!backup.commit()) throw io_error("Could not replace backup", backup_path, backup.errorString());
   }
   if (!output.commit()) {
     throw io_error("Could not replace", path, output.errorString());
@@ -129,18 +157,18 @@ void write_edict_registry_checked(const QString& path, const core::EdictRegistry
   write_file_bytes(path, bytes);
 }
 
-void write_text_file(const QString& path, const core::TextFile& file) {
+void write_text_file(const QString& path, const core::TextFile& file, bool keep_backup) {
   const std::string bytes = core::encode_text_file(file);
-  write_file_bytes(path, bytes);
+  write_file_bytes(path, bytes, keep_backup);
 }
 
 core::JwpDocument read_jwp_file(const QString& path) {
   return core::decode_jwp_document(read_file_bytes(path));
 }
 
-void write_jwp_file(const QString& path, const core::JwpDocument& document) {
+void write_jwp_file(const QString& path, const core::JwpDocument& document, bool keep_backup) {
   const std::string bytes = core::encode_jwp_document(document);
-  write_file_bytes(path, bytes);
+  write_file_bytes(path, bytes, keep_backup);
 }
 
 core::JwpProject read_jwp_project_file(const QString& path) {

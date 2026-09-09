@@ -26,9 +26,9 @@ std::string read_file_bytes(const QString& path);
 std::string read_file_bytes(const QString& path, std::size_t maximum_bytes);
 core::TextFile read_text_file(const QString& path,
                               core::TextEncoding encoding);
-void write_text_file(const QString& path, const core::TextFile& file);
+void write_text_file(const QString& path, const core::TextFile& file, bool keep_backup = false);
 core::JwpDocument read_jwp_file(const QString& path);
-void write_jwp_file(const QString& path, const core::JwpDocument& document);
+void write_jwp_file(const QString& path, const core::JwpDocument& document, bool keep_backup = false);
 core::JwpProject read_jwp_project_file(const QString& path);
 void write_jwp_project_file(const QString& path,
                             const core::JwpProject& project);

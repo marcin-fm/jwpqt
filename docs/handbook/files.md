@@ -48,6 +48,17 @@ confirmation. Export Copy leaves the live file, history and saved baseline
 unchanged. Neither command may overwrite another open document. Revert reloads
 the current source. Delete clears the editor only after deletion succeeds.
 
+## Previous-Version Backups
+
+Options can **Keep the previous disk version** when saving (off by default).
+The backup appends `_BAK` to the complete filename: `notes.txt_BAK`. Save, Save As
+and Export Copy preserve the destination's previous bytes, including its old
+encoding, before publishing the new file. New targets leave any old backup alone.
+An encoding error or backup failure does not replace the document; a successful
+backup followed by failed document publication may update the backup to the
+still-current disk version. Open/protected backup paths and backup symlinks are
+rejected. Backups retain ordinary permissions, not every filesystem attribute.
+
 ## JPR Workspaces
 
 Open Project can replace or append. Files and settings are validated before

@@ -5463,6 +5463,19 @@ bool MainWindow::save_as_path(const QString& path,
                               std::optional<core::TextEncoding> encoding,
                               bool allow_format_loss, bool export_copy,
                               OpenMode mode) {
+  if (application_settings_.keep_backup_copy && QFileInfo::exists(path)) {
+    const auto backup = path + QStringLiteral("_BAK");
+    bool protected_path = find_document_path(backup) >= 0;
+    for (const auto& other : {application_settings_path_, recent_files_path_, project_path_, query_history_path_,
+                             session_path_, edict_registry_path_, kanji_color_settings_path_, kanji_color_list_path_, kanji_info_path_})
+      if (!other.isEmpty() && document_path_identity(other) == document_path_identity(backup)) protected_path = true;
+    if (protected_path) {
+      if (mode == OpenMode::kInteractive)
+        QMessageBox::warning(this, tr("Backup destination is in use"),
+                             tr("The backup would overwrite an open document or application data file: %1").arg(backup));
+      return false;
+    }
+  }
   const int existing = find_document_path(path);
   if (existing >= 0 && documents_[existing].get() != document_) {
     if (mode == OpenMode::kInteractive)
@@ -5491,12 +5504,12 @@ bool MainWindow::save_as_path(const QString& path,
           document_->jwp_document_->document() == *document_->saved_jwp_document_;
       if (document_->jwp_document_) {
         write_jwp_file(path, unedited_pristine ? *document_->pristine_jwp_document_
-                                             : document_->jwp_document_->document());
+                                             : document_->jwp_document_->document(), application_settings_.keep_backup_copy);
       } else {
         const auto model = core::import_jwp_plain_text(
             from_qstring(document_plain_text(*document_->editor_->document())), document_->jwp_code_page_);
         if (!export_copy) saved_document = model.document();
-        write_jwp_file(path, model.document());
+        write_jwp_file(path, model.document(), application_settings_.keep_backup_copy);
       }
     } else {
       auto report = document_->jwp_document_ ? core::export_jwp_plain_text(*document_->jwp_document_, document_->jwp_code_page_)
@@ -5518,7 +5531,7 @@ bool MainWindow::save_as_path(const QString& path,
         bom = true;
       }
       text_file = core::TextFile{std::move(report.text), *encoding, bom};
-      write_text_file(path, *text_file);
+      write_text_file(path, *text_file, application_settings_.keep_backup_copy);
     }
     if (!export_copy) {
       if (document_->pristine_jwp_document_ && document_->jwp_document_ &&

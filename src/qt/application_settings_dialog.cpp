@@ -68,6 +68,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   add_boolean("settingsSaveRecent", tr("Remember recent files on disk"), &ApplicationSettings::save_recent_files);
   add_boolean("settingsStartupDictionary", tr("Open dictionary on startup without an explicit document"), &ApplicationSettings::startup_dictionary);
   add_boolean("settingsReloadFiles", tr("Restore named files from the previous session before opening command-line files"), &ApplicationSettings::reload_previous_files);
+  add_boolean("settingsKeepBackup", tr("Keep the previous disk version as filename_BAK when saving"), &ApplicationSettings::keep_backup_copy);
   add_boolean("settingsRestoreWindow", tr("Restore main window position, size and maximized state on startup"), &ApplicationSettings::restore_window);
   add_boolean("settingsCloseButtonFile", tr("Window close button closes the current document"), &ApplicationSettings::close_button_closes_file);
   add_boolean("settingsConfirmLastFileExit", tr("Ask whether to exit after closing the last document"), &ApplicationSettings::confirm_last_file_exit);

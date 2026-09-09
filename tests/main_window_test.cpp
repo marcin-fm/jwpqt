@@ -1208,6 +1208,51 @@ void test_local_file_lifecycle_actions(const QString& directory) {
           "Close did not return to an unnamed document");
 }
 
+void test_backup_policy(const QString& directory) {
+  using namespace jwpqt;
+  using namespace jwpqt::qt;
+  auto preferences = read_application_settings("backup_files=true\nSaveSettingsOnExit=false\n");
+  require(preferences.keep_backup_copy && !ApplicationSettings{}.keep_backup_copy &&
+      read_application_settings(write_application_settings(preferences)).keep_backup_copy, "Backup policy defaults/aliases lost");
+  bool invalid = false;
+  try { (void)read_application_settings("KeepBackupCopyWhenSaving=bad\nbackup_files=true\n"); }
+  catch (const std::exception&) { invalid = true; }
+  require(invalid, "Earlier invalid backup preference accepted");
+  ApplicationSettingsDialog options(preferences);
+  options.findChild<QCheckBox*>("settingsKeepBackup")->click(); options.reject();
+  require(preferences.keep_backup_copy, "Cancel changed backup preference");
+  options.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+  require(!options.settings().keep_backup_copy, "Backup checkbox not accepted");
+  const auto path = directory + "/policy-backup.txt";
+  const auto backup = path + "_BAK";
+  write_text_file(path, {U"before", core::TextEncoding::kUtf8, false});
+  MainWindow window;
+  require(window.apply_application_settings(preferences) && window.open_path(path, core::TextEncoding::kUtf8), "Backup setup failed");
+  window.active_editor()->moveCursor(QTextCursor::End);
+  window.active_editor()->insertPlainText(" after");
+  require(window.save_as_path(path, core::TextEncoding::kUtf8) &&
+      read_text_file(backup, core::TextEncoding::kUtf8).text == U"before" && !window.document_modified(),
+      "Document save did not use backup policy");
+  require(window.open_path(backup, core::TextEncoding::kUtf8, OpenMode::kNonInteractive, true), "Backup tab failed");
+  window.activate_document(0); window.active_editor()->insertPlainText("unsaved");
+  const auto text = window.active_editor()->toPlainText();
+  require(!window.save_as_path(path, core::TextEncoding::kUtf8) && window.document_modified() &&
+      window.active_editor()->toPlainText() == text && read_text_file(backup, core::TextEncoding::kUtf8).text == U"before" &&
+      read_text_file(path, core::TextEncoding::kUtf8).text == U"before after", "Open backup collision changed data");
+  require(window.close_document(1, OpenMode::kNonInteractive) && !window.load_previous_session(backup, false) &&
+      !window.save_as_path(path, core::TextEncoding::kUtf8) &&
+      read_text_file(backup, core::TextEncoding::kUtf8).text == U"before" && window.document_modified(),
+      "Implicit backup overwrote configured session data");
+  const auto config = directory + "/backup-policy.cfg";
+  require(window.save_application_settings(config), "Backup settings save failed");
+  MainWindow restored;
+  require(restored.load_application_settings(config) && restored.application_settings().keep_backup_copy &&
+      restored.save_project_path(directory + "/backup-policy.jpr", false), "Backup preference restart failed");
+  MainWindow project;
+  require(project.open_project_path(directory + "/backup-policy.jpr") && project.application_settings().keep_backup_copy,
+      "Project lost backup policy");
+}
+
 void test_startup_close_policies(const QString& directory) {
   using namespace jwpqt;
   QApplication::setQuitOnLastWindowClosed(false);
@@ -5507,6 +5552,7 @@ int main(int argc, char* argv[]) {
     test_jfc_file_dialogs(directory.path());
     test_local_file_lifecycle_actions(directory.path());
     test_startup_close_policies(directory.path());
+    test_backup_policy(directory.path());
     test_leaving_utf8_drops_bom(directory.path());
     test_detected_open(directory.path());
     test_detected_bom_is_preserved(directory.path());
