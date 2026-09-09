@@ -3,12 +3,14 @@
 #include "wnn_user_dictionary_dialog.h"
 #include "auxiliary_find.h"
 #include "japanese_fonts.h"
+#include "kana_input_field.h"
 
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
 #include <utility>
 
+#include <QAction>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFileDialog>
@@ -341,6 +343,14 @@ bool WnnUserDictionaryDialog::insert_selected() {
   }
 }
 
+void WnnUserDictionaryDialog::set_overwrite_action(QAction* action) {
+  if (action && !action->isCheckable()) {
+    throw std::invalid_argument(
+        "User dictionary overwrite action must be checkable");
+  }
+  overwrite_action_ = action;
+}
+
 std::optional<core::WnnUserEntry>
 WnnUserDictionaryDialog::prompt_for_entry(
     const std::optional<core::WnnUserEntry>& initial) {
@@ -349,12 +359,12 @@ WnnUserDictionaryDialog::prompt_for_entry(
                                 : tr("Add User Conversion"));
   auto* layout = new QVBoxLayout(&dialog);
   auto* form = new QFormLayout();
-  auto* reading = new QLineEdit(&dialog);
-  reading->setObjectName(QStringLiteral("wnnUserReading"));
-  assign_japanese_font(*reading, JapaneseFontRole::kEdit);
-  auto* candidates = new QLineEdit(&dialog);
-  candidates->setObjectName(QStringLiteral("wnnUserCandidates"));
-  assign_japanese_font(*candidates, JapaneseFontRole::kEdit);
+  auto* reading =
+      new KanaInputField(QStringLiteral("wnnUserReading"), &dialog);
+  reading->set_overwrite_action(overwrite_action_);
+  auto* candidates =
+      new KanaInputField(QStringLiteral("wnnUserCandidates"), &dialog);
+  candidates->set_overwrite_action(overwrite_action_);
   auto* inflection = new QComboBox(&dialog);
   inflection->setObjectName(QStringLiteral("wnnUserInflection"));
   inflection->addItem(tr("Uninflected"),
@@ -366,12 +376,12 @@ WnnUserDictionaryDialog::prompt_for_entry(
   inflection->addItem(tr("i-adjective"),
                       static_cast<int>(core::WnnUserInflection::kIAdjective));
   if (initial.has_value()) {
-    reading->setText(display_text(initial->reading));
+    reading->edit()->setText(display_text(initial->reading));
     QStringList values;
     for (const core::JwpText& candidate : initial->candidates) {
       values.push_back(display_text(candidate));
     }
-    candidates->setText(values.join(QStringLiteral(" / ")));
+    candidates->edit()->setText(values.join(QStringLiteral(" / ")));
     inflection->setCurrentIndex(
         inflection->findData(static_cast<int>(inflection_for(*initial))));
   }
@@ -387,9 +397,11 @@ WnnUserDictionaryDialog::prompt_for_entry(
   if (dialog.exec() != QDialog::Accepted) {
     return std::nullopt;
   }
+  reading->finish_input();
+  candidates->finish_input();
   return entry_from_fields(
-      core::encode_jwp_text(from_qstring(reading->text().trimmed())),
-      parse_candidates(candidates->text()),
+      core::encode_jwp_text(from_qstring(reading->edit()->text().trimmed())),
+      parse_candidates(candidates->edit()->text()),
       static_cast<core::WnnUserInflection>(
           inflection->currentData().toInt()),
       initial);

@@ -4474,6 +4474,7 @@ void MainWindow::show_wnn_user_dictionary_dialog() {
         }
       },
       this);
+  dialog->set_overwrite_action(overwrite_action_);
   dialog->setObjectName(QStringLiteral("userDictionaryDialog"));
   dialog->setAttribute(Qt::WA_DeleteOnClose);
   connect(dialog, &QObject::destroyed, this,
@@ -4511,6 +4512,7 @@ void MainWindow::show_edict_user_dictionary_dialog() {
         }
       },
       this);
+  dialog->set_overwrite_action(overwrite_action_);
   dialog->setObjectName(QStringLiteral("edictUserDictionaryDialog"));
   dialog->setAttribute(Qt::WA_DeleteOnClose);
   connect(dialog, &QObject::destroyed, this,

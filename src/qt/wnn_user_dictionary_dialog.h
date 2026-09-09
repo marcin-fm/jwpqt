@@ -8,9 +8,11 @@
 #include <vector>
 
 #include <QDialog>
+#include <QPointer>
 
 #include "jwpqt/core/wnn_user_dictionary.h"
 
+class QAction;
 class QLabel;
 class QListWidget;
 class QPushButton;
@@ -36,6 +38,7 @@ class WnnUserDictionaryDialog : public QDialog {
   void append_dictionary(const core::WnnUserDictionary& dictionary);
   bool save_changes();
   bool insert_selected();
+  void set_overwrite_action(QAction* action);
 
  protected:
   virtual std::optional<core::WnnUserEntry> prompt_for_entry(
@@ -56,6 +59,7 @@ class WnnUserDictionaryDialog : public QDialog {
   core::WnnUserDictionaryEditor editor_model_;
   SaveHandler save_handler_;
   InsertHandler insert_handler_;
+  QPointer<QAction> overwrite_action_;
   QListWidget* entries_list_;
   QLabel* status_label_;
   QPushButton* edit_button_;

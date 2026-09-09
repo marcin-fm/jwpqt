@@ -8,9 +8,11 @@
 #include <vector>
 
 #include <QDialog>
+#include <QPointer>
 
 #include "jwpqt/core/edict_user_dictionary.h"
 
+class QAction;
 class QLabel;
 class QListWidget;
 class QPushButton;
@@ -37,6 +39,7 @@ class EdictUserDictionaryDialog : public QDialog {
   void append_dictionary(const core::EdictUserDictionary& dictionary);
   bool save_changes();
   bool insert_selected();
+  void set_overwrite_action(QAction* action);
 
  protected:
   virtual std::optional<core::EdictUserEntry> prompt_for_entry(
@@ -57,6 +60,7 @@ class EdictUserDictionaryDialog : public QDialog {
 
   core::EdictUserDictionaryEditor editor_model_;
   core::LegacyCodePage code_page_;
+  QPointer<QAction> overwrite_action_;
   SaveHandler save_handler_;
   InsertHandler insert_handler_;
   QListWidget* entries_list_;

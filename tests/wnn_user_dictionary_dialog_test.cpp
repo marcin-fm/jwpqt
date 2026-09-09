@@ -10,11 +10,17 @@
 #include <vector>
 
 #include <QApplication>
+#include <QAction>
 #include <QDialogButtonBox>
+#include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QPushButton>
 #include <QTimer>
+#include <QToolButton>
+
+#include "jwpqt/core/jwp_text_codec.h"
 
 namespace {
 
@@ -42,6 +48,13 @@ void require(bool condition, const char* message) {
 
 WnnUserEntry entry(JwpText reading, JwpText candidate) {
   return WnnUserEntry{std::move(reading), '*', {std::move(candidate)}};
+}
+
+void type_key(QLineEdit& edit, int key, const QString& text) {
+  QKeyEvent press(QEvent::KeyPress, key, Qt::NoModifier, text);
+  QApplication::sendEvent(&edit, &press);
+  QKeyEvent release(QEvent::KeyRelease, key, Qt::NoModifier, text);
+  QApplication::sendEvent(&edit, &release);
 }
 
 void test_editing_and_save() {
@@ -134,6 +147,83 @@ void test_imported_inflection_round_trip() {
           "Confirming an imported inflected entry changed its wire semantics");
 }
 
+void test_japanese_entry_fields() {
+  QAction overwrite(nullptr);
+  overwrite.setCheckable(true);
+  overwrite.setChecked(true);
+  const WnnUserEntry initial = entry(
+      jwpqt::core::encode_jwp_text(U"かき"),
+      jwpqt::core::encode_jwp_text(U"候補"));
+  PromptTestDialog dialog(WnnUserDictionary::from_entries({initial}),
+                          [](WnnUserDictionary) { return true; });
+  dialog.set_overwrite_action(&overwrite);
+  bool interacted = false;
+  QTimer::singleShot(0, [&] {
+    QWidget* modal = QApplication::activeModalWidget();
+    auto* reading = modal ? modal->findChild<QLineEdit*>(
+                                QStringLiteral("wnnUserReading"))
+                          : nullptr;
+    auto* candidates = modal ? modal->findChild<QLineEdit*>(
+                                   QStringLiteral("wnnUserCandidates"))
+                             : nullptr;
+    auto* mode = modal ? modal->findChild<QToolButton*>(
+                             QStringLiteral("wnnUserReadingMode"))
+                       : nullptr;
+    auto* buttons = modal ? modal->findChild<QDialogButtonBox*>() : nullptr;
+    if (!reading || !candidates || !mode || !buttons) {
+      if (modal) modal->close();
+      return;
+    }
+    interacted = mode->text() == QStringLiteral("K") &&
+                 reading->toolTip().contains(QStringLiteral("Overwrite"));
+    reading->setCursorPosition(0);
+    type_key(*reading, Qt::Key_N, QStringLiteral("n"));
+    type_key(*reading, Qt::Key_A, QStringLiteral("a"));
+    candidates->setCursorPosition(candidates->text().size());
+    type_key(*candidates, Qt::Key_N, QStringLiteral("n"));
+    buttons->button(QDialogButtonBox::Ok)->click();
+  });
+  const std::optional<WnnUserEntry> edited = dialog.prompt(initial);
+  require(interacted && edited.has_value() &&
+              edited->reading == jwpqt::core::encode_jwp_text(U"なき") &&
+              edited->candidates == std::vector<JwpText>{
+                                        jwpqt::core::encode_jwp_text(U"候補ん")},
+          "User conversion fields did not share Japanese overwrite and pending input");
+
+  QAction invalid(nullptr);
+  bool rejected = false;
+  try {
+    dialog.set_overwrite_action(&invalid);
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
+  require(rejected, "User conversion dialog accepted a non-checkable overwrite action");
+
+  PromptTestDialog expired(WnnUserDictionary::from_entries({initial}),
+                           [](WnnUserDictionary) { return true; });
+  auto* transient = new QAction(nullptr);
+  transient->setCheckable(true);
+  transient->setChecked(true);
+  expired.set_overwrite_action(transient);
+  delete transient;
+  bool fell_back = false;
+  QTimer::singleShot(0, [&] {
+    QWidget* modal = QApplication::activeModalWidget();
+    auto* reading = modal ? modal->findChild<QLineEdit*>(
+                                QStringLiteral("wnnUserReading"))
+                          : nullptr;
+    auto* buttons = modal ? modal->findChild<QDialogButtonBox*>() : nullptr;
+    if (!reading || !buttons) {
+      if (modal) modal->close();
+      return;
+    }
+    fell_back = reading->toolTip().contains(QStringLiteral("Insert mode"));
+    buttons->button(QDialogButtonBox::Cancel)->click();
+  });
+  require(!expired.prompt(initial).has_value() && fell_back,
+          "Expired overwrite action did not fall back safely or Cancel mutated input");
+}
+
 void test_insert_exception_is_contained() {
   const WnnUserEntry first = entry({0x2422}, {0x3021});
   WnnUserDictionaryDialog dialog(
@@ -162,6 +252,7 @@ int main(int argc, char** argv) {
     test_import_insert_and_failed_save();
     test_invalid_edit_is_atomic();
     test_imported_inflection_round_trip();
+    test_japanese_entry_fields();
     test_insert_exception_is_contained();
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {

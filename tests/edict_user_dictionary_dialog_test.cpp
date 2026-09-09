@@ -10,11 +10,17 @@
 #include <vector>
 
 #include <QApplication>
+#include <QAction>
 #include <QDialogButtonBox>
+#include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QPushButton>
 #include <QTimer>
+#include <QToolButton>
+
+#include "jwpqt/core/jwp_text_codec.h"
 
 namespace {
 
@@ -44,6 +50,13 @@ EdictUserEntry entry(jwpqt::core::JwpText reading, std::u32string meaning,
                      jwpqt::core::JwpText headword = {}) {
   return jwpqt::core::make_edict_user_entry(
       std::move(reading), std::move(headword), std::move(meaning));
+}
+
+void type_key(QLineEdit& edit, int key, const QString& text) {
+  QKeyEvent press(QEvent::KeyPress, key, Qt::NoModifier, text);
+  QApplication::sendEvent(&edit, &press);
+  QKeyEvent release(QEvent::KeyRelease, key, Qt::NoModifier, text);
+  QApplication::sendEvent(&edit, &release);
 }
 
 void test_editing_and_save() {
@@ -144,6 +157,58 @@ void test_imported_empty_meaning_round_trip() {
           "Confirming an imported empty meaning changed its wire semantics");
 }
 
+void test_japanese_entry_fields() {
+  QAction overwrite(nullptr);
+  overwrite.setCheckable(true);
+  overwrite.setChecked(true);
+  const EdictUserEntry initial = entry(
+      jwpqt::core::encode_jwp_text(U"かき"), U"meaning",
+      jwpqt::core::encode_jwp_text(U"日本"));
+  PromptTestDialog dialog(EdictUserDictionary::from_entries({initial}),
+                          LegacyCodePage::k1252,
+                          [](EdictUserDictionary) { return true; });
+  dialog.set_overwrite_action(&overwrite);
+  bool interacted = false;
+  QTimer::singleShot(0, [&] {
+    QWidget* modal = QApplication::activeModalWidget();
+    auto* headword = modal ? modal->findChild<QLineEdit*>(
+                                 QStringLiteral("edictUserHeadword"))
+                           : nullptr;
+    auto* reading = modal ? modal->findChild<QLineEdit*>(
+                                QStringLiteral("edictUserReading"))
+                          : nullptr;
+    auto* meaning = modal ? modal->findChild<QLineEdit*>(
+                                QStringLiteral("edictUserMeaning"))
+                          : nullptr;
+    auto* meaning_mode = modal ? modal->findChild<QToolButton*>(
+                                     QStringLiteral("edictUserMeaningMode"))
+                               : nullptr;
+    auto* buttons = modal ? modal->findChild<QDialogButtonBox*>() : nullptr;
+    if (!headword || !reading || !meaning || !meaning_mode || !buttons) {
+      if (modal) modal->close();
+      return;
+    }
+    interacted = reading->toolTip().contains(QStringLiteral("Overwrite"));
+    reading->setCursorPosition(0);
+    type_key(*reading, Qt::Key_N, QStringLiteral("n"));
+    type_key(*reading, Qt::Key_A, QStringLiteral("a"));
+    headword->setCursorPosition(headword->text().size());
+    type_key(*headword, Qt::Key_N, QStringLiteral("n"));
+    meaning->clear();
+    meaning_mode->click();
+    type_key(*meaning, Qt::Key_N, QStringLiteral("n"));
+    type_key(*meaning, Qt::Key_E, QStringLiteral("e"));
+    type_key(*meaning, Qt::Key_W, QStringLiteral("w"));
+    buttons->button(QDialogButtonBox::Ok)->click();
+  });
+  const std::optional<EdictUserEntry> edited = dialog.prompt(initial);
+  require(interacted && edited.has_value() &&
+              edited->reading == jwpqt::core::encode_jwp_text(U"なき") &&
+              edited->headword == jwpqt::core::encode_jwp_text(U"日本ん") &&
+              edited->meaning == U"new",
+          "EDICT entry fields did not preserve Japanese and ASCII input modes");
+}
+
 void test_callback_exceptions_are_contained() {
   const EdictUserEntry first = entry({0x2422}, U"first");
   EdictUserDictionaryDialog dialog(
@@ -172,6 +237,7 @@ int main(int argc, char** argv) {
     test_import_insert_and_failed_save();
     test_invalid_edit_is_atomic();
     test_imported_empty_meaning_round_trip();
+    test_japanese_entry_fields();
     test_callback_exceptions_are_contained();
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {

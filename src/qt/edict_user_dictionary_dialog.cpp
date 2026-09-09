@@ -3,12 +3,14 @@
 #include "edict_user_dictionary_dialog.h"
 #include "auxiliary_find.h"
 #include "japanese_fonts.h"
+#include "kana_input_field.h"
 
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
 #include <utility>
 
+#include <QAction>
 #include <QDialogButtonBox>
 #include <QFileDialog>
 #include <QFormLayout>
@@ -299,6 +301,14 @@ bool EdictUserDictionaryDialog::insert_selected() {
   }
 }
 
+void EdictUserDictionaryDialog::set_overwrite_action(QAction* action) {
+  if (action && !action->isCheckable()) {
+    throw std::invalid_argument(
+        "User dictionary overwrite action must be checkable");
+  }
+  overwrite_action_ = action;
+}
+
 std::optional<core::EdictUserEntry>
 EdictUserDictionaryDialog::prompt_for_entry(
     const std::optional<core::EdictUserEntry>& initial) {
@@ -307,19 +317,19 @@ EdictUserDictionaryDialog::prompt_for_entry(
                                 : tr("Add User Dictionary Entry"));
   auto* layout = new QVBoxLayout(&dialog);
   auto* form = new QFormLayout();
-  auto* headword = new QLineEdit(&dialog);
-  headword->setObjectName(QStringLiteral("edictUserHeadword"));
-  assign_japanese_font(*headword, JapaneseFontRole::kEdit);
-  auto* reading = new QLineEdit(&dialog);
-  reading->setObjectName(QStringLiteral("edictUserReading"));
-  assign_japanese_font(*reading, JapaneseFontRole::kEdit);
-  auto* meaning = new QLineEdit(&dialog);
-  meaning->setObjectName(QStringLiteral("edictUserMeaning"));
-  assign_japanese_font(*meaning, JapaneseFontRole::kEdit);
+  auto* headword =
+      new KanaInputField(QStringLiteral("edictUserHeadword"), &dialog);
+  headword->set_overwrite_action(overwrite_action_);
+  auto* reading =
+      new KanaInputField(QStringLiteral("edictUserReading"), &dialog);
+  reading->set_overwrite_action(overwrite_action_);
+  auto* meaning =
+      new KanaInputField(QStringLiteral("edictUserMeaning"), &dialog);
+  meaning->set_overwrite_action(overwrite_action_);
   if (initial.has_value()) {
-    headword->setText(display_jwp(initial->headword, code_page_));
-    reading->setText(display_jwp(initial->reading, code_page_));
-    meaning->setText(to_qstring(initial->meaning));
+    headword->edit()->setText(display_jwp(initial->headword, code_page_));
+    reading->edit()->setText(display_jwp(initial->reading, code_page_));
+    meaning->edit()->setText(to_qstring(initial->meaning));
   }
   form->addRow(tr("Headword (optional):"), headword);
   form->addRow(tr("Reading:"), reading);
@@ -333,11 +343,14 @@ EdictUserDictionaryDialog::prompt_for_entry(
   if (dialog.exec() != QDialog::Accepted) {
     return std::nullopt;
   }
+  headword->finish_input();
+  reading->finish_input();
+  meaning->finish_input();
 
   core::EdictUserEntry entry{
-      core::encode_jwp_text(from_qstring(headword->text()), code_page_),
-      core::encode_jwp_text(from_qstring(reading->text()), code_page_),
-      from_qstring(meaning->text())};
+      core::encode_jwp_text(from_qstring(headword->edit()->text()), code_page_),
+      core::encode_jwp_text(from_qstring(reading->edit()->text()), code_page_),
+      from_qstring(meaning->edit()->text())};
   if (initial.has_value() && entry == *initial) {
     return initial;
   }
