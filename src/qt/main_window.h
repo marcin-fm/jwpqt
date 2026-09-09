@@ -25,6 +25,7 @@
 #include "query_history_io.h"
 #include "recent_files.h"
 #include "jwpqt/core/jwp_conversion.h"
+#include "jwpqt/core/jwp_clipboard.h"
 #include "jwpqt/core/jwp_document_history.h"
 #include "jwpqt/core/jwp_document_model.h"
 #include "jwpqt/core/jwp_search.h"
@@ -49,6 +50,7 @@ class QEvent;
 class QLabel;
 class QListWidget;
 class QMenu;
+class QMimeData;
 class QPrinter;
 class QTabWidget;
 class QTextCursor;
@@ -345,6 +347,10 @@ class MainWindow : public QMainWindow {
   void new_document();
   bool open_workspace_path(const QString& path, const ProjectOpenOptions& options, OpenMode mode, bool session);
   void connect_editor(JwpEditor* editor);
+  void export_clipboard_data(JwpEditor* editor, QMimeData& mime,
+                             const QTextCursor& cursor);
+  bool import_clipboard_data(JwpEditor* editor, const QMimeData& mime);
+  bool paste_jwp_clipboard(const core::JwpClipboardFragment& fragment);
   void refresh_document_view();
   bool finish_document_input();
   enum class DuplicateOpenResolution { kOpenAnother, kHandled, kCancelled };

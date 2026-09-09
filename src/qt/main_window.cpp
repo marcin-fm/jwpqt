@@ -55,6 +55,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QMimeData>
 #include <QMouseEvent>
 #include <QPalette>
 #include <QPageSetupDialog>
@@ -86,6 +87,7 @@
 #include <QVBoxLayout>
 
 #include "application_settings_dialog.h"
+#include "clipboard_mime.h"
 #include "edict_lookup_dialog.h"
 #include "edict_resource_search.h"
 #include "edict_results_window.h"
@@ -109,6 +111,7 @@
 #include "jwpqt/core/jis_table.h"
 #include "jwpqt/core/jis_unicode.h"
 #include "jwpqt/core/jwp_configuration.h"
+#include "jwpqt/core/jwp_clipboard.h"
 #include "jwpqt/core/jwp_plain_text.h"
 #include "jwpqt/core/jwp_text_codec.h"
 #include "jwpqt/core/plain_text_change.h"
@@ -523,6 +526,13 @@ void MainWindow::connect_editor(JwpEditor* editor) {
   // Shared actions route through the active state, never a retired editor.
   editor->setContextMenuPolicy(Qt::ActionsContextMenu);
   editor->addActions(editor_actions_);
+  editor->set_clipboard_handlers(
+      [this, editor](QMimeData& mime, const QTextCursor& cursor) {
+        export_clipboard_data(editor, mime, cursor);
+      },
+      [this, editor](const QMimeData& mime) {
+        return import_clipboard_data(editor, mime);
+      });
   connect(editor->document(), &QTextDocument::contentsChange, this,
           [this, editor](int position, int chars_removed, int chars_added) {
             if (document_->editor_ == editor)
@@ -579,6 +589,177 @@ void MainWindow::connect_editor(JwpEditor* editor) {
     cut_action_->setEnabled(available);
     copy_action_->setEnabled(available);
   });
+}
+
+void MainWindow::export_clipboard_data(JwpEditor* editor, QMimeData& mime,
+                                       const QTextCursor& cursor) {
+  if (editor != document_->editor_ || !cursor.hasSelection()) return;
+  const QString text = document_plain_text(*editor->document());
+  if (document_->jwp_document_.has_value()) {
+    const core::JwpPosition begin = core::jwp_plain_text_position(
+        *document_->jwp_document_,
+        utf32_offset_for_utf16(text, cursor.selectionStart()));
+    const core::JwpPosition end = core::jwp_plain_text_position(
+        *document_->jwp_document_,
+        utf32_offset_for_utf16(text, cursor.selectionEnd()));
+    const core::JwpClipboardFragment fragment{
+        core::copy_jwp_fragment(*document_->jwp_document_, {begin, end}),
+        document_->jwp_code_page_};
+    const std::string bytes = core::encode_jwp_clipboard_fragment(fragment);
+    mime.setData(QString::fromLatin1(kJwpClipboardMime),
+                 QByteArray(bytes.data(), static_cast<qsizetype>(bytes.size())));
+  }
+  QString selected = cursor.selectedText();
+  selected.replace(QChar::ParagraphSeparator, QLatin1Char('\n'));
+  selected.replace(QChar::LineSeparator, QLatin1Char('\n'));
+  add_clipboard_text_formats(mime, selected,
+                             application_settings_.clipboard_export,
+                             static_cast<int>(document_->jwp_code_page_),
+                             application_settings_.omit_clipboard_unicode);
+}
+
+bool MainWindow::import_clipboard_data(JwpEditor* editor,
+                                       const QMimeData& mime) {
+  if (editor != document_->editor_ || editor->isReadOnly()) return true;
+  const QPointer<MainWindow> self(this);
+  const QPointer<JwpEditor> target(editor);
+  if (document_->jwp_document_.has_value() &&
+      mime.hasFormat(QString::fromLatin1(kJwpClipboardMime))) {
+    try {
+      const QByteArray bytes = mime.data(QString::fromLatin1(kJwpClipboardMime));
+      const core::JwpClipboardFragment fragment =
+          core::decode_jwp_clipboard_fragment(std::string_view(
+              bytes.constData(), static_cast<std::size_t>(bytes.size())));
+      if (!finish_document_input()) return true;
+      if (!self || !target || target != document_->editor_) return true;
+      return paste_jwp_clipboard(fragment);
+    } catch (const std::exception& error) {
+      statusBar()->showMessage(
+          tr("Native clipboard fragment ignored: %1")
+              .arg(QString::fromUtf8(error.what())), 5000);
+    }
+  }
+
+  try {
+    const auto text = read_clipboard_text(
+        mime, application_settings_.clipboard_import,
+        static_cast<int>(document_->jwp_code_page_));
+    if (!text.has_value()) return false;
+    if (!finish_document_input()) return true;
+    if (!self || !target || target != document_->editor_) return true;
+    QTextCursor cursor = editor->textCursor();
+    cursor.insertText(text->text);
+    if (!self || !target || target != document_->editor_) return true;
+    target->setTextCursor(cursor);
+    return true;
+  } catch (const std::exception& error) {
+    statusBar()->showMessage(
+        tr("Could not paste clipboard text: %1")
+            .arg(QString::fromUtf8(error.what())), 5000);
+    return true;
+  }
+}
+
+bool MainWindow::paste_jwp_clipboard(
+    const core::JwpClipboardFragment& fragment) {
+  const QPointer<MainWindow> self(this);
+  DocumentState* const state = document_;
+  const QPointer<JwpEditor> editor(state->editor_);
+  try {
+    const QString original_text = document_plain_text(*editor->document());
+    const QTextCursor original_cursor = editor->textCursor();
+    const int original_position = original_cursor.position();
+    const int original_anchor = original_cursor.anchor();
+    const bool original_modified = editor->document()->isModified();
+    const core::JwpPosition caret = core::jwp_plain_text_position(
+        *state->jwp_document_,
+        utf32_offset_for_utf16(original_text, original_cursor.position()));
+    const core::JwpPosition begin = core::jwp_plain_text_position(
+        *state->jwp_document_, utf32_offset_for_utf16(
+            original_text, original_cursor.selectionStart()));
+    const core::JwpPosition end = core::jwp_plain_text_position(
+        *state->jwp_document_, utf32_offset_for_utf16(
+            original_text, original_cursor.selectionEnd()));
+
+    core::JwpDocument converted = fragment.document;
+    if (fragment.code_page != state->jwp_code_page_) {
+      for (core::JwpParagraph& paragraph : converted.paragraphs) {
+        for (core::JisCode& token : paragraph.text) {
+          if ((token >> 8U) != 0 || token <= 0x7fU) continue;
+          const auto code_point = core::legacy_byte_to_unicode(
+              static_cast<std::uint8_t>(token), fragment.code_page);
+          const auto replacement = code_point.has_value()
+              ? core::unicode_to_legacy_byte(*code_point,
+                                             state->jwp_code_page_)
+              : std::nullopt;
+          if (!replacement.has_value())
+            throw core::JwpClipboardError(
+                "clipboard code-page character is not representable in the destination");
+          token = *replacement;
+        }
+      }
+    }
+
+    core::JwpDocumentModel candidate = *state->jwp_document_;
+    core::JwpDocumentHistory history = state->jwp_history_;
+    history.begin(candidate, caret);
+    const core::JwpPosition following =
+        core::paste_jwp_fragment(candidate, {begin, end}, converted);
+    if (!history.commit(candidate, following)) return true;
+    const std::u32string rendered =
+        core::decode_jwp_plain_text(candidate, state->jwp_code_page_);
+    const int qt_caret = utf16_offset_for_utf32(
+        rendered, core::jwp_plain_text_offset(candidate, following));
+
+    state->updating_editor_ = true;
+    try {
+      editor->setPlainText(to_qstring(rendered));
+      if (!self || !editor) return true;
+      if (document_ != state || state->editor_ != editor) return true;
+      apply_jwp_presentation(candidate.document(), state->jwp_code_page_);
+      if (!self || !editor) return true;
+      if (document_ != state || state->editor_ != editor) return true;
+      QTextCursor cursor(editor->document());
+      cursor.setPosition(qt_caret);
+      editor->setTextCursor(cursor);
+      if (!self || !editor) return true;
+      if (document_ != state || state->editor_ != editor) return true;
+    } catch (...) {
+      if (!self || !editor || document_ != state ||
+          state->editor_ != editor)
+        return true;
+      editor->setPlainText(original_text);
+      apply_jwp_presentation(state->jwp_document_->document(),
+                             state->jwp_code_page_);
+      QTextCursor restored(editor->document());
+      restored.setPosition(original_anchor);
+      restored.setPosition(original_position, QTextCursor::KeepAnchor);
+      editor->setTextCursor(restored);
+      editor->document()->setModified(original_modified);
+      state->updating_editor_ = false;
+      throw;
+    }
+    state->updating_editor_ = false;
+    state->jwp_document_ = std::move(candidate);
+    state->jwp_history_ = std::move(history);
+    state->jwp_caret_ = following;
+    state->expected_jwp_caret_.reset();
+    state->rendered_jwp_text_ = rendered;
+    editor->document()->setModified(
+        !state->saved_jwp_document_.has_value() ||
+        state->jwp_document_->document() != *state->saved_jwp_document_);
+    update_undo_actions();
+    update_title();
+    return true;
+  } catch (const std::exception& error) {
+    if (!self || !editor || document_ != state || state->editor_ != editor)
+      return true;
+    state->updating_editor_ = false;
+    statusBar()->showMessage(
+        tr("Could not paste native clipboard fragment: %1")
+            .arg(QString::fromUtf8(error.what())), 5000);
+    return true;
+  }
 }
 
 JwpEditor* MainWindow::active_editor() const noexcept { return document_->editor_; }

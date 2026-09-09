@@ -151,6 +151,45 @@ void test_duplicate_open_settings() {
   rejects([&] { (void)write_application_settings(invalid); });
 }
 
+void test_clipboard_settings() {
+  using namespace jwpqt::qt;
+  const auto defaults = read_application_settings("");
+  require(defaults.clipboard_export == ClipboardTextFormat::kShiftJis &&
+              defaults.clipboard_import == ClipboardTextFormat::kAutoDetect &&
+              !defaults.omit_clipboard_unicode,
+          "Clipboard protocol defaults differ from the source");
+  for (int value = 6; value <= 13; ++value) {
+    const auto format = static_cast<ClipboardTextFormat>(value);
+    auto settings = read_application_settings(
+        "clip_write=6\nClipboard_Format_Export=" + std::to_string(value) +
+        "\nclip_read=1\nClipboard_Format_Import=" + std::to_string(value) +
+        "\nno_UNICODETEXT=true");
+    const auto encoded = write_application_settings(settings);
+    const auto restored = read_application_settings(encoded);
+    require(settings.clipboard_export == format &&
+                settings.clipboard_import == format &&
+                settings.omit_clipboard_unicode &&
+                restored.clipboard_export == format &&
+                restored.clipboard_import == format &&
+                restored.omit_clipboard_unicode &&
+                encoded.find("clip_write=") == std::string::npos &&
+                encoded.find("clip_read=") == std::string::npos &&
+                write_application_settings(restored) == encoded,
+            "Clipboard protocol setting did not canonicalize and round-trip");
+  }
+  for (const auto* invalid : {"Clipboard_Format_Export=1", "clip_write=2",
+                              "Clipboard_Format_Import=5", "clip_read=14",
+                              "no_UNICODETEXT=2",
+                              "Clipboard_Format_Export=bad\nclip_write=7"})
+    rejects([&] { (void)read_application_settings(invalid); });
+  auto invalid = defaults;
+  invalid.clipboard_export = ClipboardTextFormat::kAutoDetect;
+  rejects([&] { (void)write_application_settings(invalid); });
+  invalid = defaults;
+  invalid.clipboard_import = static_cast<ClipboardTextFormat>(2);
+  rejects([&] { (void)write_application_settings(invalid); });
+}
+
 void test_autoscroll_settings() {
   using namespace jwpqt::qt;
   const auto defaults = read_application_settings("");
@@ -460,6 +499,7 @@ int main(int argc, char** argv) {
     test_history_settings();
     test_conversion_choice_settings();
     test_duplicate_open_settings();
+    test_clipboard_settings();
     test_autoscroll_settings();
     test_metric_unit_settings();
     test_line_width_settings();

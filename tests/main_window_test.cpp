@@ -27,6 +27,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
+#include <QMimeData>
 #include <QMouseEvent>
 #include <QPageLayout>
 #include <QPushButton>
@@ -65,6 +66,7 @@
 #include "jis_table_dialog.h"
 #include "main_window.h"
 #include "application_settings_dialog.h"
+#include "clipboard_mime.h"
 #include <QTest>
 #include "text_bridge.h"
 #include "wnn_user_dictionary_dialog.h"
@@ -2149,6 +2151,129 @@ void test_jwp_clipboard_changes(const QString& directory) {
                 *window.current_jwp_document() == saved,
             "Clipboard normalization bypassed lossless JWP encoding checks");
   }
+
+  jwpqt::core::JwpDocument fragment_source;
+  fragment_source.paragraphs = {paragraph(U"AB"), paragraph(U"CD")};
+  fragment_source.paragraphs[0].text.insert(
+      fragment_source.paragraphs[0].text.begin() + 1, 0x80);
+  fragment_source.paragraphs[0].left_indent = 3;
+  fragment_source.paragraphs[1].left_indent = 4;
+  const QString source_path = directory + QStringLiteral("/clipboard-source.jwp");
+  jwpqt::qt::write_jwp_file(source_path, fragment_source);
+  jwpqt::qt::MainWindow window;
+  require(window.open_jwp_path(source_path, jwpqt::core::LegacyCodePage::k1251),
+          "Could not open private clipboard source");
+  auto* editor = window.active_editor();
+  QTextCursor cursor = editor->textCursor();
+  cursor.select(QTextCursor::Document);
+  editor->setTextCursor(cursor);
+  editor->copy();
+  const QMimeData* copied = QApplication::clipboard()->mimeData();
+  require(copied->hasFormat(QString::fromLatin1(jwpqt::qt::kJwpClipboardMime)) &&
+              copied->hasFormat(QString::fromLatin1(jwpqt::qt::kEncodedClipboardMime)) &&
+              copied->hasText(),
+          "Native copy did not publish private, encoded, and Unicode formats");
+
+  jwpqt::core::JwpDocument target;
+  target.paragraphs = {paragraph(U"xy")};
+  target.paragraphs[0].left_indent = 7;
+  const QString target_path = directory + QStringLiteral("/clipboard-target.jwp");
+  jwpqt::qt::write_jwp_file(target_path, target);
+  require(window.open_jwp_path(target_path, jwpqt::core::LegacyCodePage::k1251),
+          "Could not open private clipboard target");
+  editor = window.active_editor();
+  cursor = editor->textCursor();
+  cursor.setPosition(1);
+  editor->setTextCursor(cursor);
+  editor->paste();
+  const auto pasted = window.current_jwp_document();
+  require(editor->toPlainText() == QStringLiteral("xA\u0402B\nCDy") &&
+              pasted != nullptr && pasted->paragraphs.size() == 2 &&
+              pasted->paragraphs[0].left_indent == 7 &&
+              pasted->paragraphs[0].text.at(2) == 0x80 &&
+              pasted->paragraphs[1].left_indent == 4,
+          "Private paste did not preserve source paragraph format and destination prefix");
+  find_action(window, "undoAction")->trigger();
+  require(editor->toPlainText() == QStringLiteral("xy") &&
+              *window.current_jwp_document() == target,
+           "Private clipboard insertion was not one native undo operation");
+
+  const QString incompatible_path =
+      directory + QStringLiteral("/clipboard-incompatible.jwp");
+  jwpqt::qt::write_jwp_file(incompatible_path, target);
+  require(window.open_jwp_path(incompatible_path),
+          "Could not open incompatible clipboard target");
+  editor = window.active_editor();
+  editor->moveCursor(QTextCursor::End);
+  editor->paste();
+  require(editor->toPlainText() == QStringLiteral("xy") &&
+              *window.current_jwp_document() == target &&
+              !window.document_modified(),
+          "Unrepresentable private clipboard data changed the destination");
+
+  auto* fallback = new QMimeData;
+  fallback->setData(QString::fromLatin1(jwpqt::qt::kJwpClipboardMime),
+                    QByteArrayLiteral("malformed"));
+  fallback->setText(QStringLiteral("z"));
+  QApplication::clipboard()->setMimeData(fallback);
+  editor->moveCursor(QTextCursor::End);
+  editor->paste();
+  require(editor->toPlainText() == QStringLiteral("xyz"),
+          "Malformed private clipboard data did not fall back to Unicode text");
+  find_action(window, "undoAction")->trigger();
+
+  auto settings = window.application_settings();
+  settings.clipboard_export = jwpqt::qt::ClipboardTextFormat::kShiftJis;
+  settings.omit_clipboard_unicode = true;
+  require(window.apply_application_settings(settings),
+          "Could not apply clipboard export settings");
+  cursor = editor->textCursor();
+  cursor.select(QTextCursor::Document);
+  editor->setTextCursor(cursor);
+  editor->copy();
+  copied = QApplication::clipboard()->mimeData();
+  require(!copied->hasFormat(QStringLiteral("text/plain")) &&
+              !copied->hasFormat(QStringLiteral("text/html")) &&
+              copied->hasFormat(QString::fromLatin1(jwpqt::qt::kJwpClipboardMime)) &&
+              copied->hasFormat(QString::fromLatin1(jwpqt::qt::kEncodedClipboardMime)),
+          "Unicode omission did not retain only native and encoded text forms");
+
+  const QString unicode_path = directory + QStringLiteral("/clipboard-unicode.txt");
+  jwpqt::qt::write_text_file(
+      unicode_path, {U"unicode:", jwpqt::core::TextEncoding::kUtf8, false});
+  require(window.open_path(unicode_path, jwpqt::core::TextEncoding::kUtf8),
+          "Could not open Unicode clipboard target");
+  editor = window.active_editor();
+  editor->moveCursor(QTextCursor::End);
+  editor->paste();
+  require(editor->toPlainText() == QStringLiteral("unicode:xy"),
+          "Unicode document did not import the encoded clipboard fallback");
+  find_action(window, "undoAction")->trigger();
+  require(editor->toPlainText() == QStringLiteral("unicode:"),
+          "Encoded clipboard fallback was not one Unicode undo operation");
+
+  jwpqt::qt::ApplicationSettingsDialog clipboard_options(
+      window.application_settings());
+  auto* import_format =
+      clipboard_options.findChild<QComboBox*>(QStringLiteral("settingsClipboardImport"));
+  auto* export_format =
+      clipboard_options.findChild<QComboBox*>(QStringLiteral("settingsClipboardExport"));
+  auto* omit_unicode = clipboard_options.findChild<QCheckBox*>(
+      QStringLiteral("settingsOmitClipboardUnicode"));
+  require(import_format != nullptr && export_format != nullptr && omit_unicode != nullptr,
+          "Clipboard Options controls were not exposed");
+  import_format->setCurrentIndex(import_format->findData(
+      static_cast<int>(jwpqt::qt::ClipboardTextFormat::kOldJis)));
+  export_format->setCurrentIndex(export_format->findData(
+      static_cast<int>(jwpqt::qt::ClipboardTextFormat::kUtf7)));
+  omit_unicode->setChecked(false);
+  clipboard_options.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+  require(clipboard_options.settings().clipboard_import ==
+                  jwpqt::qt::ClipboardTextFormat::kOldJis &&
+              clipboard_options.settings().clipboard_export ==
+                  jwpqt::qt::ClipboardTextFormat::kUtf7 &&
+              !clipboard_options.settings().omit_clipboard_unicode,
+          "Clipboard Options did not retain selected source formats");
 }
 
 void test_application_settings_workflow(const QString& directory) {

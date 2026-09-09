@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <functional>
 #include <optional>
 #include <string_view>
 
@@ -27,6 +28,10 @@ QString document_plain_text(const QTextDocument& document);
 
 class JwpEditor final : public QTextEdit {
  public:
+  using ClipboardExportHandler =
+      std::function<void(QMimeData&, const QTextCursor&)>;
+  using ClipboardImportHandler = std::function<bool(const QMimeData&)>;
+
   static constexpr int kPageBreakProperty = QTextFormat::UserProperty + 1;
 
   explicit JwpEditor(QWidget* parent = nullptr);
@@ -60,9 +65,12 @@ class JwpEditor final : public QTextEdit {
   bool selection_autoscroll_enabled() const noexcept;
   int selection_autoscroll_interval() const noexcept;
   void scroll_view_line(int direction);
+  void set_clipboard_handlers(ClipboardExportHandler export_handler,
+                              ClipboardImportHandler import_handler);
 
  protected:
   QMimeData* createMimeDataFromSelection() const override;
+  void insertFromMimeData(const QMimeData* source) override;
   void inputMethodEvent(QInputMethodEvent* event) override;
   void keyPressEvent(QKeyEvent* event) override;
   void mouseMoveEvent(QMouseEvent* event) override;
@@ -89,6 +97,8 @@ class JwpEditor final : public QTextEdit {
   int selection_scroll_direction_ = 0;
   int selection_scroll_x_ = 0;
   std::optional<int> character_line_width_;
+  ClipboardExportHandler clipboard_export_handler_;
+  ClipboardImportHandler clipboard_import_handler_;
 };
 
 }  // namespace jwpqt::qt

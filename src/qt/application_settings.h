@@ -23,6 +23,17 @@ namespace jwpqt::qt {
 enum class JapaneseFontRole { kSystem, kEdit, kList, kKanjiBar, kFile, kBig, kTable, kBitmap, kCount };
 enum class DuplicateOpenBehavior { kOpenAnother = 0, kActivateExisting = 1, kPrompt = 2 };
 enum class LineWidthMode { kDynamic = 0, kFixed = 1, kPrinter = 2 };
+enum class ClipboardTextFormat {
+  kAutoDetect = 1,
+  kEucJp = 6,
+  kShiftJis = 7,
+  kNewJis = 8,
+  kOldJis = 9,
+  kNecJis = 10,
+  kUnicode = 11,
+  kUtf7 = 12,
+  kUtf8 = 13,
+};
 
 struct JapaneseFontSetting {
   QString family;
@@ -38,6 +49,9 @@ struct ApplicationSettings {
   JapaneseFontSetting ascii_font{{}, 0, true}; // Source size/automatic are retained; height follows each Japanese role.
   bool show_toolbar = true;
   bool omit_clipboard_bitmap = false;
+  ClipboardTextFormat clipboard_export = ClipboardTextFormat::kShiftJis;
+  ClipboardTextFormat clipboard_import = ClipboardTextFormat::kAutoDetect;
+  bool omit_clipboard_unicode = false;
   bool vertical_clipboard_bitmap = false;
   bool color_clipboard_bitmap = false;
   bool color_printing = false;

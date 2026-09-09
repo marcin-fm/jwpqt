@@ -27,6 +27,17 @@ directly. Character-level insertion from information and kanji lookup controls i
 not changed. The whole insertion remains one Undo operation in native Japanese and
 unrestricted Unicode documents.
 
+Clipboard import and export support EUC-JP, Shift-JIS, new/old/NEC JIS,
+Unicode, UTF-7 and UTF-8. Automatic import prefers a native JWP fragment,
+then its exact encoded-text representation, then declared external text and
+ordinary Unicode. Native fragments preserve paragraph layout and the original
+JIS-versus-code-page character identity; multi-paragraph paste is one Undo
+operation. Invalid or unrepresentable data does not partly change the document.
+Omit Unicode also suppresses rich text so it cannot leak an unrequested Unicode
+copy, while retaining native and configured encoded representations. Linux MIME
+types replace the Windows clipboard IDs; applications that advertise a standard
+`text/plain;charset=...` representation can exchange the configured encoding.
+
 Selection autoscroll starts enabled with the original 100 ms repeat delay.
 While extending a mouse selection within one-third of a text line from the top
 or bottom edge, the document moves one line immediately and continues at that

@@ -124,6 +124,18 @@ QMimeData* JwpEditor::createMimeDataFromSelection() const {
   text.replace(QChar::LineSeparator, QLatin1Char('\n'));
   result->setText(text);
   result->setProperty("jwpqtInternalCopy", true);
+  if (clipboard_export_handler_) {
+    try {
+      clipboard_export_handler_(*result, textCursor());
+    } catch (const std::exception& error) {
+      const auto message = tr("Text copied; native clipboard formats omitted: %1")
+                               .arg(QString::fromUtf8(error.what()));
+      QTimer::singleShot(0, this, [this, message] {
+        QStatusTipEvent event(message);
+        QCoreApplication::sendEvent(window(), &event);
+      });
+    }
+  }
   const auto options = clipboard_bitmap_options(*this);
   if (text.isEmpty() || !options.enabled) return result.release();
   try {
@@ -214,6 +226,13 @@ QMimeData* JwpEditor::createMimeDataFromSelection() const {
   return result.release();
 }
 
+void JwpEditor::insertFromMimeData(const QMimeData* source) {
+  if (source != nullptr && clipboard_import_handler_ &&
+      clipboard_import_handler_(*source))
+    return;
+  QTextEdit::insertFromMimeData(source);
+}
+
 QString document_plain_text(const QTextDocument& document) {
   // Qt's toPlainText also changes NBSP to space; only normalize line separators.
   return document.toRawText()
@@ -227,6 +246,13 @@ JwpEditor::JwpEditor(QWidget* parent)
   selection_scroll_timer_->setSingleShot(false);
   connect(selection_scroll_timer_, &QTimer::timeout, this,
           [this] { scroll_mouse_selection(); });
+}
+
+void JwpEditor::set_clipboard_handlers(
+    ClipboardExportHandler export_handler,
+    ClipboardImportHandler import_handler) {
+  clipboard_export_handler_ = std::move(export_handler);
+  clipboard_import_handler_ = std::move(import_handler);
 }
 
 void JwpEditor::set_selection_autoscroll(bool enabled, int interval_ms) {

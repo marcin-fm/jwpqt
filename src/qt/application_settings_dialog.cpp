@@ -95,9 +95,39 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   duplicate_open->setObjectName(QStringLiteral("settingsDuplicateOpen"));
   duplicate_open->addItem(tr("Ask each time"), static_cast<int>(DuplicateOpenBehavior::kPrompt));
   duplicate_open->addItem(tr("Change to the open document"), static_cast<int>(DuplicateOpenBehavior::kActivateExisting));
-  duplicate_open->addItem(tr("Open another copy"), static_cast<int>(DuplicateOpenBehavior::kOpenAnother));
+  duplicate_open->addItem(
+      tr("Open another copy"),
+      static_cast<int>(DuplicateOpenBehavior::kOpenAnother));
   duplicate_open->setCurrentIndex(duplicate_open->findData(static_cast<int>(settings_.duplicate_open)));
   form->addRow(tr("When opening an open file"), duplicate_open);
+  const auto add_clipboard_formats = [](QComboBox* control, bool include_auto) {
+    if (include_auto)
+      control->addItem(tr("Automatic"), static_cast<int>(ClipboardTextFormat::kAutoDetect));
+    control->addItem(tr("EUC-JP"), static_cast<int>(ClipboardTextFormat::kEucJp));
+    control->addItem(tr("Shift-JIS"), static_cast<int>(ClipboardTextFormat::kShiftJis));
+    control->addItem(tr("New JIS"), static_cast<int>(ClipboardTextFormat::kNewJis));
+    control->addItem(tr("Old JIS"), static_cast<int>(ClipboardTextFormat::kOldJis));
+    control->addItem(tr("NEC JIS"), static_cast<int>(ClipboardTextFormat::kNecJis));
+    control->addItem(tr("Unicode (UTF-16LE)"), static_cast<int>(ClipboardTextFormat::kUnicode));
+    control->addItem(tr("UTF-7"), static_cast<int>(ClipboardTextFormat::kUtf7));
+    control->addItem(tr("UTF-8"), static_cast<int>(ClipboardTextFormat::kUtf8));
+  };
+  auto* clipboard_import = new QComboBox(display);
+  clipboard_import->setObjectName(QStringLiteral("settingsClipboardImport"));
+  add_clipboard_formats(clipboard_import, true);
+  clipboard_import->setCurrentIndex(clipboard_import->findData(
+      static_cast<int>(settings_.clipboard_import)));
+  form->addRow(tr("Clipboard text import"), clipboard_import);
+  auto* clipboard_export = new QComboBox(display);
+  clipboard_export->setObjectName(QStringLiteral("settingsClipboardExport"));
+  add_clipboard_formats(clipboard_export, false);
+  clipboard_export->setCurrentIndex(clipboard_export->findData(
+      static_cast<int>(settings_.clipboard_export)));
+  form->addRow(tr("Clipboard encoded-text export"), clipboard_export);
+  add_boolean(
+      "settingsOmitClipboardUnicode",
+      tr("Omit standard Unicode and rich text when copying documents"),
+      &ApplicationSettings::omit_clipboard_unicode);
   auto* code_page = new QComboBox(display);
   code_page->setObjectName(QStringLiteral("settingsCodePage"));
   code_page->addItem(tr("Automatic (native CP1252)"), 0);
@@ -598,7 +628,10 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   connect(buttons, &QDialogButtonBox::accepted, this,
           [this, booleans, font_controls, dictionary_controls, code_page, history_size, conversion_choices, undo_levels, categories,
            print_family, print_size, print_auto, print_justify, ascii_family, print_patterns, print_positions, original_patterns,
-           index_type, reading_type, duplicate_open, auto_scroll_speed, default_margins, metric_units, line_width_mode, fixed_line_width, relax_punctuation, relax_small_kana,
+            index_type, reading_type, duplicate_open, clipboard_import,
+            clipboard_export, auto_scroll_speed, default_margins, metric_units,
+            line_width_mode, fixed_line_width, relax_punctuation,
+            relax_small_kana,
            default_landscape, default_vertical,
            color_fields, original_colors, color_mode, uncommon] {
     auto next = settings_;
@@ -633,6 +666,10 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
     next.maximum_undo_levels = undo_levels->value();
     next.auto_scroll_speed = auto_scroll_speed->value();
     next.duplicate_open = static_cast<DuplicateOpenBehavior>(duplicate_open->currentData().toInt());
+    next.clipboard_import = static_cast<ClipboardTextFormat>(
+        clipboard_import->currentData().toInt());
+    next.clipboard_export = static_cast<ClipboardTextFormat>(
+        clipboard_export->currentData().toInt());
     next.index_type = index_type->currentIndex();
     next.reading_type = reading_type->currentIndex();
     next.print_font = {print_family->currentText(), qRound(print_size->value() * 10), print_auto->isChecked()};

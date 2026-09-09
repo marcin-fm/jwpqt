@@ -43,6 +43,7 @@ constexpr BooleanDescriptor<ApplicationSettings> kBooleans[] = {
     {"MaximizeWindow", "maximize", &ApplicationSettings::maximize_window},
     {"ColorKanji_Printing", "colorkanji_print", &ApplicationSettings::color_printing},
     {"Clipboard_Omit_Bitmap", "no_BITMAP", &ApplicationSettings::omit_clipboard_bitmap},
+    {"Clipboard_Omit_Unicode", "no_UNICODETEXT", &ApplicationSettings::omit_clipboard_unicode},
     {"Bitmap.Vert", "clip_font.vertical", &ApplicationSettings::vertical_clipboard_bitmap},
     {"ColorKanji_Clipboard", "colorkanji_bitmap", &ApplicationSettings::color_clipboard_bitmap},
     {"AutoSearch_KanjiLookup", "auto_lookup", &ApplicationSettings::automatic_kanji_lookup},
@@ -130,6 +131,14 @@ void validate_geometry_value(int value, std::size_t coordinate) {
 core::JwpConfigurationKey font_key(std::size_t role, std::size_t field) {
   return {std::string(kFonts[role].name) + '.' + kFontFields[field].name,
           std::string(kFonts[role].alias) + '.' + kFontFields[field].alias};
+}
+
+bool valid_clipboard_format(ClipboardTextFormat format, bool allow_auto) noexcept {
+  const int value = static_cast<int>(format);
+  return (allow_auto &&
+          value == static_cast<int>(ClipboardTextFormat::kAutoDetect)) ||
+         (value >= static_cast<int>(ClipboardTextFormat::kEucJp) &&
+          value <= static_cast<int>(ClipboardTextFormat::kUtf8));
 }
 
 }  // namespace
@@ -275,6 +284,26 @@ ApplicationSettings read_application_settings(std::string_view text,
         result.fixed_line_width = static_cast<int>(
             core::parse_jwp_setting_integer(entry.value, 5, 1000));
       }
+      if (name.empty() &&
+          core::JwpConfigurationKey{"Clipboard_Format_Export", "clip_write"}
+              .matches(entry.name)) {
+        name = "Clipboard_Format_Export";
+        const auto value = static_cast<ClipboardTextFormat>(
+            core::parse_jwp_setting_integer(entry.value, 1, 13));
+        if (!valid_clipboard_format(value, false))
+          throw core::JwpConfigurationError("Unknown clipboard export format");
+        result.clipboard_export = value;
+      }
+      if (name.empty() &&
+          core::JwpConfigurationKey{"Clipboard_Format_Import", "clip_read"}
+              .matches(entry.name)) {
+        name = "Clipboard_Format_Import";
+        const auto value = static_cast<ClipboardTextFormat>(
+            core::parse_jwp_setting_integer(entry.value, 1, 13));
+        if (!valid_clipboard_format(value, true))
+          throw core::JwpConfigurationError("Unknown clipboard import format");
+        result.clipboard_import = value;
+      }
       if (name.empty() && core::JwpConfigurationKey{"IndexType", "index_type"}.matches(entry.name)) {
         name = "IndexType";
         result.index_type = static_cast<int>(core::parse_jwp_setting_integer(entry.value, 0, 20));
@@ -377,6 +406,9 @@ std::string write_application_settings(const ApplicationSettings& settings) {
     throw core::JwpConfigurationError("Unknown document line-width mode");
   if (settings.fixed_line_width < 5 || settings.fixed_line_width > 1000)
     throw core::JwpConfigurationError("Fixed document line width must be between 5 and 1000 characters");
+  if (!valid_clipboard_format(settings.clipboard_export, false) ||
+      !valid_clipboard_format(settings.clipboard_import, true))
+    throw core::JwpConfigurationError("Unknown clipboard text format");
   if (settings.translation_code_page != 0 &&
       (settings.translation_code_page < 1250 || settings.translation_code_page > 1258)) {
     throw core::JwpConfigurationError("Unknown translation code page");
@@ -477,6 +509,10 @@ std::string write_application_settings(const ApplicationSettings& settings) {
                      std::to_string(static_cast<int>(settings.line_width_mode))});
   updates.push_back({{"LineWidth_Fixed", "char_width"},
                      std::to_string(settings.fixed_line_width)});
+  updates.push_back({{"Clipboard_Format_Export", "clip_write"},
+                     std::to_string(static_cast<int>(settings.clipboard_export))});
+  updates.push_back({{"Clipboard_Format_Import", "clip_read"},
+                     std::to_string(static_cast<int>(settings.clipboard_import))});
   validate_kanji_info_options(settings.kanji_info);
   std::string fields;
   constexpr char hex[] = "0123456789ABCDEF";
