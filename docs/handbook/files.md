@@ -1,10 +1,14 @@
 # Documents and Projects
 
 Each tab owns its document, cursor, selection, encoding and undo history.
-New and menu Open preserve other open documents. Opening an existing path
-activates its tab. Save All visits unnamed files too; cancellation stops without
-discarding unprocessed documents. Close All and Exit ask about every modified
-document before discarding the workspace.
+New and menu Open preserve other open documents. When a path is already open,
+Display And Files can ask whether to use the open document, reload it or open an
+independent copy; it can also choose either non-destructive action automatically.
+Using or reloading an open document retains its established file format. Scripts
+and replacement-oriented APIs deterministically use the existing tab instead of
+opening a modal prompt. Save All visits unnamed files too; cancellation stops
+without discarding unprocessed documents. Close All and Exit ask about every
+modified document before discarding the workspace.
 
 Closing the last tab normally asks whether to exit. No keeps a clean unnamed
 Japanese document; it does not restore edits you already chose to discard.

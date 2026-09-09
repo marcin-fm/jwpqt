@@ -102,6 +102,30 @@ void test_history_settings() {
   }
 }
 
+void test_duplicate_open_settings() {
+  using namespace jwpqt::qt;
+  const auto defaults = read_application_settings("");
+  require(defaults.duplicate_open == DuplicateOpenBehavior::kPrompt,
+          "Duplicate-open default differs from the source");
+  for (int value = 0; value <= 2; ++value) {
+    const auto settings = read_application_settings(
+        "double_open=0\nDoubleOpenBehavior=" + std::to_string(value));
+    const auto expected = static_cast<DuplicateOpenBehavior>(value);
+    const auto encoded = write_application_settings(settings);
+    require(settings.duplicate_open == expected &&
+                read_application_settings(encoded).duplicate_open == expected &&
+                encoded.find("double_open=") == std::string::npos &&
+                write_application_settings(read_application_settings(encoded)) == encoded,
+            "Duplicate-open setting did not canonicalize and round-trip");
+  }
+  for (const auto* invalid : {"DoubleOpenBehavior=-1", "double_open=3",
+                              "double_open=bad\nDoubleOpenBehavior=1"})
+    rejects([&] { (void)read_application_settings(invalid); });
+  auto invalid = defaults;
+  invalid.duplicate_open = static_cast<DuplicateOpenBehavior>(3);
+  rejects([&] { (void)write_application_settings(invalid); });
+}
+
 void test_files(const QString& directory) {
   using namespace jwpqt::qt;
   const QString path = directory + QStringLiteral("/settings-\u65e5.cfg");
@@ -299,6 +323,7 @@ int main(int argc, char** argv) {
     require(directory.isValid(), "Could not create temporary settings directory");
     test_model();
     test_history_settings();
+    test_duplicate_open_settings();
     test_information_settings();
     test_dictionary_settings();
     test_files(directory.path());

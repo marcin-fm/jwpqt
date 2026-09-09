@@ -347,6 +347,9 @@ class MainWindow : public QMainWindow {
   void connect_editor(JwpEditor* editor);
   void refresh_document_view();
   bool finish_document_input();
+  enum class DuplicateOpenResolution { kOpenAnother, kHandled, kCancelled };
+  DuplicateOpenResolution resolve_duplicate_open(const QString& path, int existing,
+                                                  OpenMode mode);
   int find_document_path(const QString& path) const;
   void record_recent_document(const DocumentState& state);
   void record_recent_file(RecentDocument entry);

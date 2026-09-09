@@ -246,6 +246,11 @@ ApplicationSettings read_application_settings(std::string_view text,
         name = "MaximumUndoLevels";
         result.maximum_undo_levels = static_cast<int>(core::parse_jwp_setting_integer(entry.value, 3, 1000));
       }
+      if (name.empty() && core::JwpConfigurationKey{"DoubleOpenBehavior", "double_open"}.matches(entry.name)) {
+        name = "DoubleOpenBehavior";
+        result.duplicate_open = static_cast<DuplicateOpenBehavior>(
+            core::parse_jwp_setting_integer(entry.value, 0, 2));
+      }
       if (name.empty() && core::JwpConfigurationKey{"IndexType", "index_type"}.matches(entry.name)) {
         name = "IndexType";
         result.index_type = static_cast<int>(core::parse_jwp_setting_integer(entry.value, 0, 20));
@@ -336,6 +341,9 @@ std::string write_application_settings(const ApplicationSettings& settings) {
     throw core::JwpConfigurationError("Undo depth must be between 3 and 1000");
   if (settings.history_size < 0 || settings.history_size > 30000)
     throw core::JwpConfigurationError("History storage is outside 0..30000 cells");
+  if (settings.duplicate_open < DuplicateOpenBehavior::kOpenAnother ||
+      settings.duplicate_open > DuplicateOpenBehavior::kPrompt)
+    throw core::JwpConfigurationError("Unknown duplicate-open behavior");
   if (settings.translation_code_page != 0 &&
       (settings.translation_code_page < 1250 || settings.translation_code_page > 1258)) {
     throw core::JwpConfigurationError("Unknown translation code page");
@@ -427,6 +435,8 @@ std::string write_application_settings(const ApplicationSettings& settings) {
   updates.push_back({{"TranslationCodePage", "code_page"}, std::to_string(settings.translation_code_page)});
   updates.push_back({{"HistoryBuffers_NumChars", "history_size"}, std::to_string(settings.history_size)});
   updates.push_back({{"MaximumUndoLevels", "undo_number"}, std::to_string(settings.maximum_undo_levels)});
+  updates.push_back({{"DoubleOpenBehavior", "double_open"},
+                     std::to_string(static_cast<int>(settings.duplicate_open))});
   validate_kanji_info_options(settings.kanji_info);
   std::string fields;
   constexpr char hex[] = "0123456789ABCDEF";

@@ -21,6 +21,7 @@
 namespace jwpqt::qt {
 
 enum class JapaneseFontRole { kSystem, kEdit, kList, kKanjiBar, kFile, kBig, kTable, kBitmap, kCount };
+enum class DuplicateOpenBehavior { kOpenAnother = 0, kActivateExisting = 1, kPrompt = 2 };
 
 struct JapaneseFontSetting {
   QString family;
@@ -61,6 +62,7 @@ struct ApplicationSettings {
   bool ctrl_up_down_convert = false;
   bool insert_on_separate_lines = true;
   bool show_all_fonts = false;
+  DuplicateOpenBehavior duplicate_open = DuplicateOpenBehavior::kPrompt;
   bool startup_dictionary = false;
   bool reload_previous_files = false;
   bool keep_backup_copy = false;

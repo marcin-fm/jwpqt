@@ -5252,14 +5252,55 @@ int MainWindow::find_document_path(const QString& path) const {
   return -1;
 }
 
+MainWindow::DuplicateOpenResolution MainWindow::resolve_duplicate_open(
+    const QString& path, int existing, OpenMode mode) {
+  if (existing < 0) return DuplicateOpenResolution::kOpenAnother;
+  if (mode != OpenMode::kInteractive) {
+    if (!activate_document(existing)) return DuplicateOpenResolution::kCancelled;
+    statusBar()->showMessage(tr("Already open: %1 (existing format retained)").arg(path), 3000);
+    record_recent_document(*document_);
+    return DuplicateOpenResolution::kHandled;
+  }
+
+  auto choice = application_settings_.duplicate_open;
+  bool reload = false;
+  if (choice == DuplicateOpenBehavior::kPrompt) {
+    QMessageBox prompt(QMessageBox::Question, tr("Document is already open"),
+                       tr("%1 is already open. What should JWPqt do?").arg(path),
+                       QMessageBox::Cancel, this);
+    auto* activate = prompt.addButton(tr("Use Open Document"), QMessageBox::AcceptRole);
+    auto* another = prompt.addButton(tr("Open Another Copy"), QMessageBox::ActionRole);
+    auto* replace = prompt.addButton(tr("Reload Open Document"), QMessageBox::DestructiveRole);
+    activate->setObjectName(QStringLiteral("duplicateActivateButton"));
+    another->setObjectName(QStringLiteral("duplicateOpenAnotherButton"));
+    replace->setObjectName(QStringLiteral("duplicateReloadButton"));
+    prompt.exec();
+    if (prompt.clickedButton() == another) return DuplicateOpenResolution::kOpenAnother;
+    if (prompt.clickedButton() == replace) reload = true;
+    else if (prompt.clickedButton() != activate) return DuplicateOpenResolution::kCancelled;
+  } else if (choice == DuplicateOpenBehavior::kOpenAnother) {
+    return DuplicateOpenResolution::kOpenAnother;
+  }
+
+  if (!activate_document(existing)) return DuplicateOpenResolution::kCancelled;
+  if (reload && !revert_current_document(OpenMode::kInteractive))
+    return DuplicateOpenResolution::kCancelled;
+  statusBar()->showMessage(
+      reload ? tr("Reloaded open document: %1").arg(path)
+             : tr("Already open: %1 (existing format retained)").arg(path),
+      3000);
+  record_recent_document(*document_);
+  return DuplicateOpenResolution::kHandled;
+}
+
 bool MainWindow::open_path(const QString& path, core::TextEncoding encoding,
                            OpenMode mode, bool new_tab) {
   const int existing = find_document_path(path);
   if (existing >= 0 && (new_tab || existing != current_document_index())) {
-    const bool activated = activate_document(existing);
-    if (activated) statusBar()->showMessage(tr("Already open: %1 (existing format retained)").arg(path), 3000);
-    if (activated) record_recent_document(*document_);
-    return activated;
+    const auto resolution = resolve_duplicate_open(
+        path, existing, new_tab ? mode : OpenMode::kNonInteractive);
+    if (resolution != DuplicateOpenResolution::kOpenAnother)
+      return resolution == DuplicateOpenResolution::kHandled;
   }
   if (!new_tab && conversion_active() && !accept_conversion()) {
     return false;
@@ -5325,10 +5366,10 @@ bool MainWindow::open_jwp_path(const QString& path,
                                OpenMode mode, bool new_tab) {
   const int existing = find_document_path(path);
   if (existing >= 0 && (new_tab || existing != current_document_index())) {
-    const bool activated = activate_document(existing);
-    if (activated) statusBar()->showMessage(tr("Already open: %1 (existing format retained)").arg(path), 3000);
-    if (activated) record_recent_document(*document_);
-    return activated;
+    const auto resolution = resolve_duplicate_open(
+        path, existing, new_tab ? mode : OpenMode::kNonInteractive);
+    if (resolution != DuplicateOpenResolution::kOpenAnother)
+      return resolution == DuplicateOpenResolution::kHandled;
   }
   if (!new_tab && conversion_active() && !accept_conversion()) {
     return false;
@@ -5357,10 +5398,10 @@ bool MainWindow::open_path_detected(const QString& path, OpenMode mode, bool new
   };
   const int existing = find_document_path(path);
   if (existing >= 0 && (new_tab || existing != current_document_index())) {
-    const bool activated = activate_document(existing);
-    if (activated) statusBar()->showMessage(tr("Already open: %1 (existing format retained)").arg(path), 3000);
-    if (activated) record_recent_document(*document_);
-    return activated;
+    const auto resolution = resolve_duplicate_open(
+        path, existing, new_tab ? mode : OpenMode::kNonInteractive);
+    if (resolution != DuplicateOpenResolution::kOpenAnother)
+      return resolution == DuplicateOpenResolution::kHandled;
   }
   if (QFileInfo(path).suffix().compare(QStringLiteral("jpr"), Qt::CaseInsensitive) == 0)
     return open_project();
@@ -5607,7 +5648,9 @@ bool MainWindow::save_as_path(const QString& path,
     }
   }
   const int existing = find_document_path(path);
-  if (existing >= 0 && documents_[existing].get() != document_) {
+  const bool own_source = !export_copy && !document_->current_path_.isEmpty() &&
+      document_path_identity(path) == document_path_identity(document_->current_path_);
+  if (existing >= 0 && documents_[existing].get() != document_ && !own_source) {
     if (mode == OpenMode::kInteractive)
       QMessageBox::warning(this, tr("Document is already open"),
                            tr("This path belongs to another open document."));

@@ -434,6 +434,124 @@ void test_new_document_workflow(const QString& directory) {
           "Could not reopen a document created through New");
 }
 
+void test_duplicate_open_policy(const QString& directory) {
+  using jwpqt::core::TextEncoding;
+  using jwpqt::qt::ApplicationSettings;
+  using jwpqt::qt::DuplicateOpenBehavior;
+  using jwpqt::qt::MainWindow;
+  using jwpqt::qt::OpenMode;
+
+  const QString path = directory + QStringLiteral("/duplicate-open.txt");
+  write_bytes(path, QByteArray("first"));
+  MainWindow window;
+  require(window.open_path(path, TextEncoding::kUtf8, OpenMode::kNonInteractive),
+          "Could not open duplicate-policy fixture");
+  QPointer<jwpqt::qt::JwpEditor> original = window.active_editor();
+
+  ApplicationSettings settings = window.application_settings();
+  jwpqt::qt::ApplicationSettingsDialog cancelled(settings);
+  auto* cancelled_choice = cancelled.findChild<QComboBox*>(QStringLiteral("settingsDuplicateOpen"));
+  require(cancelled_choice != nullptr, "Duplicate-open Options control is missing");
+  cancelled_choice->setCurrentIndex(
+      cancelled_choice->findData(static_cast<int>(DuplicateOpenBehavior::kOpenAnother)));
+  cancelled.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Cancel)->click();
+  require(cancelled.settings().duplicate_open == DuplicateOpenBehavior::kPrompt,
+          "Cancelling Options changed duplicate-open behavior");
+  jwpqt::qt::ApplicationSettingsDialog options(settings);
+  auto* choice = options.findChild<QComboBox*>(QStringLiteral("settingsDuplicateOpen"));
+  require(choice != nullptr, "Duplicate-open Options control is missing");
+  choice->setCurrentIndex(choice->findData(
+      static_cast<int>(DuplicateOpenBehavior::kOpenAnother)));
+  options.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+  settings = options.settings();
+  require(window.apply_application_settings(settings) &&
+              window.open_path(path, TextEncoding::kUtf8, OpenMode::kInteractive, true),
+          "Open-another policy did not open the duplicate");
+  QPointer<jwpqt::qt::JwpEditor> duplicate = window.active_editor();
+  require(window.document_count() == 2 && duplicate && duplicate != original &&
+              duplicate->toPlainText() == QStringLiteral("first"),
+          "Duplicate did not own an independent editor with the requested encoding");
+  duplicate->selectAll();
+  duplicate->insertPlainText(QStringLiteral("copy"));
+  require(window.save_path(path) &&
+              jwpqt::qt::read_text_file(path, TextEncoding::kUtf8).text == U"copy" &&
+              original->toPlainText() == QStringLiteral("first"),
+          "A duplicate could not save its own source or mutated the other buffer");
+
+  settings.duplicate_open = DuplicateOpenBehavior::kPrompt;
+  require(window.apply_application_settings(settings) && window.activate_document(1),
+          "Could not prepare duplicate-open prompt");
+  QTimer::singleShot(0, [] {
+    auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    require(prompt != nullptr, "Duplicate-open prompt was not shown");
+    auto* reload = prompt->findChild<QPushButton*>(QStringLiteral("duplicateReloadButton"));
+    require(reload != nullptr, "Duplicate-open Reload choice is missing");
+    reload->click();
+  });
+  require(window.open_path(path, TextEncoding::kUtf16Be, OpenMode::kInteractive, true) &&
+              window.document_count() == 2 && window.active_editor() == original &&
+              original->toPlainText() == QStringLiteral("copy") &&
+              window.text_encoding() == TextEncoding::kUtf8,
+          "Reload choice did not retain the existing format and replace its disk snapshot");
+
+  QTimer::singleShot(0, [] {
+    auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    require(prompt != nullptr && prompt->button(QMessageBox::Cancel) != nullptr,
+            "Duplicate-open Cancel choice is missing");
+    prompt->button(QMessageBox::Cancel)->click();
+  });
+  require(!window.open_path(path, TextEncoding::kUtf8, OpenMode::kInteractive, true) &&
+              window.document_count() == 2 && window.active_editor() == original,
+          "Cancelling duplicate open changed the workspace");
+
+  QTimer::singleShot(0, [] {
+    auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    require(prompt != nullptr, "Duplicate-open prompt was not shown for another copy");
+    auto* another = prompt->findChild<QPushButton*>(QStringLiteral("duplicateOpenAnotherButton"));
+    require(another != nullptr, "Duplicate-open Another choice is missing");
+    another->click();
+  });
+  require(window.open_path(path, TextEncoding::kUtf8, OpenMode::kInteractive, true) &&
+              window.document_count() == 3 && window.active_editor() != original,
+          "Prompted Open Another did not create a document");
+
+  settings.duplicate_open = DuplicateOpenBehavior::kActivateExisting;
+  require(window.apply_application_settings(settings) &&
+              window.open_path(path, TextEncoding::kUtf16Le, OpenMode::kInteractive, true) &&
+              window.document_count() == 3 && window.active_editor() == original &&
+              window.text_encoding() == TextEncoding::kUtf8,
+          "Change policy did not activate the original document with its retained format");
+
+  settings.duplicate_open = DuplicateOpenBehavior::kOpenAnother;
+  require(window.apply_application_settings(settings) && window.activate_document(2) &&
+              window.open_path(path, TextEncoding::kUtf16Le, OpenMode::kNonInteractive, true) &&
+              window.document_count() == 3 && window.active_editor() == original,
+          "Noninteractive duplicate open stopped using deterministic activation");
+
+  const QString settings_path = directory + QStringLiteral("/duplicate-open.cfg");
+  jwpqt::qt::write_application_settings_file(settings_path, settings);
+  MainWindow restarted;
+  require(restarted.load_application_settings(settings_path) &&
+              restarted.application_settings().duplicate_open ==
+                  DuplicateOpenBehavior::kOpenAnother,
+          "Duplicate-open policy did not survive settings restart");
+
+  const QString project_document = directory + QStringLiteral("/duplicate-project.txt");
+  const QString project_path = directory + QStringLiteral("/duplicate-open.jpr");
+  write_bytes(project_document, QByteArray("project"));
+  MainWindow project;
+  require(project.open_path(project_document, TextEncoding::kUtf8,
+                            OpenMode::kNonInteractive) &&
+              project.apply_application_settings(settings) &&
+              project.save_project_path(project_path, true, OpenMode::kNonInteractive),
+          "Could not save duplicate-open project settings");
+  MainWindow restored;
+  require(restored.open_project_path(project_path, {}, OpenMode::kNonInteractive) &&
+              restored.application_settings().duplicate_open ==
+                  DuplicateOpenBehavior::kOpenAnother,
+          "Duplicate-open policy did not survive JPR restoration");
+}
+
 void test_document_tabs(const QString& directory) {
   using jwpqt::qt::OpenMode;
   using jwpqt::core::TextEncoding;
@@ -737,6 +855,13 @@ void test_recent_file_workflow(const QString& directory) {
   editor->moveCursor(QTextCursor::End);
   editor->insertPlainText(QStringLiteral("X"));
   require(window.activate_document(2), "Could not select recent JWP document");
+  QTimer::singleShot(0, [] {
+    auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    require(prompt != nullptr, "Recent-file duplicate prompt was not shown");
+    auto* activate = prompt->findChild<QPushButton*>(QStringLiteral("duplicateActivateButton"));
+    require(activate != nullptr, "Recent-file duplicate activation is missing");
+    activate->click();
+  });
   fixed_action->trigger();
   require(fixed_action && window.document_count() == 3 &&
               window.active_editor() == editor && window.document_modified() &&
@@ -986,6 +1111,10 @@ void test_utf16_workflow(const QString& directory) {
                   : window.open_path(source, encoding, OpenMode::kNonInteractive),
               "UTF-16 open/detection failed");
       if (!bom) {
+        auto open_settings = window.application_settings();
+        open_settings.duplicate_open = jwpqt::qt::DuplicateOpenBehavior::kActivateExisting;
+        require(window.apply_application_settings(open_settings),
+                "Could not isolate UTF-16 file-dialog behavior from duplicate prompting");
         bool offered = false;
         QTimer::singleShot(0, &window, [&] {
           if (auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget())) {
@@ -5892,6 +6021,7 @@ int main(int argc, char* argv[]) {
                             QStringLiteral("/jwpqt-window-test-XXXXXX"));
     require(directory.isValid(), "Could not create temporary test directory");
     test_new_document_workflow(directory.path());
+    test_duplicate_open_policy(directory.path());
     test_document_tabs(directory.path());
     test_workspace_kanji_count();
     test_tab_conversion_lifetimes(directory.path());
