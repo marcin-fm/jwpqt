@@ -86,6 +86,11 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
     if (it->startsWith(QStringLiteral("JwpqtRaster-")) || it->startsWith(QStringLiteral("JwpqtAscii-"))) it = families.erase(it); else ++it;
   struct FontControl { QComboBox* family; QSpinBox* size; QCheckBox* automatic; };
   std::vector<FontControl> font_controls;
+  auto* vertical_bitmap = new QCheckBox(tr("Vertical Japanese glyphs in clipboard images"), fonts);
+  vertical_bitmap->setObjectName(QStringLiteral("settingsVerticalClipboardBitmap"));
+  vertical_bitmap->setChecked(settings_.vertical_clipboard_bitmap);
+  vertical_bitmap->setToolTip(tr("Uses the bitmap font's own settings even when Automatic is checked. Latin stays horizontal; the image is intended to be read after a clockwise turn."));
+  booleans.push_back({vertical_bitmap, &ApplicationSettings::vertical_clipboard_bitmap});
   for (std::size_t i = 0; i < settings_.fonts.size(); ++i) {
     const auto role = static_cast<JapaneseFontRole>(i);
     const int row = static_cast<int>(i) + 1;
@@ -112,8 +117,15 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
       automatic = new QCheckBox(fonts);
       automatic->setObjectName(QStringLiteral("settingsFontAuto%1").arg(i));
       automatic->setChecked(settings_.fonts[i].automatic);
-      const auto enable = [family, size](bool inherit) { family->setEnabled(!inherit); if (size) size->setEnabled(!inherit); };
+      const auto enable = [family, size, automatic, role, vertical_bitmap](bool inherit) {
+        const bool vertical = role == JapaneseFontRole::kBitmap && vertical_bitmap->isChecked();
+        family->setEnabled(!inherit || vertical);
+        if (size) size->setEnabled(!inherit || vertical);
+        automatic->setEnabled(!vertical);
+      };
       connect(automatic, &QCheckBox::toggled, this, enable);
+      if (role == JapaneseFontRole::kBitmap)
+        connect(vertical_bitmap, &QCheckBox::toggled, this, [enable, automatic] { enable(automatic->isChecked()); });
       enable(automatic->isChecked());
       grid->addWidget(automatic, row, 3);
     }
@@ -138,7 +150,13 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   omit_bitmap->setChecked(settings_.omit_clipboard_bitmap);
   booleans.push_back({omit_bitmap, &ApplicationSettings::omit_clipboard_bitmap});
   grid->addWidget(omit_bitmap, last_font_row + 1, 0, 1, 4);
-  grid->setRowStretch(last_font_row + 2, 1);
+  grid->addWidget(vertical_bitmap, last_font_row + 2, 0, 1, 4);
+  auto* color_bitmap = new QCheckBox(tr("Apply kanji colors to clipboard images when list coloring is active"), fonts);
+  color_bitmap->setObjectName(QStringLiteral("settingsColorClipboardBitmap"));
+  color_bitmap->setChecked(settings_.color_clipboard_bitmap);
+  booleans.push_back({color_bitmap, &ApplicationSettings::color_clipboard_bitmap});
+  grid->addWidget(color_bitmap, last_font_row + 3, 0, 1, 4);
+  grid->setRowStretch(last_font_row + 4, 1);
   tabs->addTab(fonts, tr("Fonts"));
   auto* dictionary = new QWidget(tabs);
   auto* dictionary_form = new QFormLayout(dictionary);

@@ -39,6 +39,8 @@ struct BooleanDescriptor {
 
 constexpr BooleanDescriptor<ApplicationSettings> kBooleans[] = {
     {"Clipboard_Omit_Bitmap", "no_BITMAP", &ApplicationSettings::omit_clipboard_bitmap},
+    {"Bitmap.Vert", "clip_font.vertical", &ApplicationSettings::vertical_clipboard_bitmap},
+    {"ColorKanji_Clipboard", "colorkanji_bitmap", &ApplicationSettings::color_clipboard_bitmap},
     {"AutoSearch_KanjiLookup", "auto_lookup", &ApplicationSettings::automatic_kanji_lookup},
     {"RareKanjiLast", "rare_last", &ApplicationSettings::rare_kanji_last},
     {"Search_AllFiles", "search_all", &ApplicationSettings::search_all_files},

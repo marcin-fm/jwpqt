@@ -93,6 +93,8 @@ add_library(jwpqt_qt_ui STATIC
   page_layout_dialog.cpp
   page_layout_dialog.h
   print_document.cpp
+  jwp_text_drawing.cpp
+  jwp_text_drawing.h
   print_document.h
   wnn_user_dictionary_dialog.cpp
   wnn_user_dictionary_dialog.h

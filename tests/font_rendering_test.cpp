@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <array>
 #include <iostream>
 #include <stdexcept>
 #include <QApplication>
 #include <QAction>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QClipboard>
 #include <QDialogButtonBox>
 #include <QFontDatabase>
@@ -23,6 +25,8 @@
 #include "jwp_editor.h"
 #include "kanji_info_dialog.h"
 #include "main_window.h"
+#include "text_bridge.h"
+#include "jwpqt/core/jwp_text_codec.h"
 
 namespace qt = jwpqt::qt;
 void require(bool value, const char* message) { if (!value) throw std::runtime_error(message); }
@@ -142,11 +146,14 @@ void test_bitmap() {
   QTemporaryDir directory;
   require(directory.isValid(), "Font settings fixture directory failed");
   qt::MainWindow native;
+  settings.vertical_clipboard_bitmap = true;
+  settings.color_clipboard_bitmap = true;
   const auto path = directory.filePath(QStringLiteral("font-settings.cfg"));
   require(native.load_application_settings(path) && native.apply_application_settings(settings) &&
           native.save_application_settings(), "Could not persist Bitmap preferences");
   qt::MainWindow restarted;
-  require(restarted.load_application_settings(path) && restarted.application_settings().fonts[bitmap].size == 48,
+  require(restarted.load_application_settings(path) && restarted.application_settings().fonts[bitmap].size == 48 &&
+          restarted.application_settings().vertical_clipboard_bitmap && restarted.application_settings().color_clipboard_bitmap,
           "Restart lost Bitmap preferences");
   native.active_editor()->insertPlainText(QStringLiteral("\u611b ABC"));
   const auto before = *native.current_jwp_document();
@@ -158,8 +165,114 @@ void test_bitmap() {
   require(qt::document_plain_text(*native.active_editor()->document()).isEmpty(), "Native bitmap Copy damaged undo");
 }
 
+void test_vertical_and_color_bitmap() {
+  namespace core = jwpqt::core;
+  auto settings = qt::read_application_settings(
+      "Bitmap.Vert=true\nColorKanji_Clipboard=true\nFuture=opaque\n");
+  require(settings.vertical_clipboard_bitmap && settings.color_clipboard_bitmap,
+          "Clipboard rendering settings did not parse");
+  const auto serialized = qt::write_application_settings(settings);
+  require(qt::read_application_settings(serialized).vertical_clipboard_bitmap &&
+          qt::read_application_settings(serialized).color_clipboard_bitmap && serialized.find("Future=opaque") != std::string::npos,
+          "Clipboard rendering settings did not roundtrip");
+  for (const char* bad : {"clip_font.vertical=2\nBitmap.Vert=true\n", "colorkanji_bitmap=2\nColorKanji_Clipboard=true\n"}) {
+    bool rejected = false;
+    try { (void)qt::read_application_settings(bad); } catch (const std::exception&) { rejected = true; }
+    require(rejected, "Invalid earlier clipboard setting was ignored");
+  }
+  constexpr auto bitmap_role = static_cast<std::size_t>(qt::JapaneseFontRole::kBitmap);
+  settings.fonts[4] = {{}, 23, false};
+  settings.fonts[bitmap_role] = {QStringLiteral("Noto Sans CJK JP"), 36, true};
+  QWidget owner;
+  auto* editor = new qt::JwpEditor(&owner); editor->resize(600, 250);
+  qt::assign_japanese_font(*editor, qt::JapaneseFontRole::kFile);
+  qt::set_japanese_fonts(owner, settings);
+  require(qt::japanese_font(*editor, qt::JapaneseFontRole::kBitmap).pixelSize() == 36,
+          "Vertical bitmap did not use its own font despite Automatic");
+  settings.vertical_clipboard_bitmap = false; qt::set_japanese_fonts(owner, settings);
+  require(qt::japanese_font(*editor, qt::JapaneseFontRole::kBitmap).pixelSize() == 23,
+          "Horizontal automatic bitmap stopped inheriting File");
+  settings.fonts[bitmap_role] = {{}, 36, false};
+  const auto image = [&](const QString& text, bool vertical) {
+    settings.vertical_clipboard_bitmap = vertical; qt::set_japanese_fonts(owner, settings);
+    editor->setPlainText(text); editor->clear_kanji_colors(); editor->selectAll(); editor->copy();
+    require(QApplication::clipboard()->text() == text && QApplication::clipboard()->mimeData()->hasHtml(),
+            "Vertical copy changed text or rich formats");
+    return qvariant_cast<QImage>(QApplication::clipboard()->mimeData()->imageData());
+  };
+  const auto latin = image(QStringLiteral("ABC"), false);
+  require(!latin.isNull() && image(QStringLiteral("ABC"), true) == latin, "Vertical bitmap rotated or changed Latin");
+  const auto punctuation = image(QStringLiteral("\u30fc"), false);
+  require(image(QStringLiteral("\u30fc"), true) == punctuation, "Source punctuation exception rotated");
+  const auto horizontal = image(QStringLiteral("\u611b"), false);
+  const auto vertical = image(QStringLiteral("\u611b"), true);
+  require(!vertical.isNull() && vertical.size() == horizontal.size() && vertical != horizontal,
+          "Japanese bitmap rotation missing or entire image rotated");
+  const QString text = QStringLiteral("xx\u611bA") + qt::to_qstring(core::decode_jwp_text({0x5021}));
+  editor->setPlainText(text);
+  core::JwpDocument model; model.paragraphs.emplace_back(); model.paragraphs.back().text = core::encode_jwp_text(qt::from_qstring(text));
+  core::KanjiColorList list; list.add(0x3026);
+  core::KanjiColorPolicy policy;
+  policy.list_mode = core::KanjiListColorMode::kMatch;
+  policy.list_color = {220, 0, 0}; policy.colorize_uncommon = true; policy.uncommon_color = {0, 180, 0};
+  editor->apply_kanji_colors(model, list, policy);
+  QTextCursor selected(editor->document()); selected.setPosition(2); selected.movePosition(QTextCursor::End, QTextCursor::KeepAnchor);
+  editor->setTextCursor(selected);
+  QTextEdit::ExtraSelection transient; transient.cursor = selected; transient.format.setForeground(Qt::blue);
+  transient.format.setBackground(Qt::yellow); editor->set_transient_extra_selections({transient});
+  const int undo = editor->document()->availableUndoSteps();
+  const auto color_counts = [](const QImage& bitmap) {
+    int red = 0, green = 0, blue = 0;
+    for (int y = 0; y < bitmap.height(); ++y) for (int x = 0; x < bitmap.width(); ++x) {
+      const auto color = bitmap.pixelColor(x, y);
+      red += color.red() > color.green() + 20 && color.red() > color.blue() + 20;
+      green += color.green() > color.red() + 20 && color.green() > color.blue() + 20;
+      blue += color.blue() > color.red() + 20 && color.blue() > color.green() + 20;
+    }
+    return std::array<int, 3>{red, green, blue};
+  };
+  for (bool orientation : {false, true}) {
+    settings.vertical_clipboard_bitmap = orientation; settings.color_clipboard_bitmap = true;
+    qt::set_japanese_fonts(owner, settings); editor->copy();
+    const auto colored = qvariant_cast<QImage>(QApplication::clipboard()->mimeData()->imageData());
+    const auto counts = color_counts(colored);
+    require(counts[0] > 0 && counts[1] > 0 && counts[2] == 0, "Bitmap lost persistent colors or copied transient highlights");
+    require(QApplication::clipboard()->text() == text.mid(2), "Colored partial copy changed selected text");
+    if (orientation) colored.save(QStringLiteral("clipboard-vertical-color.png"));
+    settings.color_clipboard_bitmap = false; qt::set_japanese_fonts(owner, settings); editor->copy();
+    require(color_counts(qvariant_cast<QImage>(QApplication::clipboard()->mimeData()->imageData())) == std::array<int, 3>{0, 0, 0},
+            "Disabled bitmap color policy retained colors");
+  }
+  settings.color_clipboard_bitmap = true; qt::set_japanese_fonts(owner, settings);
+  policy.list_mode = core::KanjiListColorMode::kNoMatch; editor->apply_kanji_colors(model, list, policy); editor->copy();
+  const auto nonmembers = color_counts(qvariant_cast<QImage>(QApplication::clipboard()->mimeData()->imageData()));
+  require(nonmembers[0] > 0 && nonmembers[1] == 0 && nonmembers[2] == 0,
+          "Non-member bitmap color did not take precedence over uncommon coloring");
+  policy.list_mode = core::KanjiListColorMode::kOff; editor->apply_kanji_colors(model, list, policy); editor->copy();
+  require(color_counts(qvariant_cast<QImage>(QApplication::clipboard()->mimeData()->imageData())) == std::array<int, 3>{0, 0, 0},
+          "Inactive list mode allowed uncommon bitmap colors");
+  require(editor->document()->availableUndoSteps() == undo && editor->textCursor().selectionStart() == 2 &&
+          qt::document_plain_text(*editor->document()) == text, "Bitmap rendering changed source selection/history");
+  settings.fonts[bitmap_role].automatic = true;
+  qt::ApplicationSettingsDialog options(settings);
+  auto* automatic = options.findChild<QCheckBox*>(QStringLiteral("settingsFontAuto7"));
+  auto* family = options.findChild<QComboBox*>(QStringLiteral("settingsFont7"));
+  require(automatic && automatic->isChecked() && !automatic->isEnabled() && family && family->isEnabled(),
+          "Vertical bitmap font controls did not preserve and override Automatic");
+  auto* direction = options.findChild<QCheckBox*>(QStringLiteral("settingsVerticalClipboardBitmap"));
+  auto* colors = options.findChild<QCheckBox*>(QStringLiteral("settingsColorClipboardBitmap"));
+  require(direction && colors && direction->isChecked() && colors->isChecked(), "Clipboard rendering controls missing");
+  direction->setChecked(false); colors->setChecked(false);
+  require(automatic->isEnabled() && !family->isEnabled(), "Horizontal bitmap controls did not restore inheritance");
+  options.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+  require(!options.settings().vertical_clipboard_bitmap && !options.settings().color_clipboard_bitmap, "Clipboard controls did not apply");
+  qt::ApplicationSettingsDialog cancelled(settings);
+  cancelled.findChild<QCheckBox*>(QStringLiteral("settingsVerticalClipboardBitmap"))->setChecked(false); cancelled.reject();
+  require(cancelled.settings().vertical_clipboard_bitmap, "Cancelled clipboard rendering options applied");
+}
+
 int main(int argc, char** argv) {
   QApplication application(argc, argv);
-  try { test_fallback_and_big(); test_bitmap(); std::cout << "Font rendering tests passed\n"; }
+  try { test_fallback_and_big(); test_bitmap(); test_vertical_and_color_bitmap(); std::cout << "Font rendering tests passed\n"; }
   catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

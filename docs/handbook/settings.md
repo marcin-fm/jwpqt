@@ -17,8 +17,14 @@ File. Omit bitmap removes only that representation, not text or rich formats.
 Images have white paper and preserve the selected text without changing the
 document or undo. Images are bounded at 262,144 selected UTF-16 positions,
 8,192 pixels per edge and 16 million pixels; an omitted oversized image is
-reported while the text is still copied. Vertical/color-list bitmap policies
-and some other font tuning remain unimplemented.
+reported while the text is still copied. Vertical clipboard mode uses the
+bitmap font's own settings, even with Automatic retained. Japanese glyphs are
+counter-rotated for reading after a clockwise turn; Latin and the source
+punctuation exceptions stay horizontal. It does not rotate the whole image.
+Color clipboard mode applies persistent kanji colors only when list coloring
+is active, never selection or conversion highlights. Both settings can be
+cancelled or saved like the other font options. Original raster vertical
+substitution tables and some other font tuning remain unimplemented.
 
 ASCII and legacy extensions selects a separate single-byte font at the Japanese
 role's height. Even when that family contains Japanese, its private restricted

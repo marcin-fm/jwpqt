@@ -146,10 +146,13 @@ QFont japanese_font(const QWidget& widget, JapaneseFontRole role) {
   return font;
 }
 
-bool clipboard_bitmap_enabled(const QWidget& widget) {
+ClipboardBitmapOptions clipboard_bitmap_options(const QWidget& widget) {
   for (const QWidget* owner = &widget; owner; owner = owner->parentWidget())
-    if (owner->property(kBitmap).isValid()) return owner->property(kBitmap).toBool();
-  return true;
+    if (owner->property(kBitmap).isValid()) {
+      const auto values = owner->property(kBitmap).toList();
+      if (values.size() == 3) return {values[0].toBool(), values[1].toBool(), values[2].toBool()};
+    }
+  return {};
 }
 
 QFont ensure_ascii_font(QFont font) {
@@ -188,10 +191,12 @@ QStringList set_japanese_fonts(QWidget& owner, const ApplicationSettings& settin
     int raster_height = 0;
     for (;;) {
       family = settings.fonts[base].family;
+      const bool automatic = settings.fonts[base].automatic &&
+          !(base == static_cast<std::size_t>(JapaneseFontRole::kBitmap) && settings.vertical_clipboard_bitmap);
       bool unavailable = !family.isEmpty() && !families.contains(family, Qt::CaseInsensitive);
       raster_height = 0;
       if (family.endsWith(QStringLiteral(".f00"), Qt::CaseInsensitive) &&
-          (base == system || !settings.fonts[base].automatic)) {
+          (base == system || !automatic)) {
         try {
           const auto root = directory.isEmpty() ? QDir::currentPath() : directory;
           const auto face = raster_face(QDir::isAbsolutePath(family) ? family : root + QLatin1Char('/') + family);
@@ -201,11 +206,11 @@ QStringList set_japanese_fonts(QWidget& owner, const ApplicationSettings& settin
           if (!warnings.contains(warning)) warnings.push_back(warning);
         }
       }
-      if (unavailable && (base == system || !settings.fonts[base].automatic)) {
+      if (unavailable && (base == system || !automatic)) {
         const auto warning = QObject::tr("Font '%1' is unavailable; an inherited native fallback is used.").arg(family);
         if (!warnings.contains(warning)) warnings.push_back(warning);
       }
-      if (base == system || (!settings.fonts[base].automatic && !unavailable)) {
+      if (base == system || (!automatic && !unavailable)) {
         if (unavailable) family.clear();
         break;
       }
@@ -220,7 +225,8 @@ QStringList set_japanese_fonts(QWidget& owner, const ApplicationSettings& settin
     resolved.push_back(QVariantList{family, size});
   }
   owner.setProperty(kSettings, resolved);
-  owner.setProperty(kBitmap, !settings.omit_clipboard_bitmap);
+  owner.setProperty(kBitmap, QVariantList{!settings.omit_clipboard_bitmap,
+                                        settings.vertical_clipboard_bitmap, settings.color_clipboard_bitmap});
   QString ascii;
   try {
     QFont font = QFontDatabase::systemFont(QFontDatabase::GeneralFont);

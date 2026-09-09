@@ -73,6 +73,8 @@ void mixed_workspace(const QString& directory) {
   settings.dictionary.monitor_clipboard = true;
   settings.fonts[static_cast<int>(qt::JapaneseFontRole::kBitmap)] = {{}, 28, false};
   settings.omit_clipboard_bitmap = true;
+  settings.vertical_clipboard_bitmap = true;
+  settings.color_clipboard_bitmap = true;
   settings.ascii_font.family = QStringLiteral("DejaVu Sans Mono");
   require(original.apply_application_settings(settings) && original.activate_document(1), "Could not prepare project settings");
   auto cursor = original.active_editor()->textCursor(); cursor.setPosition(1); cursor.setPosition(3, QTextCursor::KeepAnchor);
@@ -103,6 +105,8 @@ void mixed_workspace(const QString& directory) {
   require(restored.active_editor()->font().pixelSize() == 21 && !restored.application_settings().show_toolbar &&
               restored.application_settings().dictionary.monitor_clipboard &&
               restored.application_settings().omit_clipboard_bitmap &&
+              restored.application_settings().vertical_clipboard_bitmap &&
+              restored.application_settings().color_clipboard_bitmap &&
               restored.application_settings().ascii_font.family == QStringLiteral("DejaVu Sans Mono") &&
               restored.application_settings().fonts[static_cast<int>(qt::JapaneseFontRole::kBitmap)].size == 28,
           "Project did not apply supported settings");

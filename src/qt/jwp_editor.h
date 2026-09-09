@@ -60,6 +60,8 @@ class JwpEditor final : public QTextEdit {
   void update_extra_selections();
 
   QList<QTextEdit::ExtraSelection> kanji_color_selections_;
+  bool kanji_list_coloring_ = false;
+  core::LegacyCodePage color_code_page_ = core::kDefaultLegacyCodePage;
   QList<QTextEdit::ExtraSelection> transient_extra_selections_;
 };
 

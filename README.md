@@ -208,8 +208,15 @@ nonbreaking spaces and Unicode signatures) and Qt's rich formats, and add a
 white-background native text image. **Clipboard_Omit_Bitmap** disables only the
 image. Rendering uses a separate document, bounded at 262,144 selected UTF-16
 positions, 8,192 pixels per edge and 16 million pixels; oversized images are
-omitted with a status message while text remains available. Vertical and
-color-list bitmap policies remain separate fidelity work.
+omitted with a status message while text remains available. **Bitmap.Vert**
+counter-rotates Japanese glyphs using the same source rules as PDF printing;
+Latin and the source punctuation exceptions stay horizontal. It uses the
+bitmap font's own settings even when Automatic is retained. This is the legacy
+clockwise-paper-turn convention, not a rotation of the entire image.
+**ColorKanji_Clipboard** applies persistent kanji foregrounds only while list
+coloring is active. Selection and conversion highlights are never copied into
+the image. These options persist through settings, restart and JPR; original
+raster vertical-substitution tables remain separate fidelity work.
 
 **Options > Fonts > ASCII and legacy extensions** selects an independent
 single-byte font at the Japanese role's height, without changing desktop menus

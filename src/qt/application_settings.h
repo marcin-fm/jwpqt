@@ -33,6 +33,8 @@ struct ApplicationSettings {
   JapaneseFontSetting ascii_font{{}, 0, true}; // Source size/automatic are retained; height follows each Japanese role.
   bool show_toolbar = true;
   bool omit_clipboard_bitmap = false;
+  bool vertical_clipboard_bitmap = false;
+  bool color_clipboard_bitmap = false;
   ToolbarSettings toolbar;
   bool show_status_bar = true;
   bool show_kanji_bar = true;

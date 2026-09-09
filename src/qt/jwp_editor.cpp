@@ -33,6 +33,7 @@
 
 #include "jwpqt/core/jwp_text_codec.h"
 #include "japanese_fonts.h"
+#include "jwp_text_drawing.h"
 
 namespace jwpqt::qt {
 namespace {
@@ -116,7 +117,8 @@ QMimeData* JwpEditor::createMimeDataFromSelection() const {
   text.replace(QChar::LineSeparator, QLatin1Char('\n'));
   result->setText(text);
   result->setProperty("jwpqtInternalCopy", true);
-  if (text.isEmpty() || !clipboard_bitmap_enabled(*this)) return result.release();
+  const auto options = clipboard_bitmap_options(*this);
+  if (text.isEmpty() || !options.enabled) return result.release();
   try {
     if (text.size() > 262144) throw std::runtime_error("selection exceeds 262144 character positions");
     (void)checked_input_text(text);
@@ -127,6 +129,20 @@ QMimeData* JwpEditor::createMimeDataFromSelection() const {
     bitmap.setDefaultFont(font);
     bitmap.setDocumentMargin(2);
     bitmap.setPlainText(text);
+    if (options.colors && kanji_list_coloring_) {
+      const int start = textCursor().selectionStart(), end = textCursor().selectionEnd();
+      for (const auto& color : kanji_color_selections_) {
+        const int first = std::max(start, color.cursor.selectionStart());
+        const int last = std::min(end, color.cursor.selectionEnd());
+        if (first >= last) continue;
+        QTextCursor range(&bitmap);
+        range.setPosition(first - start);
+        range.setPosition(last - start, QTextCursor::KeepAnchor);
+        QTextCharFormat format;
+        format.setForeground(color.format.foreground());
+        range.mergeCharFormat(format);
+      }
+    }
     const qreal old_unit = QFontMetricsF(document()->defaultFont()).horizontalAdvance(QStringLiteral("\u3000"));
     const qreal new_unit = QFontMetricsF(font, &metrics).horizontalAdvance(QStringLiteral("\u3000"));
     const qreal source_width = document()->textWidth() > 0 ? document()->textWidth() : viewport()->width();
@@ -142,7 +158,23 @@ QMimeData* JwpEditor::createMimeDataFromSelection() const {
     QPainter painter(&image);
     QAbstractTextDocumentLayout::PaintContext context;
     context.palette.setColor(QPalette::Text, Qt::black);
-    bitmap.documentLayout()->draw(&painter, context);
+    if (!options.vertical) {
+      bitmap.documentLayout()->draw(&painter, context);
+    } else {
+      painter.setPen(Qt::black);
+      for (QTextBlock block = bitmap.begin(); block.isValid(); block = block.next()) {
+        const auto foreground = [&block](int at) {
+          QTextCursor cursor(block);
+          cursor.setPosition(block.position() + at);
+          cursor.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
+          const auto brush = cursor.charFormat().foreground();
+          return brush.style() == Qt::NoBrush ? QColor(Qt::black) : brush.color();
+        };
+        draw_jwp_text_layout(painter, *block.layout(), block.text(),
+            bitmap.documentLayout()->blockBoundingRect(block).topLeft(), true,
+            color_code_page_, foreground);
+      }
+    }
     painter.end();
     result->setImageData(image);
   } catch (const std::exception& error) {
@@ -305,8 +337,10 @@ void JwpEditor::apply_kanji_colors(
     const core::JwpDocument& jwp_document,
     const core::KanjiColorList& color_list,
     const core::KanjiColorPolicy& policy, core::LegacyCodePage code_page) {
-  set_kanji_color_selections(
-      prepare_kanji_colors(jwp_document, color_list, policy, code_page));
+  auto colors = prepare_kanji_colors(jwp_document, color_list, policy, code_page);
+  kanji_list_coloring_ = policy.list_mode != core::KanjiListColorMode::kOff;
+  color_code_page_ = code_page;
+  set_kanji_color_selections(std::move(colors));
 }
 
 QList<QTextEdit::ExtraSelection> JwpEditor::prepare_kanji_colors(
@@ -389,6 +423,8 @@ void JwpEditor::set_kanji_color_selections(
 }
 
 void JwpEditor::clear_kanji_colors() {
+  kanji_list_coloring_ = false;
+  color_code_page_ = core::kDefaultLegacyCodePage;
   kanji_color_selections_.clear();
   update_extra_selections();
 }
