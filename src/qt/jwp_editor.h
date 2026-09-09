@@ -59,6 +59,7 @@ class JwpEditor final : public QTextEdit {
   void set_selection_autoscroll(bool enabled, int interval_ms);
   bool selection_autoscroll_enabled() const noexcept;
   int selection_autoscroll_interval() const noexcept;
+  void scroll_view_line(int direction);
 
  protected:
   QMimeData* createMimeDataFromSelection() const override;

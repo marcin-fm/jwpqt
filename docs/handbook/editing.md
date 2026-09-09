@@ -35,9 +35,11 @@ Japanese document with selected text or a conversion range, Ctrl+Up converts or
 cycles forward and Ctrl+Down cycles backward. The initial conversion uses the
 normal first candidate in either direction. Shift does not reverse these rules.
 Candidate cycling preserves the live preview and its single undo transaction.
-Without a selection, with the option off, or in an unrestricted Unicode document,
-the existing native navigation remains available. Query and result-list shortcuts
-are independent. The setting is retained by settings and projects.
+Otherwise Ctrl+Up/Down scrolls the document viewport by one display line without
+changing an existing selection. This replaces Qt's unrelated block-navigation
+shortcut and applies to native and unrestricted Unicode documents. Query and
+result-list shortcuts are independent. The conversion setting is retained by
+settings and projects.
 
 ## Find and Replace
 

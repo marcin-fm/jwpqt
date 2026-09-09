@@ -4056,6 +4056,20 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
       }
     }
   }
+  if (watched == document_->editor_ &&
+      (event->type() == QEvent::ShortcutOverride ||
+       event->type() == QEvent::KeyPress)) {
+    const auto* key = static_cast<QKeyEvent*>(event);
+    if ((key->modifiers() & Qt::ControlModifier) &&
+        !(key->modifiers() & (Qt::AltModifier | Qt::MetaModifier)) &&
+        (key->key() == Qt::Key_Up || key->key() == Qt::Key_Down)) {
+      event->accept();
+      if (event->type() == QEvent::KeyPress)
+        document_->editor_->scroll_view_line(
+            key->key() == Qt::Key_Up ? -1 : 1);
+      return true;
+    }
+  }
   if (watched != document_->editor_ || !document_->jwp_document_.has_value() ||
       conversion_active() || document_->editor_->isReadOnly()) {
     return QMainWindow::eventFilter(watched, event);

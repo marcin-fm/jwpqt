@@ -13,6 +13,7 @@
 #include <utility>
 
 #include <QAbstractTextDocumentLayout>
+#include <QAbstractSlider>
 #include <QColor>
 #include <QCoreApplication>
 #include <QFontMetricsF>
@@ -244,6 +245,35 @@ bool JwpEditor::selection_autoscroll_enabled() const noexcept {
 
 int JwpEditor::selection_autoscroll_interval() const noexcept {
   return selection_scroll_interval_;
+}
+
+void JwpEditor::scroll_view_line(int direction) {
+  if (direction != -1 && direction != 1)
+    throw std::invalid_argument("Editor scroll direction must be -1 or 1");
+
+  const QTextCursor original = textCursor();
+  verticalScrollBar()->triggerAction(
+      direction < 0 ? QAbstractSlider::SliderSingleStepSub
+                    : QAbstractSlider::SliderSingleStepAdd);
+
+  // JWPxp stores selection endpoints separately from its visible caret. Keep
+  // the logical selection exact instead of allowing QTextEdit's Ctrl+arrow
+  // block-navigation command to alter it.
+  if (original.hasSelection()) {
+    if (textCursor().position() != original.position() ||
+        textCursor().anchor() != original.anchor())
+      setTextCursor(original);
+    return;
+  }
+
+  const QRect caret = cursorRect(original);
+  const bool outside = direction < 0 ? caret.top() >= viewport()->height()
+                                     : caret.bottom() <= 0;
+  if (!outside) return;
+
+  QTextCursor visible = original;
+  visible.movePosition(direction < 0 ? QTextCursor::Up : QTextCursor::Down);
+  setTextCursor(visible);
 }
 
 void JwpEditor::mousePressEvent(QMouseEvent* event) {

@@ -546,6 +546,49 @@ void test_selection_autoscroll() {
           "Invalid autoscroll delay changed the editor policy");
 }
 
+void test_control_line_scroll() {
+  using namespace jwpqt::qt;
+  JwpEditor editor;
+  editor.resize(280, 120);
+  QString text;
+  for (int i = 0; i < 40; ++i)
+    text += QStringLiteral("line %1\n").arg(i);
+  editor.setPlainText(text);
+  editor.show();
+  QApplication::processEvents();
+  require(editor.verticalScrollBar()->maximum() > 0,
+          "Control-scroll fixture does not overflow its viewport");
+
+  editor.verticalScrollBar()->setValue(
+      editor.verticalScrollBar()->maximum() / 2);
+  QTextCursor selection(editor.document());
+  selection.setPosition(20);
+  selection.setPosition(36, QTextCursor::KeepAnchor);
+  editor.setTextCursor(selection);
+  const int position = editor.textCursor().position();
+  const int anchor = editor.textCursor().anchor();
+  const int before = editor.verticalScrollBar()->value();
+  editor.scroll_view_line(1);
+  require(editor.verticalScrollBar()->value() > before &&
+              editor.textCursor().position() == position &&
+              editor.textCursor().anchor() == anchor,
+          "Control-scroll changed the selection or did not move the viewport");
+  const int down = editor.verticalScrollBar()->value();
+  editor.scroll_view_line(-1);
+  require(editor.verticalScrollBar()->value() < down &&
+              editor.textCursor().position() == position &&
+              editor.textCursor().anchor() == anchor,
+          "Reverse control-scroll changed the selection or did not move the viewport");
+
+  bool rejected = false;
+  try {
+    editor.scroll_view_line(0);
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
+  require(rejected, "Invalid control-scroll direction was accepted");
+}
+
 void test_character_line_width() {
   jwpqt::qt::JwpEditor editor;
   editor.setPlainText(QStringLiteral("one two three four five six seven"));
@@ -653,6 +696,7 @@ int main(int argc, char** argv) {
     test_kanji_color_validation_is_atomic();
     test_composed_overwrite();
     test_selection_autoscroll();
+    test_control_line_scroll();
     test_character_line_width();
     test_margin_relaxation();
   } catch (const std::exception& error) {

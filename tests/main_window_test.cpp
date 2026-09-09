@@ -2956,8 +2956,9 @@ void test_control_arrow_conversion(const QString& directory) {
     QApplication::sendEvent(editor, &press);
   };
   editor->selectAll(); key(Qt::Key_Up);
-  require(!window.conversion_active() && *window.current_jwp_document() == source,
-          "Disabled control conversion altered the document");
+  require(!window.conversion_active() && *window.current_jwp_document() == source &&
+              editor->textCursor().hasSelection(),
+          "Disabled control conversion altered the document selection");
   ApplicationSettingsDialog options(window.application_settings());
   options.findChild<QCheckBox*>("settingsCtrlConvert")->setChecked(true);
   require(!window.application_settings().ctrl_up_down_convert, "Staged control setting changed live policy");
@@ -3001,6 +3002,28 @@ void test_control_arrow_conversion(const QString& directory) {
   editor = window.active_editor(); editor->insertPlainText("a"); editor->selectAll(); key(Qt::Key_Down);
   require(!window.conversion_active() && document_plain_text(*editor->document()) == "a",
           "Control policy changed an unrestricted Unicode document");
+  QString lines;
+  for (int i = 0; i < 80; ++i) lines += QStringLiteral("line %1\n").arg(i);
+  editor->setPlainText(lines);
+  window.resize(420, 240); window.show(); QApplication::processEvents();
+  require(editor->verticalScrollBar()->maximum() > 0,
+          "Control-scroll window fixture does not overflow");
+  editor->verticalScrollBar()->setValue(editor->verticalScrollBar()->maximum() / 2);
+  QTextCursor selected(editor->document()); selected.setPosition(12);
+  selected.setPosition(25, QTextCursor::KeepAnchor); editor->setTextCursor(selected);
+  const int position = selected.position(); const int anchor = selected.anchor();
+  const int before = editor->verticalScrollBar()->value();
+  key(Qt::Key_Down);
+  require(editor->verticalScrollBar()->value() > before &&
+              editor->textCursor().position() == position &&
+              editor->textCursor().anchor() == anchor,
+          "Control Down invoked Qt navigation or changed the selection");
+  const int down = editor->verticalScrollBar()->value();
+  key(Qt::Key_Up, Qt::ControlModifier | Qt::ShiftModifier);
+  require(editor->verticalScrollBar()->value() < down &&
+              editor->textCursor().position() == position &&
+              editor->textCursor().anchor() == anchor,
+          "Control Shift Up did not retain source scrolling semantics");
 }
 
 void test_undo_depth_policy(const QString& directory) {
