@@ -138,7 +138,14 @@ dictionaries do not enable malformed-row recovery.
 New and Open create independent tabs with their own text, format, selection,
 scroll position and undo history; dictionaries are shared. Opening a path that
 is already open activates it without reloading unsaved changes. Close removes
-only that tab, and closing the last tab leaves a clean Japanese document.
+only that tab. Closing the last tab asks whether to exit; No leaves a clean
+Japanese document, without restoring edits already discarded during Close.
+Options can disable this confirmation or make the window close button close
+only the current file. Alt-close forces application exit, Ctrl-close forces file
+close, and explicit Quit always exits the application after the save checks.
+These policies persist through settings and projects. **Open dictionary on
+startup** applies only when no explicit document/project is supplied; unavailable
+dictionary resources are reported. Resource-report mode never opens startup UI.
 **Save All** visits every document, including unnamed files, and stops on the
 first cancellation or error. **Close All** and Quit check every document before
 discarding any. **Window > Next/Previous File** (`Ctrl+Tab`/`Ctrl+Shift+Tab`, also

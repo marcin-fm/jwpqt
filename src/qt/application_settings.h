@@ -48,6 +48,9 @@ struct ApplicationSettings {
   bool save_settings_on_exit = true;
   bool save_recent_files = true;
   bool save_histories = true;
+  bool startup_dictionary = false;
+  bool close_button_closes_file = false;
+  bool confirm_last_file_exit = true;
   bool automatic_kanji_lookup = true;
   bool rare_kanji_last = true;
   bool bushu_nelson = true;

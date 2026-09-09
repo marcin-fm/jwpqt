@@ -210,11 +210,15 @@ int main(int argc, char* argv[]) {
     return 0;
   }
   window.show();
+  if (!window.open_startup_dictionary(!positional_arguments.isEmpty()))
+    QTextStream(stderr) << "Startup dictionary requested but no searchable dictionary is available.\n";
   if (parser.isSet(handbook_option))
     window.findChild<QAction*>(QStringLiteral("helpContentsAction"))->trigger();
 
   if (parser.isSet(smoke_test)) {
-    QTimer::singleShot(0, &application, &QCoreApplication::quit);
+    QTimer::singleShot(0, &window, [&window, &application] {
+      if (window.close_application()) application.quit();
+    });
   }
   return application.exec();
 }

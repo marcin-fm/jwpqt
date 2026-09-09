@@ -465,7 +465,7 @@ MainWindow::MainWindow(QWidget* parent)
     }
   });
   connect(document_tabs_, &QTabWidget::tabCloseRequested, this,
-          [this](int index) { close_document(index); });
+          [this](int index) { close_document_command(index); });
   update_command_bar_palette();
   encoding_label_->setObjectName(QStringLiteral("documentEncoding"));
   input_mode_button_->setObjectName(QStringLiteral("inputMode"));
@@ -673,6 +673,52 @@ bool MainWindow::approve_close_all(OpenMode mode) {
     } else if (!finish_document_input() || document_modified()) return false;
   }
   return true;
+}
+
+bool MainWindow::close_document_command(int index) {
+  QPointer<MainWindow> self(this);
+  const bool last = document_count() == 1;
+  if (!close_document(index) || !self) return false;
+  if (!last || document_count() != 1 || !document_->current_path_.isEmpty() || document_modified()) return true;
+  auto* blank = document_;
+  const int revision = blank->editor_->document()->revision();
+  bool exit = !application_settings_.confirm_last_file_exit;
+  if (!exit) {
+    QPointer<QMessageBox> prompt = new QMessageBox(QMessageBox::Question, tr("Close Last Document"),
+        tr("The last document is closed. Exit the application?\nNo keeps a clean unnamed document open."),
+        QMessageBox::Yes | QMessageBox::No, this);
+    prompt->setObjectName(QStringLiteral("lastFileExitPrompt"));
+    prompt->setDefaultButton(QMessageBox::No);
+    exit = prompt->exec() == QMessageBox::Yes;
+    if (prompt) delete prompt.data();
+  }
+  if (!self) return false;
+  if (exit) {
+    // Window-manager Close may already be on Qt's close-event stack.
+    QTimer::singleShot(0, this, [this, blank, revision] {
+      if (document_count() == 1 && document_ == blank && document_->current_path_.isEmpty() &&
+          !document_modified() && document_->editor_->document()->revision() == revision)
+        close_application();
+    });
+  }
+  return true;
+}
+
+bool MainWindow::close_application() {
+  QPointer<MainWindow> self(this);
+  const bool previous = force_application_close_;
+  force_application_close_ = true;
+  const bool accepted = close();
+  if (self) force_application_close_ = previous;
+  return accepted;
+}
+
+bool MainWindow::open_startup_dictionary(bool explicit_document) {
+  if (explicit_document || !application_settings_.startup_dictionary) return true;
+  if (!edict_lookup_action_->isEnabled()) return false;
+  QPointer<MainWindow> self(this);
+  show_edict_lookup_dialog();
+  return self && edict_lookup_dialog_;
 }
 
 bool MainWindow::close_all_documents(OpenMode mode) {
@@ -2306,7 +2352,7 @@ void MainWindow::create_actions() {
   close_action->setObjectName(QStringLiteral("closeDocumentAction"));
   close_action->setShortcut(QKeySequence(QStringLiteral("Ctrl+F4")));
   connect(close_action, &QAction::triggered, this,
-          [this] { close_document(current_document_index()); });
+          [this] { close_document_command(current_document_index()); });
   QAction* close_all_action = file_menu->addAction(tr("Close A&ll"));
   close_all_action->setObjectName(QStringLiteral("closeAllDocumentsAction"));
   connect(close_all_action, &QAction::triggered, this,
@@ -2379,8 +2425,9 @@ void MainWindow::create_actions() {
   update_recent_file_actions();
   file_menu->addSeparator();
   QAction* quit_action = file_menu->addAction(tr("&Quit"));
+  quit_action->setObjectName(QStringLiteral("quitAction"));
   quit_action->setShortcut(QKeySequence::Quit);
-  connect(quit_action, &QAction::triggered, this, &QWidget::close);
+  connect(quit_action, &QAction::triggered, this, [this] { close_application(); });
 
   QMenu* edit_menu = menuBar()->addMenu(tr("&Edit"));
 
@@ -6894,6 +6941,13 @@ void MainWindow::show_error(const QString& action,
 void MainWindow::closeEvent(QCloseEvent* event) {
   if (query_history_busy_ || search_busy_ || print_busy_) {
     event->ignore();
+    return;
+  }
+  const auto modifiers = QApplication::keyboardModifiers();
+  if (!force_application_close_ && !(modifiers & Qt::AltModifier) &&
+      ((modifiers & Qt::ControlModifier) || application_settings_.close_button_closes_file)) {
+    event->ignore();
+    close_document_command(current_document_index());
     return;
   }
   if (approve_close_all(OpenMode::kInteractive)) {

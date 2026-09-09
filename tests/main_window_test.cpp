@@ -64,6 +64,8 @@
 #include "kana_input_field.h"
 #include "jis_table_dialog.h"
 #include "main_window.h"
+#include "application_settings_dialog.h"
+#include <QTest>
 #include "text_bridge.h"
 #include "wnn_user_dictionary_dialog.h"
 
@@ -1197,9 +1199,160 @@ void test_local_file_lifecycle_actions(const QString& directory) {
   require(window.open_path(close_path, jwpqt::core::TextEncoding::kUtf8,
                            jwpqt::qt::OpenMode::kNonInteractive),
           "Could not reopen lifecycle fixture");
+  QTimer::singleShot(0, [] {
+    auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    if (prompt) prompt->button(QMessageBox::No)->click();
+  });
   close->trigger();
   require(window.current_path().isEmpty() && editor->toPlainText().isEmpty(),
           "Close did not return to an unnamed document");
+}
+
+void test_startup_close_policies(const QString& directory) {
+  using namespace jwpqt;
+  QApplication::setQuitOnLastWindowClosed(false);
+  const auto parsed = qt::read_application_settings(
+      "startup_dict=true\nclose_does_file=true\nconfirm_exit=false\nRetained_Field = x\n");
+  require(parsed.startup_dictionary && parsed.close_button_closes_file && !parsed.confirm_last_file_exit,
+          "Source startup/close aliases were not applied");
+  const auto bytes = qt::write_application_settings(parsed);
+  require(bytes.find("OpenDictionary = true") != std::string::npos &&
+              bytes.find("CloseButton_Closes_File = true") != std::string::npos &&
+              bytes.find("LastFileConfirmExit = false") != std::string::npos &&
+              bytes.find("Retained_Field = x") != std::string::npos,
+          "Startup/close serialization lost source settings");
+  bool invalid = false;
+  try { (void)qt::read_application_settings("LastFileConfirmExit=bad\nconfirm_exit=true\n"); }
+  catch (const std::exception&) { invalid = true; }
+  require(invalid, "An invalid earlier close setting was ignored");
+
+  qt::MainWindow window;
+  auto preferences = parsed;
+  preferences.confirm_last_file_exit = true;
+  require(window.apply_application_settings(preferences), "Could not set close preferences");
+  const QString path = directory + QStringLiteral("/startup-close.cfg");
+  require(window.save_application_settings(path), "Could not save startup/close settings");
+  const QString project_path = directory + QStringLiteral("/startup-close.jpr");
+  qt::ProjectOpenOptions project_options;
+  project_options.allow_unapplied_settings = true;
+  qt::MainWindow restored;
+  require(window.save_project_path(project_path, false) && restored.open_project_path(project_path, project_options) &&
+              restored.application_settings().startup_dictionary && restored.application_settings().close_button_closes_file &&
+              restored.application_settings().confirm_last_file_exit &&
+              !restored.findChild<QDialog*>(QStringLiteral("edictLookupDialog")),
+          "Project preferences were lost or incorrectly ran application startup");
+  qt::MainWindow restarted;
+  require(restarted.load_application_settings(path) && restarted.application_settings().startup_dictionary &&
+              restarted.application_settings().close_button_closes_file &&
+              restarted.application_settings().confirm_last_file_exit &&
+              restarted.open_startup_dictionary(true) && !restarted.open_startup_dictionary(false) &&
+              !restarted.findChild<QDialog*>(QStringLiteral("edictLookupDialog")),
+          "Startup restoration or missing-resource handling changed");
+
+  qt::ApplicationSettingsDialog options(preferences, &window);
+  options.show();
+  QCoreApplication::processEvents();
+  require(options.grab().save(QDir::current().filePath(QStringLiteral("startup-close-options.png"))),
+          "Could not capture startup/close Options");
+  for (const char* name : {"settingsStartupDictionary", "settingsCloseButtonFile", "settingsConfirmLastFileExit"}) {
+    auto* box = options.findChild<QCheckBox*>(QString::fromLatin1(name));
+    require(box && box->isChecked(), "A startup/close Options control is missing");
+    box->click();
+  }
+  options.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+  require(!options.settings().startup_dictionary && !options.settings().close_button_closes_file &&
+              !options.settings().confirm_last_file_exit && window.application_settings().confirm_last_file_exit,
+          "Staged Options did not capture all close controls independently");
+  qt::ApplicationSettingsDialog cancelled(preferences, &window);
+  cancelled.findChild<QCheckBox*>(QStringLiteral("settingsCloseButtonFile"))->click();
+  cancelled.reject();
+  require(cancelled.settings().close_button_closes_file && window.application_settings().close_button_closes_file,
+          "Cancelled startup/close Options were applied");
+
+  window.show();
+  QCoreApplication::processEvents();
+  require(window.new_document_tab() == 1 && !window.close() && window.isVisible() && window.document_count() == 1,
+          "Window close did not close only the active document");
+  window.active_editor()->insertPlainText(QStringLiteral("unsaved"));
+  QTimer::singleShot(0, [] {
+    auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    require(prompt && prompt->button(QMessageBox::Cancel), "Expected dirty-close save prompt");
+    prompt->button(QMessageBox::Cancel)->click();
+  });
+  require(!window.close() && window.document_modified() && window.active_editor()->toPlainText() == QStringLiteral("unsaved"),
+          "Cancelled close lost the dirty document");
+  find_action(window, "undoAction")->trigger();
+  require(!window.document_modified(), "Could not reset close fixture");
+  const auto answer = [](QMessageBox::StandardButton button) {
+    QTimer::singleShot(0, [button] {
+      auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+      require(prompt && prompt->objectName() == QStringLiteral("lastFileExitPrompt"), "Expected last-file exit choice");
+      prompt->button(button)->click();
+    });
+  };
+  answer(QMessageBox::No);
+  find_action(window, "closeDocumentAction")->trigger();
+  require(window.isVisible() && window.current_path().isEmpty() && !window.document_modified(),
+          "Declining last-file exit did not keep a clean unnamed document");
+  const QString original = directory + QStringLiteral("/close-policy.txt");
+  qt::write_text_file(original, {U"original", core::TextEncoding::kUtf8, false});
+  require(window.open_path(original, core::TextEncoding::kUtf8, qt::OpenMode::kNonInteractive), "Could not open discard fixture");
+  window.active_editor()->insertPlainText(QStringLiteral("changed"));
+  QTimer::singleShot(0, [&] {
+    auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    require(prompt && prompt->button(QMessageBox::Discard), "Expected discard choice");
+    answer(QMessageBox::No);
+    prompt->button(QMessageBox::Discard)->click();
+  });
+  find_action(window, "closeDocumentAction")->trigger();
+  require(window.current_path().isEmpty() && window.active_editor()->toPlainText().isEmpty() &&
+              !find_action(window, "undoAction")->isEnabled() && read_bytes(original) == "original",
+          "Declining exit restored discarded edits or changed the closed file");
+  answer(QMessageBox::Yes);
+  find_action(window, "closeDocumentAction")->trigger();
+  QCoreApplication::processEvents();
+  require(!window.isVisible(), "Accepted last-file exit did not close the application");
+  window.show();
+  preferences.confirm_last_file_exit = false;
+  require(window.apply_application_settings(preferences), "Could not disable last-file confirmation");
+  find_action(window, "closeDocumentAction")->trigger();
+  QCoreApplication::processEvents();
+  require(!window.isVisible(), "Disabled confirmation did not exit without a prompt");
+  window.show();
+  require(window.new_document_tab() == 1, "Could not prepare force-Quit fixture");
+  find_action(window, "quitAction")->trigger();
+  require(!window.isVisible() && window.document_count() == 2, "Explicit Quit used the file-close policy");
+  window.show();
+  require(!window.close() && window.document_count() == 1 && window.isVisible(), "Force-Quit state leaked to later closes");
+
+  preferences.close_button_closes_file = false;
+  require(window.apply_application_settings(preferences) && window.new_document_tab() == 1, "Could not prepare modifier close");
+  QTest::keyPress(window.windowHandle(), Qt::Key_Control, Qt::ControlModifier);
+  require(!window.close() && window.document_count() == 1 && window.isVisible(), "Ctrl-close did not force file close");
+  QTest::keyRelease(window.windowHandle(), Qt::Key_Control, Qt::ControlModifier);
+  preferences.close_button_closes_file = true;
+  require(window.apply_application_settings(preferences) && window.new_document_tab() == 1, "Could not prepare Alt-close");
+  QTest::keyPress(window.windowHandle(), Qt::Key_Alt, Qt::AltModifier);
+  require(window.close() && !window.isVisible() && window.document_count() == 2, "Alt-close did not force application close");
+  QTest::keyRelease(window.windowHandle(), Qt::Key_Alt, Qt::AltModifier);
+
+  qt::MainWindow changed;
+  changed.show();
+  QTimer::singleShot(0, [&] {
+    auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    require(prompt, "Expected guarded exit prompt");
+    changed.active_editor()->insertPlainText(QStringLiteral("new work"));
+    prompt->button(QMessageBox::Yes)->click();
+  });
+  find_action(changed, "closeDocumentAction")->trigger();
+  QCoreApplication::processEvents();
+  require(changed.isVisible() && changed.document_modified() && changed.active_editor()->toPlainText() == QStringLiteral("new work"),
+          "An old exit confirmation closed newer document contents");
+  QPointer<qt::MainWindow> doomed = new qt::MainWindow;
+  QTimer::singleShot(0, [&] { delete doomed.data(); });
+  find_action(*doomed, "closeDocumentAction")->trigger();
+  require(doomed.isNull(), "Exit confirmation did not survive owner deletion");
+  QApplication::setQuitOnLastWindowClosed(true);
 }
 
 void test_leaving_utf8_drops_bom(const QString& directory) {
@@ -3371,7 +3524,12 @@ void test_edict_search_controls(const QString& directory) {
   require(window.load_edict_configuration(registry_path, qt::OpenMode::kNonInteractive),
           "Could not load dictionary controls fixture");
   auto* action = find_action(window, "edictLookupAction");
-  action->trigger();
+  auto startup = window.application_settings();
+  startup.startup_dictionary = true;
+  require(window.apply_application_settings(startup) && window.open_startup_dictionary(true) &&
+              !window.findChild<QDialog*>(QStringLiteral("edictLookupDialog")) &&
+              window.open_startup_dictionary(false),
+          "Dictionary startup ignored explicit-document precedence or available resources");
   auto* dialog = dynamic_cast<qt::EdictLookupDialog*>(
       window.findChild<QDialog*>(QStringLiteral("edictLookupDialog")));
   require(dialog != nullptr, "Could not open dictionary controls");
@@ -5348,6 +5506,7 @@ int main(int argc, char* argv[]) {
     test_editing_mode_switch(directory.path());
     test_jfc_file_dialogs(directory.path());
     test_local_file_lifecycle_actions(directory.path());
+    test_startup_close_policies(directory.path());
     test_leaving_utf8_drops_bom(directory.path());
     test_detected_open(directory.path());
     test_detected_bom_is_preserved(directory.path());

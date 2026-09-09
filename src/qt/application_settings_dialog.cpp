@@ -66,6 +66,9 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   add_boolean("settingsCandidateScroll", tr("Candidate bar scrollbar"), &ApplicationSettings::kanji_bar_scrollbar);
   add_boolean("settingsSaveOnExit", tr("Save settings on exit"), &ApplicationSettings::save_settings_on_exit);
   add_boolean("settingsSaveRecent", tr("Remember recent files on disk"), &ApplicationSettings::save_recent_files);
+  add_boolean("settingsStartupDictionary", tr("Open dictionary on startup without an explicit document"), &ApplicationSettings::startup_dictionary);
+  add_boolean("settingsCloseButtonFile", tr("Window close button closes the current document"), &ApplicationSettings::close_button_closes_file);
+  add_boolean("settingsConfirmLastFileExit", tr("Ask whether to exit after closing the last document"), &ApplicationSettings::confirm_last_file_exit);
   auto* code_page = new QComboBox(display);
   code_page->setObjectName(QStringLiteral("settingsCodePage"));
   code_page->addItem(tr("Automatic (native CP1252)"), 0);

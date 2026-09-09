@@ -6,6 +6,14 @@ activates its tab. Save All visits unnamed files too; cancellation stops without
 discarding unprocessed documents. Close All and Exit ask about every modified
 document before discarding the workspace.
 
+Closing the last tab normally asks whether to exit. No keeps a clean unnamed
+Japanese document; it does not restore edits you already chose to discard.
+Display And Files settings can disable this confirmation or make the window
+close button close only the active file. Alt-close forces program exit and
+Ctrl-close forces file close. Explicit Quit always uses the whole-workspace
+save checks. The optional startup dictionary opens only without an explicit
+document/project and with available dictionary resources.
+
 ## Formats
 
 Native JWP preserves paragraph formatting, page breaks, metadata and headers.

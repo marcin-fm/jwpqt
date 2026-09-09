@@ -146,6 +146,21 @@ void test_runtime_paths(const QString& executable, const QString& root) {
           QStringLiteral("Native settings path, retained fields or read-only startup were lost"));
   preferences_file.close();
   require(preferences_file.remove(), QStringLiteral("Could not remove native settings fixture"));
+  const QByteArray startup_preferences(
+      "OpenDictionary=true\nCloseButton_Closes_File=true\nLastFileConfirmExit=true\n"
+      "SaveSettingsOnExit=false\nSave_Histories=false\n");
+  write_file(preferences, startup_preferences);
+  require(!run(options, 0).contains(QStringLiteral("Startup dictionary requested")) &&
+              preferences_file.open(QIODevice::ReadOnly) && preferences_file.readAll() == startup_preferences,
+          QStringLiteral("Resource report opened startup UI or rewrote preferences"));
+  preferences_file.close();
+  auto startup_options = options;
+  startup_options.removeAll(QStringLiteral("--resource-report"));
+  startup_options.append(QStringLiteral("--smoke-test"));
+  require(run(startup_options, 0).contains(QStringLiteral("Startup dictionary requested but no searchable dictionary")) &&
+              !QFile::exists(queries),
+          QStringLiteral("Smoke shutdown used last-file confirmation or hid unavailable startup resources"));
+  require(preferences_file.remove(), QStringLiteral("Could not remove startup settings fixture"));
   write_file(queries, QByteArray("corrupt query history"));
   QFile query_file(queries);
   require(run(options, 0).contains(QStringLiteral("Could not load query history")) &&

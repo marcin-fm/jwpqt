@@ -1,3 +1,5 @@
+find_package(Qt6 REQUIRED COMPONENTS Test)
+
 add_executable(jwpqt_core_tests
   utf8_test.cpp
 )
@@ -146,7 +148,7 @@ target_compile_options(jwpqt_kanji_color_settings_tests
 add_executable(jwpqt_main_window_tests
   main_window_test.cpp
 )
-target_link_libraries(jwpqt_main_window_tests PRIVATE jwpqt_qt_ui)
+target_link_libraries(jwpqt_main_window_tests PRIVATE jwpqt_qt_ui Qt6::Test)
 target_compile_options(jwpqt_main_window_tests PRIVATE -Wall -Wextra -Wpedantic)
 
 add_executable(jwpqt_wnn_user_dictionary_dialog_tests

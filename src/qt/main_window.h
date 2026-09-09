@@ -133,6 +133,8 @@ class MainWindow : public QMainWindow {
   int new_document_tab(bool japanese_editing = true);
   bool activate_document(int index);
   bool close_document(int index, OpenMode mode = OpenMode::kInteractive);
+  bool close_application();
+  bool open_startup_dictionary(bool explicit_document = false);
   bool close_all_documents(OpenMode mode = OpenMode::kInteractive);
   bool save_all_documents(OpenMode mode = OpenMode::kInteractive);
   bool load_recent_file_configuration(
@@ -356,6 +358,7 @@ class MainWindow : public QMainWindow {
   bool save_document_as(bool export_copy = false);
   bool maybe_save();
   bool approve_close_all(OpenMode mode);
+  bool close_document_command(int index);
   std::optional<core::TextEncoding> choose_encoding();
   void load_document(const QString& path, const core::TextFile& file,
                      bool japanese_editing = true, bool new_tab = false);
@@ -401,6 +404,7 @@ class MainWindow : public QMainWindow {
   QListWidget* conversion_candidates_;
   std::shared_ptr<QPrinter> printer_;
   bool print_busy_ = false;
+  bool force_application_close_ = false;
   bool print_selection_available_ = false;
   QLabel* encoding_label_;
   QAction* undo_action_;
