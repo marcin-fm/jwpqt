@@ -2,16 +2,82 @@
 
 #include "jwpqt/core/edict_registry.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <limits>
 
 #include "jwpqt/core/byte_io.h"
+#include "jwpqt/core/text_file.h"
+#include "jwpqt/core/utf8.h"
 
 namespace jwpqt::core {
 namespace {
 
 constexpr std::uint32_t kAnsiMagic = 0x12bc3e76U;
 constexpr std::uint32_t kUtf16Magic = 0x52bc3eb7U;
+
+unsigned char sample_byte(std::string_view bytes, std::size_t index) {
+  return index < bytes.size()
+             ? static_cast<unsigned char>(bytes[index])
+             : 0;
+}
+
+bool source_utf8_sample(std::string_view bytes, std::size_t size) {
+  for (std::size_t i = 0; i < size; ++i) {
+    const unsigned char byte = sample_byte(bytes, i);
+    if ((byte & 0x80U) == 0) continue;
+    std::size_t continuation = 0;
+    if ((byte & 0xe0U) == 0xc0U) continuation = 1;
+    else if ((byte & 0xf0U) == 0xe0U) continuation = 2;
+    else if ((byte & 0xf8U) == 0xf0U) continuation = 3;
+    else return false;
+    for (std::size_t j = 1; j <= continuation; ++j)
+      if ((sample_byte(bytes, i + j) & 0xc0U) != 0x80U) return false;
+    i += continuation;
+  }
+  return true;
+}
+
+bool source_euc_sample(std::string_view bytes, std::size_t size) {
+  for (std::size_t i = 0; i < size; ++i) {
+    if (sample_byte(bytes, i) <= 0x7fU) continue;
+    if (sample_byte(bytes, i + 1) < 0x80U) return false;
+    ++i;
+  }
+  return true;
+}
+
+std::optional<std::u32string> sample_description(
+    std::string_view bytes, EdictRegistryEncoding encoding,
+    LegacyCodePage mixed_code_page, std::size_t size) {
+  const std::size_t nul = bytes.find('\0');
+  const std::size_t available = std::min({size, bytes.size(), nul});
+  const std::string_view sample = bytes.substr(0, available);
+  const std::size_t first = sample.find('/');
+  if (first == std::string_view::npos) return std::nullopt;
+  const std::size_t second = sample.find('/', first + 1);
+  if (second == std::string_view::npos || second == first + 1)
+    return std::nullopt;
+  const std::string_view description =
+      sample.substr(first + 1, second - first - 1);
+  try {
+    if (encoding == EdictRegistryEncoding::kUtf8)
+      return decode_utf8(description);
+    if (encoding == EdictRegistryEncoding::kEucJp)
+      return decode_text_file(description, TextEncoding::kEucJp).text;
+    std::u32string result;
+    result.reserve(description.size());
+    for (const char source_byte : description) {
+      const auto byte = static_cast<unsigned char>(source_byte);
+      const auto code_point = legacy_byte_to_unicode(byte, mixed_code_page);
+      if (!code_point) return std::nullopt;
+      result.push_back(*code_point);
+    }
+    return result;
+  } catch (const std::exception&) {
+    return std::nullopt;
+  }
+}
 
 void validate_limits(const EdictRegistryLimits& limits) {
   if (limits.encoded_bytes < 8 || limits.entries == 0 ||
@@ -343,6 +409,33 @@ std::string serialize_edict_registry(const EdictRegistry& registry,
   }
   writer.write_u32_le(0);
   return writer.take_bytes();
+}
+
+EdictDictionarySample infer_edict_dictionary_sample(
+    std::string_view bytes, LegacyCodePage mixed_code_page,
+    std::size_t inspected_bytes) {
+  if (bytes.empty()) throw EdictRegistryError("Dictionary sample is empty");
+  if (inspected_bytes == 0 || inspected_bytes > 1024U * 1024U)
+    throw EdictRegistryError("Dictionary sample limit is invalid");
+
+  const std::size_t size = std::min(inspected_bytes, bytes.size());
+  bool ascii = true;
+  for (std::size_t i = 0; i < size; ++i)
+    if (sample_byte(bytes, i) > 0x7fU) {
+      ascii = false;
+      break;
+    }
+
+  EdictDictionarySample result;
+  if (ascii) result.encoding = EdictRegistryEncoding::kEucJp;
+  else if (source_utf8_sample(bytes, size))
+    result.encoding = EdictRegistryEncoding::kUtf8;
+  else if (source_euc_sample(bytes, size))
+    result.encoding = EdictRegistryEncoding::kEucJp;
+  else result.encoding = EdictRegistryEncoding::kMixed;
+  result.description = sample_description(
+      bytes, result.encoding, mixed_code_page, size);
+  return result;
 }
 
 }  // namespace jwpqt::core

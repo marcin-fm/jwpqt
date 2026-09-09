@@ -11,9 +11,13 @@
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDir>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QFile>
+#include <QFileDialog>
 #include <QInputDialog>
 #include <QLabel>
+#include <QMimeData>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QLockFile>
@@ -82,6 +86,97 @@ void storage(const QString& root) {
   rejects([&] { qt::read_edict_registry_snapshot(QString()); });
   rejects([&] { qt::read_edict_registry_snapshot(path + QChar::Null + "suffix"); });
   qt::write_edict_registry_file(path, value);
+}
+void sample_import(const QString& root) {
+  const auto utf8 = root + "/dropped.utf";
+  const auto mixed = root + "/mixed.dic";
+  write(utf8, QByteArray::fromHex("e78cab202fe8be9ee69bb82f0a"));
+  write(root + "/dropped.jdx", "index");
+  write(mixed, QByteArray::fromHex("c7ad202f80206e616d652f0a"));
+
+  auto value = fixture();
+  qt::EdictRegistryDialog detected(value, root, core::LegacyCodePage::k1251);
+  auto* list = child<QListWidget>(detected, "registryEntries");
+  child<QLineEdit>(detected, "registryPath")->setText(utf8);
+  child<QPushButton>(detected, "registryDetect")->click();
+  require(detected.registry().entries[0].path == utf8.toStdU16String() &&
+              detected.registry().entries[0].encoding == core::EdictRegistryEncoding::kUtf8 &&
+              detected.registry().entries[0].indexed &&
+              detected.registry().entries[0].label == u"\u8f9e\u66f8",
+          "Detect did not apply source sample, companion index, path, and description");
+  const auto after_detect = detected.registry();
+  child<QLineEdit>(detected, "registryPath")->setText(root + "/missing");
+  child<QPushButton>(detected, "registryDetect")->click();
+  require(detected.registry().entries[0].encoding == after_detect.entries[0].encoding &&
+              detected.registry().entries[0].label == after_detect.entries[0].label &&
+              child<QLabel>(detected, "registryStatus")->text().contains("regular file"),
+          "Failed Detect changed inferred fields or concealed its error");
+  QTimer::singleShot(0, &detected, [&] {
+    auto* chooser = detected.findChild<QFileDialog*>();
+    require(chooser, "Dictionary Browse dialog");
+    chooser->selectFile(mixed);
+    static_cast<QDialog*>(chooser)->accept();
+  });
+  child<QPushButton>(detected, "registryBrowse")->click();
+  require(detected.registry().entries[0].path == mixed.toStdU16String() &&
+              detected.registry().entries[0].encoding == core::EdictRegistryEncoding::kMixed &&
+              detected.registry().entries[0].label == u"\u0402 name" &&
+              !detected.registry().entries[0].indexed,
+          "Browse did not run the bounded dictionary inference workflow");
+
+  list->setCurrentRow(2);
+  child<QLineEdit>(detected, "registryPath")->setText(mixed);
+  child<QPushButton>(detected, "registryDetect")->click();
+  require(detected.registry().entries[2].path == mixed.toStdU16String() &&
+              detected.registry().entries[2].encoding == core::EdictRegistryEncoding::kMixed &&
+              detected.registry().entries[2].special == core::EdictRegistrySpecial::kUser &&
+              !detected.registry().entries[2].indexed &&
+              detected.registry().entries[2].label == u"\u0402 name",
+          "Detect changed the protected user dictionary contract");
+
+  list->setCurrentRow(0);
+  QMimeData mime;
+  mime.setUrls({QUrl::fromLocalFile(mixed), QUrl::fromLocalFile(utf8)});
+  QDragEnterEvent enter(QPoint(2, 2), Qt::CopyAction, &mime,
+                        Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(&detected, &enter);
+  require(enter.isAccepted(), "Local dictionary drag was not accepted");
+  QDropEvent drop(QPointF(2, 2), Qt::CopyAction, &mime,
+                  Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(&detected, &drop);
+  require(drop.isAccepted() && detected.registry().entries.size() == value.entries.size() + 2 &&
+              detected.registry().entries[1].path == mixed.toStdU16String() &&
+              detected.registry().entries[1].encoding == core::EdictRegistryEncoding::kMixed &&
+              detected.registry().entries[1].label == u"\u0402 name" &&
+              detected.registry().entries[2].path == utf8.toStdU16String(),
+          "Multi-file drop did not retain source order or inferred fields");
+  require(child<QLabel>(detected, "registryStatus")->text().contains("2 dictionary"),
+          "Multi-file drop did not disclose staged additions");
+
+  const auto count = detected.registry().entries.size();
+  QMimeData remote;
+  remote.setUrls({QUrl(QStringLiteral("https://example.invalid/dict"))});
+  QDragEnterEvent remote_enter(QPoint(2, 2), Qt::CopyAction, &remote,
+                               Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(&detected, &remote_enter);
+  require(!remote_enter.isAccepted() && detected.registry().entries.size() == count,
+          "Nonlocal dictionary drag was accepted or changed the registry");
+
+  auto full = fixture();
+  full.entries.resize(core::EdictRegistryLimits{}.entries, full.entries.front());
+  full.entries.back() = fixture().entries.back();
+  qt::EdictRegistryDialog bounded(full, root, core::kDefaultLegacyCodePage);
+  QMimeData one;
+  one.setUrls({QUrl::fromLocalFile(utf8)});
+  QDragEnterEvent full_enter(QPoint(2, 2), Qt::CopyAction, &one,
+                             Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(&bounded, &full_enter);
+  QDropEvent full_drop(QPointF(2, 2), Qt::CopyAction, &one,
+                       Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(&bounded, &full_drop);
+  require(bounded.registry().entries.size() == core::EdictRegistryLimits{}.entries &&
+              child<QLabel>(bounded, "registryStatus")->text().contains("entry limit"),
+          "Drop exceeded or concealed the registry entry bound");
 }
 void controls(const QString& root) {
   auto value = fixture();
@@ -314,7 +409,7 @@ int main(int argc, char** argv) {
     const auto root = directory.path();
     write(root + "/first", "\xe7\x8c\xab /cat first/\n");
     write(root + "/second", "\xe7\x8a\xac /cat second/\n");
-    storage(root); controls(root); integration(root); migration_and_paths(root);
+    storage(root); sample_import(root); controls(root); integration(root); migration_and_paths(root);
     std::cout << "All dictionary registry manager tests passed\n";
   } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

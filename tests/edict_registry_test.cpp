@@ -18,6 +18,7 @@ using jwpqt::core::EdictRegistryLimits;
 using jwpqt::core::EdictRegistryNames;
 using jwpqt::core::EdictRegistrySpecial;
 using jwpqt::core::EdictRegistryWireEncoding;
+using jwpqt::core::infer_edict_dictionary_sample;
 using jwpqt::core::parse_edict_registry;
 using jwpqt::core::serialize_edict_registry;
 
@@ -265,6 +266,48 @@ void test_limits_and_invalid_models() {
                 "Invalid registry wire encoding was serialized");
 }
 
+void test_dictionary_sample_inference() {
+  auto sample = infer_edict_dictionary_sample("header /ASCII description/\n");
+  require(sample.encoding == EdictRegistryEncoding::kEucJp &&
+              sample.description == U"ASCII description",
+          "ASCII dictionary sample inference is wrong");
+
+  sample = infer_edict_dictionary_sample(
+      std::string{"\xe7\x8c\xab /\xe6\x97\xa5\xe6\x9c\xac/\n"});
+  require(sample.encoding == EdictRegistryEncoding::kUtf8 &&
+              sample.description == U"\u65e5\u672c",
+          "UTF-8 dictionary sample inference is wrong");
+
+  sample = infer_edict_dictionary_sample(
+      std::string{"\xa4\xa2 /\xa4\xa2/\n"});
+  require(sample.encoding == EdictRegistryEncoding::kEucJp &&
+              sample.description == U"\u3042",
+          "EUC dictionary sample inference is wrong");
+
+  sample = infer_edict_dictionary_sample(
+      std::string{"\xc7\xad /\x80 name/\n"},
+      jwpqt::core::LegacyCodePage::k1251);
+  require(sample.encoding == EdictRegistryEncoding::kMixed &&
+              sample.description == U"\u0402 name",
+          "Mixed dictionary sample inference or code page is wrong");
+
+  std::string boundary(2048, 'a');
+  boundary.back() = static_cast<char>(0xc2);
+  boundary.push_back(static_cast<char>(0xa2));
+  sample = infer_edict_dictionary_sample(boundary);
+  require(sample.encoding == EdictRegistryEncoding::kUtf8,
+          "Source lookahead at the sample boundary was lost");
+
+  sample = infer_edict_dictionary_sample(std::string{"x /\xc0\x80/\n"});
+  require(sample.encoding == EdictRegistryEncoding::kUtf8 &&
+              !sample.description,
+          "Malformed source-compatible UTF-8 sample was not isolated from its description");
+  require_error([] { (void)infer_edict_dictionary_sample({}); },
+                "Empty dictionary sample was accepted");
+  require_error([] { (void)infer_edict_dictionary_sample("x", jwpqt::core::kDefaultLegacyCodePage, 0); },
+                "Zero dictionary sample limit was accepted");
+}
+
 }  // namespace
 
 int main() {
@@ -275,5 +318,6 @@ int main() {
   test_malformed_input();
   test_parser_limits();
   test_limits_and_invalid_models();
+  test_dictionary_sample_inference();
   return EXIT_SUCCESS;
 }

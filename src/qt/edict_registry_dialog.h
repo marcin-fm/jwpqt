@@ -2,6 +2,8 @@
 #pragma once
 
 #include <QDialog>
+#include <QList>
+#include <QUrl>
 #include "jwpqt/core/edict_registry.h"
 #include "jwpqt/core/legacy_code_page.h"
 
@@ -11,6 +13,8 @@ class QComboBox;
 class QCheckBox;
 class QLabel;
 class QPushButton;
+class QDragEnterEvent;
+class QDropEvent;
 
 namespace jwpqt::qt {
 
@@ -22,11 +26,17 @@ class EdictRegistryDialog : public QDialog {
   bool allow_unavailable() const;
   void accept() override;
 
+ protected:
+  void dragEnterEvent(QDragEnterEvent* event) override;
+  void dropEvent(QDropEvent* event) override;
+
  private:
   void refresh(int row);
   void select_entry();
   void update_entry();
   void inspect_entry();
+  bool detect_entry(int row, const QString& filename, bool replace_name);
+  void add_dictionary_files(const QList<QUrl>& urls);
   void defaults();
   core::EdictRegistry registry_;
   QString directory_;

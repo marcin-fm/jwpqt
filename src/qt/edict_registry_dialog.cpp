@@ -7,7 +7,9 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
+#include <QDragEnterEvent>
 #include <QFileDialog>
+#include <QFile>
 #include <QFileInfo>
 #include <QFormLayout>
 #include <QHBoxLayout>
@@ -16,6 +18,8 @@
 #include <QListWidget>
 #include <QPointer>
 #include <QPushButton>
+#include <QDropEvent>
+#include <QMimeData>
 #include <QSignalBlocker>
 #include <QStringView>
 #include <QVBoxLayout>
@@ -36,6 +40,7 @@ EdictRegistryDialog::EdictRegistryDialog(core::EdictRegistry registry, QString d
   setObjectName(QStringLiteral("edictRegistryDialog"));
   setWindowTitle(tr("Dictionary Manager"));
   resize(920, 620);
+  setAcceptDrops(true);
   auto* layout = new QVBoxLayout(this);
   auto* description = new QLabel(tr("Search order is top to bottom. All changes are staged until Save and Reload.\n"
       "Removing an entry does not delete its files. Relative paths use: %1").arg(directory_), this);
@@ -79,7 +84,13 @@ EdictRegistryDialog::EdictRegistryDialog(core::EdictRegistry registry, QString d
   auto* browse = new QPushButton(tr("Browse..."), this);
   browse->setObjectName(QStringLiteral("registryBrowse"));
   browse->setAutoDefault(false);
-  form->addRow(browse);
+  auto* detect = new QPushButton(tr("Detect"), this);
+  detect->setObjectName(QStringLiteral("registryDetect"));
+  detect->setAutoDefault(false);
+  auto* file_buttons = new QHBoxLayout;
+  file_buttons->addWidget(browse);
+  file_buttons->addWidget(detect);
+  form->addRow(file_buttons);
   const auto combo = [this, form](const QString& label, const char* name, const QStringList& values) {
     auto* result = new QComboBox(this);
     result->setObjectName(QString::fromLatin1(name));
@@ -168,16 +179,36 @@ EdictRegistryDialog::EdictRegistryDialog(core::EdictRegistry registry, QString d
       refresh(next);
     });
   connect(inspect, &QPushButton::clicked, this, &EdictRegistryDialog::inspect_entry);
+  connect(detect, &QPushButton::clicked, this, [this] {
+    const int row = list_->currentRow();
+    if (row >= 0) detect_entry(row, path_->text(), true);
+  });
   connect(browse, &QPushButton::clicked, this, [this] {
     const QPointer<EdictRegistryDialog> self(this);
     const int row = list_->currentRow();
     const auto filename = QFileDialog::getOpenFileName(this, tr("Choose Dictionary"), directory_, tr("All files (*)"));
-    if (self && row == list_->currentRow() && !filename.isEmpty()) path_->setText(filename);
+    if (self && row == list_->currentRow() && !filename.isEmpty())
+      detect_entry(row, filename, true);
   });
   refresh(0);
 }
 
 bool EdictRegistryDialog::allow_unavailable() const { return allow_->isChecked(); }
+
+void EdictRegistryDialog::dragEnterEvent(QDragEnterEvent* event) {
+  if (!event->mimeData()->hasUrls()) return;
+  for (const auto& url : event->mimeData()->urls())
+    if (url.isLocalFile() && QFileInfo(url.toLocalFile()).isFile()) {
+      event->acceptProposedAction();
+      return;
+    }
+}
+
+void EdictRegistryDialog::dropEvent(QDropEvent* event) {
+  if (!event->mimeData()->hasUrls()) return;
+  add_dictionary_files(event->mimeData()->urls());
+  event->acceptProposedAction();
+}
 
 void EdictRegistryDialog::refresh(int row) {
   updating_ = true;
@@ -270,6 +301,75 @@ void EdictRegistryDialog::inspect_entry() {
         .arg(QString::fromStdString(errors.front()));
     status_->setText(message);
   } catch (const std::exception& error) { status_->setText(QString::fromUtf8(error.what())); }
+}
+
+bool EdictRegistryDialog::detect_entry(int row, const QString& filename,
+                                       bool replace_name) {
+  if (row < 0 || row >= static_cast<int>(registry_.entries.size())) return false;
+  try {
+    const QFileInfo source(filename);
+    if (filename.isEmpty() || filename.contains(QChar::Null) || !source.isFile())
+      throw core::EdictRegistryError("Dictionary sample is not a regular file");
+    QFile file(filename);
+    if (!file.open(QIODevice::ReadOnly))
+      throw core::EdictRegistryError("Could not open dictionary sample");
+    const QByteArray bytes = file.read(2058);
+    if (bytes.isEmpty())
+      throw core::EdictRegistryError("Dictionary sample is empty");
+    const auto inferred = core::infer_edict_dictionary_sample(
+        std::string_view(bytes.constData(), static_cast<std::size_t>(bytes.size())),
+        code_page_);
+    auto& entry = registry_.entries[static_cast<std::size_t>(row)];
+    entry.path = filename.toStdU16String();
+    if (entry.special != core::EdictRegistrySpecial::kUser) {
+      entry.encoding = inferred.encoding;
+      entry.indexed = QFileInfo(edict_index_path(filename)).isFile();
+    }
+    if (replace_name) {
+      const QString label = inferred.description
+                                ? to_qstring(*inferred.description)
+                                : source.completeBaseName();
+      if (!label.isEmpty()) entry.label = label.toStdU16String();
+    }
+    refresh(row);
+    status_->setText(tr("Detected %1%2 from the first 2,048 bytes. Changes remain staged.")
+        .arg(encoding_->currentText(), entry.indexed ? tr(" with a companion index") : QString()));
+    return true;
+  } catch (const std::exception& error) {
+    status_->setText(QString::fromUtf8(error.what()));
+    return false;
+  }
+}
+
+void EdictRegistryDialog::add_dictionary_files(const QList<QUrl>& urls) {
+  int row = list_->currentRow();
+  int added = 0;
+  QString last_error;
+  for (const auto& url : urls) {
+    if (!url.isLocalFile()) {
+      last_error = tr("Only local dictionary files can be added");
+      continue;
+    }
+    if (registry_.entries.size() >= core::EdictRegistryLimits{}.entries) {
+      last_error = tr("The dictionary registry has reached its 4,096-entry limit");
+      break;
+    }
+    core::EdictRegistryEntry entry;
+    entry.label = QFileInfo(url.toLocalFile()).completeBaseName().toStdU16String();
+    entry.searched = true;
+    registry_.entries.insert(registry_.entries.begin() + ++row, std::move(entry));
+    if (detect_entry(row, url.toLocalFile(), true)) {
+      ++added;
+    } else {
+      last_error = status_->text();
+      registry_.entries.erase(registry_.entries.begin() + row--);
+    }
+  }
+  refresh(row);
+  if (added)
+    status_->setText(tr("%1 dictionary file(s) detected and staged. Save and Reload to apply them.%2")
+        .arg(added).arg(last_error.isEmpty() ? QString() : tr(" Last error: %1").arg(last_error)));
+  else if (!last_error.isEmpty()) status_->setText(last_error);
 }
 
 void EdictRegistryDialog::defaults() {
