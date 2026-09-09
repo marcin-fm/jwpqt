@@ -2745,6 +2745,7 @@ void MainWindow::create_actions() {
           [this] { save_all_documents(); });
 
   QAction* save_as_action = file_menu->addAction(tr("Save &As..."));
+  save_as_action->setObjectName(QStringLiteral("saveAsDocumentAction"));
   save_as_action->setShortcut(QKeySequence::SaveAs);
   connect(save_as_action, &QAction::triggered, this,
           [this] { save_document_as(); });
@@ -2853,6 +2854,7 @@ void MainWindow::create_actions() {
 
   edit_menu->addSeparator();
   QAction* select_all_action = edit_menu->addAction(tr("Select &All"));
+  select_all_action->setObjectName(QStringLiteral("selectAllAction"));
   select_all_action->setShortcut(QKeySequence::SelectAll);
   connect(select_all_action, &QAction::triggered, this, [this] {
     finish_kana_input();

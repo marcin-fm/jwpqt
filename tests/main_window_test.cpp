@@ -26,6 +26,7 @@
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMenu>
 #include <QMessageBox>
 #include <QMimeData>
 #include <QMouseEvent>
@@ -285,6 +286,80 @@ QAction* find_encoding_action(jwpqt::qt::MainWindow& window,
 
 QAction* find_action(jwpqt::qt::MainWindow& window, const char* name) {
   return window.findChild<QAction*>(QString::fromLatin1(name));
+}
+
+void test_legacy_command_inventory() {
+  constexpr std::pair<const char*, const char*> kLegacyActions[] = {
+      {"IDM_FILE_NEW", "newDocumentAction"},
+      {"IDM_FILE_OPEN", "openDocumentAction"},
+      {"IDM_FILE_REVERT", "revertDocumentAction"},
+      {"IDM_FILE_CLOSE", "closeDocumentAction"},
+      {"IDM_FILE_CLOSEALL", "closeAllDocumentsAction"},
+      {"IDM_FILE_SAVE", "saveDocumentAction"},
+      {"IDM_FILE_SAVEALL", "saveAllDocumentsAction"},
+      {"IDM_FILE_SAVEAS", "saveAsDocumentAction"},
+      {"IDM_FILE_DELETE", "deleteDocumentAction"},
+      {"IDM_FILE_PRINT", "printAction"},
+      {"IDM_FILE_PRINTERSETUP", "printerSetupAction"},
+      {"IDM_FILE_FILES_NONE", "recentFile1Action"},
+      {"IDM_FILE_EXIT", "quitAction"},
+      {"IDM_EDIT_UNDO", "undoAction"},
+      {"IDM_EDIT_REDO", "redoAction"},
+      {"IDM_EDIT_MODE_KANJI", "kanaInputAction"},
+      {"IDM_EDIT_MODE_ASCII", "asciiInputAction"},
+      {"IDM_EDIT_MODE_JASCII", "jasciiInputAction"},
+      {"IDM_EDIT_CUT", "cutAction"},
+      {"IDM_EDIT_COPY", "copyAction"},
+      {"IDM_EDIT_PASTE", "pasteAction"},
+      {"IDM_EDIT_SELECTALL", "selectAllAction"},
+      {"IDM_EDIT_INSERTPAGEBREAK", "insertPageBreakAction"},
+      {"IDM_EDIT_SEARCH", "findAction"},
+      {"IDM_EDIT_REPLACE", "replaceAction"},
+      {"IDM_EDIT_FINDNEXT", "findNextAction"},
+      {"IDM_EDIT_REVERSESEARCH", "findPreviousAction"},
+      {"IDM_KANJI_CONVERT", "convertSelectionAction"},
+      {"IDM_KANJI_GETINFO", "kanjiInfoAction"},
+      {"IDM_KANJI_RADICALLOOKUP", "radicalLookupAction"},
+      {"IDM_KANJI_BUSHULOOKUP", "bushuLookupAction"},
+      {"IDM_KANJI_BUSHU2LOOKUP", "strokeBushuLookupAction"},
+      {"IDM_KANJI_SKIPLOOKUP", "skipLookupAction"},
+      {"IDM_KANJI_HSLOOKUP", "spahnLookupAction"},
+      {"IDM_KANJI_FCLOOKUP", "fourCornerLookupAction"},
+      {"IDM_KANJI_READINGLOOKUP", "kanjiReadingLookupAction"},
+      {"IDM_KANJI_INDEXLOOKUP", "indexLookupAction"},
+      {"IDM_KANJI_JISTABLE", "jisTableAction"},
+      {"IDM_KANJI_MAKEKANJILIST", "makeKanjiColorListAction"},
+      {"IDM_KANJI_APPENDKANJILIST", "appendKanjiColorListAction"},
+      {"IDM_KANJI_ADDSUBKANJILIST", "editKanjiColorListAction"},
+      {"IDM_KANJI_OPENKANJILIST", "viewKanjiColorListAction"},
+      {"IDM_KANJI_CLEARKANJILIST", "clearKanjiColorListAction"},
+      {"IDM_KANJI_COUNTKANJI", "kanjiCountAction"},
+      {"IDM_UTILITIES_DICTIONARY", "edictLookupAction"},
+      {"IDM_UTILITIES_USERCONVERSION", "userDictionaryAction"},
+      {"IDM_UTILITIES_OPTIONS", "applicationOptionsAction"},
+      {"IDM_UTILITIES_CHARINFO", "kanjiInfoSetupAction"},
+      {"IDM_UTILITIES_CUSTOMIZE", "customizeToolbarAction"},
+      {"IDM_UTILITIES_FORMATFILE", "formatFileAction"},
+      {"IDM_UTILITIES_FORMATPARAGRAPH", "formatParagraphAction"},
+      {"IDM_UTILITIES_PAGELAYOUT", "pageLayoutAction"},
+      {"IDM_UTILITIES_DEFAULTOPTIONS", "defaultSettingsAction"},
+      {"IDM_UTILITIES_SAVESETTINGS", "saveSettingsAction"},
+      {"IDM_UTILITIES_IMPORTSETTINGS", "importSettingsAction"},
+      {"IDM_WINDOW_NEXTFILE", "nextFileAction"},
+      {"IDM_WINDOW_PREVIOUSFILE", "previousFileAction"},
+      {"IDM_WINDOW_FILES", "filesAction"},
+      {"IDM_HELP_MAININDEX", "helpContentsAction"},
+      {"IDM_HELP_ABOUTJWPCE", "aboutAction"},
+  };
+
+  jwpqt::qt::MainWindow window;
+  for (const auto& [legacy_id, action_name] : kLegacyActions) {
+    const QAction* action = find_action(window, action_name);
+    require(action != nullptr,
+            std::string("Missing native action for ") + legacy_id);
+    require(qobject_cast<QMenu*>(action->parent()) != nullptr,
+            std::string("Native action is not in a menu for ") + legacy_id);
+  }
 }
 
 void send_text_key(QTextEdit* editor, int key, const QString& text,
@@ -6480,6 +6555,7 @@ int main(int argc, char* argv[]) {
     QTemporaryDir directory(QDir::tempPath() +
                             QStringLiteral("/jwpqt-window-test-XXXXXX"));
     require(directory.isValid(), "Could not create temporary test directory");
+    test_legacy_command_inventory();
     test_new_document_workflow(directory.path());
     test_duplicate_open_policy(directory.path());
     test_document_line_width_policy(directory.path());

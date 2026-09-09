@@ -122,7 +122,7 @@ searched resources require explicit acceptance, and a stale disk snapshot cannot
 be overwritten. Lookup queries/results/history remain intact; close the user
 dictionary editor first to protect its working copy. ANSI registry migration
 asks for the original code page and writes Unicode only on successful Save.
-The [handbook](docs/handbook/dictionary.md) describes details and remaining gaps.
+The [handbook](docs/handbook/dictionary.md) describes the complete native workflow.
 
 The clickable **Resources** status and **Help > Runtime Resources** show loaded
 sources, failures, and skipped invalid records. Add `--resource-report` to the
@@ -373,8 +373,9 @@ ordered indexed or unindexed resources from `dict.cfg`, searches with the
 portable direct, adaptive, wildcard, contingent, and name filters, and inserts
 selected rows into JWP with portable undo. Editable EDICT `user.dct` and native
 kanji lookup tools and project workspaces are available. Native document printing
-and preview are described below. Remaining configuration, input/lookup controls,
-legacy print tuning and other remaining command-parity gaps remain in progress.
+and preview are described below. The recovered main-menu command inventory and
+configuration surface are covered by native implementations or explicit platform
+replacements and exclusions.
 
 ### Document printing and preview
 
@@ -434,7 +435,7 @@ jobs report an error rather than silently truncating. Native spool errors are
 reported, but cancellation cannot recall pages already sent to a physical printer.
 PDF text/image/preview verification is the accepted printing gate for this port;
 physical-printer testing is not required. This does not claim testing of every
-printer backend or remove the retained legacy-formatting limitations above.
+printer backend or pixel-identical Win32 rasterization.
 
 ### Input modes and shortcuts
 
@@ -464,8 +465,8 @@ not the document behind it. Typed kana/JASCII, Unicode and ordinary IME commits
 use scalar-safe, selection-only replacement and native query undo. Mode hints
 are available in the query tooltips and accessibility descriptions. Invalid input,
 field limits, validators and read-only targets cannot erase text before rejection.
-Other edit forms, remaining clipboard formats and exact legacy visual-line-edge
-behavior remain separate input-parity work.
+The remaining Japanese-input forms and native/external clipboard representations
+use the same validated composition, overwrite and one-step undo boundaries.
 
 `Ctrl+A` remains Select All. Close uses `Ctrl+F4`, leaving `Ctrl+W` for conversion.
 SKIP uses `Ctrl+Alt+S` and Spahn-Hadamitzky uses `Ctrl+Alt+H`, avoiding native

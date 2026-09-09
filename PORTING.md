@@ -368,12 +368,11 @@ vendor extensions, malformed byte sequences, unassigned table cells, and
 Unicode characters outside the recovered repertoire. Supporting any of these
 requires a separate fixture-backed change rather than silent substitution.
 
-## Next slices
+## Native completion boundary
 
-1. Port kanji information, radical, stroke, SKIP, and four-corner lookup tools.
-2. Port paged printing and clipboard color policy over the rich JWP document
-    layout.
-3. Port configuration, remaining import/export paths, and help.
-
-Each slice is committed independently after focused tests and the complete
-CTest suite pass.
+The recovered main-menu command inventory and configuration surface now have
+tested native implementations or source-justified platform replacements and
+exclusions. Linux delivery replaces the Windows registry installer, the embedded
+handbook replaces WinHelp, and Linux MIME formats replace Windows clipboard IDs.
+The command-inventory regression and complete CTest suites guard that boundary;
+newly recovered behavior still requires an independent fixture-backed change.

@@ -1,7 +1,9 @@
 # About jwpqt
 
 jwpqt is a native Qt 6 Linux port of JWPxp 1.67, descended from JWPce and JWP.
-It is still under development and is not a claim of complete JWPxp parity.
+Its recovered user-visible command and configuration surfaces have been audited;
+each command has a tested native implementation or a documented platform
+replacement or exclusion.
 The running version is displayed in this window's status and by `jwpqt --version`.
 
 ## Credits and License
@@ -28,9 +30,13 @@ not included in the native package and are never downloaded automatically.
 
 Help > Runtime Resources and `--resource-report` provide local diagnostics.
 Do not publish private document text, history files, user dictionaries or paths
-without reviewing them first. Known open porting areas include remaining
-dictionary/lookup policies, toolbar and font roles, auxiliary result-list Find
-and some legacy print tuning. The bundled handbook distinguishes implemented
-native behavior from these gaps.
+without reviewing them first. Windows Install is replaced by CMake/CPack and
+desktop/MIME integration, WinHelp by this embedded handbook, and Windows
+clipboard formats by equivalent Linux MIME formats. The Qt screen line breaker
+can group adjacent closing marks before per-character formatting; the portable
+planner and PDF renderer still permit only the first mark to hang, while the
+screen preserves exact document text rather than inserting hidden characters.
+PDF rendering is the accepted printing gate; physical printer hardware was not
+tested.
 
 [Contents](start.md) | [Installation](installation.md)

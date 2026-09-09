@@ -75,8 +75,9 @@ select alternate vertical glyphs; non-square raster rotation is rejected safely.
 TrueType fonts with a vertical substitution feature use their alternate glyphs
 and rotate Japanese punctuation as well. The private face retains the original
 text in PDF extraction and does not change horizontal fonts or saved settings.
-Fonts without that feature keep the native fallback. Other font tuning remains
-explicitly unfinished.
+Fonts without that feature keep the native fallback. Legacy font-cache and
+display-buffer controls are documented exclusions: they selected Win32 cache
+strategies that the bounded native font engine does not use.
 
 ASCII and legacy extensions selects a separate single-byte font at the Japanese
 role's height. Even when that family contains Japanese, its private restricted

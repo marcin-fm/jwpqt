@@ -733,6 +733,33 @@ void test_margin_relaxation() {
   editor.clear_jwp_layout();
   require(first_period.charFormat().fontStretch() != 1,
           "Clearing JWP presentation retained margin relaxation");
+
+  source.paragraphs[0].text.push_back(0x2122);
+  const std::u32string adjacent_decoded =
+      core::decode_jwp_text(source.paragraphs[0].text);
+  qt::JwpEditor adjacent_editor;
+  adjacent_editor.setPlainText(QString::fromUcs4(
+      adjacent_decoded.data(), static_cast<qsizetype>(adjacent_decoded.size())));
+  adjacent_editor.apply_jwp_layout(source);
+  adjacent_editor.apply_jwp_fonts(source, core::kDefaultLegacyCodePage);
+  adjacent_editor.set_character_line_width(4);
+  adjacent_editor.apply_margin_relaxation(
+      source, core::kDefaultLegacyCodePage, true, true);
+  QTextCursor first_closing(adjacent_editor.document());
+  first_closing.setPosition(4);
+  first_closing.setPosition(5, QTextCursor::KeepAnchor);
+  QTextCursor second_closing(adjacent_editor.document());
+  second_closing.setPosition(5);
+  second_closing.setPosition(6, QTextCursor::KeepAnchor);
+  require(first_closing.charFormat().fontStretch() == 1 &&
+              second_closing.charFormat().fontStretch() != 1 &&
+              adjacent_editor.toPlainText() ==
+                  QString::fromUcs4(adjacent_decoded.data(),
+                                    static_cast<qsizetype>(
+                                        adjacent_decoded.size())) &&
+              source.paragraphs[0].text.back() == 0x2122,
+          "Adjacent closing marks changed the one-character planner or "
+          "document identity");
 }
 
 }  // namespace
