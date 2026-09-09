@@ -1,21 +1,25 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "application_settings_dialog.h"
-#include <QDoubleSpinBox>
 
+#include <algorithm>
+#include <array>
 #include <utility>
 #include <vector>
 
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
+#include <QDoubleSpinBox>
 #include <QFontDatabase>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QLabel>
 #include <QListWidget>
+#include <QLineEdit>
 #include <QMessageBox>
 #include <QPlainTextEdit>
+#include <QPointer>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSpinBox>
@@ -24,7 +28,9 @@
 
 #include "jwpqt/core/jwp_configuration.h"
 #include "jwpqt/core/edict_filter.h"
+#include "jwpqt/core/jwp_text_codec.h"
 #include "kanji_info_options_dialog.h"
+#include "kana_input_field.h"
 #include "text_bridge.h"
 
 namespace jwpqt::qt {
@@ -269,11 +275,48 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   print_auto->setChecked(settings_.print_font.automatic);
   print_form->addRow(tr("Printer font"), print_family); print_form->addRow(tr("Physical size"), print_size);
   print_form->addRow(print_auto);
+  auto* print_colors = new QCheckBox(tr("Print kanji-list colors (requires an active list mode)"), printing);
+  print_colors->setObjectName(QStringLiteral("settingsPrintColors"));
+  print_colors->setChecked(settings_.color_printing);
+  print_form->addRow(print_colors);
+  booleans.push_back({print_colors, &ApplicationSettings::color_printing});
+  std::array<KanaInputField*, 4> print_patterns{};
+  std::array<QString, 4> original_patterns{};
+  std::array<QDoubleSpinBox*, 4> print_positions{};
+  const auto pattern_page = settings_.translation_code_page ? static_cast<core::LegacyCodePage>(settings_.translation_code_page) : core::kDefaultLegacyCodePage;
+  const char* pattern_labels[] = {"Date pattern", "Time pattern", "AM text", "PM text"};
+  const char* position_labels[] = {"Header left extension", "Header right extension", "Header distance", "Footer distance"};
+  for (std::size_t i = 0; i < 4; ++i) {
+    auto* field = new KanaInputField(QStringLiteral("settingsPrintPattern%1").arg(i), printing);
+    field->set_input_mode(InputMode::kAscii);
+    const auto& raw = settings_.print_formatting.patterns[i];
+    try {
+      original_patterns[i] = to_qstring(core::decode_jwp_text(core::JwpText(raw.begin(), std::find(raw.begin(), raw.end(), 0)), pattern_page));
+    } catch (const core::JwpTextCodecError&) {
+      field->edit()->setReadOnly(true);
+      field->edit()->setPlaceholderText(tr("Not displayable in this code page; original bytes retained"));
+    }
+    field->edit()->setText(original_patterns[i]);
+    print_form->addRow(tr(pattern_labels[i]), field); print_patterns[i] = field;
+  }
+  for (std::size_t i = 0; i < 4; ++i) {
+    auto* position = new QDoubleSpinBox(printing);
+    position->setObjectName(QStringLiteral("settingsPrintPosition%1").arg(i));
+    position->setRange(0, 10); position->setDecimals(2); position->setSingleStep(0.1);
+    position->setValue(settings_.print_formatting.position[i] / 100.0);
+    position->setSuffix(i < 2 ? tr(" characters") : tr(" lines"));
+    print_form->addRow(tr(position_labels[i]), position); print_positions[i] = position;
+  }
   auto* print_note = new QLabel(tr("Printing uses physical point sizes independently of screen zoom. "
       "Page Layout controls margins, headers and vertical glyphs. Preview and output use a frozen document snapshot. "
-      "Vertical mode follows JWP: Japanese glyphs are rotated for quarter-turn reading of the paper."), printing);
+      "Vertical mode follows JWP: Japanese glyphs are rotated for quarter-turn reading of the paper. "
+      "Patterns: &Y year, &y two digits, &M month, &D day, &H 24-hour, &h 12-hour, &N minutes, &A AM/PM, && ampersand. "
+      "Legacy noon uses AM and midnight uses hour zero. Date/time allow 19 JWP characters; AM/PM allow 9."), printing);
   print_note->setWordWrap(true); print_form->addRow(print_note);
-  tabs->addTab(printing, tr("Printing"));
+  auto* print_scroll = new QScrollArea(tabs); print_scroll->setWidgetResizable(true);
+  print_scroll->setObjectName(QStringLiteral("settingsPrintScroll"));
+  print_scroll->setFrameShape(QFrame::NoFrame); print_scroll->setWidget(printing);
+  tabs->addTab(print_scroll, tr("Printing"));
   auto* lookup = new QWidget(tabs);
   auto* lookup_form = new QFormLayout(lookup);
   auto* lookup_auto = new QCheckBox(tr("Automatic kanji lookup"), lookup);
@@ -303,7 +346,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
   connect(buttons, &QDialogButtonBox::accepted, this,
           [this, booleans, font_controls, dictionary_controls, code_page, history_size, categories,
-           print_family, print_size, print_auto, ascii_family] {
+           print_family, print_size, print_auto, ascii_family, print_patterns, print_positions, original_patterns] {
     auto next = settings_;
     for (const auto& control : booleans) next.*(control.member) = control.widget->isChecked();
     for (const auto& control : dictionary_controls) next.dictionary.*(control.member) = control.widget->isChecked();
@@ -321,11 +364,30 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
     next.history_size = history_size->value();
     next.print_font = {print_family->currentText(), qRound(print_size->value() * 10), print_auto->isChecked()};
     next.ascii_font.family = ascii_family->currentText();
+    const QPointer<ApplicationSettingsDialog> self(this);
     try {
+      const auto encoding = next.translation_code_page ? static_cast<core::LegacyCodePage>(next.translation_code_page) : core::kDefaultLegacyCodePage;
+      for (std::size_t i = 0; i < 4; ++i) {
+        print_patterns[i]->finish_input();
+        if (!self) return;
+        const auto text = print_patterns[i]->edit()->text();
+        if (text != original_patterns[i]) {
+          const auto unicode = from_qstring(text);
+          if (to_qstring(unicode) != text) throw core::JwpConfigurationError("Invalid Unicode in print pattern");
+          const auto converted = core::encode_jwp_text(unicode, encoding);
+          if (std::find(converted.begin(), converted.end(), 0) != converted.end())
+            throw core::JwpConfigurationError("Print pattern contains a NUL character");
+          auto& raw = next.print_formatting.patterns[i];
+          if (converted.size() >= raw.size()) throw core::JwpConfigurationError("Print pattern exceeds its legacy capacity");
+          std::copy(converted.begin(), converted.end(), raw.begin()); raw[converted.size()] = 0;
+        }
+        next.print_formatting.position[i] = qRound(print_positions[i]->value() * 100);
+      }
       (void)write_application_settings(next);
       settings_ = std::move(next);
       accept();
-    } catch (const core::JwpConfigurationError& error) {
+    } catch (const std::exception& error) {
+      if (!self) return;
       QMessageBox::warning(this, tr("Invalid settings"), QString::fromUtf8(error.what()));
     }
   });

@@ -39,7 +39,7 @@ void draw_jwp_text_layout(QPainter& painter, QTextLayout& layout, const QString&
       const qreal middle = line.rect().translated(origin).center().y();
       if (middle < painter.clipBoundingRect().top() || middle >= painter.clipBoundingRect().bottom()) continue;
     }
-    if (!vertical) { line.draw(&painter, origin); continue; }
+    if (!vertical && !foreground) { line.draw(&painter, origin); continue; }
     const int end = line.textStart() + line.textLength();
     for (int at = line.textStart(); at < end;) {
       boundaries.setPosition(at);
@@ -48,7 +48,7 @@ void draw_jwp_text_layout(QPainter& painter, QTextLayout& layout, const QString&
       const QColor color = foreground ? foreground(at) : painter.pen().color();
       painter.save();
       painter.setPen(color);
-      if (rotates(text.mid(at, next - at))) {
+      if (vertical && rotates(text.mid(at, next - at))) {
         const qreal x = line.cursorToX(at);
         const qreal width = std::abs(line.cursorToX(next) - x);
         const QPointF center = origin + QPointF(x + width / 2, line.y() + line.height() / 2);
@@ -57,7 +57,7 @@ void draw_jwp_text_layout(QPainter& painter, QTextLayout& layout, const QString&
         while (next < end) {
           boundaries.setPosition(next);
           const int after = boundaries.toNextBoundary();
-          if (after <= next || after > end || rotates(text.mid(next, after - next)) ||
+          if (after <= next || after > end || (vertical && rotates(text.mid(next, after - next))) ||
               (foreground && foreground(next) != color)) break;
           next = after;
         }

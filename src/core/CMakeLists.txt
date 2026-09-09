@@ -41,6 +41,7 @@ add_library(jwpqt_core STATIC
   legacy_code_page.cpp
   legacy_text.cpp
   plain_text_change.cpp
+  print_format.cpp
   query_history.cpp
   query_history_file.cpp
   raster_font.cpp

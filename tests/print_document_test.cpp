@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <functional>
@@ -27,8 +28,10 @@
 #include <QPrintPreviewWidget>
 #include <QDoubleSpinBox>
 #include <QCheckBox>
+#include <QLineEdit>
 #include <QDialogButtonBox>
 #include <QPushButton>
+#include <QTabWidget>
 #include "main_window.h"
 #include "application_settings_dialog.h"
 #include "file_io.h"
@@ -159,7 +162,7 @@ void test_layout_and_ranges(const QString& directory) {
                 complete.contains(QStringLiteral("THIRD")), "PDF omitted document pages");
     require(!complete.contains(QStringLiteral("ODD 1")) && complete.contains(QStringLiteral("EVEN 2")) &&
                 complete.contains(QStringLiteral("ODD 3 AUTHOR name.jwp & &z")) &&
-                complete.contains(QStringLiteral("FOOT 3 2024/02/03 14:05")), "PDF header/footer expansion or parity is wrong");
+                complete.contains(QStringLiteral("FOOT 3 24/2/3 2:05 PM")), "PDF header/footer expansion or parity is wrong");
   }
   printer.setPrintRange(QPrinter::PageRange); printer.setFromTo(2, 3);
   printer.setPageOrder(QPrinter::LastPageFirst);
@@ -274,6 +277,152 @@ class PrintWindow final : public jwpqt::qt::MainWindow {
   bool prompt_for_print(QPrinter& printer) override { return prompt(printer); }
   bool prompt_for_printer_setup(QPrinter& printer) override { return setup(printer); }
 };
+
+void test_print_policies(const QString& directory) {
+  using namespace jwpqt;
+  qt::PrintOptions options; options.font = QFont(QStringLiteral("Noto Sans CJK JP"), 16);
+  options.time = QDateTime(QDate(2024, 2, 29), QTime(12, 5));
+  options.colors = true; options.color_policy.list_mode = core::KanjiListColorMode::kMatch;
+  options.color_policy.list_color = {255, 0, 0}; options.color_policy.colorize_uncommon = true;
+  options.color_policy.uncommon_color = {0, 180, 0}; options.color_list.add(0x3026);
+  core::JwpDocument metadata; metadata.margins = {1,1,1,1};
+  metadata.headers[0][0] = core::encode_jwp_text(U"\u611b &D &T");
+  const std::string custom = "&Y-&M-&D";
+  std::copy(custom.begin(), custom.end(), options.formatting.patterns[0].begin());
+  options.formatting.patterns[0][custom.size()] = 0;
+  QTextDocument source;
+  source.setPlainText(qt::to_qstring(core::decode_jwp_text({0x3026,'A',0x5021})));
+  const auto original = source.toRawText(); const auto undo = source.availableUndoSteps();
+  QPageLayout page(QPageSize(QPageSize::A4), QPageLayout::Portrait, {72,72,72,72}, QPageLayout::Point);
+  const auto render = [&] {
+    qt::PrintLayout layout(source, page, &metadata, options);
+    QImage image(layout.page_size().toSize(), QImage::Format_RGB32); image.fill(Qt::white);
+    QPainter painter(&image); layout.paint_page(painter, 1); painter.end(); return image;
+  };
+  const auto colored = [](const QImage& image, bool red, int top, int bottom) {
+    int count = 0;
+    for (int y = top; y < std::min(bottom, image.height()); ++y) for (int x = 0; x < image.width(); ++x) {
+      const auto c = image.pixelColor(x, y);
+      count += red ? c.red() > c.green() + 40 && c.red() > c.blue() + 40
+                   : c.green() > c.red() + 40 && c.green() > c.blue() + 40;
+    }
+    return count;
+  };
+  for (bool vertical : {false, true}) {
+    metadata.vertical = vertical;
+    auto image = render();
+    require(colored(image, true, 0, 72) > 0 && colored(image, true, 72, image.height()) > 0 &&
+                colored(image, false, 72, image.height()) > 0, "Print list/header/uncommon colors missing");
+    options.colors = false; auto mono = render();
+    require(colored(mono, true, 0, mono.height()) == 0 && colored(mono, false, 0, mono.height()) == 0, "Disabled print colors leaked");
+    options.colors = true; options.color_policy.list_mode = core::KanjiListColorMode::kOff;
+    mono = render(); require(colored(mono, false, 0, mono.height()) == 0, "Uncommon printing ignored list-mode gate");
+    options.color_policy.list_mode = core::KanjiListColorMode::kNoMatch;
+    image = render(); require(colored(image, false, 0, image.height()) == 0 && colored(image, true, 72, image.height()) > 0,
+        "Print list precedence failed");
+    options.color_policy.list_mode = core::KanjiListColorMode::kMatch;
+  }
+  metadata.vertical = false;
+  options.selection = {{1, 2}};
+  const auto partial = render();
+  require(colored(partial, true, 72, partial.height()) == 0 && colored(partial, false, 72, partial.height()) == 0 &&
+      colored(partial, true, 0, 72) > 0, "Selection printing colored unselected body text or lost header colors");
+  options.selection.reset();
+  QPrinter printer(QPrinter::HighResolution); printer.setOutputFormat(QPrinter::PdfFormat);
+  const auto path = directory + QStringLiteral("/policies.pdf"); printer.setOutputFileName(path);
+  qt::print_document(printer, source, &metadata, options);
+  require(pdf_text(path).contains(QStringLiteral("2024-2-29 12:05 AM")), "Custom date/time pattern missing from PDF");
+  QProcess raster;
+  const auto png = directory + QStringLiteral("/policy-output");
+  raster.start(QStringLiteral("pdftoppm"), {QStringLiteral("-singlefile"), QStringLiteral("-scale-to"),
+      QStringLiteral("842"), QStringLiteral("-png"), path, png});
+  require(raster.waitForFinished(30000) && raster.exitCode() == 0, "Colored PDF rasterization failed");
+  const QImage actual(png + QStringLiteral(".png"));
+  require(!actual.isNull() && colored(actual, true, 0, actual.height()) > 0 &&
+      colored(actual, false, 0, actual.height()) > 0, "Actual PDF did not preserve kanji colors");
+  require(actual.save(QDir::currentPath() + QStringLiteral("/print-policies.png")), "Print policy capture failed");
+  const auto original_image = render(); options.formatting.position = {50, 25, 50, 50};
+  require(render() != original_image, "Header position controls did not move output");
+  options.formatting.position[2] = 1000;
+  const auto saved = bytes(path);
+  require_error([&] { qt::print_document(printer, source, &metadata, options); }, "Invalid header geometry accepted");
+  require(bytes(path) == saved && source.toRawText() == original && source.availableUndoSteps() == undo,
+      "Print policy changed disk/source on failure");
+
+  auto settings = qt::read_application_settings("colorkanji_print=true\nhead_left=50\nhead_top=75\n");
+  settings.print_formatting.patterns[0][19] = 0xffff;
+  const auto encoded = qt::write_application_settings(settings);
+  const auto restored = qt::read_application_settings(encoded);
+  require(restored.color_printing && restored.print_formatting.patterns == settings.print_formatting.patterns &&
+      restored.print_formatting.position == settings.print_formatting.position && qt::write_application_settings(restored) == encoded,
+      "Print configuration round trip lost raw JIS tail or units");
+  bool failed = false;
+  try { (void)qt::read_application_settings("head_top=bad\nhead_top=100\n"); } catch (const std::exception&) { failed = true; }
+  require(failed, "Later header setting hid invalid input");
+  failed = false;
+  try { (void)qt::read_application_settings("Printing_Formatting_Date=" + std::string(80, '4') + "\n" + encoded); }
+  catch (const std::exception&) { failed = true; }
+  require(failed, "Later valid pattern hid an unterminated earlier array");
+  auto unavailable = settings;
+  unavailable.print_formatting.patterns[2][0] = 0x80; // Undefined in recovered CP1252.
+  qt::ApplicationSettingsDialog retained(unavailable);
+  require(retained.findChild<QLineEdit*>(QStringLiteral("settingsPrintPattern2"))->isReadOnly(),
+      "Undisplayable legacy pattern did not retain its bytes safely");
+  QMetaObject::invokeMethod(retained.findChild<QDialogButtonBox*>(), "accepted", Qt::DirectConnection);
+  require(retained.settings().print_formatting.patterns == unavailable.print_formatting.patterns,
+      "Opening print Options rewrote an undisplayable pattern");
+  qt::ApplicationSettingsDialog dialog(settings);
+  dialog.show();
+  dialog.findChild<QTabWidget*>()->setCurrentWidget(dialog.findChild<QWidget*>(QStringLiteral("settingsPrintScroll")));
+  QApplication::processEvents();
+  require(dialog.grab().save(QDir::currentPath() + QStringLiteral("/print-format-options.png")), "Print Options capture failed");
+  dialog.findChild<QLineEdit*>(QStringLiteral("settingsPrintPattern0"))->setText(QStringLiteral("&Y"));
+  dialog.findChild<QDoubleSpinBox*>(QStringLiteral("settingsPrintPosition2"))->setValue(1.25);
+  dialog.findChild<QCheckBox*>(QStringLiteral("settingsPrintColors"))->setChecked(false);
+  QMetaObject::invokeMethod(dialog.findChild<QDialogButtonBox*>(), "accepted", Qt::DirectConnection);
+  require(!dialog.settings().color_printing && dialog.settings().print_formatting.position[2] == 125 &&
+      dialog.settings().print_formatting.patterns[0][2] == 0 && dialog.settings().print_formatting.patterns[0][19] == 0xffff,
+      "Print Options lost edits or preserved tail");
+  qt::ApplicationSettingsDialog cancelled(settings);
+  cancelled.findChild<QCheckBox*>(QStringLiteral("settingsPrintColors"))->setChecked(false);
+  cancelled.reject();
+  require(cancelled.settings().color_printing, "Cancelled print preferences were applied");
+
+  auto native = metadata; native.paragraphs.resize(1); native.paragraphs[0].text = {0x3026, 'A', 0x5021};
+  const auto native_path = directory + QStringLiteral("/policy.jwp"); qt::write_jwp_file(native_path, native);
+  PrintWindow window;
+  const auto config = directory + QStringLiteral("/print-settings.cfg");
+  require(window.load_application_settings(config) && window.open_jwp_path(native_path, core::LegacyCodePage::k1252, qt::OpenMode::kNonInteractive),
+      "Print controller fixture failed");
+  auto accepted = settings; accepted.print_formatting.patterns[0] = {'B','E','F','O','R','E',0};
+  accepted.print_formatting.patterns[0].resize(20);
+  require(window.load_kanji_color_configuration(directory + QStringLiteral("/print-colors.ini"),
+      directory + QStringLiteral("/print-colors.txt"), qt::OpenMode::kNonInteractive) &&
+      window.apply_application_settings(accepted) && window.save_application_settings() &&
+      window.set_kanji_color_list(options.color_list, qt::OpenMode::kNonInteractive) &&
+      window.set_kanji_color_policy(options.color_policy, qt::OpenMode::kNonInteractive), "Print policies could not be applied");
+  qt::MainWindow restarted;
+  require(restarted.load_application_settings(config) && restarted.application_settings().color_printing &&
+      restarted.application_settings().print_formatting.patterns == accepted.print_formatting.patterns,
+      "Print preferences did not survive restart");
+  const auto model_before = *window.current_jwp_document();
+  const auto captured_path = directory + QStringLiteral("/captured-policy.pdf");
+  window.prompt = [&](QPrinter& device) {
+    auto changed = accepted; changed.color_printing = false;
+    changed.print_formatting.patterns[0][0] = 'X';
+    require(window.apply_application_settings(changed), "Could not change preferences during print prompt");
+    require(window.set_kanji_color_policy({}, qt::OpenMode::kNonInteractive), "Could not change live color policy");
+    device.setOutputFormat(QPrinter::PdfFormat); device.setOutputFileName(captured_path); return true;
+  };
+  window.findChild<QAction*>(QStringLiteral("printAction"))->trigger();
+  require(pdf_text(captured_path).contains(QStringLiteral("BEFORE")) && *window.current_jwp_document() == model_before,
+      "Print snapshot changed with later formatting preferences or changed the document");
+  raster.start(QStringLiteral("pdftoppm"), {QStringLiteral("-singlefile"), QStringLiteral("-scale-to"),
+      QStringLiteral("842"), QStringLiteral("-png"), captured_path, png});
+  require(raster.waitForFinished(30000) && raster.exitCode() == 0, "Captured PDF rasterization failed");
+  const QImage captured(png + QStringLiteral(".png"));
+  require(colored(captured, true, 0, captured.height()) > 0, "Modal print lost its captured color policy");
+}
 
 void test_window_workflow(const QString& directory) {
   using namespace jwpqt;
@@ -413,5 +562,6 @@ int main(int argc, char* argv[]) {
   test_layout_and_ranges(directory.path());
   test_selection_and_vertical(directory.path());
   test_window_workflow(directory.path());
+  test_print_policies(directory.path());
   return EXIT_SUCCESS;
 }

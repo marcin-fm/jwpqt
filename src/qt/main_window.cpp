@@ -5982,6 +5982,11 @@ void MainWindow::print_current_document(bool preview) {
     PrintOptions options;
     options.file_name = document_->current_path_;
     options.code_page = document_->jwp_code_page_;
+    options.formatting = application_settings_.print_formatting;
+    options.format_code_page = default_jwp_code_page();
+    options.colors = application_settings_.color_printing;
+    options.color_list = kanji_color_list_;
+    options.color_policy = kanji_color_policy_;
     options.font = japanese_print_font(source->defaultFont(), application_settings_.print_font,
         QFileInfo(application_settings_path_).path());
     const auto cursor = document_->editor_->textCursor();

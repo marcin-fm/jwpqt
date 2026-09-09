@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <iterator>
 #include <limits>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -38,6 +39,7 @@ struct BooleanDescriptor {
 };
 
 constexpr BooleanDescriptor<ApplicationSettings> kBooleans[] = {
+    {"ColorKanji_Printing", "colorkanji_print", &ApplicationSettings::color_printing},
     {"Clipboard_Omit_Bitmap", "no_BITMAP", &ApplicationSettings::omit_clipboard_bitmap},
     {"Bitmap.Vert", "clip_font.vertical", &ApplicationSettings::vertical_clipboard_bitmap},
     {"ColorKanji_Clipboard", "colorkanji_bitmap", &ApplicationSettings::color_clipboard_bitmap},
@@ -76,6 +78,13 @@ constexpr BooleanDescriptor<EdictLookupOptions> kDictionaryBooleans[] = {
     {"Dict_JASCII_to_ASCII", "dict_jascii2ascii", &EdictLookupOptions::jascii_to_ascii},
     {"Dict_ASCII_MatchFullEntry", "dict_fullascii", &EdictLookupOptions::full_ascii}};
 
+constexpr FontDescriptor kPrintPatterns[] = {{"Printing_Formatting_Date", "date_format"},
+    {"Printing_Formatting_Time", "time_format"}, {"Printing_Formatting_AM", "am_format"},
+    {"Printing_Formatting_PM", "pm_format"}};
+constexpr FontDescriptor kHeaderPositions[] = {{"Printing_HeaderPos_Left", "head_left"},
+    {"Printing_HeaderPos_Right", "head_right"}, {"Printing_HeaderPos_Top", "head_top"},
+    {"Printing_HeaderPos_Bottom", "head_bottom"}};
+
 core::JwpConfigurationKey font_key(std::size_t role, std::size_t field) {
   return {std::string(kFonts[role].name) + '.' + kFontFields[field].name,
           std::string(kFonts[role].alias) + '.' + kFontFields[field].alias};
@@ -96,6 +105,19 @@ ApplicationSettings read_application_settings(std::string_view text,
   for (const auto& entry : entries) {
     std::string name;
     try {
+      for (std::size_t i = 0; i < 4; ++i) {
+        if (core::JwpConfigurationKey{kPrintPatterns[i].name, kPrintPatterns[i].alias}.matches(entry.name)) {
+          name = kPrintPatterns[i].name;
+          auto& pattern = result.print_formatting.patterns[i];
+          const auto bytes = core::parse_jwp_setting_bytes(entry.value, pattern.size() * 2);
+          for (std::size_t j = 0; j < pattern.size(); ++j)
+            pattern[j] = static_cast<core::JisCode>(bytes[j * 2] | (bytes[j * 2 + 1] << 8));
+          core::validate_print_formatting(result.print_formatting);
+        } else if (core::JwpConfigurationKey{kHeaderPositions[i].name, kHeaderPositions[i].alias}.matches(entry.name)) {
+          name = kHeaderPositions[i].name;
+          result.print_formatting.position[i] = static_cast<int>(core::parse_jwp_setting_integer(entry.value, 0, 1000));
+        }
+      }
       for (std::size_t role = 0; role < std::size(kFonts) && name.empty(); ++role) {
         for (std::size_t field = 0; field < std::size(kFontFields); ++field) {
           const auto key = font_key(role, field);
@@ -176,6 +198,9 @@ ApplicationSettings read_application_settings(std::string_view text,
         name = "CharInfo_ShowHeadings";
         result.kanji_info.headings = core::parse_jwp_setting_bool(entry.value);
       }
+    } catch (const std::invalid_argument& error) {
+      throw core::JwpConfigurationError("Configuration line " + std::to_string(entry.line) +
+          ", " + name + ": " + error.what());
     } catch (const core::JwpConfigurationError& error) {
       throw core::JwpConfigurationError("Configuration line " + std::to_string(entry.line) +
           ", " + name + ": " + error.what());
@@ -194,6 +219,8 @@ ApplicationSettings read_application_settings(std::string_view text,
 }
 
 std::string write_application_settings(const ApplicationSettings& settings) {
+  try { core::validate_print_formatting(settings.print_formatting); }
+  catch (const std::invalid_argument& error) { throw core::JwpConfigurationError(error.what()); }
   validate_toolbar(settings.toolbar);
   if (settings.history_size < 0 || settings.history_size > 30000)
     throw core::JwpConfigurationError("History storage is outside 0..30000 cells");
@@ -204,6 +231,16 @@ std::string write_application_settings(const ApplicationSettings& settings) {
   std::vector<core::JwpConfigurationUpdate> updates;
   std::string toolbar_bytes;
   constexpr char digits[] = "0123456789ABCDEF";
+  for (std::size_t i = 0; i < 4; ++i) {
+    std::string bytes;
+    for (auto code : settings.print_formatting.patterns[i]) {
+      for (unsigned byte : {static_cast<unsigned>(code & 255), static_cast<unsigned>(code >> 8)}) {
+        bytes.push_back(digits[byte >> 4]); bytes.push_back(digits[byte & 15]);
+      }
+    }
+    updates.push_back({{kPrintPatterns[i].name, kPrintPatterns[i].alias}, bytes});
+    updates.push_back({{kHeaderPositions[i].name, kHeaderPositions[i].alias}, std::to_string(settings.print_formatting.position[i])});
+  }
   for (const auto byte : settings.toolbar.buttons) {
     toolbar_bytes.push_back(digits[byte >> 4]);
     toolbar_bytes.push_back(digits[byte & 15]);

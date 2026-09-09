@@ -15,6 +15,8 @@
 
 #include "jwpqt/core/jwp_document.h"
 #include "jwpqt/core/legacy_code_page.h"
+#include "jwpqt/core/kanji_color_list.h"
+#include "jwpqt/core/print_format.h"
 
 class QPrinter;
 class QTextDocument;
@@ -33,6 +35,11 @@ struct PrintOptions {
   core::LegacyCodePage code_page = core::LegacyCodePage::k1252;
   std::optional<std::pair<int, int>> selection;
   QDateTime time = QDateTime::currentDateTime();
+  core::JwpPrintFormatting formatting;
+  core::LegacyCodePage format_code_page = core::kDefaultLegacyCodePage;
+  bool colors = false;
+  core::KanjiColorList color_list;
+  core::KanjiColorPolicy color_policy;
   bool preview = false;
   std::function<bool(int, int)> progress;
 };

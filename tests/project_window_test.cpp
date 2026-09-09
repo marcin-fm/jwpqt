@@ -76,6 +76,9 @@ void mixed_workspace(const QString& directory) {
   settings.vertical_clipboard_bitmap = true;
   settings.color_clipboard_bitmap = true;
   settings.ascii_font.family = QStringLiteral("DejaVu Sans Mono");
+  settings.color_printing = true;
+  settings.print_formatting.position = {25,50,75,125};
+  settings.print_formatting.patterns[0][19] = 0x1234;
   require(original.apply_application_settings(settings) && original.activate_document(1), "Could not prepare project settings");
   auto cursor = original.active_editor()->textCursor(); cursor.setPosition(1); cursor.setPosition(3, QTextCursor::KeepAnchor);
   original.active_editor()->setTextCursor(cursor);
@@ -108,6 +111,9 @@ void mixed_workspace(const QString& directory) {
               restored.application_settings().vertical_clipboard_bitmap &&
               restored.application_settings().color_clipboard_bitmap &&
               restored.application_settings().ascii_font.family == QStringLiteral("DejaVu Sans Mono") &&
+              restored.application_settings().color_printing &&
+              restored.application_settings().print_formatting.position == settings.print_formatting.position &&
+              restored.application_settings().print_formatting.patterns == settings.print_formatting.patterns &&
               restored.application_settings().fonts[static_cast<int>(qt::JapaneseFontRole::kBitmap)].size == 28,
           "Project did not apply supported settings");
   require(qt::document_plain_text(*restored.active_editor()->document()) == qt::to_qstring(U"A\ufeff\u00a0\U0001f600"),

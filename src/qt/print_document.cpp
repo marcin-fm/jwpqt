@@ -3,6 +3,7 @@
 #include "jwp_text_drawing.h"
 #include "japanese_fonts.h"
 #include "jwpqt/core/jwp_text_codec.h"
+#include "jwpqt/core/jis_unicode.h"
 #include "text_bridge.h"
 #include <algorithm>
 #include <cmath>
@@ -68,8 +69,13 @@ struct PrintLayout::Data {
         case 'K': output += summary(3); break;
         case 'L': output += summary(0); break;
         case 'S': output += summary(1); break;
-        case 'D': output += options.time.toString(QStringLiteral("yyyy/MM/dd")); break;
-        case 'T': output += options.time.toString(QStringLiteral("HH:mm")); break;
+        case 'D': case 'T': {
+          const auto date = options.time.date(); const auto time = options.time.time();
+          output += to_qstring(core::decode_jwp_text(core::expand_print_pattern(options.formatting,
+              code.toUpper() == QLatin1Char('T'), date.year(), date.month(), date.day(), time.hour(), time.minute()),
+              options.format_code_page));
+          break;
+        }
         case 'F': output += options.file_name; break;
         case 'N': output += QFileInfo(options.file_name).fileName(); break;
         case 'P': output += QString::number(page); break;
@@ -83,7 +89,17 @@ struct PrintLayout::Data {
 
   void draw_layout(QPainter& painter, QTextLayout& layout, const QString& text,
                    const QPointF& origin, bool vertical) const {
-    draw_jwp_text_layout(painter, layout, text, origin, vertical, options.code_page);
+    std::function<QColor(int)> foreground;
+    if (options.colors && options.color_policy.list_mode != core::KanjiListColorMode::kOff) {
+      foreground = [&](int position) {
+        const auto unicode = text[position].isHighSurrogate() && position + 1 < text.size()
+            ? QChar::surrogateToUcs4(text[position], text[position + 1]) : text[position].unicode();
+        const auto jis = core::unicode_to_jis_x0208(unicode);
+        const auto color = jis ? core::kanji_foreground_color(*jis, options.color_list.contains(*jis), options.color_policy) : std::nullopt;
+        return color ? QColor(color->red, color->green, color->blue) : QColor(Qt::black);
+      };
+    }
+    draw_jwp_text_layout(painter, layout, text, origin, vertical, options.code_page, foreground);
   }
 };
 
@@ -94,6 +110,9 @@ PrintLayout::PrintLayout(const QTextDocument& source, const QPageLayout& page,
     throw PrintDocumentError("Invalid or oversized print document");
   d.metrics.setDotsPerMeterX(2835); d.metrics.setDotsPerMeterY(2835);
   d.options = std::move(options);
+  try { core::validate_print_formatting(d.options.formatting); }
+  catch (const std::invalid_argument& error) { throw PrintDocumentError(error.what()); }
+  if (!d.options.time.isValid()) throw PrintDocumentError("Invalid print date or time");
   if (jwp) d.jwp = *jwp;
   d.paper = page.fullRect(QPageLayout::Point).size();
   d.body = page.paintRect(QPageLayout::Point);
@@ -185,8 +204,13 @@ void PrintLayout::paint_page(QPainter& painter, int page) const {
     if (text.isEmpty()) continue;
     QTextLayout header(text, d.options.font, &d.metrics);
     header.beginLayout(); auto line = header.createLine(); line.setLineWidth(1000000); header.endLayout();
-    const qreal x = d.body.left() + (d.body.width() - line.naturalTextWidth()) * alignment / 2;
-    const qreal y = footer ? d.body.bottom() + line.height() : d.body.top() - 2 * line.height();
+    const auto& position = d.options.formatting.position;
+    const qreal unit = QFontMetricsF(d.options.font, &d.metrics).horizontalAdvance(QStringLiteral("\u3000"));
+    const qreal left = d.body.left() - unit * position[0] / 100;
+    const qreal width = d.body.width() + unit * (position[0] + position[1]) / 100;
+    const qreal x = left + (width - line.naturalTextWidth()) * alignment / 2;
+    const qreal y = footer ? d.body.bottom() + line.height() * position[3] / 100
+        : d.body.top() - line.height() * (100 + position[2]) / 100;
     if (x < 0 || x + line.naturalTextWidth() > d.paper.width() || y < 0 || y + line.height() > d.paper.height())
       throw PrintDocumentError("Header or footer does not fit the page margins");
     painter.save(); painter.setPen(Qt::black); d.draw_layout(painter, header, text, {x, y}, vertical); painter.restore();

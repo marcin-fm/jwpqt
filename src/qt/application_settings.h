@@ -14,6 +14,7 @@
 
 #include "kanji_info_options.h"
 #include "edict_lookup_options.h"
+#include "jwpqt/core/print_format.h"
 
 namespace jwpqt::qt {
 
@@ -35,6 +36,8 @@ struct ApplicationSettings {
   bool omit_clipboard_bitmap = false;
   bool vertical_clipboard_bitmap = false;
   bool color_clipboard_bitmap = false;
+  bool color_printing = false;
+  core::JwpPrintFormatting print_formatting;
   ToolbarSettings toolbar;
   bool show_status_bar = true;
   bool show_kanji_bar = true;

@@ -335,7 +335,11 @@ margins and orientation as one undoable change, only to its original document.
 
 JWP odd/even headers and footers support first-page suppression and the source
 `&A`, `&C`, `&D`, `&F`, `&K`, `&L`, `&N`, `&S`, `&T`, `&P` and `&&` substitutions.
-Date/time are captured once for the job and currently use `yyyy/MM/dd` and `HH:mm`.
+Date/time and output policies are captured once for the job. **Options > Printing**
+configures the source date/time/AM/PM patterns and header offsets. Defaults are
+`&y/&M/&D` and `&h:&N &A`; the legacy rules intentionally use AM at noon and
+hour zero at midnight. Date/time allow 19 JWP characters and AM/PM text allows 9;
+original unused configuration-array cells remain preserved.
 Vertical JWP output preserves the source paper convention: Japanese glyphs are
 counter-rotated while Latin and the recovered exception punctuation stay on the
 horizontal baseline, for reading the paper after a clockwise quarter turn. Native
@@ -345,9 +349,11 @@ of pixel-identical legacy bitmap/vertical-GSUB placement.
 **Options > Printing** stores `Print.Font`, `Print.Size` and `Print.Auto` through
 configuration and projects. The size is physical points in the dialog and tenths
 of a point on disk, independently of screen font sizes. Automatic uses the document
-font family; explicit families use Qt's native font fallback. Output is monochrome.
-Custom legacy date/AM-PM formats, header-position tuning and ASCII grid-justification
-settings remain retained and disclosed as unapplied.
+font family; explicit families use Qt's native font fallback. **ColorKanji_Printing**
+enables kanji colors only with an active list mode, including header/footer text;
+list colors retain precedence over uncommon colors. Neither later preference
+changes nor transient editor highlighting alter a captured print job.
+ASCII grid-justification settings remain retained and disclosed as unapplied.
 
 PDF output is completed in a temporary file beside its destination and published
 atomically. Invalid geometry/ranges, cancellation (including the final checkpoint)
