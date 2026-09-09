@@ -2936,6 +2936,54 @@ void test_undo_depth_policy(const QString& directory) {
           "Restored project editor did not apply its undo limit");
 }
 
+void test_selection_autoscroll_policy(const QString& directory) {
+  using namespace jwpqt::qt;
+  MainWindow window;
+  auto* first = window.active_editor();
+  require(first->selection_autoscroll_enabled() &&
+              first->selection_autoscroll_interval() == 100,
+          "New editor did not use source autoscroll defaults");
+  find_action(window, "newTextDocumentAction")->trigger();
+  auto* second = window.active_editor();
+
+  ApplicationSettingsDialog cancelled(window.application_settings());
+  cancelled.findChild<QCheckBox*>(QStringLiteral("settingsAutoScroll"))->setChecked(false);
+  cancelled.findChild<QSpinBox*>(QStringLiteral("settingsAutoScrollSpeed"))->setValue(35);
+  cancelled.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Cancel)->click();
+  require(window.application_settings().auto_scroll &&
+              second->selection_autoscroll_interval() == 100,
+          "Cancelling Options changed selection autoscroll");
+
+  ApplicationSettingsDialog options(window.application_settings());
+  options.findChild<QCheckBox*>(QStringLiteral("settingsAutoScroll"))->setChecked(false);
+  options.findChild<QSpinBox*>(QStringLiteral("settingsAutoScrollSpeed"))->setValue(35);
+  options.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+  require(window.apply_application_settings(options.settings()) &&
+              !first->selection_autoscroll_enabled() &&
+              !second->selection_autoscroll_enabled() &&
+              first->selection_autoscroll_interval() == 35 &&
+              second->selection_autoscroll_interval() == 35,
+          "Autoscroll Options did not update every existing editor");
+  find_action(window, "newDocumentAction")->trigger();
+  require(!window.active_editor()->selection_autoscroll_enabled() &&
+              window.active_editor()->selection_autoscroll_interval() == 35,
+          "New document did not inherit selection autoscroll settings");
+
+  const QString root = directory + QStringLiteral("/selection-autoscroll");
+  require(QDir().mkpath(root) &&
+              window.save_application_settings(root + QStringLiteral("/settings.cfg")) &&
+              window.save_project_path(root + QStringLiteral("/workspace.jpr"), false),
+          "Could not persist selection autoscroll settings");
+  MainWindow restored;
+  require(restored.load_application_settings(root + QStringLiteral("/settings.cfg")) &&
+              !restored.application_settings().auto_scroll &&
+              restored.application_settings().auto_scroll_speed == 35 &&
+              restored.open_project_path(root + QStringLiteral("/workspace.jpr")) &&
+              !restored.active_editor()->selection_autoscroll_enabled() &&
+              restored.active_editor()->selection_autoscroll_interval() == 35,
+          "Settings restart or JPR changed selection autoscroll policy");
+}
+
 void test_result_list_insertion_policy(const QString& directory) {
   using namespace jwpqt::core;
   using namespace jwpqt::qt;
@@ -6064,6 +6112,7 @@ int main(int argc, char* argv[]) {
     test_katakana_policy(directory.path());
     test_control_arrow_conversion(directory.path());
     test_undo_depth_policy(directory.path());
+    test_selection_autoscroll_policy(directory.path());
     test_result_list_insertion_policy(directory.path());
     test_selected_romaji(directory.path());
     test_jwp_wnn_conversion(directory.path());

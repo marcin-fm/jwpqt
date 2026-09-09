@@ -126,6 +126,28 @@ void test_duplicate_open_settings() {
   rejects([&] { (void)write_application_settings(invalid); });
 }
 
+void test_autoscroll_settings() {
+  using namespace jwpqt::qt;
+  const auto defaults = read_application_settings("");
+  require(defaults.auto_scroll && defaults.auto_scroll_speed == 100,
+          "Autoscroll defaults differ from the source");
+  const auto settings = read_application_settings(
+      "auto_scroll=true\nAutoScroll=false\nscroll_speed=5\nAutoScroll_Speed=250");
+  const auto encoded = write_application_settings(settings);
+  require(!settings.auto_scroll && settings.auto_scroll_speed == 250 &&
+              encoded.find("auto_scroll") == std::string::npos &&
+              encoded.find("scroll_speed") == std::string::npos &&
+              read_application_settings(encoded).auto_scroll_speed == 250 &&
+              !read_application_settings(encoded).auto_scroll,
+          "Autoscroll settings did not canonicalize and round-trip");
+  for (const auto* invalid : {"AutoScroll_Speed=-1", "scroll_speed=10001",
+                              "scroll_speed=bad\nAutoScroll_Speed=100"})
+    rejects([&] { (void)read_application_settings(invalid); });
+  auto invalid = defaults;
+  invalid.auto_scroll_speed = 10001;
+  rejects([&] { (void)write_application_settings(invalid); });
+}
+
 void test_files(const QString& directory) {
   using namespace jwpqt::qt;
   const QString path = directory + QStringLiteral("/settings-\u65e5.cfg");
@@ -324,6 +346,7 @@ int main(int argc, char** argv) {
     test_model();
     test_history_settings();
     test_duplicate_open_settings();
+    test_autoscroll_settings();
     test_information_settings();
     test_dictionary_settings();
     test_files(directory.path());

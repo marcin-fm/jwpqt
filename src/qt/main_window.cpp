@@ -337,11 +337,14 @@ std::optional<core::TextEncoding> encoding_from_filter(const QString& filter) {
 }  // namespace
 
 struct MainWindow::DocumentState {
-  explicit DocumentState(QWidget* parent, std::size_t undo_levels) : editor_(new JwpEditor(parent)), jwp_history_(undo_levels) {
+  explicit DocumentState(QWidget* parent, std::size_t undo_levels,
+                         bool auto_scroll, int auto_scroll_speed)
+      : editor_(new JwpEditor(parent)), jwp_history_(undo_levels) {
     QFont font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
     font.setPixelSize(16);
     editor_->setFont(font);
     assign_japanese_font(*editor_, JapaneseFontRole::kFile);
+    editor_->set_selection_autoscroll(auto_scroll, auto_scroll_speed);
   }
 
   JwpEditor* editor_;
@@ -412,7 +415,9 @@ MainWindow::MainWindow(QWidget* parent)
       input_mode_actions_(new QActionGroup(this)),
       encoding_actions_(new QActionGroup(this)),
       jwp_code_page_menu_(nullptr) {
-  documents_.push_back(std::make_unique<DocumentState>(this, application_settings_.maximum_undo_levels));
+  documents_.push_back(std::make_unique<DocumentState>(
+      this, application_settings_.maximum_undo_levels,
+      application_settings_.auto_scroll, application_settings_.auto_scroll_speed));
   document_ = documents_.front().get();
   auto* central = new QWidget(this);
   auto* layout = new QVBoxLayout(central);
@@ -627,7 +632,9 @@ void MainWindow::refresh_document_view() {
 
 int MainWindow::new_document_tab(bool japanese_editing) {
   if (!finish_document_input()) return -1;
-  auto next = std::make_unique<DocumentState>(this, application_settings_.maximum_undo_levels);
+  auto next = std::make_unique<DocumentState>(
+      this, application_settings_.maximum_undo_levels,
+      application_settings_.auto_scroll, application_settings_.auto_scroll_speed);
   next->jwp_code_page_ = default_jwp_code_page();
   next->editor_->setLineWrapMode(QTextEdit::WidgetWidth);
   next->editor_->setVerticalScrollBarPolicy(application_settings_.vertical_scrollbar
@@ -1219,6 +1226,10 @@ bool MainWindow::apply_application_settings(const ApplicationSettings& settings,
       for (const auto& view : views)
         view.state->jwp_history_.set_max_entries(static_cast<std::size_t>(next.maximum_undo_levels));
       application_settings_ = std::move(next);
+      for (const auto& state : documents_)
+        state->editor_->set_selection_autoscroll(
+            application_settings_.auto_scroll,
+            application_settings_.auto_scroll_speed);
       kanji_color_policy_ = effective_kanji_color_policy(application_settings_, stored_kanji_color_policy_);
       setProperty("jwpqtMarkRareKanji", application_settings_.mark_rare_kanji);
       setProperty("jwpqtOldKatakanaInput", application_settings_.old_katakana_input);

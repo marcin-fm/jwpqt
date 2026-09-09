@@ -75,6 +75,13 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   add_boolean("settingsOldKatakana", tr("Use old katakana vowel quote handling"), &ApplicationSettings::old_katakana_input);
   add_boolean("settingsCtrlConvert", tr("Use Ctrl+Up/Down to convert selected kana"), &ApplicationSettings::ctrl_up_down_convert);
   add_boolean("settingsInsertLines", tr("Insert complete result-list entries on separate lines"), &ApplicationSettings::insert_on_separate_lines);
+  add_boolean("settingsAutoScroll", tr("Autoscroll while extending a selection near the document edge"), &ApplicationSettings::auto_scroll);
+  auto* auto_scroll_speed = new QSpinBox(display);
+  auto_scroll_speed->setObjectName(QStringLiteral("settingsAutoScrollSpeed"));
+  auto_scroll_speed->setRange(0, 10000);
+  auto_scroll_speed->setSuffix(tr(" ms"));
+  auto_scroll_speed->setValue(settings_.auto_scroll_speed);
+  form->addRow(tr("Autoscroll repeat delay"), auto_scroll_speed);
   add_boolean("settingsKeepBackup", tr("Keep the previous disk version as filename_BAK when saving"), &ApplicationSettings::keep_backup_copy);
   add_boolean("settingsRestoreWindow", tr("Restore main window position, size and maximized state on startup"), &ApplicationSettings::restore_window);
   add_boolean("settingsCloseButtonFile", tr("Window close button closes the current document"), &ApplicationSettings::close_button_closes_file);
@@ -523,7 +530,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   connect(buttons, &QDialogButtonBox::accepted, this,
           [this, booleans, font_controls, dictionary_controls, code_page, history_size, undo_levels, categories,
            print_family, print_size, print_auto, print_justify, ascii_family, print_patterns, print_positions, original_patterns,
-            index_type, reading_type, duplicate_open, default_margins, displayed_margins, default_landscape, default_vertical,
+           index_type, reading_type, duplicate_open, auto_scroll_speed, default_margins, displayed_margins, default_landscape, default_vertical,
            color_fields, original_colors, color_mode, uncommon] {
     auto next = settings_;
     for (std::size_t i = 0; i < 4; ++i)
@@ -546,6 +553,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
     next.translation_code_page = code_page->currentData().toInt();
     next.history_size = history_size->value();
     next.maximum_undo_levels = undo_levels->value();
+    next.auto_scroll_speed = auto_scroll_speed->value();
     next.duplicate_open = static_cast<DuplicateOpenBehavior>(duplicate_open->currentData().toInt());
     next.index_type = index_type->currentIndex();
     next.reading_type = reading_type->currentIndex();

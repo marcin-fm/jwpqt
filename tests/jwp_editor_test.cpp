@@ -12,7 +12,9 @@
 
 #include <QApplication>
 #include <QAbstractTextDocumentLayout>
+#include <QEventLoop>
 #include <QImage>
+#include <QMouseEvent>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
 #include <QPalette>
@@ -24,6 +26,7 @@
 #include <QTextCursor>
 #include <QTextDocument>
 #include <QTextLayout>
+#include <QTimer>
 
 #include "jwpqt/core/jwp_text_codec.h"
 
@@ -456,6 +459,93 @@ void test_composed_overwrite() {
   }
 }
 
+void wait_for_events(int milliseconds) {
+  QEventLoop loop;
+  QTimer::singleShot(milliseconds, &loop, &QEventLoop::quit);
+  loop.exec();
+}
+
+void send_mouse(jwpqt::qt::JwpEditor& editor, QEvent::Type type,
+                const QPoint& position, Qt::MouseButton button,
+                Qt::MouseButtons buttons) {
+  QMouseEvent event(type, QPointF(position),
+                    QPointF(editor.viewport()->mapToGlobal(position)),
+                    button, buttons, Qt::NoModifier);
+  QApplication::sendEvent(editor.viewport(), &event);
+}
+
+void test_selection_autoscroll() {
+  jwpqt::qt::JwpEditor editor;
+  editor.resize(240, 120);
+  QString text;
+  for (int i = 0; i < 100; ++i)
+    text += QStringLiteral("selection row %1\n").arg(i);
+  editor.setPlainText(text);
+  editor.show();
+  QApplication::processEvents();
+  require(editor.verticalScrollBar()->maximum() > 0,
+          "Autoscroll fixture does not overflow its viewport");
+
+  const QPoint start(8, 8);
+  const QPoint edge(8, editor.viewport()->height() - 1);
+  editor.set_selection_autoscroll(false, 20);
+  send_mouse(editor, QEvent::MouseButtonPress, start,
+             Qt::LeftButton, Qt::LeftButton);
+  send_mouse(editor, QEvent::MouseMove, edge,
+             Qt::NoButton, Qt::LeftButton);
+  const int disabled_position = editor.verticalScrollBar()->value();
+  wait_for_events(80);
+  require(editor.verticalScrollBar()->value() == disabled_position,
+          "Disabled selection autoscroll continued moving the document");
+  send_mouse(editor, QEvent::MouseButtonRelease, edge,
+             Qt::LeftButton, Qt::NoButton);
+
+  editor.verticalScrollBar()->setValue(0);
+  editor.set_selection_autoscroll(true, 20);
+  send_mouse(editor, QEvent::MouseButtonPress, start,
+             Qt::LeftButton, Qt::LeftButton);
+  send_mouse(editor, QEvent::MouseMove, edge,
+             Qt::NoButton, Qt::LeftButton);
+  const int first_position = editor.verticalScrollBar()->value();
+  wait_for_events(90);
+  require(first_position > 0 &&
+              editor.verticalScrollBar()->value() > first_position &&
+              editor.textCursor().hasSelection(),
+          "Enabled selection autoscroll did not repeat or extend the selection");
+  send_mouse(editor, QEvent::MouseButtonRelease, edge,
+             Qt::LeftButton, Qt::NoButton);
+  const int released_position = editor.verticalScrollBar()->value();
+  wait_for_events(60);
+  require(editor.verticalScrollBar()->value() == released_position,
+          "Selection autoscroll continued after mouse release");
+
+  editor.verticalScrollBar()->setValue(editor.verticalScrollBar()->maximum());
+  const QPoint lower_start(8, editor.viewport()->height() - 8);
+  const QPoint top_edge(8, 0);
+  send_mouse(editor, QEvent::MouseButtonPress, lower_start,
+             Qt::LeftButton, Qt::LeftButton);
+  send_mouse(editor, QEvent::MouseMove, top_edge,
+             Qt::NoButton, Qt::LeftButton);
+  const int upward_first = editor.verticalScrollBar()->value();
+  wait_for_events(90);
+  require(upward_first < editor.verticalScrollBar()->maximum() &&
+              editor.verticalScrollBar()->value() < upward_first,
+          "Selection autoscroll did not repeat upward");
+  send_mouse(editor, QEvent::MouseButtonRelease, top_edge,
+             Qt::LeftButton, Qt::NoButton);
+  require(editor.selection_autoscroll_enabled() &&
+              editor.selection_autoscroll_interval() == 20,
+          "Autoscroll editor policy was not retained");
+  bool rejected = false;
+  try {
+    editor.set_selection_autoscroll(true, 10001);
+  } catch (const std::out_of_range&) {
+    rejected = true;
+  }
+  require(rejected && editor.selection_autoscroll_interval() == 20,
+          "Invalid autoscroll delay changed the editor policy");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -467,6 +557,7 @@ int main(int argc, char** argv) {
     test_kanji_colors_follow_raw_tokens();
     test_kanji_color_validation_is_atomic();
     test_composed_overwrite();
+    test_selection_autoscroll();
   } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return EXIT_FAILURE;

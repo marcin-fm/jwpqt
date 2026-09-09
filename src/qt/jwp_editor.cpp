@@ -20,6 +20,7 @@
 #include <QInputMethodEvent>
 #include <QKeyEvent>
 #include <QMimeData>
+#include <QMouseEvent>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QScrollBar>
@@ -214,8 +215,118 @@ QString document_plain_text(const QTextDocument& document) {
       .replace(QChar(QChar::LineSeparator), QLatin1Char('\n'));
 }
 
-JwpEditor::JwpEditor(QWidget* parent) : QTextEdit(parent) {
+JwpEditor::JwpEditor(QWidget* parent)
+    : QTextEdit(parent), selection_scroll_timer_(new QTimer(this)) {
   setAcceptRichText(false);
+  selection_scroll_timer_->setSingleShot(false);
+  connect(selection_scroll_timer_, &QTimer::timeout, this,
+          [this] { scroll_mouse_selection(); });
+}
+
+void JwpEditor::set_selection_autoscroll(bool enabled, int interval_ms) {
+  if (interval_ms < 0 || interval_ms > 10000)
+    throw std::out_of_range("Selection autoscroll delay is outside 0..10000 ms");
+  selection_autoscroll_ = enabled;
+  selection_scroll_interval_ = interval_ms;
+  if (!enabled) stop_mouse_autoscroll();
+  else if (selection_scroll_timer_->isActive())
+    selection_scroll_timer_->setInterval(std::max(1, interval_ms));
+}
+
+bool JwpEditor::selection_autoscroll_enabled() const noexcept {
+  return selection_autoscroll_;
+}
+
+int JwpEditor::selection_autoscroll_interval() const noexcept {
+  return selection_scroll_interval_;
+}
+
+void JwpEditor::mousePressEvent(QMouseEvent* event) {
+  stop_mouse_autoscroll();
+  QTextEdit::mousePressEvent(event);
+  mouse_selecting_ = event->button() == Qt::LeftButton;
+}
+
+void JwpEditor::mouseMoveEvent(QMouseEvent* event) {
+  if (!mouse_selecting_ || !(event->buttons() & Qt::LeftButton)) {
+    stop_mouse_autoscroll();
+    QTextEdit::mouseMoveEvent(event);
+    return;
+  }
+
+  const int width = viewport()->width();
+  const int height = viewport()->height();
+  if (width <= 0 || height <= 0) {
+    stop_mouse_autoscroll();
+    event->accept();
+    return;
+  }
+  const int x = static_cast<int>(event->position().x());
+  const int y = static_cast<int>(event->position().y());
+  selection_scroll_x_ = std::clamp(x, 0, width - 1);
+  if (y < 0 || y >= height) {
+    extend_mouse_selection(selection_scroll_x_, std::clamp(y, 0, height - 1));
+  } else {
+    QTextEdit::mouseMoveEvent(event);
+  }
+
+  const int edge = std::max(1, fontMetrics().height() / 3);
+  auto* scroll = verticalScrollBar();
+  int direction = 0;
+  if (y < edge && scroll->value() > scroll->minimum()) direction = -1;
+  else if (y > height - edge && scroll->value() < scroll->maximum()) direction = 1;
+  if (!selection_autoscroll_ || direction == 0) {
+    stop_mouse_autoscroll();
+    event->accept();
+    return;
+  }
+
+  const bool begin = direction != selection_scroll_direction_ ||
+      !selection_scroll_timer_->isActive();
+  selection_scroll_direction_ = direction;
+  if (begin) scroll_mouse_selection();
+  selection_scroll_timer_->start(std::max(1, selection_scroll_interval_));
+  event->accept();
+}
+
+void JwpEditor::mouseReleaseEvent(QMouseEvent* event) {
+  stop_mouse_autoscroll();
+  mouse_selecting_ = false;
+  QTextEdit::mouseReleaseEvent(event);
+}
+
+void JwpEditor::extend_mouse_selection(int x, int y) {
+  QTextCursor selection = textCursor();
+  const int anchor = selection.anchor();
+  const int position = cursorForPosition(QPoint(x, y)).position();
+  selection.setPosition(anchor);
+  selection.setPosition(position, QTextCursor::KeepAnchor);
+  setTextCursor(selection);
+}
+
+void JwpEditor::scroll_mouse_selection() {
+  if (!selection_autoscroll_ || !mouse_selecting_ ||
+      selection_scroll_direction_ == 0) {
+    stop_mouse_autoscroll();
+    return;
+  }
+  auto* scroll = verticalScrollBar();
+  const int before = scroll->value();
+  scroll->triggerAction(selection_scroll_direction_ < 0
+                            ? QAbstractSlider::SliderSingleStepSub
+                            : QAbstractSlider::SliderSingleStepAdd);
+  if (scroll->value() == before) {
+    stop_mouse_autoscroll();
+    return;
+  }
+  extend_mouse_selection(selection_scroll_x_,
+                         selection_scroll_direction_ < 0 ? 0
+                                                         : viewport()->height() - 1);
+}
+
+void JwpEditor::stop_mouse_autoscroll() {
+  selection_scroll_timer_->stop();
+  selection_scroll_direction_ = 0;
 }
 
 void JwpEditor::insert_composed_text(std::u32string_view text, bool allow_overwrite) {

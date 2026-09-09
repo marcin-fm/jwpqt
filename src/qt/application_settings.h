@@ -62,6 +62,8 @@ struct ApplicationSettings {
   bool ctrl_up_down_convert = false;
   bool insert_on_separate_lines = true;
   bool show_all_fonts = false;
+  bool auto_scroll = true;
+  int auto_scroll_speed = 100;
   DuplicateOpenBehavior duplicate_open = DuplicateOpenBehavior::kPrompt;
   bool startup_dictionary = false;
   bool reload_previous_files = false;

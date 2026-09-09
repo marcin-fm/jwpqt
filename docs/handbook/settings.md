@@ -27,6 +27,13 @@ directly. Character-level insertion from information and kanji lookup controls i
 not changed. The whole insertion remains one Undo operation in native Japanese and
 unrestricted Unicode documents.
 
+Selection autoscroll starts enabled with the original 100 ms repeat delay.
+While extending a mouse selection within one-third of a text line from the top
+or bottom edge, the document moves one line immediately and continues at that
+delay. Disable it to keep an edge drag within the visible page. A delay of zero
+uses Qt's shortest event-loop interval. The setting applies to every existing
+and new document without changing text, selection, scroll position or undo.
+
 Bitmap controls the image included when copying document text; Automatic inherits
 File. Omit bitmap removes only that representation, not text or rich formats.
 Images have white paper and preserve the selected text without changing the

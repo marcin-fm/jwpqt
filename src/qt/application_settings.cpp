@@ -56,6 +56,7 @@ constexpr BooleanDescriptor<ApplicationSettings> kBooleans[] = {
     {"CtrlUpDownConvertKanji", "ctrl_up_down_convert", &ApplicationSettings::ctrl_up_down_convert},
     {"InsertOnSeparateLines", "paste_newpara", &ApplicationSettings::insert_on_separate_lines},
     {"ShowAllFonts", "all_fonts", &ApplicationSettings::show_all_fonts},
+    {"AutoScroll", "auto_scroll", &ApplicationSettings::auto_scroll},
     {"KeepBackupCopyWhenSaving", "backup_files", &ApplicationSettings::keep_backup_copy},
     {"CloseButton_Closes_File", "close_does_file", &ApplicationSettings::close_button_closes_file},
     {"LastFileConfirmExit", "confirm_exit", &ApplicationSettings::confirm_last_file_exit},
@@ -251,6 +252,11 @@ ApplicationSettings read_application_settings(std::string_view text,
         result.duplicate_open = static_cast<DuplicateOpenBehavior>(
             core::parse_jwp_setting_integer(entry.value, 0, 2));
       }
+      if (name.empty() && core::JwpConfigurationKey{"AutoScroll_Speed", "scroll_speed"}.matches(entry.name)) {
+        name = "AutoScroll_Speed";
+        result.auto_scroll_speed = static_cast<int>(
+            core::parse_jwp_setting_integer(entry.value, 0, 10000));
+      }
       if (name.empty() && core::JwpConfigurationKey{"IndexType", "index_type"}.matches(entry.name)) {
         name = "IndexType";
         result.index_type = static_cast<int>(core::parse_jwp_setting_integer(entry.value, 0, 20));
@@ -339,6 +345,8 @@ std::string write_application_settings(const ApplicationSettings& settings) {
     throw core::JwpConfigurationError("Invalid kanji lookup type");
   if (settings.maximum_undo_levels < 3 || settings.maximum_undo_levels > 1000)
     throw core::JwpConfigurationError("Undo depth must be between 3 and 1000");
+  if (settings.auto_scroll_speed < 0 || settings.auto_scroll_speed > 10000)
+    throw core::JwpConfigurationError("Autoscroll delay must be between 0 and 10000 ms");
   if (settings.history_size < 0 || settings.history_size > 30000)
     throw core::JwpConfigurationError("History storage is outside 0..30000 cells");
   if (settings.duplicate_open < DuplicateOpenBehavior::kOpenAnother ||
@@ -435,6 +443,7 @@ std::string write_application_settings(const ApplicationSettings& settings) {
   updates.push_back({{"TranslationCodePage", "code_page"}, std::to_string(settings.translation_code_page)});
   updates.push_back({{"HistoryBuffers_NumChars", "history_size"}, std::to_string(settings.history_size)});
   updates.push_back({{"MaximumUndoLevels", "undo_number"}, std::to_string(settings.maximum_undo_levels)});
+  updates.push_back({{"AutoScroll_Speed", "scroll_speed"}, std::to_string(settings.auto_scroll_speed)});
   updates.push_back({{"DoubleOpenBehavior", "double_open"},
                      std::to_string(static_cast<int>(settings.duplicate_open))});
   validate_kanji_info_options(settings.kanji_info);
