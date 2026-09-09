@@ -129,6 +129,21 @@ QMimeData* JwpEditor::createMimeDataFromSelection() const {
     bitmap.setDefaultFont(font);
     bitmap.setDocumentMargin(2);
     bitmap.setPlainText(text);
+    const int selection_start = textCursor().selectionStart();
+    const int selection_end = textCursor().selectionEnd();
+    for (auto block = document()->findBlock(selection_start); block.isValid() && block.position() < selection_end; block = block.next())
+      for (auto it = block.begin(); !it.atEnd(); ++it) {
+        const auto part = it.fragment();
+        const int first = std::max(selection_start, part.position());
+        const int last = std::min(selection_end, part.position() + part.length());
+        const int kind = part.charFormat().intProperty(kJwpCharacterKind);
+        if (first >= last || !kind) continue;
+        QTextCursor range(&bitmap); range.setPosition(first - selection_start);
+        range.setPosition(last - selection_start, QTextCursor::KeepAnchor);
+        QTextCharFormat format; format.setProperty(kJwpCharacterKind, kind);
+        format.setFontFamilies(jwp_representation_font(font, kind).families());
+        range.mergeCharFormat(format);
+      }
     if (options.colors && kanji_list_coloring_) {
       const int start = textCursor().selectionStart(), end = textCursor().selectionEnd();
       for (const auto& color : kanji_color_selections_) {
@@ -172,7 +187,11 @@ QMimeData* JwpEditor::createMimeDataFromSelection() const {
         };
         draw_jwp_text_layout(painter, *block.layout(), block.text(),
             bitmap.documentLayout()->blockBoundingRect(block).topLeft(), true,
-            color_code_page_, foreground);
+            color_code_page_, foreground, [&block](int at) {
+              QTextCursor cursor(block); cursor.setPosition(block.position() + at);
+              cursor.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
+              return cursor.charFormat().intProperty(kJwpCharacterKind);
+            });
       }
     }
     painter.end();
@@ -322,8 +341,25 @@ void JwpEditor::apply_jwp_layout(const core::JwpDocument& jwp_document) {
   viewport()->update();
 }
 
+void JwpEditor::apply_jwp_fonts(const core::JwpDocument& source, core::LegacyCodePage code_page) {
+  preserve_document_state(document(), [&] { apply_jwp_character_fonts(*document(), source, code_page); });
+}
+
 void JwpEditor::clear_jwp_layout() {
   preserve_document_state(document(), [this] {
+    for (QTextBlock block = document()->begin(); block.isValid(); block = block.next()) {
+      QList<QTextCursor> marked;
+      for (auto it = block.begin(); !it.atEnd(); ++it) {
+        const auto part = it.fragment();
+        if (!part.charFormat().hasProperty(kJwpCharacterKind)) continue;
+        QTextCursor cursor(document()); cursor.setPosition(part.position());
+        cursor.setPosition(part.position() + part.length(), QTextCursor::KeepAnchor); marked.push_back(cursor);
+      }
+      for (auto cursor : marked) {
+        auto format = cursor.charFormat(); format.clearProperty(kJwpCharacterKind);
+        format.clearProperty(QTextFormat::FontFamilies); cursor.setCharFormat(format);
+      }
+    }
     for (QTextBlock block = document()->begin(); block.isValid();
          block = block.next()) {
       QTextCursor cursor(block);

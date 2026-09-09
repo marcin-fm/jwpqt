@@ -1086,6 +1086,7 @@ bool MainWindow::apply_application_settings(const ApplicationSettings& settings,
             ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
         if (state->jwp_document_) {
           state->editor_->apply_jwp_layout(state->jwp_document_->document());
+          state->editor_->apply_jwp_fonts(state->jwp_document_->document(), state->jwp_code_page_);
           state->editor_->apply_kanji_colors(state->jwp_document_->document(),
               kanji_color_list_, kanji_color_policy_, state->jwp_code_page_);
         }
@@ -3245,6 +3246,7 @@ void MainWindow::restore_jwp_history_state(core::JwpPosition caret) {
 void MainWindow::apply_jwp_presentation(const core::JwpDocument& document,
                                         core::LegacyCodePage code_page) {
   document_->editor_->apply_jwp_layout(document);
+  document_->editor_->apply_jwp_fonts(document, code_page);
   document_->editor_->apply_kanji_colors(document, kanji_color_list_,
                               kanji_color_policy_, code_page);
 }
@@ -5185,6 +5187,7 @@ void MainWindow::load_jwp_document(const QString& path,
   staged_editor.setFont(document_->editor_->font());
   staged_editor.setPlainText(to_qstring(text));
   staged_editor.apply_jwp_layout(model.document());
+  staged_editor.apply_jwp_fonts(model.document(), code_page);
   staged_editor.prepare_kanji_colors(model.document(), kanji_color_list_,
                                       kanji_color_policy_, code_page);
 

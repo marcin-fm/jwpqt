@@ -20,6 +20,7 @@ QRawFont jwp_vertical_font(const QRawFont& original);
 void draw_jwp_text_layout(QPainter& painter, QTextLayout& layout, const QString& text,
                           const QPointF& origin, bool vertical,
                           core::LegacyCodePage code_page,
-                          const std::function<QColor(int)>& foreground = {});
+                          const std::function<QColor(int)>& foreground = {},
+                          const std::function<int(int)>& representation = {});
 
 }  // namespace jwpqt::qt

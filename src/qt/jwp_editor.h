@@ -31,6 +31,7 @@ class JwpEditor final : public QTextEdit {
   void insert_composed_text(std::u32string_view text, bool allow_overwrite = true);
   int character_page_width() const;
   void apply_jwp_layout(const core::JwpDocument& document);
+  void apply_jwp_fonts(const core::JwpDocument& document, core::LegacyCodePage code_page);
   void clear_jwp_layout();
   void apply_kanji_colors(
       const core::JwpDocument& document,

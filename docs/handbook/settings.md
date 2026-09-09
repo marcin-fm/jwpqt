@@ -39,9 +39,11 @@ missing families report a native fallback. Legacy ASCII Size/Auto values are
 retained but do not change the matched height. Copy images and printing share
 this selection; optional Latin ligatures are disabled for individual-character
 rendering and PDF text. No system fonts are modified or redistributed, and their
-original licensing and embedding restrictions remain. Unicode shared by both
-legacy bytes and JIS codes currently uses the Japanese face; exact distinction
-between those original representations remains a separate fidelity gap.
+original licensing and embedding restrictions remain. Native documents preserve
+the byte/JIS distinction even for identical Unicode: bytes use the ASCII face and
+stay upright, while JIS characters use the Japanese face and vertical rules.
+Copy images and PDF bodies/headers retain this display identity without changing
+text or undo. Switching to unrestricted Unicode removes native display metadata.
 
 You can enter a legacy .f00 filename instead of a font family, including Print.
 Relative names use the settings directory, not a guessed Windows directory.

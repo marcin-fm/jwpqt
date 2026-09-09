@@ -23,6 +23,7 @@
 #include <QTextBlock>
 #include <QTextCursor>
 #include <QTextLayout>
+#include <QVector>
 
 namespace jwpqt::qt {
 namespace {
@@ -55,32 +56,43 @@ struct PrintLayout::Data {
   QRectF body;
   int pages = 0;
 
-  QString header(const core::JwpText& source, int page) const {
+  QString header(const core::JwpText& source, int page, QVector<int>* kinds = nullptr) const {
     const QString input = to_qstring(core::decode_jwp_text(source, options.code_page));
     if (input.size() > 65535) throw PrintDocumentError("Print header exceeds its limit");
     QString output;
+    const auto append = [&](const QString& text, int kind) {
+      output += text;
+      if (kinds) for (qsizetype n = 0; n < text.size(); ++n) kinds->push_back(kind);
+    };
+    const auto append_raw = [&](const core::JwpText& raw, core::LegacyCodePage code_page) {
+      const auto decoded = core::decode_jwp_text(raw, code_page);
+      for (std::size_t n = 0; n < raw.size(); ++n)
+        append(to_qstring(std::u32string(1, decoded[n])), raw[n] < 0x100 ? 1 : 2);
+    };
     for (int i = 0; i < input.size(); ++i) {
-      if (input[i] != QLatin1Char('&') || i + 1 == input.size()) { output += input[i]; continue; }
+      if (input[i] != QLatin1Char('&') || i + 1 == input.size()) {
+        append(QString(input[i]), source[i] < 0x100 ? 1 : 2); continue;
+      }
       const QChar code = input[++i];
-      const auto summary = [&](int n) { return to_qstring(core::decode_jwp_text(jwp->summary[n], options.code_page)); };
+      const auto summary = [&](int n) { append_raw(jwp->summary[n], options.code_page); };
       switch (code.toUpper().unicode()) {
-        case 'A': output += summary(2); break;
-        case 'C': output += summary(4); break;
-        case 'K': output += summary(3); break;
-        case 'L': output += summary(0); break;
-        case 'S': output += summary(1); break;
+        case 'A': summary(2); break;
+        case 'C': summary(4); break;
+        case 'K': summary(3); break;
+        case 'L': summary(0); break;
+        case 'S': summary(1); break;
         case 'D': case 'T': {
           const auto date = options.time.date(); const auto time = options.time.time();
-          output += to_qstring(core::decode_jwp_text(core::expand_print_pattern(options.formatting,
+          append_raw(core::expand_print_pattern(options.formatting,
               code.toUpper() == QLatin1Char('T'), date.year(), date.month(), date.day(), time.hour(), time.minute()),
-              options.format_code_page));
+              options.format_code_page);
           break;
         }
-        case 'F': output += options.file_name; break;
-        case 'N': output += QFileInfo(options.file_name).fileName(); break;
-        case 'P': output += QString::number(page); break;
-        case '&': output += QLatin1Char('&'); break;
-        default: output += QLatin1Char('&'); output += code;
+        case 'F': append(options.file_name, 0); break;
+        case 'N': append(QFileInfo(options.file_name).fileName(), 0); break;
+        case 'P': append(QString::number(page), 1); break;
+        case '&': append(QStringLiteral("&"), 1); break;
+        default: append(QStringLiteral("&"), 1); append(QString(code), source[i] < 0x100 ? 1 : 2);
       }
       if (output.size() > 65535) throw PrintDocumentError("Expanded print header exceeds its limit");
     }
@@ -88,7 +100,8 @@ struct PrintLayout::Data {
   }
 
   void draw_layout(QPainter& painter, QTextLayout& layout, const QString& text,
-                   const QPointF& origin, bool vertical) const {
+                   const QPointF& origin, bool vertical,
+                   const std::function<int(int)>& representation = {}) const {
     std::function<QColor(int)> foreground;
     if (options.colors && options.color_policy.list_mode != core::KanjiListColorMode::kOff) {
       foreground = [&](int position) {
@@ -99,7 +112,7 @@ struct PrintLayout::Data {
         return color ? QColor(color->red, color->green, color->blue) : QColor(Qt::black);
       };
     }
-    draw_jwp_text_layout(painter, layout, text, origin, vertical, options.code_page, foreground);
+    draw_jwp_text_layout(painter, layout, text, origin, vertical, options.code_page, foreground, representation);
   }
 };
 
@@ -151,7 +164,8 @@ PrintLayout::PrintLayout(const QTextDocument& source, const QPageLayout& page,
       const auto part = fragment.fragment();
       auto format = part.charFormat();
       QFont font = format.font().resolve(d.options.font);
-      font.setFamilies(d.options.font.families()); font.setPointSizeF(d.options.font.pointSizeF());
+      font.setFamilies(jwp_representation_font(d.options.font, format.intProperty(kJwpCharacterKind)).families());
+      font.setPointSizeF(d.options.font.pointSizeF());
       format.setFont(font); format.setForeground(Qt::black); format.setBackground(Qt::NoBrush);
       formats.push_back({part.position(), part.position() + part.length(), format});
     }
@@ -194,15 +208,28 @@ void PrintLayout::paint_page(QPainter& painter, int page) const {
   const QPointF origin(d.body.left(), d.body.top() - (page - 1) * d.body.height());
   for (auto block = d.document->begin(); block.isValid(); block = block.next()) {
     const auto rect = d.document->documentLayout()->blockBoundingRect(block).translated(origin);
-    if (rect.intersects(d.body)) d.draw_layout(painter, *block.layout(), block.text(), rect.topLeft(), vertical);
+    if (rect.intersects(d.body)) d.draw_layout(painter, *block.layout(), block.text(), rect.topLeft(), vertical, [block](int at) {
+      QTextCursor cursor(block); cursor.setPosition(block.position() + at);
+      cursor.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
+      return cursor.charFormat().intProperty(kJwpCharacterKind);
+    });
   }
   painter.restore();
   if (!d.jwp || (page == 1 && d.jwp->suppress_first_page_headers)) return;
   const int parity = d.jwp->separate_left_right_headers && page % 2 == 0 ? 1 : 0;
   for (int footer = 0; footer < 2; ++footer) for (int alignment = 0; alignment < 3; ++alignment) {
-    const QString text = d.header(d.jwp->headers[parity + footer * 2][alignment], page);
+    QVector<int> kinds;
+    const QString text = d.header(d.jwp->headers[parity + footer * 2][alignment], page, &kinds);
     if (text.isEmpty()) continue;
     QTextLayout header(text, d.options.font, &d.metrics);
+    QList<QTextLayout::FormatRange> formats;
+    for (int first = 0; first < kinds.size();) {
+      int end = first + 1;
+      while (end < kinds.size() && kinds[end] == kinds[first]) ++end;
+      QTextCharFormat format; format.setFontFamilies(jwp_representation_font(d.options.font, kinds[first]).families());
+      formats.push_back({first, end - first, format}); first = end;
+    }
+    header.setFormats(formats);
     header.beginLayout(); auto line = header.createLine(); line.setLineWidth(1000000); header.endLayout();
     const auto& position = d.options.formatting.position;
     const qreal unit = QFontMetricsF(d.options.font, &d.metrics).horizontalAdvance(QStringLiteral("\u3000"));
@@ -213,7 +240,9 @@ void PrintLayout::paint_page(QPainter& painter, int page) const {
         : d.body.top() - line.height() * (100 + position[2]) / 100;
     if (x < 0 || x + line.naturalTextWidth() > d.paper.width() || y < 0 || y + line.height() > d.paper.height())
       throw PrintDocumentError("Header or footer does not fit the page margins");
-    painter.save(); painter.setPen(Qt::black); d.draw_layout(painter, header, text, {x, y}, vertical); painter.restore();
+    painter.save(); painter.setPen(Qt::black);
+    d.draw_layout(painter, header, text, {x, y}, vertical, [&kinds](int at) { return kinds.at(at); });
+    painter.restore();
   }
 }
 

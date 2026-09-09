@@ -114,7 +114,8 @@ QRawFont jwp_vertical_font(const QRawFont& original) {
 void draw_jwp_text_layout(QPainter& painter, QTextLayout& layout, const QString& text,
                           const QPointF& origin, bool vertical,
                           core::LegacyCodePage code_page,
-                          const std::function<QColor(int)>& foreground) {
+                          const std::function<QColor(int)>& foreground,
+                          const std::function<int(int)>& representation) {
   // TrueType vert faces rotate all Japanese glyphs. Raster/fallback faces use
   // the source exception list and (for raster fonts) ink-position corrections.
   std::vector<std::pair<QRawFont, QRawFont>> prepared;
@@ -125,13 +126,17 @@ void draw_jwp_text_layout(QPainter& painter, QTextLayout& layout, const QString&
     return font;
   };
   QTextBoundaryFinder boundaries(QTextBoundaryFinder::Grapheme, text);
-  const auto jis_code = [&](const QString& cluster) {
+  const auto jis_code = [&](const QString& cluster, int at) {
     const auto scalars = from_qstring(cluster);
+    const int kind = representation ? representation(at) : 0;
+    if (kind == 1) return std::optional<core::JisCode>{0};
+    if (kind == 2) return scalars.empty() ? std::optional<core::JisCode>{} : core::unicode_to_jis_x0208(scalars[0]);
+    if (kind) throw std::invalid_argument("Invalid JWP glyph representation");
     return scalars.empty() ? std::optional<core::JisCode>{}
                           : core::unicode_to_jwp_code(scalars[0], code_page);
   };
-  const auto rotates = [&](const QString& cluster) {
-    const auto jis = jis_code(cluster);
+  const auto rotates = [&](const QString& cluster, int at) {
+    const auto jis = jis_code(cluster, at);
     return jis && core::jwp_glyph_rotates(*jis);
   };
   for (int number = 0; number < layout.lineCount(); ++number) {
@@ -146,13 +151,15 @@ void draw_jwp_text_layout(QPainter& painter, QTextLayout& layout, const QString&
       boundaries.setPosition(at);
       int next = boundaries.toNextBoundary();
       if (next <= at || next > end) next = end;
+      if (representation) for (int p = at + 1; p < next; ++p)
+        if (representation(p) != representation(at)) { next = p; break; }
       const QColor color = foreground ? foreground(at) : painter.pen().color();
       painter.save();
       const auto restore = qScopeGuard([&] { painter.restore(); });
       painter.setPen(color);
       auto runs = line.glyphRuns(at, next - at);
       bool true_type = false;
-      const auto code = jis_code(text.mid(at, next - at));
+      const auto code = jis_code(text.mid(at, next - at), at);
       if (vertical && code && *code >= 0x2100) for (auto& run : runs) {
         const auto font = alternate(run.rawFont());
         if (!font.isValid()) continue;
@@ -173,7 +180,7 @@ void draw_jwp_text_layout(QPainter& painter, QTextLayout& layout, const QString&
         }
         run.setRawFont(font); run.setGlyphIndexes(glyphs); true_type = true;
       }
-      if (vertical && (true_type || rotates(text.mid(at, next - at)))) {
+      if (vertical && (true_type || rotates(text.mid(at, next - at), at))) {
         if (!runs.empty()) {
           const auto raw = runs.front().rawFont();
           const auto metadata = raw.fontTable("JWPV");
@@ -209,7 +216,7 @@ void draw_jwp_text_layout(QPainter& painter, QTextLayout& layout, const QString&
           boundaries.setPosition(next);
           const int after = boundaries.toNextBoundary();
           if (after <= next || after > end) break;
-          const auto following = vertical ? jis_code(text.mid(next, after - next)) : std::optional<core::JisCode>{};
+          const auto following = vertical ? jis_code(text.mid(next, after - next), next) : std::optional<core::JisCode>{};
           if ((following && *following >= 0x2100) ||
               (foreground && foreground(next) != color)) break;
           next = after;

@@ -7,9 +7,14 @@
 #include "jwp_text_drawing.h"
 #include "print_document.h"
 #include "text_bridge.h"
+#include "file_io.h"
+#include "jwpqt/core/jis_unicode.h"
 #include "jwpqt/core/character_font.h"
 
 #include <QApplication>
+#include <QClipboard>
+#include <QMimeData>
+#include <QTextBlock>
 #include <QAction>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -149,6 +154,89 @@ void test_vertical_native(const QFont& font) {
   }
 }
 
+void test_representation() {
+  constexpr auto page = core::LegacyCodePage::k1253;
+  const auto sigma = core::unicode_to_jis_x0208(U'\u03a3');
+  require(sigma.has_value(), "JIS Greek fixture is missing");
+  core::JwpDocument source; source.paragraphs.resize(1);
+  source.paragraphs[0].text = {0xd3, *sigma};
+  source.margins = {1, 1, 1, 1}; source.headers[0][0] = source.paragraphs[0].text;
+  QTemporaryDir temporary;
+  const auto path = temporary.filePath(QStringLiteral("greek.jwp"));
+  qt::write_jwp_file(path, source);
+  qt::MainWindow window;
+  qt::ApplicationSettings settings;
+  settings.fonts[0] = {QStringLiteral("Noto Sans CJK JP"), 24, false};
+  settings.fonts[static_cast<std::size_t>(qt::JapaneseFontRole::kBitmap)] = {QStringLiteral("Noto Sans CJK JP"), 24, false};
+  const auto ascii_family = QRawFont::fromFont(QFontDatabase::systemFont(QFontDatabase::GeneralFont)).familyName();
+  require(QFontDatabase::families().contains(ascii_family), "ASCII fixture family is unavailable");
+  settings.ascii_font = {ascii_family, 0, false};
+  require(window.apply_application_settings(settings) && window.open_jwp_path(path, page, qt::OpenMode::kNonInteractive), "Could not open aliased JWP glyphs");
+  window.show(); QApplication::processEvents();
+  auto* editor = window.active_editor();
+  const QString text = QStringLiteral("\u03a3\u03a3");
+  const auto verify = [&] {
+    require(qt::document_plain_text(*editor->document()) == text && window.current_jwp_document()->paragraphs[0].text == source.paragraphs[0].text,
+            "Font identity changed raw tokens or Unicode");
+    (void)editor->document()->size();
+    auto* layout = editor->document()->begin().layout();
+    const auto raw = layout->glyphRuns(0, 1), jis = layout->glyphRuns(1, 1);
+    require(!raw.empty() && !jis.empty() && raw.front().rawFont().familyName().startsWith(QStringLiteral("JwpqtAscii-Bytes-")) &&
+            jis.front().rawFont().familyName() == QStringLiteral("Noto Sans CJK JP"), "Aliased Greek used the wrong actual font");
+    const auto original = shaped(QFont(ascii_family), QStringLiteral("\u03a3"));
+    auto sized = original; sized.setPixelSize(raw.front().rawFont().pixelSize());
+    if (raw.front().rawFont().pathForGlyph(raw.front().glyphIndexes().front()) !=
+        sized.pathForGlyph(sized.glyphIndexesForString(QStringLiteral("\u03a3")).front()))
+      std::cerr << "raw=" << raw.front().rawFont().familyName().toStdString() << " pixel=" << raw.front().rawFont().pixelSize()
+                << " glyph=" << raw.front().glyphIndexes().front() << " original=" << sized.familyName().toStdString()
+                << " pixel=" << sized.pixelSize() << " glyph=" << sized.glyphIndexesForString(QStringLiteral("\u03a3")).front() << '\n';
+    require(raw.front().rawFont().pathForGlyph(raw.front().glyphIndexes().front()) ==
+            sized.pathForGlyph(sized.glyphIndexesForString(QStringLiteral("\u03a3")).front()), "Raw byte outline changed");
+  };
+  verify();
+  for (int at : {0, 1}) {
+    const auto copy = [&](bool vertical) {
+      settings.vertical_clipboard_bitmap = vertical;
+      require(window.apply_application_settings(settings), "Representation settings refresh failed");
+      QTextCursor cursor(editor->document()); cursor.setPosition(at); cursor.setPosition(at + 1, QTextCursor::KeepAnchor); editor->setTextCursor(cursor);
+      editor->copy();
+      require(QApplication::clipboard()->text() == QStringLiteral("\u03a3"), "Glyph-aware copy changed text");
+      return qvariant_cast<QImage>(QApplication::clipboard()->mimeData()->imageData());
+    };
+    const auto horizontal = copy(false), vertical = copy(true);
+    require(!horizontal.isNull() && !vertical.isNull(), "Representation clipboard image missing");
+    require(at == 0 ? horizontal == vertical : horizontal != vertical, "Raw/JIS vertical identity was ignored");
+  }
+  verify();
+  for (bool vertical : {false, true}) {
+    auto model = source; model.vertical = vertical;
+    QPrinter printer(QPrinter::HighResolution); printer.setOutputFormat(QPrinter::PdfFormat);
+    const auto pdf = temporary.filePath(vertical ? QStringLiteral("vertical.pdf") : QStringLiteral("horizontal.pdf"));
+    printer.setOutputFileName(pdf);
+    qt::PrintOptions options; options.code_page = page; options.font = editor->font(); options.font.setPointSizeF(16);
+    qt::print_document(printer, *editor->document(), &model, options);
+    QProcess extract; extract.start(QStringLiteral("pdftotext"), {QStringLiteral("-raw"), pdf, QStringLiteral("-")});
+    require(extract.waitForFinished() && extract.exitCode() == 0, "Representation PDF extraction failed");
+    QString actual = QString::fromUtf8(extract.readAllStandardOutput());
+    actual.remove(QLatin1Char('\n')); actual.remove(QLatin1Char('\f')); actual.remove(QLatin1Char(' '));
+    require(actual == text + text, "Body/header glyph identities changed PDF Unicode");
+  }
+  editor->moveCursor(QTextCursor::End); editor->insertPlainText(QStringLiteral("!"));
+  window.findChild<QAction*>(QStringLiteral("undoAction"))->trigger(); verify();
+  require(!editor->document()->isModified(), "Representation formatting changed saved baseline");
+  auto bad = source; bad.paragraphs[0].text[0] = 'X';
+  bool rejected = false;
+  try { qt::apply_jwp_character_fonts(*editor->document(), bad, page); } catch (const std::invalid_argument&) { rejected = true; }
+  require(rejected, "Invalid raw/display mapping was accepted"); verify();
+  settings.fonts[0].size = 30;
+  require(window.apply_application_settings(settings), "Identity font size refresh failed"); verify();
+  require(window.set_japanese_editing(false, true), "Could not switch to unrestricted Unicode");
+  require(qt::document_plain_text(*editor->document()) == text, "Engine switch changed aliased text");
+  for (auto block = editor->document()->begin(); block.isValid(); block = block.next())
+    for (auto it = block.begin(); !it.atEnd(); ++it)
+      require(!it.fragment().charFormat().hasProperty(qt::kJwpCharacterKind), "Native identity leaked into Unicode editing");
+}
+
 int main(int argc, char** argv) {
   QApplication app(argc, argv);
   try {
@@ -158,6 +246,7 @@ int main(int argc, char** argv) {
     QFont original(japanese); original.setPixelSize(24);
     const auto original_raw = QRawFont::fromFont(original);
     test_vertical_native(original);
+    test_representation();
     require(original_raw.supportsCharacter('A') && original_raw.supportsCharacter(0x611b), "Test must use a font covering BOTH ASCII and Japanese");
     std::map<std::string, std::string> tables;
     for (const char* tag : {"head", "hhea", "maxp", "hmtx", "name", "OS/2", "post", "glyf", "loca", "CFF "}) {

@@ -5,6 +5,7 @@
 #include "jwpqt/core/jis_unicode.h"
 #include "jwpqt/core/legacy_code_page.h"
 #include "jwpqt/core/raster_font.h"
+#include "jwpqt/core/jwp_text_codec.h"
 #include "text_bridge.h"
 
 #include <QCoreApplication>
@@ -18,6 +19,9 @@
 #include <QStyle>
 #include <QVariant>
 #include <QWidget>
+#include <QTextBlock>
+#include <QTextCursor>
+#include <QTextDocument>
 #include <map>
 #include <stdexcept>
 #include <utility>
@@ -32,11 +36,20 @@ constexpr char kSettings[] = "_jwpqt_font_settings";
 constexpr char kBitmap[] = "_jwpqt_clipboard_bitmap";
 constexpr char kAscii[] = "_jwpqt_ascii_face";
 
-QString ascii_face(const QFont& font) {
+QString ascii_face(const QFont& font, bool raw_bytes = false) {
   const auto raw = QRawFont::fromFont(font);
   if (!raw.isValid()) throw std::runtime_error("Could not open native ASCII font");
+  auto* app = QCoreApplication::instance();
+  auto cache = app->property("_jwpqt_ascii_faces").toMap();
+  for (const auto& entry : cache) {
+    const auto values = entry.toList();
+    if (values[3].value<QRawFont>() == raw &&
+        values[0].toString().startsWith(QStringLiteral("JwpqtAscii-Bytes-")) == raw_bytes)
+      return values[0].toString();
+  }
   std::map<std::string, std::string> tables;
   QCryptographicHash hash(QCryptographicHash::Sha256);
+  if (raw_bytes) hash.addData(QByteArrayLiteral("raw-bytes"));
   for (const char* tag : {"head", "hhea", "maxp", "hmtx", "cmap", "loca", "glyf", "CFF ", "name", "OS/2", "post",
                           "fpgm", "prep", "cvt ", "gasp", "GDEF", "GPOS", "GSUB", "kern", "BASE", "VORG",
                           "fvar", "gvar", "avar", "cvar", "HVAR", "VVAR", "MVAR", "STAT", "CFF2"}) {
@@ -46,8 +59,6 @@ QString ascii_face(const QFont& font) {
     tables.emplace(tag, data.toStdString());
   }
   const auto digest = QString::fromLatin1(hash.result().toHex());
-  auto* app = QCoreApplication::instance();
-  auto cache = app->property("_jwpqt_ascii_faces").toMap();
   if (cache.contains(digest)) return cache[digest].toList()[0].toString();
   qlonglong total = 0;
   for (const auto& value : cache) total += value.toList()[1].toLongLong();
@@ -60,9 +71,9 @@ QString ascii_face(const QFont& font) {
   for (char32_t scalar = 0x20; scalar < 0x7f; ++scalar) add(scalar);
   for (int page = 1250; page <= 1258; ++page) for (int byte = 128; byte <= 255; ++byte) {
     const auto scalar = core::legacy_byte_to_unicode(static_cast<std::uint8_t>(byte), static_cast<core::LegacyCodePage>(page));
-    if (scalar && !core::unicode_to_jis_x0208(*scalar)) add(*scalar);
+    if (scalar && (raw_bytes || !core::unicode_to_jis_x0208(*scalar))) add(*scalar);
   }
-  const auto family = QStringLiteral("JwpqtAscii-") + digest.left(32);
+  const auto family = QStringLiteral("JwpqtAscii-") + (raw_bytes ? QStringLiteral("Bytes-") : QString{}) + digest.left(32);
   const auto face = core::make_character_font(std::move(tables), mappings, family.toStdString());
   if (total + static_cast<qlonglong>(face.size()) > 64 * 1024 * 1024) throw std::runtime_error("Private ASCII font memory exceeded");
   const int id = QFontDatabase::addApplicationFontFromData(QByteArray::fromStdString(face));
@@ -71,7 +82,7 @@ QString ascii_face(const QFont& font) {
     QFontDatabase::removeApplicationFont(id);
     throw std::runtime_error("Private ASCII font family mismatch");
   }
-  cache.insert(digest, QVariantList{family, static_cast<qlonglong>(face.size())});
+  cache.insert(digest, QVariantList{family, static_cast<qlonglong>(face.size()), QVariant::fromValue(font), QVariant::fromValue(raw)});
   app->setProperty("_jwpqt_ascii_faces", cache);
   return family;
 }
@@ -159,6 +170,58 @@ QFont ensure_ascii_font(QFont font) {
   if (font.families().isEmpty() || !font.families().front().startsWith(QStringLiteral("JwpqtAscii-")))
     font.setFamilies({ascii_face(QFontDatabase::systemFont(QFontDatabase::GeneralFont)), font.family()});
   return font;
+}
+
+QFont jwp_representation_font(QFont font, int kind) {
+  if (kind == 0) return font;
+  auto families = ensure_ascii_font(font).families();
+  const QString ascii = families.takeFirst();
+  if (kind == 1) {
+    const auto cache = QCoreApplication::instance()->property("_jwpqt_ascii_faces").toMap();
+    bool found = false;
+    for (const auto& entry : cache) {
+      const auto values = entry.toList();
+      if (values[0].toString() != ascii) continue;
+      families.prepend(ascii_face(values[2].value<QFont>(), true)); found = true; break;
+    }
+    if (!found) throw std::runtime_error("Missing original ASCII font identity");
+  } else if (kind != 2) throw std::invalid_argument("Invalid JWP character representation");
+  font.setFamilies(families);
+  return font;
+}
+
+void apply_jwp_character_fonts(QTextDocument& document, const core::JwpDocument& source,
+                               core::LegacyCodePage code_page) {
+  if (document.blockCount() != static_cast<int>(source.paragraphs.size()))
+    throw std::invalid_argument("JWP font paragraph count mismatch");
+  // Validate the entire mapping before publishing any display metadata.
+  auto block = document.begin();
+  for (const auto& paragraph : source.paragraphs) {
+    if (block.text() != to_qstring(core::decode_jwp_text(paragraph.text, code_page)))
+      throw std::invalid_argument("JWP font text mismatch");
+    block = block.next();
+  }
+  const auto bytes = jwp_representation_font(document.defaultFont(), 1).families();
+  const auto japanese = jwp_representation_font(document.defaultFont(), 2).families();
+  block = document.begin();
+  for (const auto& paragraph : source.paragraphs) {
+    const auto decoded = core::decode_jwp_text(paragraph.text, code_page);
+    int position = block.position(), start = position, previous = 0;
+    const auto publish = [&](int end) {
+      if (start == end) return;
+      QTextCursor cursor(&document); cursor.setPosition(start); cursor.setPosition(end, QTextCursor::KeepAnchor);
+      QTextCharFormat format;
+      format.setProperty(kJwpCharacterKind, previous);
+      format.setFontFamilies(previous == 1 ? bytes : japanese);
+      cursor.mergeCharFormat(format);
+    };
+    for (std::size_t i = 0; i < paragraph.text.size(); ++i) {
+      const int kind = paragraph.text[i] < 0x100 ? 1 : 2;
+      if (kind != previous) { publish(position); start = position; previous = kind; }
+      position += decoded[i] > 0xffff ? 2 : 1;
+    }
+    publish(position); block = block.next();
+  }
 }
 
 QFont japanese_print_font(QFont base, const JapaneseFontSetting& setting, const QString& directory) {

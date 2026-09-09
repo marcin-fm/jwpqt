@@ -237,8 +237,11 @@ selection. Optional Latin ligatures are disabled for source-style individual
 characters and reliable PDF text. Original outlines, copyright/license records
 and embedding flags are preserved; no font is installed globally or bundled.
 Private copies are bounded at 16 faces and 64 MiB per application cache.
-Unicode shared by both a legacy byte and a JIS code currently takes the Japanese
-route; distinguishing those original representations remains a fidelity gap.
+Native documents retain the original byte/JIS distinction as display-only
+metadata, even when both encode identical Unicode. Raw bytes use the ASCII face
+and remain upright; JIS characters use the Japanese face and its vertical rules.
+Clipboard images and PDF bodies/headers preserve that identity without changing
+text, native tokens or undo. Unrestricted Unicode has no invented byte identity.
 
 Legacy **`.f00` font files** can be entered instead of a font family, including
 the separate Print role. Relative paths resolve from the application settings
