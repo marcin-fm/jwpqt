@@ -5,10 +5,13 @@
 #include <limits>
 
 #include <QApplication>
+#include <QAction>
 #include <QCheckBox>
 #include <QDoubleSpinBox>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
+#include <QToolButton>
 
 #include "jwpqt/core/jwp_text_codec.h"
 #include "page_layout_dialog.h"
@@ -20,6 +23,13 @@ void require(bool condition, const char* message) {
     std::cerr << message << '\n';
     std::exit(EXIT_FAILURE);
   }
+}
+
+void type_key(QLineEdit& edit, int key, const QString& text) {
+  QKeyEvent press(QEvent::KeyPress, key, Qt::NoModifier, text);
+  QApplication::sendEvent(&edit, &press);
+  QKeyEvent release(QEvent::KeyRelease, key, Qt::NoModifier, text);
+  QApplication::sendEvent(&edit, &release);
 }
 
 jwpqt::core::JwpDocument document() {
@@ -84,6 +94,40 @@ void test_failed_encoding_is_atomic() {
           "Unrepresentable page-layout text partially changed the document");
 }
 
+void test_japanese_metadata_input() {
+  auto source = document();
+  source.summary[0] = jwpqt::core::encode_jwp_text(U"かき");
+  source.headers[0][0] = jwpqt::core::encode_jwp_text(U"見出し");
+  QAction overwrite(nullptr);
+  overwrite.setCheckable(true);
+  overwrite.setChecked(true);
+  jwpqt::qt::PageLayoutDialog dialog(
+      source, jwpqt::core::LegacyCodePage::k1252, nullptr, nullptr, false,
+      &overwrite);
+  auto* title =
+      dialog.findChild<QLineEdit*>(QStringLiteral("layoutTitle"));
+  auto* header =
+      dialog.findChild<QLineEdit*>(QStringLiteral("layoutHeader0_0"));
+  auto* title_mode =
+      dialog.findChild<QToolButton*>(QStringLiteral("layoutTitleMode"));
+  require(title != nullptr && header != nullptr && title_mode != nullptr &&
+              title_mode->text() == QStringLiteral("K") &&
+              title->toolTip().contains(QStringLiteral("Overwrite")),
+          "Page-layout text fields did not expose shared Japanese input");
+
+  title->setCursorPosition(0);
+  type_key(*title, Qt::Key_N, QStringLiteral("n"));
+  type_key(*title, Qt::Key_A, QStringLiteral("a"));
+  header->setCursorPosition(header->text().size());
+  type_key(*header, Qt::Key_N, QStringLiteral("n"));
+  require(dialog.apply_changes() &&
+              jwpqt::core::decode_jwp_text(dialog.document().summary[0]) ==
+                  U"なき" &&
+              jwpqt::core::decode_jwp_text(dialog.document().headers[0][0]) ==
+                  U"見出しん",
+          "Page-layout text did not apply overwrite or pending Japanese input");
+}
+
 void test_invalid_source_margin_is_rejected() {
   auto source = document();
   source.margins[0] = std::numeric_limits<float>::quiet_NaN();
@@ -102,6 +146,7 @@ int main(int argc, char* argv[]) {
   QApplication application(argc, argv);
   test_candidate_application();
   test_failed_encoding_is_atomic();
+  test_japanese_metadata_input();
   test_invalid_source_margin_is_rejected();
   return EXIT_SUCCESS;
 }

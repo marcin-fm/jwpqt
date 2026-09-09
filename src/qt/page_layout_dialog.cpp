@@ -16,6 +16,7 @@
 #include <QVBoxLayout>
 
 #include "jwpqt/core/jwp_text_codec.h"
+#include "kana_input_field.h"
 #include "text_bridge.h"
 
 namespace jwpqt::qt {
@@ -58,7 +59,8 @@ QDoubleSpinBox* margin_spin(const char* name, QWidget* parent, bool metric) {
 PageLayoutDialog::PageLayoutDialog(const core::JwpDocument& document,
                                    core::LegacyCodePage code_page,
                                    QWidget* parent, const core::JwpPageDefaults* defaults,
-                                   bool metric_units)
+                                   bool metric_units,
+                                   QAction* overwrite_action)
     : QDialog(parent),
       document_(document),
       code_page_(code_page),
@@ -140,14 +142,14 @@ PageLayoutDialog::PageLayoutDialog(const core::JwpDocument& document,
     auto* page = new QWidget(header_tabs);
     auto* form = new QFormLayout(page);
     for (std::size_t position = 0; position < headers_[set].size(); ++position) {
-      auto* edit = new QLineEdit(page);
-      edit->setObjectName(
-          QStringLiteral("layoutHeader%1_%2").arg(set).arg(position));
-      edit->setMaxLength(65'535);
-      edit->setText(to_qstring(core::decode_jwp_text(
+      auto* field = new KanaInputField(
+          QStringLiteral("layoutHeader%1_%2").arg(set).arg(position), page);
+      field->set_overwrite_action(overwrite_action);
+      field->edit()->setMaxLength(65'535);
+      field->edit()->setText(to_qstring(core::decode_jwp_text(
           document_.headers[set][position], code_page_)));
-      headers_[set][position] = edit;
-      form->addRow(tr(kHeaderPositions[position]), edit);
+      headers_[set][position] = field;
+      form->addRow(tr(kHeaderPositions[position]), field);
     }
     header_tabs->addTab(page, tr(kHeaderSets[set]));
   }
@@ -157,13 +159,14 @@ PageLayoutDialog::PageLayoutDialog(const core::JwpDocument& document,
   auto* summary_page = new QWidget(tabs);
   auto* summary_layout = new QFormLayout(summary_page);
   for (std::size_t index = 0; index < summary_.size(); ++index) {
-    auto* edit = new QLineEdit(summary_page);
-    edit->setObjectName(QString::fromLatin1(kSummaryNames[index]));
-    edit->setMaxLength(65'535);
-    edit->setText(
+    auto* field = new KanaInputField(
+        QString::fromLatin1(kSummaryNames[index]), summary_page);
+    field->set_overwrite_action(overwrite_action);
+    field->edit()->setMaxLength(65'535);
+    field->edit()->setText(
         to_qstring(core::decode_jwp_text(document_.summary[index], code_page_)));
-    summary_[index] = edit;
-    summary_layout->addRow(tr(kSummaryLabels[index]), edit);
+    summary_[index] = field;
+    summary_layout->addRow(tr(kSummaryLabels[index]), field);
   }
   tabs->addTab(summary_page, tr("Summary"));
   outer->addWidget(tabs, 1);
@@ -185,6 +188,9 @@ const core::JwpDocument& PageLayoutDialog::document() const noexcept {
 
 bool PageLayoutDialog::apply_changes() {
   try {
+    for (auto& set : headers_)
+      for (KanaInputField* field : set) field->finish_input();
+    for (KanaInputField* field : summary_) field->finish_input();
     core::JwpDocument candidate = document_;
     for (std::size_t index = 0; index < candidate.margins.size(); ++index)
       if (margins_changed_[index])
@@ -198,12 +204,12 @@ bool PageLayoutDialog::apply_changes() {
       for (std::size_t position = 0; position < candidate.headers[set].size();
            ++position) {
         candidate.headers[set][position] = core::encode_jwp_text(
-            from_qstring(headers_[set][position]->text()), code_page_);
+            from_qstring(headers_[set][position]->edit()->text()), code_page_);
       }
     }
     for (std::size_t index = 0; index < candidate.summary.size(); ++index) {
       candidate.summary[index] = core::encode_jwp_text(
-          from_qstring(summary_[index]->text()), code_page_);
+          from_qstring(summary_[index]->edit()->text()), code_page_);
     }
     document_ = std::move(candidate);
     status_->clear();

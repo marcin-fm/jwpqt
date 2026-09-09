@@ -5804,6 +5804,66 @@ void test_kanji_color_list_commands(const QString& directory) {
       directory + QStringLiteral("/kanji-list-commands.jwp");
   jwpqt::qt::write_jwp_file(source_path, source);
 
+  {
+    const QString dialog_settings =
+        directory + QStringLiteral("/kanji-list-dialog.ini");
+    const QString dialog_list =
+        directory + QStringLiteral("/kanji-list-dialog.lst");
+    {
+      QSettings settings(dialog_settings, QSettings::IniFormat);
+      jwpqt::qt::write_kanji_color_policy(settings, policy);
+    }
+    jwpqt::qt::write_kanji_color_list_file(dialog_list, initial_list);
+
+    jwpqt::qt::MainWindow dialog_window;
+    require(dialog_window.load_kanji_color_configuration(
+                dialog_settings, dialog_list,
+                jwpqt::qt::OpenMode::kNonInteractive),
+            "Could not prepare native kanji-list prompt");
+    QAction* dialog_edit =
+        find_action(dialog_window, "editKanjiColorListAction");
+    QAction* overwrite = find_action(dialog_window, "overwriteModeAction");
+    require(dialog_edit != nullptr && dialog_edit->isEnabled() &&
+                overwrite != nullptr,
+            "Native kanji-list prompt actions were unavailable");
+    overwrite->setChecked(true);
+
+    QString final_text;
+    QTimer::singleShot(0, [&] {
+      auto* dialog =
+          qobject_cast<QDialog*>(QApplication::activeModalWidget());
+      require(dialog != nullptr,
+              "Native kanji-list prompt was not shown");
+      auto* text =
+          dialog->findChild<QLineEdit*>(QStringLiteral("kanjiColorListText"));
+      auto* mode = dialog->findChild<QToolButton*>(
+          QStringLiteral("kanjiColorListTextMode"));
+      auto* buttons = dialog->findChild<QDialogButtonBox*>();
+      require(text != nullptr && mode != nullptr && buttons != nullptr &&
+                  mode->text() == QStringLiteral("K"),
+              "Native kanji-list prompt did not expose Japanese input");
+      QObject::connect(text, &QLineEdit::textChanged,
+                       [&](const QString& value) { final_text = value; });
+      text->setText(QStringLiteral("\u65e5\u6708"));
+      text->setCursorPosition(1);
+      QInputMethodEvent commit;
+      commit.setCommitString(QStringLiteral("\u672c"));
+      QApplication::sendEvent(text, &commit);
+      QKeyEvent pending_n(QEvent::KeyPress, Qt::Key_N, Qt::NoModifier,
+                          QStringLiteral("n"));
+      QApplication::sendEvent(text, &pending_n);
+      buttons->button(QDialogButtonBox::Ok)->click();
+    });
+    dialog_edit->trigger();
+    const jwpqt::core::JwpText prompt_codes =
+        jwpqt::core::encode_jwp_text(U"\u65e5\u672c\u6708");
+    require(final_text == QStringLiteral("\u65e5\u672c\u3093") &&
+                dialog_window.kanji_color_list().contains(prompt_codes[0]) &&
+                dialog_window.kanji_color_list().contains(prompt_codes[1]) &&
+                !dialog_window.kanji_color_list().contains(prompt_codes[2]),
+            "Native kanji-list prompt lost overwrite or pending Japanese input");
+  }
+
   PromptingWindow window;
   require(window.load_kanji_color_configuration(
               settings_path, list_path,

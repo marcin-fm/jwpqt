@@ -15,16 +15,19 @@
 class QCheckBox;
 class QDoubleSpinBox;
 class QLabel;
-class QLineEdit;
+class QAction;
 
 namespace jwpqt::qt {
+
+class KanaInputField;
 
 class PageLayoutDialog : public QDialog {
  public:
   PageLayoutDialog(const core::JwpDocument& document,
                    core::LegacyCodePage code_page, QWidget* parent = nullptr,
                    const core::JwpPageDefaults* defaults = nullptr,
-                   bool metric_units = false);
+                   bool metric_units = false,
+                   QAction* overwrite_action = nullptr);
 
   const core::JwpDocument& document() const noexcept;
   bool apply_changes();
@@ -41,8 +44,8 @@ class PageLayoutDialog : public QDialog {
   QCheckBox* vertical_;
   QCheckBox* separate_headers_;
   QCheckBox* suppress_first_;
-  std::array<std::array<QLineEdit*, 3>, 4> headers_;
-  std::array<QLineEdit*, 5> summary_;
+  std::array<std::array<KanaInputField*, 3>, 4> headers_;
+  std::array<KanaInputField*, 5> summary_;
   QLabel* status_;
 };
 

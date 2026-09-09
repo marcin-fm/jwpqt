@@ -98,6 +98,7 @@
 #include "jis_table_dialog.h"
 #include "japanese_fonts.h"
 #include "jwp_editor.h"
+#include "kana_input_field.h"
 #include "kanji_code_lookup_dialog.h"
 #include "kanji_count_dialog.h"
 #include "kanji_info_dialog.h"
@@ -1591,7 +1592,8 @@ void MainWindow::configure_application_settings(bool dictionary_page) {
     const auto color = i == 1 ? kanji_color_policy_.list_color : kanji_color_policy_.uncommon_color;
     displayed.color_refs[i] = std::uint32_t(color.red) | (std::uint32_t(color.green) << 8) | (std::uint32_t(color.blue) << 16);
   }
-  QPointer<ApplicationSettingsDialog> dialog = new ApplicationSettingsDialog(displayed, this, dictionary_page);
+  QPointer<ApplicationSettingsDialog> dialog = new ApplicationSettingsDialog(
+      displayed, this, dictionary_page, overwrite_action_);
   const int result = dialog->exec();
   if (!self || !dialog) return;
   const auto settings = dialog->settings();
@@ -6346,7 +6348,8 @@ std::optional<core::JwpDocument> MainWindow::prompt_for_page_layout(
   const QPointer<MainWindow> self(this);
   QPointer<PageLayoutDialog> dialog = new PageLayoutDialog(
       initial, document_->jwp_code_page_, this,
-      &application_settings_.default_page, application_settings_.metric_units);
+      &application_settings_.default_page, application_settings_.metric_units,
+      overwrite_action_);
   const auto answer = dialog->exec();
   if (!self || !dialog) return std::nullopt;
   const auto cleanup = qScopeGuard([dialog] { if (dialog) delete dialog; });
@@ -6465,9 +6468,12 @@ MainWindow::prompt_for_kanji_color_list_edit() {
   operation->addItem(tr("Add to list"), true);
   operation->addItem(tr("Remove from list"), false);
   form->addRow(tr("Operation:"), operation);
-  auto* text = new QLineEdit(&dialog);
-  text->setObjectName(QStringLiteral("kanjiColorListText"));
-  form->addRow(tr("Kanji:"), text);
+  auto* input = new KanaInputField(
+      QStringLiteral("kanjiColorListText"), &dialog);
+  auto* text = input->edit();
+  text->setMaxLength(65535);
+  input->set_overwrite_action(overwrite_action_);
+  form->addRow(tr("Kanji:"), input);
   layout->addLayout(form);
 
   auto* buttons = new QDialogButtonBox(
@@ -6478,6 +6484,7 @@ MainWindow::prompt_for_kanji_color_list_edit() {
   if (dialog.exec() != QDialog::Accepted) {
     return std::nullopt;
   }
+  input->finish_input();
   return KanjiColorListEditRequest{text->text(),
                                    operation->currentData().toBool()};
 }

@@ -45,7 +45,8 @@ constexpr double kCentimetersPerInch = 2.54;
 }  // namespace
 
 ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& settings, QWidget* parent,
-                                                     bool dictionary_page)
+                                                     bool dictionary_page,
+                                                     QAction* overwrite_action)
     : QDialog(parent), settings_(settings) {
   setObjectName(QStringLiteral("applicationSettingsDialog"));
   setWindowTitle(tr("Options"));
@@ -542,6 +543,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   for (std::size_t i = 0; i < 4; ++i) {
     auto* field = new KanaInputField(QStringLiteral("settingsPrintPattern%1").arg(i), printing);
     field->set_input_mode(InputMode::kAscii);
+    field->set_overwrite_action(overwrite_action);
     const auto& raw = settings_.print_formatting.patterns[i];
     try {
       original_patterns[i] = to_qstring(core::decode_jwp_text(core::JwpText(raw.begin(), std::find(raw.begin(), raw.end(), 0)), pattern_page));

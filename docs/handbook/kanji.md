@@ -60,6 +60,9 @@ Result strips provide canonical insertion and per-character information menus.
 Count Kanji can inspect current or all open documents without changing their
 text or accepting a conversion preview. Its snapshots follow edits and closed
 tabs. The accumulated dictionary result window opens only on explicit request.
+The Add/Remove kanji-color-list prompt provides K/A/J input, shared
+Insert/Overwrite behavior and pending-kana completion before validating the
+edited list.
 
 Dark and light artwork follows the native palette. Japanese content fonts can
 be configured independently from desktop menu fonts in Options.

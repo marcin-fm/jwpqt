@@ -19,6 +19,8 @@
 #include <QTextCursor>
 #include <QPainter>
 #include <QFontMetricsF>
+#include <QInputMethodEvent>
+#include <QKeyEvent>
 #include <QProcess>
 #include <QStandardPaths>
 #include <QDir>
@@ -33,6 +35,7 @@
 #include <QDialogButtonBox>
 #include <QPushButton>
 #include <QTabWidget>
+#include <QToolButton>
 #include "main_window.h"
 #include "application_settings_dialog.h"
 #include "file_io.h"
@@ -375,6 +378,42 @@ void test_print_policies(const QString& directory) {
   QMetaObject::invokeMethod(retained.findChild<QDialogButtonBox*>(), "accepted", Qt::DirectConnection);
   require(retained.settings().print_formatting.patterns == unavailable.print_formatting.patterns,
       "Opening print Options rewrote an undisplayable pattern");
+  QAction overwrite(nullptr);
+  overwrite.setCheckable(true);
+  overwrite.setChecked(true);
+  qt::ApplicationSettingsDialog japanese_patterns(
+      settings, nullptr, false, &overwrite);
+  auto* japanese_pattern = japanese_patterns.findChild<QLineEdit*>(
+      QStringLiteral("settingsPrintPattern0"));
+  auto* japanese_mode = japanese_patterns.findChild<QToolButton*>(
+      QStringLiteral("settingsPrintPattern0Mode"));
+  require(japanese_pattern != nullptr && japanese_mode != nullptr &&
+              japanese_mode->text() == QStringLiteral("A"),
+          "Print pattern did not expose its Japanese input mode");
+  japanese_mode->click();
+  japanese_mode->click();
+  japanese_pattern->setText(QStringLiteral("\u65e5\u6708"));
+  japanese_pattern->setCursorPosition(1);
+  QInputMethodEvent japanese_commit;
+  japanese_commit.setCommitString(QStringLiteral("\u672c"));
+  QApplication::sendEvent(japanese_pattern, &japanese_commit);
+  QKeyEvent pending_n(QEvent::KeyPress, Qt::Key_N, Qt::NoModifier,
+                      QStringLiteral("n"));
+  QApplication::sendEvent(japanese_pattern, &pending_n);
+  QMetaObject::invokeMethod(
+      japanese_patterns.findChild<QDialogButtonBox*>(), "accepted",
+      Qt::DirectConnection);
+  const auto& stored_japanese_pattern =
+      japanese_patterns.settings().print_formatting.patterns[0];
+  const auto pattern_end = std::find(stored_japanese_pattern.begin(),
+                                     stored_japanese_pattern.end(), 0);
+  require(
+      japanese_mode->text() == QStringLiteral("K") &&
+          japanese_pattern->text() == QStringLiteral("\u65e5\u672c\u3093") &&
+          core::decode_jwp_text(
+              core::JwpText(stored_japanese_pattern.begin(), pattern_end)) ==
+              U"\u65e5\u672c\u3093",
+      "Print pattern lost shared overwrite or pending Japanese input");
   qt::ApplicationSettingsDialog dialog(settings);
   dialog.show();
   dialog.findChild<QTabWidget*>()->setCurrentWidget(dialog.findChild<QWidget*>(QStringLiteral("settingsPrintScroll")));

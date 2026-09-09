@@ -39,6 +39,10 @@ rewrite it.
 JWP supports separate odd/even header and footer fields and first-page
 suppression. The substitutions are case-insensitive:
 
+Header, footer, title, subject, author, keyword and comment fields provide the
+same K/A/J input control and Insert/Overwrite policy as document editing.
+Pending kana is completed before Page Layout validates and applies the metadata.
+
 | Code | Value |
 | --- | --- |
 | &A | Author |
@@ -64,6 +68,9 @@ the literal AM/PM text. `&&` is an ampersand. Defaults are `&y/&M/&D` and
 Date/time patterns hold 19 JWP characters; AM/PM text holds 9. Unused legacy
 array cells remain preserved. Text unavailable in the current code page is
 shown as a read-only placeholder rather than silently rewritten.
+These four pattern fields also provide K/A/J input and the shared
+Insert/Overwrite policy; they start in ASCII mode because the source defaults
+are substitution patterns.
 
 Left/right header extensions are measured in characters; header/footer distances
 are measured in lines, in hundredths, from 0 to 10. Preview uses these same
