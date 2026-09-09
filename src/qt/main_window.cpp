@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "main_window.h"
+#include "window_geometry.h"
 #include <QStringView>
 #include "toolbar_dialog.h"
 #include <QTimer>
@@ -501,6 +502,7 @@ MainWindow::MainWindow(QWidget* parent)
   resize(900, 680);
 
   new_document();
+  window_geometry_ = new WindowGeometry(*this, application_settings_);
 }
 
 void MainWindow::connect_editor(JwpEditor* editor) {
@@ -1578,6 +1580,7 @@ void MainWindow::update_recent_file_actions() {
 }
 
 MainWindow::~MainWindow() {
+  if (window_geometry_) window_geometry_->stop();
   delete find_dialog_.data();
   delete replace_dialog_.data();
   document_tabs_->disconnect(this);

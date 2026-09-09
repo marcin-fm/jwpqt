@@ -39,6 +39,8 @@ struct BooleanDescriptor {
 };
 
 constexpr BooleanDescriptor<ApplicationSettings> kBooleans[] = {
+    {"RestoreWindow", "usedims", &ApplicationSettings::restore_window},
+    {"MaximizeWindow", "maximize", &ApplicationSettings::maximize_window},
     {"ColorKanji_Printing", "colorkanji_print", &ApplicationSettings::color_printing},
     {"Clipboard_Omit_Bitmap", "no_BITMAP", &ApplicationSettings::omit_clipboard_bitmap},
     {"Bitmap.Vert", "clip_font.vertical", &ApplicationSettings::vertical_clipboard_bitmap},
@@ -95,6 +97,24 @@ constexpr FontDescriptor kHeaderPositions[] = {{"Printing_HeaderPos_Left", "head
     {"Printing_HeaderPos_Right", "head_right"}, {"Printing_HeaderPos_Top", "head_top"},
     {"Printing_HeaderPos_Bottom", "head_bottom"}};
 
+constexpr FontDescriptor kWindows[] = {{"Window", ""}, {"CharInfo", "size_info"},
+    {"Dictionary", "size_dict"}, {"KanjiCount", "size_count"}, {"MoreInfo", "size_more"},
+    {"UserConv", "size_cnvrt"}, {"UserDict", "size_user"}};
+
+core::JwpConfigurationKey geometry_key(std::size_t window, std::size_t coordinate) {
+  constexpr const char* fields[] = {"X", "Y", "W", "H"};
+  constexpr const char* aliases[] = {"x", "y", "sx", "sy"};
+  constexpr const char* main_aliases[] = {"x", "y", "xs", "ys"};
+  return {std::string(kWindows[window].name) + '.' + fields[coordinate], window == 0 ?
+      std::string(main_aliases[coordinate]) : std::string(kWindows[window].alias) + '.' + aliases[coordinate]};
+}
+
+void validate_geometry_value(int value, std::size_t coordinate) {
+  if (value == std::numeric_limits<std::int32_t>::min()) return; // Windows CW_USEDEFAULT.
+  if (value < (coordinate < 2 ? -1000000 : 0) || value > (coordinate < 2 ? 1000000 : 32768))
+    throw core::JwpConfigurationError("Window geometry is outside its supported range");
+}
+
 core::JwpConfigurationKey font_key(std::size_t role, std::size_t field) {
   return {std::string(kFonts[role].name) + '.' + kFontFields[field].name,
           std::string(kFonts[role].alias) + '.' + kFontFields[field].alias};
@@ -115,6 +135,17 @@ ApplicationSettings read_application_settings(std::string_view text,
   for (const auto& entry : entries) {
     std::string name;
     try {
+      for (std::size_t window = 0; window < std::size(kWindows); ++window) {
+        for (std::size_t coordinate = 0; coordinate < 4; ++coordinate) {
+          const auto key = geometry_key(window, coordinate);
+          if (!key.matches(entry.name)) continue;
+          const int value = static_cast<int>(core::parse_jwp_setting_integer(entry.value,
+              std::numeric_limits<std::int32_t>::min(), std::numeric_limits<std::int32_t>::max()));
+          validate_geometry_value(value, coordinate);
+          result.window_geometry[window][coordinate] = value;
+          name = key.name;
+        }
+      }
       if (core::JwpConfigurationKey{"Printing_Justify_ASCII", "print_justify"}.matches(entry.name)) {
         name = "Printing_Justify_ASCII";
         result.print_formatting.justify_ascii = core::parse_jwp_setting_bool(entry.value);
@@ -255,6 +286,13 @@ std::string write_application_settings(const ApplicationSettings& settings) {
     throw core::JwpConfigurationError("Unknown translation code page");
   }
   std::vector<core::JwpConfigurationUpdate> updates;
+  for (std::size_t window = 0; window < std::size(kWindows); ++window) {
+    for (std::size_t coordinate = 0; coordinate < 4; ++coordinate) {
+      const int value = settings.window_geometry[window][coordinate];
+      validate_geometry_value(value, coordinate);
+      updates.push_back({geometry_key(window, coordinate), std::to_string(value)});
+    }
+  }
   updates.push_back({{"IndexType", "index_type"}, std::to_string(settings.index_type)});
   updates.push_back({{"ReadingType", "reading_type"}, std::to_string(settings.reading_type)});
   updates.push_back({{"Printing_Justify_ASCII", "print_justify"}, settings.print_formatting.justify_ascii ? "true" : "false"});

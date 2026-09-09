@@ -49,6 +49,11 @@ struct ApplicationSettings {
   bool save_recent_files = true;
   bool save_histories = true;
   bool startup_dictionary = false;
+  bool restore_window = false;
+  bool maximize_window = false;
+  // Main, Character Info, Dictionary, Count, More Info, User Conversion, User Dictionary.
+  // Each tuple is x/y/width/height in native logical pixels; zero dimensions mean defaults.
+  std::array<std::array<int, 4>, 7> window_geometry{};
   bool close_button_closes_file = false;
   bool confirm_last_file_exit = true;
   bool automatic_kanji_lookup = true;

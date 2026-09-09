@@ -43,6 +43,8 @@ target_compile_options(jwpqt_qt_support
 )
 
 add_library(jwpqt_qt_ui STATIC
+  window_geometry.cpp
+  window_geometry.h
   help_window.cpp
   help_window.h
   application_settings_dialog.cpp

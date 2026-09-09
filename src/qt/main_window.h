@@ -73,6 +73,7 @@ class KanjiCountDialog;
 class KanjiLookupDialog;
 class KanjiReadingLookupDialog;
 class WnnUserDictionaryDialog;
+class WindowGeometry;
 
 enum class OpenMode {
   kInteractive,
@@ -422,6 +423,7 @@ class MainWindow : public QMainWindow {
   bool recent_file_persistence_enabled_ = true;
   ApplicationSettings application_settings_;
   QString application_settings_path_;
+  WindowGeometry* window_geometry_ = nullptr;
   QString application_settings_warning_;
   QStringList application_font_warnings_;
   bool application_settings_persistence_enabled_ = true;

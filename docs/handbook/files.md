@@ -14,6 +14,16 @@ Ctrl-close forces file close. Explicit Quit always uses the whole-workspace
 save checks. The optional startup dictionary opens only without an explicit
 document/project and with available dictionary resources.
 
+**Restore main window** retains its normal position, size and maximized state.
+Minimizing does not replace the saved normal bounds. Character Information,
+Dictionary, Count, More Info and both user-dictionary windows independently
+remember their last size and position. New windows use those values; changing
+settings does not relocate windows already open. Independent information windows
+remain independent, with the last moved/resized one supplying the next default.
+Placement uses native logical pixels and is clamped to an available screen when
+an old monitor is absent. Dimensions and restore flags travel with settings and
+projects; this does not yet reopen the previous session's document tabs.
+
 ## Formats
 
 Native JWP preserves paragraph formatting, page breaks, metadata and headers.

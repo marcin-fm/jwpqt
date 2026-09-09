@@ -146,6 +146,13 @@ close, and explicit Quit always exits the application after the save checks.
 These policies persist through settings and projects. **Open dictionary on
 startup** applies only when no explicit document/project is supplied; unavailable
 dictionary resources are reported. Resource-report mode never opens startup UI.
+
+**Restore main window** persists normal bounds and maximized state without recording
+minimized geometry. Six source dialog roles independently remember their placement;
+existing windows are not relocated by importing settings. New placements are bounded
+and clamped to available native screens, and independent information viewers remain
+independent. Geometry is included in settings/JPR; previous-session document reload
+remains a separate unfinished policy.
 **Save All** visits every document, including unnamed files, and stops on the
 first cancellation or error. **Close All** and Quit check every document before
 discarding any. **Window > Next/Previous File** (`Ctrl+Tab`/`Ctrl+Shift+Tab`, also
