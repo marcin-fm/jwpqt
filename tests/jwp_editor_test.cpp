@@ -394,6 +394,57 @@ void test_composed_overwrite() {
   require(editor.toPlainText() == QStringLiteral("AX\U0001f600B\nC"),
           "Composed insert mode unexpectedly overwrote text");
 
+  editor.resize(180, 120);
+  editor.show();
+  editor.set_character_line_width(2);
+  editor.setPlainText(QStringLiteral("\u3042\u3044\u3046\u3048"));
+  QCoreApplication::processEvents();
+  QTextCursor wrapped(editor.document());
+  wrapped.movePosition(QTextCursor::EndOfLine);
+  require(wrapped.position() > 0 && wrapped.position() < 4,
+          "Visual-line overwrite fixture did not wrap");
+  const int boundary = wrapped.position();
+  editor.setTextCursor(wrapped);
+  editor.setOverwriteMode(true);
+  editor.insert_composed_text(U"X");
+  QString expected = QStringLiteral("\u3042\u3044\u3046\u3048");
+  expected.insert(boundary, QLatin1Char('X'));
+  require(editor.toPlainText() == expected,
+          "Overwrite replaced text beyond a visual-line end");
+  editor.undo();
+  require(editor.toPlainText() == QStringLiteral("\u3042\u3044\u3046\u3048"),
+          "Visual-line insertion was not one undo transaction");
+
+  editor.setPlainText(QStringLiteral("\u3042\u3044\u3046\u3048"));
+  QCoreApplication::processEvents();
+  wrapped = QTextCursor(editor.document());
+  wrapped.movePosition(QTextCursor::EndOfLine);
+  const int typed_boundary = wrapped.position();
+  editor.setTextCursor(wrapped);
+  QKeyEvent typed(QEvent::KeyPress, Qt::Key_Y, Qt::NoModifier,
+                  QStringLiteral("Y"));
+  QApplication::sendEvent(&editor, &typed);
+  expected = QStringLiteral("\u3042\u3044\u3046\u3048");
+  expected.insert(typed_boundary, QLatin1Char('Y'));
+  require(editor.toPlainText() == expected,
+          "Typed overwrite replaced text beyond a visual-line end");
+
+  editor.setPlainText(QStringLiteral("\u3042\u3044\u3046\u3048"));
+  QCoreApplication::processEvents();
+  wrapped = QTextCursor(editor.document());
+  wrapped.movePosition(QTextCursor::EndOfLine);
+  const int ime_boundary = wrapped.position();
+  editor.setTextCursor(wrapped);
+  QInputMethodEvent wrapped_commit;
+  wrapped_commit.setCommitString(QStringLiteral("Z"));
+  QApplication::sendEvent(&editor, &wrapped_commit);
+  expected = QStringLiteral("\u3042\u3044\u3046\u3048");
+  expected.insert(ime_boundary, QLatin1Char('Z'));
+  require(editor.toPlainText() == expected,
+          "Input method overwrite replaced text beyond a visual-line end");
+  editor.set_character_line_width(std::nullopt);
+  editor.hide();
+
   editor.setPlainText(QStringLiteral("ABC"));
   editor.setOverwriteMode(true);
   select(1, 1);

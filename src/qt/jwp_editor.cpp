@@ -33,6 +33,7 @@
 #include <QTextCursor>
 #include <QTextDocument>
 #include <QTextFormat>
+#include <QTextLayout>
 #include <QTimer>
 
 #include "jwpqt/core/line_relaxation.h"
@@ -408,6 +409,22 @@ QTextCursor JwpEditor::input_cursor(std::u32string_view text, bool allow_overwri
   if (splits_scalar(cursor.selectionStart()) || splits_scalar(cursor.selectionEnd()))
     throw std::invalid_argument("Composed input cannot split a Unicode scalar");
   if (!overwriteMode() || !allow_overwrite || cursor.hasSelection()) return cursor;
+
+  // JWPxp inserts at the end of each formatted line, not just at the end of a
+  // paragraph. Its cursor retains which side of a soft wrap it occupies, while
+  // QTextCursor retains only the shared document position. Treat that boundary
+  // as the prior line's end, avoiding destructive overwrite at the ambiguity.
+  const QTextBlock block = cursor.block();
+  if (const QTextLayout* layout = block.layout(); layout != nullptr) {
+    const int relative = cursor.position() - block.position();
+    for (int index = 0; index + 1 < layout->lineCount(); ++index) {
+      const QTextLine line = layout->lineAt(index);
+      if (relative == line.textStart() + line.textLength()) return cursor;
+    }
+  }
+  QTextCursor line_end = cursor;
+  line_end.movePosition(QTextCursor::EndOfLine);
+  if (line_end.position() == cursor.position()) return cursor;
 
   // Composed input bypasses QTextEdit's typed-key overwrite handling. Never eat
   // a paragraph break or half of a supplementary character.
