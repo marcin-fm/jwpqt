@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "jwp_text_drawing.h"
 
-#include <algorithm>
 #include <cmath>
-#include <iterator>
 #include <optional>
 #include <QGlyphRun>
 #include <QPainter>
+#include <QScopeGuard>
 #include <QTextBoundaryFinder>
 #include <QTextLayout>
+#include <QtEndian>
 #include "jwpqt/core/jwp_text_codec.h"
+#include "jwpqt/core/raster_font.h"
 #include "text_bridge.h"
 
 namespace jwpqt::qt {
@@ -20,18 +21,15 @@ void draw_jwp_text_layout(QPainter& painter, QTextLayout& layout, const QString&
                           const std::function<QColor(int)>& foreground) {
   // JWP counter-rotates Japanese glyphs for paper read after a clockwise turn;
   // Latin and these source punctuation exceptions retain their orientation.
-  static constexpr core::JisCode no_rotate[] = {
-    0x213b,0x213c,0x2141,0x2142,0x2143,0x2144,0x2145,0x214a,0x214b,
-    0x214c,0x214d,0x214e,0x214f,0x2150,0x2151,0x2152,0x2153,0x2154,0x2155,
-    0x2156,0x2157,0x2158,0x2159,0x215a,0x215b,0x2161,0x2162,0x2163,0x2164,
-    0x2165,0x2166,0x2167,0x222a,0x222b,0x222e,0x2127};
   QTextBoundaryFinder boundaries(QTextBoundaryFinder::Grapheme, text);
-  const auto rotates = [&](const QString& cluster) {
+  const auto jis_code = [&](const QString& cluster) {
     const auto scalars = from_qstring(cluster);
-    const auto jis = scalars.empty() ? std::optional<core::JisCode>{}
-                                    : core::unicode_to_jwp_code(scalars[0], code_page);
-    return jis && *jis >= 0x2100 &&
-        std::find(std::begin(no_rotate), std::end(no_rotate), *jis) == std::end(no_rotate);
+    return scalars.empty() ? std::optional<core::JisCode>{}
+                          : core::unicode_to_jwp_code(scalars[0], code_page);
+  };
+  const auto rotates = [&](const QString& cluster) {
+    const auto jis = jis_code(cluster);
+    return jis && core::jwp_glyph_rotates(*jis);
   };
   for (int number = 0; number < layout.lineCount(); ++number) {
     const auto line = layout.lineAt(number);
@@ -47,8 +45,37 @@ void draw_jwp_text_layout(QPainter& painter, QTextLayout& layout, const QString&
       if (next <= at || next > end) next = end;
       const QColor color = foreground ? foreground(at) : painter.pen().color();
       painter.save();
+      const auto restore = qScopeGuard([&] { painter.restore(); });
       painter.setPen(color);
       if (vertical && rotates(text.mid(at, next - at))) {
+        const auto runs = line.glyphRuns(at, next - at);
+        if (!runs.empty()) {
+          const auto raw = runs.front().rawFont();
+          const auto metadata = raw.fontTable("JWPV");
+          if (!metadata.isEmpty()) {
+            const auto word = [&](int offset) {
+              if (offset < 0 || offset + 2 > metadata.size())
+                throw core::RasterFontError("Invalid native raster vertical metadata");
+              return qFromBigEndian<quint16>(metadata.constData() + offset);
+            };
+            const int width = word(2), height = word(4), count = word(6);
+            if (word(0) != 1 || width < 8 || width > 64 || width != height ||
+                count > 256 || metadata.size() != 8 + count * 6)
+              throw core::RasterFontError("Unsupported native raster vertical geometry");
+            const auto code = *jis_code(text.mid(at, next - at));
+            for (int i = 0; i < count; ++i) {
+              const int x_offset = word(10 + i * 6);
+              const auto encoded_y = word(12 + i * 6);
+              const int y_offset = encoded_y < 32768 ? encoded_y : static_cast<int>(encoded_y) - 65536;
+              if (x_offset > width || y_offset < -height || y_offset > height)
+                throw core::RasterFontError("Invalid native raster vertical offset");
+              if (word(8 + i * 6) == code) {
+                const qreal scale = raw.pixelSize() / height;
+                painter.translate(-x_offset * scale, -y_offset * scale);
+              }
+            }
+          }
+        }
         const qreal x = line.cursorToX(at);
         const qreal width = std::abs(line.cursorToX(next) - x);
         const QPointF center = origin + QPointF(x + width / 2, line.y() + line.height() / 2);
@@ -63,7 +90,6 @@ void draw_jwp_text_layout(QPainter& painter, QTextLayout& layout, const QString&
         }
       }
       for (const auto& run : line.glyphRuns(at, next - at)) painter.drawGlyphRun(origin, run);
-      painter.restore();
       at = next;
     }
   }

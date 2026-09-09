@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <iterator>
 #include <map>
 #include <utility>
 #include <vector>
@@ -13,6 +14,10 @@
 namespace jwpqt::core {
 namespace {
 constexpr std::size_t kMaximumFace = 64 * 1024 * 1024;
+constexpr JisCode kOffsetGlyphs[] = {
+    0x2122,0x2123,0x2124,0x2125,0x2421,0x2423,0x2425,0x2427,0x2429,0x2443,
+    0x2463,0x2465,0x2467,0x246e,0x2521,0x2523,0x2525,0x2527,0x2529,0x2543,
+    0x2563,0x2565,0x2567,0x256e,0x2575,0x2576};
 unsigned le16(std::string_view s, std::size_t p) {
   return static_cast<unsigned char>(s[p]) | (static_cast<unsigned>(static_cast<unsigned char>(s[p + 1])) << 8);
 }
@@ -36,6 +41,15 @@ std::uint32_t checksum(std::string_view s) {
 }
 }  // namespace
 
+bool jwp_glyph_rotates(JisCode code) noexcept {
+  constexpr JisCode exceptions[] = {
+      0x213b,0x213c,0x2141,0x2142,0x2143,0x2144,0x2145,0x214a,0x214b,
+      0x214c,0x214d,0x214e,0x214f,0x2150,0x2151,0x2152,0x2153,0x2154,0x2155,
+      0x2156,0x2157,0x2158,0x2159,0x215a,0x215b,0x2161,0x2162,0x2163,0x2164,
+      0x2165,0x2166,0x2167,0x222a,0x222b,0x222e,0x2127};
+  return code >= 0x2100 && std::find(std::begin(exceptions), std::end(exceptions), code) == std::end(exceptions);
+}
+
 RasterFont::RasterFont(std::string_view bytes) {
   if (bytes.size() < 64 || bytes.size() > 8 * 1024 * 1024) throw RasterFontError("Invalid raster font size");
   width_ = static_cast<int>(le16(bytes, 40)); height_ = static_cast<int>(le16(bytes, 42));
@@ -53,12 +67,15 @@ RasterFont::RasterFont(std::string_view bytes) {
       stride_ != static_cast<std::size_t>(((width_ + 15) / 16) * 2))
     throw RasterFontError("Invalid raster font row alignment");
   if ((bytes.size() - 64) % glyph_bytes_) throw RasterFontError("Truncated raster font glyph");
-  count_ = (bytes.size() - 64) / glyph_bytes_;
-  if (count_ < verticals) throw RasterFontError("Invalid raster font vertical count");
-  count_ -= verticals;
+  const auto total = (bytes.size() - 64) / glyph_bytes_;
+  if (total < verticals) throw RasterFontError("Invalid raster font vertical count");
+  const auto declared_base = total - verticals;
   holes_ = holes != 0;
-  if (holes_ ? (count_ != 7802 && count_ != 7806) : (count_ != 6874 && count_ != 6878))
+  if (holes_ ? (declared_base != 7802 && declared_base != 7806) : (declared_base != 6874 && declared_base != 6878))
     throw RasterFontError("Incomplete raster font character table");
+  // The source never uses header.verticals to substitute or hide glyphs:
+  // standard JIS indexes address the physical table, including any last slots.
+  count_ = std::min<std::size_t>(total, holes_ ? 7806 : 6878);
   data_.assign(bytes.substr(64, count_ * glyph_bytes_));
 }
 
@@ -82,6 +99,20 @@ bool RasterFont::ink(std::size_t glyph, int x, int y) const {
     throw RasterFontError("Raster font pixel outside glyph");
   const auto p = glyph * glyph_bytes_ + static_cast<std::size_t>(y) * stride_ + static_cast<std::size_t>(x / 8);
   return (static_cast<unsigned char>(data_[p]) & (0x80U >> (x % 8))) == 0;
+}
+
+std::pair<int, int> RasterFont::vertical_offset(JisCode code) const {
+  if (width_ != height_) throw RasterFontError("Vertical raster rendering requires a square font");
+  if (std::find(std::begin(kOffsetGlyphs), std::end(kOffsetGlyphs), code) == std::end(kOffsetGlyphs)) return {};
+  const auto glyph = glyph_index(code);
+  const bool rotate = jwp_glyph_rotates(code);
+  int left = width_, top = height_, right = -1;
+  for (int y = 0; y < height_; ++y) for (int x = 0; x < width_; ++x) {
+    if (rotate ? ink(glyph, width_ - y - 1, x) : ink(glyph, x, y)) {
+      left = std::min(left, x); top = std::min(top, y); right = std::max(right, x);
+    }
+  }
+  return {left, top - (width_ - right - 1)};
 }
 
 std::string RasterFont::native_face(std::string_view family) const {
@@ -145,6 +176,15 @@ std::string RasterFont::native_face(std::string_view family) const {
   os2.replace(42, 16, ranges);
   for (int v : {em,0,leading_ * 64,em,0}) u16(os2, v);
   auto& post = tables["post"]; u32(post, 0x30000); post.append(28, '\0');
+  // Private metadata lets native drawing reproduce source ink-bound offsets
+  // without reopening font files or changing the horizontal glyph outlines.
+  auto& vertical = tables["JWPV"];
+  u16(vertical, 1); u16(vertical, width_); u16(vertical, height_);
+  u16(vertical, width_ == height_ ? static_cast<int>(std::size(kOffsetGlyphs)) : 0);
+  if (width_ == height_) for (auto code : kOffsetGlyphs) {
+    const auto offset = vertical_offset(code);
+    u16(vertical, code); u16(vertical, offset.first); u16(vertical, offset.second);
+  }
   std::map<char32_t, std::uint32_t> mappings;
   for (unsigned hi = 0x21; hi <= 0x74; ++hi) for (unsigned lo = 0x21; lo <= 0x7e; ++lo) {
     const auto code = static_cast<JisCode>((hi << 8) | lo);

@@ -23,8 +23,11 @@ counter-rotated for reading after a clockwise turn; Latin and the source
 punctuation exceptions stay horizontal. It does not rotate the whole image.
 Color clipboard mode applies persistent kanji colors only when list coloring
 is active, never selection or conversion highlights. Both settings can be
-cancelled or saved like the other font options. Original raster vertical
-substitution tables and some other font tuning remain unimplemented.
+cancelled or saved like the other font options. Raster punctuation and small
+kana use the original ink-bound positioning rules. The raster header does not
+select alternate vertical glyphs; non-square raster rotation is rejected safely.
+TrueType vertical glyph alternates and some other font tuning remain separate
+fidelity work.
 
 ASCII and legacy extensions selects a separate single-byte font at the Japanese
 role's height. Even when that family contains Japanese, its private restricted

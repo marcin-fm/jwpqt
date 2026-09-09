@@ -216,7 +216,11 @@ clockwise-paper-turn convention, not a rotation of the entire image.
 **ColorKanji_Clipboard** applies persistent kanji foregrounds only while list
 coloring is active. Selection and conversion highlights are never copied into
 the image. These options persist through settings, restart and JPR; original
-raster vertical-substitution tables remain separate fidelity work.
+raster punctuation and small-kana positioning uses the source ink-bound rules.
+The raster header's extra-character count does not select substitutions in the
+source; standard glyph availability follows the physical table. Non-square
+raster rotation is rejected rather than reading outside the bitmap. TrueType
+vertical GSUB alternates remain a separate fidelity requirement.
 
 **Options > Fonts > ASCII and legacy extensions** selects an independent
 single-byte font at the Japanese role's height, without changing desktop menus
