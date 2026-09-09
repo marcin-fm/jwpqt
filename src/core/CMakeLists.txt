@@ -40,6 +40,7 @@ add_library(jwpqt_core STATIC
   jwp_text_codec.cpp
   legacy_code_page.cpp
   legacy_text.cpp
+  line_relaxation.cpp
   plain_text_change.cpp
   print_format.cpp
   query_history.cpp
