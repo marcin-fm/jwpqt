@@ -41,6 +41,14 @@ are independent. The setting is retained by settings and projects.
 
 ## Find and Replace
 
+Options > History sets the native Japanese undo depth (3–1000, default 50).
+Reducing it keeps the nearest undo and redo entries and permanently removes older
+ones without changing the current document or saved/dirty state. Increasing it
+does not recover discarded history. Finish an active conversion before changing
+the limit. New documents, settings and projects retain the selected depth.
+Unrestricted Unicode editors retain Qt's history; the native depth setting never
+truncates their text or silently clears their undo stack.
+
 Edit > Find and Replace open modeless dialogs with their own Japanese input
 fields. Search and replacement histories are separate, persistent lists. Up,
 Down and the History buttons recall without searching; list deletion is

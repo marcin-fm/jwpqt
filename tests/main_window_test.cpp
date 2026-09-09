@@ -2708,6 +2708,10 @@ void test_control_arrow_conversion(const QString& directory) {
   editor->selectAll(); key(Qt::Key_Down);
   require(window.conversion_active() && window.current_jwp_document()->paragraphs[0].text == JwpText{0x3021},
           "Control Down did not start the normal first candidate");
+  auto resized = window.application_settings(); resized.maximum_undo_levels = 3;
+  require(!window.apply_application_settings(resized) && window.conversion_active() &&
+              window.application_settings().maximum_undo_levels == 50,
+          "Undo resizing accepted or invalidated an active conversion");
   key(Qt::Key_Up);
   require(window.conversion_active() && window.current_jwp_document()->paragraphs[0].text == JwpText{0x3022},
           "Control Up did not cycle forward without acceptance");
@@ -2732,6 +2736,75 @@ void test_control_arrow_conversion(const QString& directory) {
   editor = window.active_editor(); editor->insertPlainText("a"); editor->selectAll(); key(Qt::Key_Down);
   require(!window.conversion_active() && document_plain_text(*editor->document()) == "a",
           "Control policy changed an unrestricted Unicode document");
+}
+
+void test_undo_depth_policy(const QString& directory) {
+  using namespace jwpqt::qt;
+  require(ApplicationSettings{}.maximum_undo_levels == 50 &&
+              read_application_settings("undo_number = 3\n").maximum_undo_levels == 3,
+          "Undo source defaults or alias changed");
+  bool rejected = false;
+  try { (void)read_application_settings("MaximumUndoLevels = 2\nundo_number = 50\n"); }
+  catch (const std::exception&) { rejected = true; }
+  require(rejected, "Invalid earlier undo limit accepted");
+  MainWindow window;
+  const auto fill = [&](char32_t character) {
+    for (int i = 0; i < 6; ++i) {
+      window.active_editor()->moveCursor(QTextCursor::End);
+      require(window.insert_edict_text(std::u32string(1, character)), "Could not prepare independent edits");
+    }
+  };
+  const auto undo_count = [&] {
+    auto* undo = find_action(window, "undoAction");
+    int count = 0;
+    while (undo->isEnabled() && count < 10) { undo->trigger(); ++count; }
+    return count;
+  };
+  fill(U'A');
+  find_action(window, "newDocumentAction")->trigger(); fill(U'B');
+  const auto original = *window.current_jwp_document();
+  ApplicationSettingsDialog cancelled(window.application_settings());
+  cancelled.findChild<QSpinBox*>("settingsUndoLevels")->setValue(3);
+  cancelled.reject();
+  require(window.application_settings().maximum_undo_levels == 50, "Cancel changed undo capacity");
+  ApplicationSettingsDialog options(window.application_settings());
+  options.findChild<QSpinBox*>("settingsUndoLevels")->setValue(3);
+  auto* option_tabs = options.findChild<QTabWidget*>();
+  for (int i = 0; i < option_tabs->count(); ++i)
+    if (option_tabs->widget(i)->isAncestorOf(options.findChild<QSpinBox*>("settingsUndoLevels"))) option_tabs->setCurrentIndex(i);
+  options.show(); QApplication::processEvents();
+  require(options.grab().save(QDir::current().filePath("undo-depth-options.png")), "Could not capture history controls");
+  options.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+  require(window.apply_application_settings(options.settings()) && *window.current_jwp_document() == original &&
+              window.document_modified(), "Resizing undo changed text or dirty state");
+  require(undo_count() == 3 && document_plain_text(*window.active_editor()->document()) == "BBB",
+          "Active native history did not retain only the nearest edits");
+  require(window.activate_document(0) && undo_count() == 3 &&
+              document_plain_text(*window.active_editor()->document()) == "AAA", "Inactive history was not resized");
+  find_action(window, "newDocumentAction")->trigger(); fill(U'C');
+  require(undo_count() == 3 && document_plain_text(*window.active_editor()->document()) == "CCC", "New history ignored configured limit");
+  find_action(window, "newTextDocumentAction")->trigger(); fill(U'D');
+  auto larger = window.application_settings(); larger.maximum_undo_levels = 8;
+  require(window.apply_application_settings(larger) && undo_count() == 6 && window.active_editor()->document()->isEmpty(),
+          "Native history setting damaged unrestricted Unicode history or text");
+  const auto root = directory + "/undo-depth";
+  require(QDir().mkpath(root) && window.save_application_settings(root + "/settings.cfg"), "Could not save undo preference");
+  MainWindow restored;
+  require(restored.load_application_settings(root + "/settings.cfg") && restored.application_settings().maximum_undo_levels == 8 &&
+              restored.save_project_path(root + "/empty.jpr", false), "Undo preference restart failed");
+  MainWindow project;
+  require(project.open_project_path(root + "/empty.jpr") && project.application_settings().maximum_undo_levels == 8,
+          "Project did not preserve undo preference");
+  for (int i = 0; i < 10; ++i) {
+    project.active_editor()->moveCursor(QTextCursor::End);
+    require(project.insert_edict_text(U"E"), "Could not populate restored history");
+  }
+  int restored_undos = 0;
+  while (find_action(project, "undoAction")->isEnabled() && restored_undos < 12) {
+    find_action(project, "undoAction")->trigger(); ++restored_undos;
+  }
+  require(restored_undos == 8 && document_plain_text(*project.active_editor()->document()) == "EE",
+          "Restored project editor did not apply its undo limit");
 }
 
 void test_selected_romaji(const QString& directory) {
@@ -5765,6 +5838,7 @@ int main(int argc, char* argv[]) {
     test_jwp_page_break_insertion(directory.path());
     test_katakana_policy(directory.path());
     test_control_arrow_conversion(directory.path());
+    test_undo_depth_policy(directory.path());
     test_selected_romaji(directory.path());
     test_jwp_wnn_conversion(directory.path());
     test_jwp_wnn_conversion_boundaries(directory.path());

@@ -240,6 +240,10 @@ ApplicationSettings read_application_settings(std::string_view text,
         name = "HistoryBuffers_NumChars";
         result.history_size = static_cast<int>(core::parse_jwp_setting_integer(entry.value, 0, 30000));
       }
+      if (name.empty() && core::JwpConfigurationKey{"MaximumUndoLevels", "undo_number"}.matches(entry.name)) {
+        name = "MaximumUndoLevels";
+        result.maximum_undo_levels = static_cast<int>(core::parse_jwp_setting_integer(entry.value, 3, 1000));
+      }
       if (name.empty() && core::JwpConfigurationKey{"IndexType", "index_type"}.matches(entry.name)) {
         name = "IndexType";
         result.index_type = static_cast<int>(core::parse_jwp_setting_integer(entry.value, 0, 20));
@@ -326,6 +330,8 @@ std::string write_application_settings(const ApplicationSettings& settings) {
   validate_toolbar(settings.toolbar);
   if (settings.index_type < 0 || settings.index_type > 20 || settings.reading_type < 0 || settings.reading_type > 6)
     throw core::JwpConfigurationError("Invalid kanji lookup type");
+  if (settings.maximum_undo_levels < 3 || settings.maximum_undo_levels > 1000)
+    throw core::JwpConfigurationError("Undo depth must be between 3 and 1000");
   if (settings.history_size < 0 || settings.history_size > 30000)
     throw core::JwpConfigurationError("History storage is outside 0..30000 cells");
   if (settings.translation_code_page != 0 &&
@@ -418,6 +424,7 @@ std::string write_application_settings(const ApplicationSettings& settings) {
                     "0x" + QString::number(bits, 16).toStdString()});
   updates.push_back({{"TranslationCodePage", "code_page"}, std::to_string(settings.translation_code_page)});
   updates.push_back({{"HistoryBuffers_NumChars", "history_size"}, std::to_string(settings.history_size)});
+  updates.push_back({{"MaximumUndoLevels", "undo_number"}, std::to_string(settings.maximum_undo_levels)});
   validate_kanji_info_options(settings.kanji_info);
   std::string fields;
   constexpr char hex[] = "0123456789ABCDEF";

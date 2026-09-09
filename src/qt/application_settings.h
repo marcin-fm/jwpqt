@@ -86,6 +86,7 @@ struct ApplicationSettings {
   bool search_wrap = false;
   bool search_keep_open = true;
   int history_size = 300;
+  int maximum_undo_levels = 50;
   int translation_code_page = 1252;
   KanjiInfoOptions kanji_info;
   EdictLookupOptions dictionary;

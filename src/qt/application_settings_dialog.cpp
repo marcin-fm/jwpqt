@@ -313,6 +313,14 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   history_size->setRange(0, 30000);
   history_size->setValue(settings_.history_size);
   history_form->addRow(tr("Storage cells per history"), history_size);
+  auto* undo_levels = new QSpinBox(history);
+  undo_levels->setObjectName(QStringLiteral("settingsUndoLevels"));
+  undo_levels->setRange(3, 1000);
+  undo_levels->setValue(settings_.maximum_undo_levels);
+  history_form->addRow(tr("Native Japanese undo levels"), undo_levels);
+  auto* undo_note = new QLabel(tr("Reducing this limit discards the oldest native undo/redo entries. Unicode editors retain Qt history. Finish active conversions before changing it."), history);
+  undo_note->setWordWrap(true);
+  history_form->addRow(undo_note);
   auto* save_histories = new QCheckBox(tr("Save query histories on exit"), history);
   save_histories->setObjectName(QStringLiteral("settingsSaveHistories"));
   save_histories->setChecked(settings_.save_histories);
@@ -470,7 +478,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   outer->addWidget(buttons);
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
   connect(buttons, &QDialogButtonBox::accepted, this,
-          [this, booleans, font_controls, dictionary_controls, code_page, history_size, categories,
+          [this, booleans, font_controls, dictionary_controls, code_page, history_size, undo_levels, categories,
            print_family, print_size, print_auto, print_justify, ascii_family, print_patterns, print_positions, original_patterns,
            index_type, reading_type, default_margins, displayed_margins, default_landscape, default_vertical,
            color_fields, original_colors, color_mode, uncommon] {
@@ -494,6 +502,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
     }
     next.translation_code_page = code_page->currentData().toInt();
     next.history_size = history_size->value();
+    next.maximum_undo_levels = undo_levels->value();
     next.index_type = index_type->currentIndex();
     next.reading_type = reading_type->currentIndex();
     next.print_font = {print_family->currentText(), qRound(print_size->value() * 10), print_auto->isChecked()};

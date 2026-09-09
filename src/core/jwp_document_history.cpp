@@ -16,6 +16,21 @@ std::size_t JwpDocumentHistory::max_entries() const noexcept {
   return max_entries_;
 }
 
+void JwpDocumentHistory::set_max_entries(std::size_t max_entries) {
+  if (max_entries < kMinimumMaxEntries || max_entries > kMaximumMaxEntries)
+    throw JwpDocumentHistoryError("history depth must be between 3 and 1000");
+  if (max_entries == max_entries_) return;
+  if (transaction_start_)
+    throw JwpDocumentHistoryError("cannot resize an active history transaction");
+  if (undo_entries_.size() > max_entries)
+    undo_entries_.erase(undo_entries_.begin(), undo_entries_.end() - static_cast<std::ptrdiff_t>(max_entries));
+  if (redo_entries_.size() > max_entries)
+    redo_entries_.erase(redo_entries_.begin(), redo_entries_.end() - static_cast<std::ptrdiff_t>(max_entries));
+  max_entries_ = max_entries;
+  break_coalescing();
+  ++generation_;
+}
+
 std::size_t JwpDocumentHistory::undo_depth() const noexcept {
   return undo_entries_.size();
 }
@@ -154,6 +169,7 @@ bool JwpDocumentHistory::undo(JwpDocumentModel& model, JwpPosition& caret) {
   Entry entry = undo_entries_.back();
   JwpDocumentModel restored(entry.before.document);
   redo_entries_.push_back(entry);
+  if (redo_entries_.size() > max_entries_) redo_entries_.erase(redo_entries_.begin());
   undo_entries_.pop_back();
   model = std::move(restored);
   caret = entry.before.caret;
@@ -175,6 +191,7 @@ bool JwpDocumentHistory::redo(JwpDocumentModel& model, JwpPosition& caret) {
   Entry entry = redo_entries_.back();
   JwpDocumentModel restored(entry.after.document);
   undo_entries_.push_back(entry);
+  if (undo_entries_.size() > max_entries_) undo_entries_.erase(undo_entries_.begin());
   redo_entries_.pop_back();
   model = std::move(restored);
   caret = entry.after.caret;

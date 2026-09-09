@@ -72,6 +72,35 @@ void test_defaults_and_limits() {
          "history limit endpoints");
 }
 
+void test_resizing_history() {
+  auto model = model_with_text();
+  JwpPosition caret{};
+  JwpDocumentHistory history;
+  for (int i = 0; i < 8; ++i) insert_transaction(history, model, caret, 'A' + i);
+  for (int i = 0; i < 4; ++i) expect(history.undo(model, caret), "prepare both history stacks");
+  const auto before = model.document();
+  const auto position = caret;
+  history.set_max_entries(3);
+  expect(history.undo_depth() == 3 && history.redo_depth() == 3 && model.document() == before && caret == position,
+         "resize preserves current state and nearest undo/redo");
+  for (int i = 0; i < 3; ++i) expect(history.redo(model, caret), "retained nearest redo");
+  expect(!history.can_redo() && history.undo_depth() == 3 && text_of(model) == JwpText({'A','B','C','D','E','F','G'}),
+         "redo after shrinking obeys the new cap");
+  for (int i = 0; i < 3; ++i) expect(history.undo(model, caret), "retained nearest undo");
+  expect(!history.can_undo() && model.document() == before, "oldest pruned entries are not restored");
+  history.set_max_entries(20);
+  expect(history.redo_depth() == 3 && !history.can_undo(), "increasing depth does not invent entries");
+  const auto generation = history.generation();
+  expect_error([&] { history.set_max_entries(2); }, "invalid live depth");
+  expect_error([&] { history.set_max_entries(std::numeric_limits<std::size_t>::max()); }, "overflowing live depth");
+  expect(history.max_entries() == 20 && history.generation() == generation, "invalid depth preserves history");
+  history.begin(model, caret);
+  history.set_max_entries(20);
+  expect_error([&] { history.set_max_entries(4); }, "resize during a transaction");
+  expect(history.transaction_active() && history.max_entries() == 20, "rejected resize preserves transaction");
+  history.cancel();
+}
+
 void test_grouped_transaction_restores_document_and_caret() {
   JwpDocumentModel model = model_with_text({'A', 'D'});
   JwpDocumentHistory history;
@@ -244,6 +273,7 @@ void test_invalid_lifecycle_and_external_mutation() {
 
 int main() {
   test_defaults_and_limits();
+  test_resizing_history();
   test_grouped_transaction_restores_document_and_caret();
   test_typing_coalesces_until_broken();
   test_unchanged_abandon_preserves_typing_coalescing();

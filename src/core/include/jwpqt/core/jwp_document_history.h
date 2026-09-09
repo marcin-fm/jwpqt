@@ -31,6 +31,7 @@ class JwpDocumentHistory {
       std::size_t max_entries = kDefaultMaxEntries);
 
   std::size_t max_entries() const noexcept;
+  void set_max_entries(std::size_t max_entries);
   std::size_t undo_depth() const noexcept;
   std::size_t redo_depth() const noexcept;
   bool can_undo() const noexcept;
