@@ -7,6 +7,14 @@ and unrestricted Unicode documents both support undo and lookup insertion.
 
 ## Conversion
 
+Options > Display and Files also provides Old Katakana Vowel Handling (off by
+default). Normally a quote after a pending uppercase A/I/U/E/O emits the katakana
+vowel and consumes the quote. Old behavior also emits the original quote mapping:
+the closing corner bracket for apostrophe, or dakuten for double quote. The setting
+applies to document input, Japanese query fields and selected-romaji replay.
+Changing it preserves pending input and takes effect on the next key; each
+workspace retains its own policy. Settings and projects preserve the choice.
+
 WNN conversion requires wnn.dix and wnn.dat. Choose a candidate in the candidate
 bar and accept it as one undo transaction. User conversions and learned choices
 have separate user-data files. Selected printable romaji can be converted to

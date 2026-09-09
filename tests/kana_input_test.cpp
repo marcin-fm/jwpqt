@@ -88,6 +88,21 @@ void test_pending_input() {
 }
 
 void test_vowel_quote_modes() {
+  const std::string vowels = "AIUEO";
+  const JisCode codes[]{0x2522, 0x2524, 0x2526, 0x2528, 0x252a};
+  for (std::size_t i = 0; i < vowels.size(); ++i) {
+    for (const char quote : {'\'', '"'}) {
+      for (const bool old_mode : {false, true}) {
+        KanaInputComposer changing({!old_mode});
+        require(changing.push_ascii(vowels[i]).empty(), "Vowel did not wait for quote policy");
+        changing.set_old_katakana_input(old_mode);
+        require(changing.pending(), "Output policy change consumed pending vowel");
+        auto expected = std::vector{event(KanaInputKind::kText, {codes[i]})};
+        if (old_mode) expected.push_back(event(KanaInputKind::kText, {static_cast<JisCode>(quote == '\'' ? 0x2157 : 0x212b)}));
+        require(changing.push_ascii(quote) == expected && !changing.pending(), "Live vowel quote policy mismatch");
+      }
+    }
+  }
   KanaInputComposer composer;
   require(composer.push_ascii('A').empty(), "uppercase vowel was not pending");
   require(composer.push_ascii('\'') ==

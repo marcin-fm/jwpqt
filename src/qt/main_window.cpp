@@ -1215,6 +1215,7 @@ bool MainWindow::apply_application_settings(const ApplicationSettings& settings,
       application_settings_ = std::move(next);
       kanji_color_policy_ = effective_kanji_color_policy(application_settings_, stored_kanji_color_policy_);
       setProperty("jwpqtMarkRareKanji", application_settings_.mark_rare_kanji);
+      setProperty("jwpqtOldKatakanaInput", application_settings_.old_katakana_input);
       for (auto* list : findChildren<QListWidget*>())
         if (dynamic_cast<RareKanjiDelegate*>(list->itemDelegate())) {
           list->doItemsLayout();
@@ -3985,6 +3986,7 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
     const ushort value = text.at(0).unicode();
     if (value >= 0x20U && value <= 0x7eU) {
       try {
+        document_->kana_input_.set_old_katakana_input(application_settings_.old_katakana_input);
         apply_kana_input_events(
             document_->kana_input_.push_ascii(static_cast<char>(value)));
       } catch (const std::exception& error) {
@@ -4898,7 +4900,8 @@ bool MainWindow::convert_selection() {
     try {
       const core::JwpText result = core::convert_romaji_text(
           std::string_view(input->constData(), static_cast<std::size_t>(input->size())),
-          wnn_resources_ ? &wnn_resources_->session : nullptr);
+          wnn_resources_ ? &wnn_resources_->session : nullptr,
+          core::KanaInputOptions{application_settings_.old_katakana_input});
       const std::u32string text = core::decode_jwp_text(result, document_->jwp_code_page_);
       if (to_qstring(text) == original_cursor.selectedText()) return false;
       // Replay is fully validated before this single, selection-bounded edit.

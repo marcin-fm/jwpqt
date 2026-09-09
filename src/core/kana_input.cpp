@@ -441,6 +441,10 @@ bool KanaInputComposer::pending_ambiguous() const noexcept {
              std::string_view::npos;
 }
 
+void KanaInputComposer::set_old_katakana_input(bool enabled) noexcept {
+  options_.old_katakana_input = enabled;
+}
+
 void KanaInputComposer::set_options(KanaInputOptions options) {
   if (options.old_katakana_input == options_.old_katakana_input &&
       options.reject_incomplete == options_.reject_incomplete) {

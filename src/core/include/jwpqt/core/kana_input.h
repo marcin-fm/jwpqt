@@ -64,6 +64,8 @@ class KanaInputComposer {
   bool pending_ambiguous() const noexcept;
   // Changing behavior in the middle of a composition is rejected.
   void set_options(KanaInputOptions options);
+  // This output policy is safe to change without consuming a pending vowel.
+  void set_old_katakana_input(bool enabled) noexcept;
 
  private:
   bool emit_buffer(std::vector<KanaInputEvent>& events) const;

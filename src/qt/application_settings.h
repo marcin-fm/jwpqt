@@ -57,6 +57,7 @@ struct ApplicationSettings {
   bool save_recent_files = true;
   bool save_histories = true;
   bool revert_to_kanji_mode = true;
+  bool old_katakana_input = false;
   bool startup_dictionary = false;
   bool reload_previous_files = false;
   bool keep_backup_copy = false;

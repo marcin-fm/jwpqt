@@ -249,6 +249,12 @@ bool KanaInputField::eventFilter(QObject* watched, QEvent* event) {
         text.size() == 1 && text[0].unicode() >= 0x20 && text[0].unicode() <= 0x7e) {
       const char value = static_cast<char>(text[0].unicode());
       if (mode_ == InputMode::kKanji) {
+        bool old_katakana = false;
+        for (auto* owner = parentWidget(); owner; owner = owner->parentWidget()) {
+          const auto setting = owner->property("jwpqtOldKatakanaInput");
+          if (setting.isValid()) { old_katakana = setting.toBool(); break; }
+        }
+        composer_.set_old_katakana_input(old_katakana);
         insert_events(composer_.push_ascii(value));
         return true;
       }

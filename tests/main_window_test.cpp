@@ -2600,6 +2600,70 @@ void test_jwp_rejects_non_bmp_edit(const QString& directory) {
           "Rejected non-BMP edit corrupted the JWP document");
 }
 
+void test_katakana_policy(const QString& directory) {
+  using namespace jwpqt::core;
+  using namespace jwpqt::qt;
+  require(!ApplicationSettings{}.old_katakana_input &&
+              read_application_settings("old_katakana_input = true\n").old_katakana_input,
+          "Katakana policy defaults or alias changed");
+  bool rejected = false;
+  try { (void)read_application_settings("OldKatakanaVowelHandling = invalid\nold_katakana_input = true\n"); }
+  catch (const std::exception&) { rejected = true; }
+  require(rejected, "Invalid earlier katakana policy accepted");
+  for (const bool old : {false, true}) {
+    MainWindow window;
+    MainWindow other;
+    auto policy = window.application_settings();
+    ApplicationSettingsDialog dialog(policy);
+    auto* option = dialog.findChild<QCheckBox*>(QStringLiteral("settingsOldKatakana"));
+    require(option && !option->isChecked(), "Old katakana option missing");
+    option->setChecked(old);
+    dialog.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+    policy = dialog.settings();
+    require(!window.application_settings().old_katakana_input, "Staged policy changed live input");
+    auto* editor = window.active_editor();
+    send_text_key(editor, Qt::Key_A, QStringLiteral("A"), Qt::ShiftModifier);
+    require(editor->toPlainText().isEmpty(), "Pending vowel unexpectedly emitted");
+    require(window.apply_application_settings(policy), "Could not apply pending vowel policy");
+    send_text_key(editor, Qt::Key_Apostrophe, QStringLiteral("'"));
+    const auto expected = old ? QStringLiteral("\u30a2\u300d") : QStringLiteral("\u30a2");
+    require(editor->toPlainText() == expected, "Document ignored live vowel policy");
+    find_action(window, "undoAction")->trigger();
+    require(editor->toPlainText().isEmpty() && !window.document_modified(), "Vowel policy input did not undo cleanly");
+
+    KanaInputField query(QStringLiteral("oldKanaQuery"), &window);
+    KanaInputField isolated(QStringLiteral("isolatedKanaQuery"), &other);
+    const auto key = [](QLineEdit* edit, int code, const QString& text) {
+      QKeyEvent event(QEvent::KeyPress, code, Qt::NoModifier, text);
+      QApplication::sendEvent(edit, &event);
+    };
+    key(query.edit(), Qt::Key_A, "A");
+    auto changed = policy; changed.old_katakana_input = !old;
+    require(window.apply_application_settings(changed) && query.edit()->text().isEmpty(), "Query policy change flushed pending input");
+    key(query.edit(), Qt::Key_Apostrophe, "'");
+    require(query.edit()->text() == (!old ? QStringLiteral("\u30a2\u300d") : QStringLiteral("\u30a2")),
+            std::string("Query ignored owning workspace policy: ") + query.edit()->text().toUtf8().toHex().constData() +
+                " setting=" + std::to_string(window.property("jwpqtOldKatakanaInput").toBool()));
+    key(isolated.edit(), Qt::Key_A, "A"); key(isolated.edit(), Qt::Key_Apostrophe, "'");
+    require(isolated.edit()->text() == QStringLiteral("\u30a2"), "Katakana preference leaked to another workspace");
+
+    require(window.apply_application_settings(policy), "Could not restore replay policy");
+    editor->insertPlainText(QStringLiteral("A'"));
+    editor->selectAll();
+    require(window.convert_selection() && editor->textCursor().selectedText() == expected,
+            "Selected replay ignored katakana policy");
+    find_action(window, "undoAction")->trigger();
+    require(editor->toPlainText() == QStringLiteral("A'"), "Katakana replay lost original text on undo");
+    const auto path = directory + (old ? "/old-kana" : "/modern-kana");
+    require(window.save_as_path(path + ".jwp", std::nullopt) &&
+                window.save_application_settings(path + ".cfg") && window.save_project_path(path + ".jpr", false), "Could not save katakana policy");
+    MainWindow restored;
+    require(restored.load_application_settings(path + ".cfg") && restored.application_settings().old_katakana_input == old &&
+                restored.open_project_path(path + ".jpr") && restored.application_settings().old_katakana_input == old,
+            "Katakana preference did not survive settings and project restoration");
+  }
+}
+
 void test_selected_romaji(const QString& directory) {
   using namespace jwpqt::core;
   using namespace jwpqt::qt;
@@ -5629,6 +5693,7 @@ int main(int argc, char* argv[]) {
     test_jwp_history_actions(directory.path());
     test_jwp_paragraph_formatting(directory.path());
     test_jwp_page_break_insertion(directory.path());
+    test_katakana_policy(directory.path());
     test_selected_romaji(directory.path());
     test_jwp_wnn_conversion(directory.path());
     test_jwp_wnn_conversion_boundaries(directory.path());
