@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "kanji_reading_lookup_dialog.h"
+#include "kanji_lookup_names.h"
 #include "auxiliary_find.h"
 #include "kanji_result_keys.h"
 
@@ -19,6 +20,7 @@
 #include <QListWidget>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QSignalBlocker>
 #include <QStyle>
 #include <QVBoxLayout>
 
@@ -65,17 +67,10 @@ KanjiReadingLookupDialog::KanjiReadingLookupDialog(
   resize(800, 360);
 
   kind_->setObjectName(QStringLiteral("kanjiReadingKind"));
-  const auto add_kind = [this](const QString& label,
-                               core::KanjiReadingKind kind) {
-    kind_->addItem(label, static_cast<int>(kind));
-  };
-  add_kind(tr("On-yomi"), core::KanjiReadingKind::kOn);
-  add_kind(tr("Kun-yomi"), core::KanjiReadingKind::kKun);
-  add_kind(tr("On-yomi or kun-yomi"), core::KanjiReadingKind::kOnOrKun);
-  add_kind(tr("Meaning"), core::KanjiReadingKind::kMeaning);
-  add_kind(tr("Nanori"), core::KanjiReadingKind::kNanori);
-  add_kind(tr("Pinyin"), core::KanjiReadingKind::kPinyin);
-  add_kind(tr("Korean"), core::KanjiReadingKind::kKorean);
+  for (std::size_t i = 0; i < kKanjiReadingNames.size(); ++i) {
+    if (i >= 4 && (information_.flags() & (i == 4 ? 4U : i == 5 ? 1U : 2U)) == 0) continue;
+    kind_->addItem(tr(kKanjiReadingNames[i]), static_cast<int>(i));
+  }
   query_->setObjectName(QStringLiteral("kanjiReadingQuery"));
   minimum_strokes_->setObjectName(QStringLiteral("kanjiReadingMinimumStrokes"));
   maximum_strokes_->setObjectName(QStringLiteral("kanjiReadingMaximumStrokes"));
@@ -83,6 +78,7 @@ KanjiReadingLookupDialog::KanjiReadingLookupDialog(
   maximum_strokes_->setRange(0, 30);
   maximum_strokes_->setValue(30);
   flexible_kun_->setObjectName(QStringLiteral("kanjiReadingFlexibleKun"));
+  flexible_kun_->setChecked(true);
   partial_words_->setObjectName(QStringLiteral("kanjiReadingPartialWords"));
 
   auto* outer = new QVBoxLayout(this);
@@ -166,6 +162,28 @@ KanjiReadingLookupDialog::KanjiReadingLookupDialog(
   update_actions();
   new KanjiResultKeys(results_, insert_button_, info_button_, copy_button_, this);
   new AuxiliaryFind(results_, {}, false);
+  auto changed = [this] {
+    const auto handler = preferences_handler_;
+    if (handler) handler(flexible_kun_->isChecked(), partial_words_->isChecked(), preferred_kind_);
+  };
+  connect(kind_, &QComboBox::activated, this, [this, changed] {
+    preferred_kind_ = kind_->currentData().toInt();
+    changed();
+  });
+  connect(flexible_kun_, &QCheckBox::clicked, this, changed);
+  connect(partial_words_, &QCheckBox::clicked, this, changed);
+}
+
+void KanjiReadingLookupDialog::set_search_preferences(bool flexible, bool partial, int kind, bool initialize_input) {
+  if (kind < 0 || kind > 6) throw core::KanjiInfoError("Invalid preferred reading type");
+  const QSignalBlocker f(flexible_kun_), p(partial_words_), k(kind_);
+  flexible_kun_->setChecked(flexible);
+  partial_words_->setChecked(partial);
+  preferred_kind_ = kind;
+  const int available = kind_->findData(kind);
+  kind_->setCurrentIndex(available < 0 ? kind_->findData(2) : available);
+  kind_->setToolTip(available < 0 ? tr("Saved reading type is unavailable; showing on-yomi or kun-yomi.") : kind_->currentText());
+  update_mode(initialize_input); // Only initialization may finish the local input state.
 }
 
 void KanjiReadingLookupDialog::set_query(
@@ -176,6 +194,7 @@ void KanjiReadingLookupDialog::set_query(
     throw core::KanjiInfoError("Native reading query is invalid");
   }
   kind_->setCurrentIndex(index);
+  preferred_kind_ = static_cast<int>(query.kind);
   query_->setText(to_qstring(query.text));
   minimum_strokes_->setValue(query.strokes.minimum);
   maximum_strokes_->setValue(query.strokes.maximum);
@@ -250,9 +269,9 @@ std::vector<core::JisCode> KanjiReadingLookupDialog::selected_codes() const {
   return values;
 }
 
-void KanjiReadingLookupDialog::update_mode() {
+void KanjiReadingLookupDialog::update_mode(bool input) {
   const core::KanjiReadingKind kind = selected_kind(*kind_);
-  query_field_->set_input_mode(
+  if (input) query_field_->set_input_mode(
       kind == core::KanjiReadingKind::kMeaning || kind == core::KanjiReadingKind::kPinyin ||
               kind == core::KanjiReadingKind::kKorean
           ? InputMode::kAscii : InputMode::kKanji);

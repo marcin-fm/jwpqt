@@ -45,6 +45,13 @@ constexpr BooleanDescriptor<ApplicationSettings> kBooleans[] = {
     {"ColorKanji_Clipboard", "colorkanji_bitmap", &ApplicationSettings::color_clipboard_bitmap},
     {"AutoSearch_KanjiLookup", "auto_lookup", &ApplicationSettings::automatic_kanji_lookup},
     {"RareKanjiLast", "rare_last", &ApplicationSettings::rare_kanji_last},
+    {"Bushu_MatchNelson", "bushu_nelson", &ApplicationSettings::bushu_nelson},
+    {"Bushu_MatchClassical", "bushu_classical", &ApplicationSettings::bushu_classical},
+    {"FlexibleKunReadings", "reading_kun", &ApplicationSettings::flexible_kun},
+    {"MatchPartialMeanings", "reading_word", &ApplicationSettings::partial_meanings},
+    {"Match_SKIP_Miscodings", "skip_misscodes", &ApplicationSettings::skip_miscodes},
+    {"ReduceRadicalChoices", "no_variants", &ApplicationSettings::reduce_radical_choices},
+    {"DeemphasizeRareRadicals", "colorize_radicals", &ApplicationSettings::deemphasize_rare_radicals},
     {"Search_AllFiles", "search_all", &ApplicationSettings::search_all_files},
     {"Search_CaseInsensitive", "search_nocase", &ApplicationSettings::search_ignore_case},
     {"Search_WidthInsensitive", "search_jascii", &ApplicationSettings::search_ignore_width},
@@ -171,6 +178,14 @@ ApplicationSettings read_application_settings(std::string_view text,
         name = "HistoryBuffers_NumChars";
         result.history_size = static_cast<int>(core::parse_jwp_setting_integer(entry.value, 0, 30000));
       }
+      if (name.empty() && core::JwpConfigurationKey{"IndexType", "index_type"}.matches(entry.name)) {
+        name = "IndexType";
+        result.index_type = static_cast<int>(core::parse_jwp_setting_integer(entry.value, 0, 20));
+      }
+      if (name.empty() && core::JwpConfigurationKey{"ReadingType", "reading_type"}.matches(entry.name)) {
+        name = "ReadingType";
+        result.reading_type = static_cast<int>(core::parse_jwp_setting_integer(entry.value, 0, 6));
+      }
       if (name.empty() && core::JwpConfigurationKey{"ToolbarButtons", "buttons"}.matches(entry.name)) {
         name = "ToolbarButtons";
         const auto bytes = core::parse_jwp_setting_bytes(entry.value, result.toolbar.buttons.size());
@@ -228,6 +243,8 @@ std::string write_application_settings(const ApplicationSettings& settings) {
   try { core::validate_print_formatting(settings.print_formatting); }
   catch (const std::invalid_argument& error) { throw core::JwpConfigurationError(error.what()); }
   validate_toolbar(settings.toolbar);
+  if (settings.index_type < 0 || settings.index_type > 20 || settings.reading_type < 0 || settings.reading_type > 6)
+    throw core::JwpConfigurationError("Invalid kanji lookup type");
   if (settings.history_size < 0 || settings.history_size > 30000)
     throw core::JwpConfigurationError("History storage is outside 0..30000 cells");
   if (settings.translation_code_page != 0 &&
@@ -235,6 +252,8 @@ std::string write_application_settings(const ApplicationSettings& settings) {
     throw core::JwpConfigurationError("Unknown translation code page");
   }
   std::vector<core::JwpConfigurationUpdate> updates;
+  updates.push_back({{"IndexType", "index_type"}, std::to_string(settings.index_type)});
+  updates.push_back({{"ReadingType", "reading_type"}, std::to_string(settings.reading_type)});
   updates.push_back({{"Printing_Justify_ASCII", "print_justify"}, settings.print_formatting.justify_ascii ? "true" : "false"});
   std::string toolbar_bytes;
   constexpr char digits[] = "0123456789ABCDEF";

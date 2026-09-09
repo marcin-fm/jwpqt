@@ -35,6 +35,19 @@ Index remain explicit searches, retaining the last report until successful Searc
 The Bushu stroke arrows also cycle Any, the selected radical's minimum, through
 30, and back to Any; manual counts remain available.
 
+Options also saves Nelson/classical Bushu matching, flexible kun readings,
+partial-word meanings, SKIP miscodes, default index/reading types, equivalent
+variant reduction and rare radical dimming. User changes in the lookup windows
+are remembered; both Bushu pages remain synchronized. Variant reduction applies
+to Stroke/Bushu and Spahn choices. Dimming uses the original fixed rare-choice
+list in the Radical and Bushu grids and never prevents selecting those choices.
+
+A saved index or reading type that is unavailable in the current metadata uses
+a visible fallback without erasing the saved preference. SKIP miscodes remain
+disabled when the data has no cross-references. Applying preferences does not
+flush pending kana, search, or discard results. A new reading window initializes
+its input mode for the selected type; an existing query keeps its local mode.
+
 In radical, code and reading result strips, Enter inserts the selection without
 searching, I or F23 opens information, and F4 closes the lookup. F2/period moves
 forward and F3/comma moves backward; Ctrl moves five characters, including with

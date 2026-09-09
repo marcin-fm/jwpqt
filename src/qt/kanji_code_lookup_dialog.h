@@ -4,6 +4,7 @@
 #define JWPQT_QT_KANJI_CODE_LOOKUP_DIALOG_H
 
 #include <functional>
+#include <utility>
 #include <vector>
 
 #include <QDialog>
@@ -40,6 +41,12 @@ class KanjiCodeLookupDialog : public QDialog {
   void set_index_query(const core::KanjiIndexQuery& query);
   void set_automatic_search(bool automatic);
   void set_auto_search_handler(std::function<void(bool)> handler);
+  void set_search_preferences(bool nelson, bool classical, bool miscodes, int index_type);
+  void set_radical_preferences(bool reduce, bool deemphasize);
+  void set_variants_handler(std::function<void(bool)> handler) { variants_handler_ = std::move(handler); }
+  void set_preferences_handler(std::function<void(bool, bool, bool, int)> handler) {
+    preferences_handler_ = std::move(handler);
+  }
   void select_skip_mode();
   void select_four_corner_mode();
   void select_bushu_mode();
@@ -74,6 +81,10 @@ class KanjiCodeLookupDialog : public QDialog {
   InsertHandler insert_handler_;
   InfoHandler info_handler_;
   std::function<void(bool)> auto_search_handler_;
+  std::function<void(bool, bool, bool, int)> preferences_handler_;
+  int preferred_index_ = 0;
+  bool deemphasize_radicals_ = false;
+  std::function<void(bool)> variants_handler_;
   QCheckBox* automatic_;
   QTabWidget* tabs_;
   QSpinBox* skip_type_;

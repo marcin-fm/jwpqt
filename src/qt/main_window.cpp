@@ -1070,6 +1070,14 @@ bool MainWindow::apply_application_settings(const ApplicationSettings& settings,
           application_settings_.automatic_kanji_lookup, application_settings_.rare_kanji_last);
       if (kanji_code_lookup_dialog_) kanji_code_lookup_dialog_->set_automatic_search(
           application_settings_.automatic_kanji_lookup);
+      if (kanji_code_lookup_dialog_) kanji_code_lookup_dialog_->set_search_preferences(
+          application_settings_.bushu_nelson, application_settings_.bushu_classical,
+          application_settings_.skip_miscodes, application_settings_.index_type);
+      if (kanji_reading_lookup_dialog_) kanji_reading_lookup_dialog_->set_search_preferences(
+          application_settings_.flexible_kun, application_settings_.partial_meanings, application_settings_.reading_type);
+      if (kanji_code_lookup_dialog_) kanji_code_lookup_dialog_->set_radical_preferences(
+          application_settings_.reduce_radical_choices, application_settings_.deemphasize_rare_radicals);
+      if (kanji_lookup_dialog_) kanji_lookup_dialog_->set_deemphasize_radicals(application_settings_.deemphasize_rare_radicals);
       // Font/layout signals must not be interpreted as edits in any open tab.
       application_font_warnings_ = set_japanese_fonts(*this, application_settings_,
           QFileInfo(application_settings_path_).path());
@@ -4167,6 +4175,16 @@ void MainWindow::show_kanji_code_lookup_dialog(KanjiCodeLookupMode mode) {
       radical_sheet_);
   select_mode(*dialog);
   dialog->set_automatic_search(application_settings_.automatic_kanji_lookup);
+  dialog->set_search_preferences(application_settings_.bushu_nelson, application_settings_.bushu_classical,
+                                 application_settings_.skip_miscodes, application_settings_.index_type);
+  dialog->set_preferences_handler([this](bool nelson, bool classical, bool miscodes, int index) {
+    application_settings_.bushu_nelson = nelson;
+    application_settings_.bushu_classical = classical;
+    application_settings_.skip_miscodes = miscodes;
+    application_settings_.index_type = index;
+  });
+  dialog->set_radical_preferences(application_settings_.reduce_radical_choices, application_settings_.deemphasize_rare_radicals);
+  dialog->set_variants_handler([this](bool reduce) { application_settings_.reduce_radical_choices = reduce; });
   dialog->set_auto_search_handler([this](bool automatic) {
     application_settings_.automatic_kanji_lookup = automatic;
     if (kanji_lookup_dialog_) kanji_lookup_dialog_->set_lookup_options(
@@ -4204,6 +4222,13 @@ void MainWindow::show_kanji_reading_lookup_dialog() {
       [this](core::JisCode code) { show_kanji_info_code(code); }, this);
   dialog->set_overwrite_action(overwrite_action_);
   if (!seed.empty()) dialog->set_query_text(seed);
+  dialog->set_search_preferences(application_settings_.flexible_kun, application_settings_.partial_meanings,
+                                 application_settings_.reading_type, true);
+  dialog->set_preferences_handler([this](bool flexible, bool partial, int type) {
+    application_settings_.flexible_kun = flexible;
+    application_settings_.partial_meanings = partial;
+    application_settings_.reading_type = type;
+  });
   dialog->setAttribute(Qt::WA_DeleteOnClose);
   connect(dialog, &QObject::destroyed, this,
           [this] { kanji_reading_lookup_dialog_ = nullptr; });
@@ -4234,6 +4259,7 @@ void MainWindow::show_kanji_lookup_dialog() {
       [this](core::JisCode code) { show_kanji_info_code(code); }, this);
   dialog->set_lookup_options(application_settings_.automatic_kanji_lookup,
                              application_settings_.rare_kanji_last);
+  dialog->set_deemphasize_radicals(application_settings_.deemphasize_rare_radicals);
   dialog->set_auto_search_handler([this](bool automatic) {
     application_settings_.automatic_kanji_lookup = automatic;
     if (kanji_code_lookup_dialog_) kanji_code_lookup_dialog_->set_automatic_search(automatic);

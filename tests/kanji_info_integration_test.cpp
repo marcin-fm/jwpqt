@@ -5,7 +5,10 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QDir>
+#include <QTabWidget>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QDialogButtonBox>
 #include <QClipboard>
 #include <QContextMenuEvent>
@@ -527,13 +530,24 @@ jwpqt::qt::KanjiInfoDialog* request_information(QTextEdit& editor, int position,
 void test_lookup_preferences(const QString& directory) {
   using namespace jwpqt;
   const auto settings = qt::read_application_settings(
-      "auto_lookup=false\nRareKanjiLast=no\nFutureOption=42\n");
+      "auto_lookup=false\nRareKanjiLast=no\nFutureOption=42\n"
+      "Bushu_MatchNelson=false\nbushu_classical=true\nFlexibleKunReadings=no\n"
+      "reading_word=true\nMatch_SKIP_Miscodings=true\nIndexType=20\nreading_type=3\n"
+      "no_variants=true\nDeemphasizeRareRadicals=true\n");
   require(!settings.automatic_kanji_lookup && !settings.rare_kanji_last && settings.unapplied.size() == 1,
           "Lookup aliases/defaults/retained fields are wrong");
   try {
     (void)qt::read_application_settings("rare_last=maybe\nRareKanjiLast=true\n");
     require(false, "Invalid overridden lookup setting was accepted");
   } catch (const core::JwpConfigurationError&) {}
+  require(!settings.bushu_nelson && settings.bushu_classical && !settings.flexible_kun &&
+          settings.partial_meanings && settings.skip_miscodes && settings.index_type == 20 && settings.reading_type == 3,
+          "Search preference aliases did not decode");
+  for (const auto* invalid : {"IndexType=21\nindex_type=0\n", "ReadingType=-1\n", "reading_type=7\n",
+                             "FlexibleKunReadings=maybe\nreading_kun=true\n"}) {
+    try { (void)qt::read_application_settings(invalid); require(false, "Invalid lookup preference was accepted"); }
+    catch (const core::JwpConfigurationError&) {}
+  }
   const auto canonical = qt::write_application_settings(settings);
   require(qt::write_application_settings(qt::read_application_settings(canonical)) == canonical,
           "Lookup setting serialization is not canonical");
@@ -541,13 +555,29 @@ void test_lookup_preferences(const QString& directory) {
   auto* automatic = options.findChild<QCheckBox*>("settingsLookupAutomatic");
   auto* rare = options.findChild<QCheckBox*>("settingsLookupRareLast");
   require(automatic && rare && !automatic->isChecked() && !rare->isChecked(), "Lookup Options are missing");
+  auto* preferred_index = options.findChild<QComboBox*>("settingsIndexType");
+  auto* preferred_reading = options.findChild<QComboBox*>("settingsReadingType");
+  auto* flexible = options.findChild<QCheckBox*>("settingsFlexibleKun");
+  require(preferred_index && preferred_reading && flexible && preferred_index->currentIndex() == 20 &&
+          preferred_reading->currentIndex() == 3 && !flexible->isChecked(), "Lookup default Options are missing");
+  preferred_index->setCurrentIndex(5); flexible->setChecked(true);
   automatic->setChecked(true);
   options.reject();
   require(!options.settings().automatic_kanji_lookup, "Cancelled lookup Options changed settings");
+  require(options.settings().index_type == 20 && !options.settings().flexible_kun, "Cancel changed lookup defaults");
   auto* buttons = options.findChild<QDialogButtonBox*>();
   buttons->button(QDialogButtonBox::Ok)->click();
   require(options.settings().automatic_kanji_lookup && !options.settings().rare_kanji_last,
           "Accepted lookup Options lost values");
+  require(options.settings().index_type == 5 && options.settings().flexible_kun, "Accepted lookup defaults were lost");
+  auto* option_tabs = options.findChild<QTabWidget*>();
+  require(option_tabs, "Options has no pages");
+  for (int i = 0; i < option_tabs->count(); ++i)
+    if (option_tabs->tabText(i) == "Kanji Lookup") option_tabs->setCurrentIndex(i);
+  options.show();
+  QApplication::processEvents();
+  require(options.grab().save(QDir::current().filePath("lookup-preferences.png")), "Could not capture lookup Options");
+  options.hide();
 
   qt::MainWindow window;
   write_database(directory + "/lookup-info.dat");
@@ -570,6 +600,70 @@ void test_lookup_preferences(const QString& directory) {
   auto* radial = dynamic_cast<qt::KanjiLookupDialog*>(window.findChild<QDialog*>("kanjiLookupDialog"));
   auto* code = dynamic_cast<qt::KanjiCodeLookupDialog*>(window.findChild<QDialog*>("kanjiCodeLookupDialog"));
   require(radial && code, "Lookup windows did not open");
+  auto* miscodes = code->findChild<QCheckBox*>("skipMisclassifications");
+  require(miscodes && !miscodes->isEnabled() && miscodes->isChecked() &&
+          window.application_settings().skip_miscodes,
+          "Unavailable SKIP references erased the preference or enabled unsupported search");
+  auto* variants = code->findChild<QCheckBox*>("spahnVariants");
+  auto* stroke_variants = code->findChild<QCheckBox*>("strokeBushuVariants");
+  require(variants && stroke_variants && !variants->isChecked() && !stroke_variants->isChecked(),
+          "Reduced radical preference was not applied");
+  variants->click();
+  require(!window.application_settings().reduce_radical_choices && stroke_variants->isChecked(),
+          "User variant preference did not synchronize");
+  stroke_variants->click();
+  require(window.application_settings().reduce_radical_choices && !variants->isChecked(),
+          "Stroke variant preference did not synchronize");
+  auto* nelson = code->findChild<QCheckBox*>("bushuNelson");
+  auto* classical = code->findChild<QCheckBox*>("bushuClassical");
+  auto* stroke_nelson = code->findChild<QCheckBox*>("strokeBushuNelson");
+  auto* index_kind = code->findChild<QComboBox*>("kanjiIndexType");
+  require(nelson && classical && stroke_nelson && index_kind && !nelson->isChecked() && classical->isChecked() &&
+          !stroke_nelson->isChecked(), "Bushu defaults were not applied to both pages");
+  nelson->click();
+  require(window.application_settings().bushu_nelson && stroke_nelson->isChecked() &&
+          window.application_settings().index_type == 20, "Bushu edit lost synchronization or unavailable index preference");
+  index_kind->setCurrentIndex(1);
+  QMetaObject::invokeMethod(index_kind, "activated", Qt::DirectConnection, Q_ARG(int, 1));
+  require(window.application_settings().index_type == 1, "Index choice was not remembered");
+  window.findChild<QAction*>("kanjiReadingLookupAction")->trigger();
+  auto* reading = dynamic_cast<qt::KanjiReadingLookupDialog*>(window.findChild<QDialog*>("kanjiReadingLookupDialog"));
+  require(reading, "Reading preferences fixture did not open");
+  auto* reading_kind = reading->findChild<QComboBox*>("kanjiReadingKind");
+  auto* query_edit = reading->findChild<QLineEdit*>("kanjiReadingQuery");
+  auto* reading_flexible = reading->findChild<QCheckBox*>("kanjiReadingFlexibleKun");
+  require(reading_kind->currentData().toInt() == 3 && !reading_flexible->isChecked() &&
+          reading->findChild<QCheckBox*>("kanjiReadingPartialWords")->isChecked(), "Reading defaults did not reach controls");
+  reading->set_search_preferences(false, true, 6);
+  require(reading_kind->findData(6) < 0 && reading_kind->currentData().toInt() == 2,
+          "Unavailable reading type did not use a visible fallback");
+  reading_flexible->click();
+  require(window.application_settings().reading_type == 6, "Fallback overwrote the saved reading type");
+  reading->set_search_preferences(false, true, 3);
+  query_edit->setText("tree");
+  require(reading->search() && !reading->results().empty(), "Reading defaults did not reach search");
+  const auto reading_results = reading->results();
+  auto* reading_list = reading->findChild<QListWidget*>("kanjiReadingResults");
+  const int reading_row = reading_list->currentRow();
+  reading_kind->setCurrentIndex(2);
+  QMetaObject::invokeMethod(reading_kind, "activated", Qt::DirectConnection, Q_ARG(int, 2));
+  query_edit->clear();
+  QKeyEvent pending(QEvent::KeyPress, Qt::Key_N, Qt::NoModifier, "n");
+  QApplication::sendEvent(query_edit, &pending);
+  require(query_edit->text().isEmpty(), "Pending reading fixture unexpectedly committed");
+  auto changed_defaults = window.application_settings();
+  changed_defaults.reading_type = 3; changed_defaults.flexible_kun = true;
+  require(window.apply_application_settings(changed_defaults) && query_edit->text().isEmpty() &&
+          reading->results() == reading_results && reading_list->currentRow() == reading_row,
+          "Preference application flushed pending input or changed results");
+  QKeyEvent finish(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier, "a");
+  QApplication::sendEvent(query_edit, &finish);
+  require(query_edit->text() == QString(QChar(0x306a)), "Applying reading type lost local kana composition");
+  reading_kind->setCurrentIndex(2);
+  QMetaObject::invokeMethod(reading_kind, "activated", Qt::DirectConnection, Q_ARG(int, 2));
+  reading_flexible->click();
+  require(!window.application_settings().flexible_kun && window.application_settings().reading_type == 2,
+          "Reading control changes were not remembered");
   auto* radial_auto = radial->findChild<QCheckBox*>("kanjiLookupAutoSearch");
   auto* code_auto = code->findChild<QCheckBox*>("kanjiCodeAutoSearch");
   require(radial_auto && code_auto && !radial_auto->isChecked() && !code_auto->isChecked(),
@@ -614,7 +708,14 @@ void test_lookup_preferences(const QString& directory) {
   qt::MainWindow project;
   require(project.open_project_path(directory + "/lookup.jpr") &&
               !project.application_settings().automatic_kanji_lookup && project.application_settings().rare_kanji_last,
-          "Project lost lookup preferences");
+           "Project lost lookup preferences");
+  for (const auto* saved : {&restarted.application_settings(), &project.application_settings()})
+    require(saved->index_type == 1 && saved->reading_type == 2 && saved->bushu_nelson &&
+            saved->bushu_classical && !saved->flexible_kun && saved->partial_meanings && saved->skip_miscodes,
+            "Restart/project lost lookup search preferences");
+  require(restarted.application_settings().reduce_radical_choices && project.application_settings().reduce_radical_choices &&
+          restarted.application_settings().deemphasize_rare_radicals && project.application_settings().deemphasize_rare_radicals,
+          "Restart/project lost radical appearance preferences");
 }
 
 void test_character_context(const QString& directory) {

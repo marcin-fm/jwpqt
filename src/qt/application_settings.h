@@ -50,6 +50,15 @@ struct ApplicationSettings {
   bool save_histories = true;
   bool automatic_kanji_lookup = true;
   bool rare_kanji_last = true;
+  bool bushu_nelson = true;
+  bool bushu_classical = true;
+  bool flexible_kun = true;
+  bool partial_meanings = false;
+  bool skip_miscodes = false;
+  bool reduce_radical_choices = false;
+  bool deemphasize_rare_radicals = false;
+  int index_type = 0;
+  int reading_type = 2;
   bool search_all_files = false;
   bool search_ignore_case = true;
   bool search_ignore_width = true;

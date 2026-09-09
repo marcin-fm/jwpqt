@@ -338,9 +338,12 @@ void KanjiLookupDialog::update_artwork() {
       radical_sheet_.height() >= static_cast<int>(radical_buttons_.size()) * 16;
   for (std::size_t index = 0; index < radical_buttons_.size(); ++index) {
     auto* button = radical_buttons_[index];
-    button->setPalette(palette());
+    const bool subdued = deemphasize_radicals_ && is_rare_radical(static_cast<unsigned>(index + 1));
+    auto colors = palette();
+    if (subdued) colors.setColor(QPalette::ButtonText, Qt::gray);
+    button->setPalette(colors);
     if (has_sheet) button->setIcon(themed_lookup_icon(
-        radical_sheet_.copy(0, static_cast<int>(index) * 16, 16, 16), palette()));
+        radical_sheet_.copy(0, static_cast<int>(index) * 16, 16, 16), palette(), subdued));
   }
 }
 

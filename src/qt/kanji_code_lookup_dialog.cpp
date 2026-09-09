@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "kanji_code_lookup_dialog.h"
+#include "kanji_lookup_names.h"
 #include "auxiliary_find.h"
 #include "kanji_result_keys.h"
 
@@ -156,6 +157,9 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
   skip_misclassifications_->setObjectName(
       QStringLiteral("skipMisclassifications"));
   skip_layout->addRow(skip_misclassifications_);
+  skip_misclassifications_->setEnabled((information_.flags() & 0x0020U) != 0);
+  if (!skip_misclassifications_->isEnabled())
+    skip_misclassifications_->setToolTip(tr("This metadata file has no SKIP cross-references. The saved preference is retained."));
   auto* skip_legend = new QLabel(skip_page);
   skip_legend->setObjectName(QStringLiteral("skipLegend"));
   skip_legend->setPixmap(QPixmap(QStringLiteral(":/jwpqt/skiptype.bmp"))
@@ -303,16 +307,8 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
 
   auto* index_page = new QWidget(tabs_);
   auto* index_layout = new QFormLayout(index_page);
-  const QStringList index_names{
-      tr("Modern Reader's Japanese-English Character Dictionary, Andrew Nelson"),
-      tr("New Nelson Japanese-English Character Dictionary, John Haig"),
-      tr("New Japanese-English Character Dictionary, Jack Halpern"),
-      tr("School grade"), tr("Morohashi (full index)"), tr("Morohashi (volume/index)"),
-      tr("Halpern Kanji Learners' Dictionary"), tr("Spahn-Hadamitzky Kanji & Kana"),
-      tr("Henshall"), tr("Gakken"), tr("Heisig"), tr("O'Neill Names"),
-      tr("O'Neill Essential Kanji"), tr("De Roo"), tr("Frequency"),
-      tr("Read/Write Japanese"), tr("Tuttle Kanji Cards"), tr("The Kanji Way"),
-      tr("Kanji in Context"), tr("Japanese for Busy People"), tr("Compact Kanji Guide")};
+  QStringList index_names;
+  for (auto* name : kKanjiIndexNames) index_names.push_back(tr(name));
   const int index_count = (information_.flags() & 0x0008U) == 0 ? 4
       : (information_.flags() & 0x0010U) == 0 ? 6 : static_cast<int>(index_names.size());
   index_type_->setObjectName(QStringLiteral("kanjiIndexType"));
@@ -490,6 +486,74 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
   update_artwork();
   new KanjiResultKeys(results_, insert_button_, info_button_, copy_button_, this);
   new AuxiliaryFind(results_, {}, false);
+
+  auto changed = [this](bool stroke) {
+    const bool nelson = (stroke ? stroke_bushu_nelson_ : bushu_nelson_)->isChecked();
+    const bool classical = (stroke ? stroke_bushu_classical_ : bushu_classical_)->isChecked();
+    {
+      const QSignalBlocker n(stroke ? bushu_nelson_ : stroke_bushu_nelson_);
+      const QSignalBlocker c(stroke ? bushu_classical_ : stroke_bushu_classical_);
+      (stroke ? bushu_nelson_ : stroke_bushu_nelson_)->setChecked(nelson);
+      (stroke ? bushu_classical_ : stroke_bushu_classical_)->setChecked(classical);
+    }
+    const auto handler = preferences_handler_;
+    if (handler) handler(nelson, classical, skip_misclassifications_->isChecked(), preferred_index_);
+  };
+  for (auto* check : {bushu_nelson_, bushu_classical_, skip_misclassifications_})
+    connect(check, &QCheckBox::clicked, this, [changed] { changed(false); });
+  for (auto* check : {stroke_bushu_nelson_, stroke_bushu_classical_})
+    connect(check, &QCheckBox::clicked, this, [changed] { changed(true); });
+  connect(index_type_, &QComboBox::activated, this, [this, changed](int index) {
+    preferred_index_ = index_type_->itemData(index).toInt();
+    changed(false);
+  });
+  for (auto* check : {spahn_variants_, stroke_bushu_variants_}) {
+    connect(check, &QCheckBox::clicked, this, [this, check](bool variants) {
+      QPointer<KanjiCodeLookupDialog> self(this);
+      const bool pending = search_timer_->isActive();
+      set_radical_preferences(!variants, deemphasize_radicals_);
+      if (!self) return;
+      if (pending && automatic_->isChecked()) search_timer_->start();
+      const auto handler = variants_handler_;
+      if (handler) handler(!check->isChecked());
+    });
+  }
+}
+
+void KanjiCodeLookupDialog::set_radical_preferences(bool reduce, bool deemphasize) {
+  if (spahn_variants_->isChecked() == reduce || stroke_bushu_variants_->isChecked() == reduce) {
+    const unsigned current = stroke_bushu_radicals_->currentItem() ?
+        stroke_bushu_radicals_->currentItem()->data(Qt::UserRole).toUInt() : 0;
+    search_timer_->stop();
+    const QSignalBlocker s(spahn_variants_), b(stroke_bushu_variants_), list(stroke_bushu_radicals_);
+    spahn_variants_->setChecked(!reduce); stroke_bushu_variants_->setChecked(!reduce);
+    populate_spahn_choices(); populate_stroke_bushu_choices();
+    for (int row = 0; row < stroke_bushu_radicals_->count(); ++row)
+      if (stroke_bushu_radicals_->item(row)->data(Qt::UserRole).toUInt() == current) {
+        stroke_bushu_radicals_->setCurrentRow(row); break;
+      }
+  }
+  deemphasize_radicals_ = deemphasize;
+  update_artwork();
+}
+
+void KanjiCodeLookupDialog::set_search_preferences(bool nelson, bool classical, bool miscodes, int index_type) {
+  if (index_type < 0 || index_type > 20) throw core::KanjiInfoError("Invalid preferred index type");
+  if (bushu_nelson_->isChecked() == nelson && stroke_bushu_nelson_->isChecked() == nelson &&
+      bushu_classical_->isChecked() == classical && stroke_bushu_classical_->isChecked() == classical &&
+      skip_misclassifications_->isChecked() == miscodes && preferred_index_ == index_type) return;
+  search_timer_->stop();
+  const QSignalBlocker n(bushu_nelson_), c(bushu_classical_), sn(stroke_bushu_nelson_),
+      sc(stroke_bushu_classical_), m(skip_misclassifications_), i(index_type_);
+  preferred_index_ = index_type;
+  bushu_nelson_->setChecked(nelson); stroke_bushu_nelson_->setChecked(nelson);
+  bushu_classical_->setChecked(classical); stroke_bushu_classical_->setChecked(classical);
+  skip_misclassifications_->setChecked(miscodes);
+  const int available = index_type_->findData(index_type);
+  index_type_->setCurrentIndex(available < 0 ? 0 : available);
+  index_type_->setToolTip(available < 0 ? tr("Saved index type is unavailable in this metadata file; showing Nelson.") : index_type_->currentText());
+  const auto type = static_cast<core::KanjiIndexType>(index_type_->currentData().toInt());
+  index_volume_->setEnabled(type == core::KanjiIndexType::kMorohashiVolume || type == core::KanjiIndexType::kBusyPeople);
 }
 
 void KanjiCodeLookupDialog::set_automatic_search(bool automatic) {
@@ -515,7 +579,11 @@ void KanjiCodeLookupDialog::update_artwork() {
   const QSignalBlocker blocker(bushu_radicals_);
   for (int row = 0; row < bushu_radicals_->count(); ++row) {
     auto* item = bushu_radicals_->item(row);
-    if (item->data(Qt::UserRole).isValid()) continue;
+    if (item->data(Qt::UserRole).isValid()) {
+      const bool subdued = deemphasize_radicals_ && is_rare_radical(item->data(Qt::UserRole + 1).toUInt() + 1);
+      item->setForeground(subdued ? QBrush(Qt::gray) : QBrush());
+      continue;
+    }
     item->setBackground(dark ? palette().color(QPalette::Window) : QColor(Qt::white));
     item->setForeground(dark ? QColor(255, 128, 128) : QColor(176, 0, 32));
   }
@@ -525,8 +593,10 @@ void KanjiCodeLookupDialog::update_artwork() {
     for (int row = 0; row < list->count(); ++row) {
       auto* item = list->item(row);
       const QVariant sprite = item->data(sprite_role);
-      if (sprite.isValid())
-        item->setIcon(themed_lookup_icon(sheet.copy(0, sprite.toInt() * 16, 16, 16), palette()));
+      if (sprite.isValid()) {
+        const bool subdued = list == bushu_radicals_ && deemphasize_radicals_ && is_rare_radical(sprite.toUInt() + 1);
+        item->setIcon(themed_lookup_icon(sheet.copy(0, sprite.toInt() * 16, 16, 16), palette(), subdued));
+      }
     }
   };
   if (radical_sheet_.width() >= 16 && radical_sheet_.height() >= 241 * 16) {
@@ -688,6 +758,7 @@ void KanjiCodeLookupDialog::set_index_query(const core::KanjiIndexQuery& query) 
   if (type < 0 || type >= index_type_->count() || query.index > 65535 || query.volume > 255)
     throw core::KanjiInfoError("Native kanji index query is unavailable or out of range");
   index_type_->setCurrentIndex(type);
+  preferred_index_ = static_cast<int>(query.type);
   index_value_->setValue(static_cast<int>(query.index));
   index_volume_->setValue(static_cast<int>(query.volume));
   select_index_mode();
@@ -711,7 +782,7 @@ bool KanjiCodeLookupDialog::search_skip() {
   query.type = spin_range(*skip_type_, 4);
   query.first = spin_range(*skip_first_, 20);
   query.second = spin_range(*skip_second_, 24);
-  query.include_misclassifications = skip_misclassifications_->isChecked();
+  query.include_misclassifications = (information_.flags() & 0x0020U) != 0 && skip_misclassifications_->isChecked();
   try {
     return publish(core::search_kanji_skip(information_, query));
   } catch (const std::exception& error) {

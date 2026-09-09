@@ -692,13 +692,20 @@ criteria clear stale results when automatic search is disabled.
 
 Options > Kanji Lookup persists shared Auto Search and Rare Kanji Last through
 settings and projects without searching or disturbing the current results.
+Bushu matching sources, flexible kun readings, partial meanings, SKIP miscodes,
+default reading/index types and radical variant/rare-choice presentation also
+persist. User changes synchronize the two Bushu pages. Preferences unavailable
+in the loaded metadata are retained with a visible fallback or disabled control;
+they are not silently replaced by that fallback. Applying settings preserves
+pending query input and results. Rare-choice dimming follows the original fixed
+radical list, not a frequency estimate, and does not disable selection.
 Bushu has the same bounded stroke stepping. In radical/code/reading result
 strips, Enter inserts, I/F23 opens information, F2/F3 or period/comma moves
 (Ctrl moves five), C copies the selection, Shift+C copies all without changing
 selection, and F4 closes. Shift-click/Shift-Space on Copy also copies all.
 Query fields keep their local Japanese input controls; Reading/Index remain
-explicit searches. Auxiliary history/search consumers, remaining dictionary
-options and the final command audit still need closure.
+explicit searches. Remaining configuration, dictionary inference/drop and the
+final command audit still need closure.
 
 ### Character information
 

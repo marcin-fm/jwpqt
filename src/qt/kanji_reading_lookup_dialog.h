@@ -3,6 +3,7 @@
 #pragma once
 
 #include <functional>
+#include <utility>
 #include <string_view>
 #include <vector>
 
@@ -36,13 +37,17 @@ class KanjiReadingLookupDialog : public QDialog {
   void set_query(const core::KanjiReadingQuery& query);
   void set_query_text(std::u32string_view text);
   void set_overwrite_action(QAction* action);
+  void set_search_preferences(bool flexible, bool partial, int kind, bool initialize_input = false);
+  void set_preferences_handler(std::function<void(bool, bool, int)> handler) {
+    preferences_handler_ = std::move(handler);
+  }
   bool search();
   std::vector<core::JisCode> results() const;
 
  private:
   bool publish(core::KanjiCodeSearchReport report);
   std::vector<core::JisCode> selected_codes() const;
-  void update_mode();
+  void update_mode(bool input = true);
   void update_actions();
   void copy_results();
   void insert_results();
@@ -51,6 +56,8 @@ class KanjiReadingLookupDialog : public QDialog {
   const core::KanjiInfoDatabase& information_;
   InsertHandler insert_handler_;
   InfoHandler info_handler_;
+  std::function<void(bool, bool, int)> preferences_handler_;
+  int preferred_kind_ = 2;
   QComboBox* kind_;
   KanaInputField* query_field_;
   QLineEdit* query_;

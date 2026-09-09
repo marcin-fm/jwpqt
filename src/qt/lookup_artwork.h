@@ -10,7 +10,8 @@
 namespace jwpqt::qt {
 
 QPixmap themed_lookup_artwork(const QPixmap& source, const QPalette& palette);
-QIcon themed_lookup_icon(const QPixmap& source, const QPalette& palette);
+QIcon themed_lookup_icon(const QPixmap& source, const QPalette& palette, bool subdued = false);
+bool is_rare_radical(unsigned radical) noexcept;
 
 }  // namespace jwpqt::qt
 

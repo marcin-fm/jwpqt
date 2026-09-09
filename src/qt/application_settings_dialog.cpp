@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "application_settings_dialog.h"
+#include "kanji_lookup_names.h"
 
 #include <algorithm>
 #include <array>
@@ -335,6 +336,33 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   lookup_form->addRow(lookup_rare);
   booleans.push_back({lookup_auto, &ApplicationSettings::automatic_kanji_lookup});
   booleans.push_back({lookup_rare, &ApplicationSettings::rare_kanji_last});
+  const struct { const char* label; const char* object; bool ApplicationSettings::*member; } lookup_flags[] = {
+      {"Match Nelson radicals", "settingsBushuNelson", &ApplicationSettings::bushu_nelson},
+      {"Match classical radicals", "settingsBushuClassical", &ApplicationSettings::bushu_classical},
+      {"Flexible kun-yomi matching", "settingsFlexibleKun", &ApplicationSettings::flexible_kun},
+      {"Allow partial-word meanings", "settingsPartialMeanings", &ApplicationSettings::partial_meanings},
+      {"Include SKIP miscodes", "settingsSkipMiscodes", &ApplicationSettings::skip_miscodes},
+      {"Hide equivalent Stroke/Bushu and Spahn radical variants", "settingsReduceRadicals", &ApplicationSettings::reduce_radical_choices},
+      {"Deemphasize source rare radical choices", "settingsDeemphasizeRadicals", &ApplicationSettings::deemphasize_rare_radicals}};
+  for (const auto& flag : lookup_flags) {
+    auto* check = new QCheckBox(tr(flag.label), lookup);
+    check->setObjectName(QString::fromLatin1(flag.object));
+    check->setChecked(settings_.*(flag.member));
+    lookup_form->addRow(check);
+    booleans.push_back({check, flag.member});
+  }
+  auto* index_type = new QComboBox(lookup);
+  index_type->setObjectName(QStringLiteral("settingsIndexType"));
+  for (auto* name : kKanjiIndexNames) index_type->addItem(tr(name));
+  index_type->setCurrentIndex(settings_.index_type);
+  index_type->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+  index_type->setMinimumContentsLength(25);
+  lookup_form->addRow(tr("Default index type"), index_type);
+  auto* reading_type = new QComboBox(lookup);
+  reading_type->setObjectName(QStringLiteral("settingsReadingType"));
+  for (auto* name : kKanjiReadingNames) reading_type->addItem(tr(name));
+  reading_type->setCurrentIndex(settings_.reading_type);
+  lookup_form->addRow(tr("Default reading type"), reading_type);
   auto* lookup_note = new QLabel(tr("Auto is shared by radical and code lookup windows. "
       "Changing preferences does not run a search or reorder current results. "
       "Reading and Index lookup remain explicit searches."), lookup);
@@ -352,7 +380,8 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
   connect(buttons, &QDialogButtonBox::accepted, this,
           [this, booleans, font_controls, dictionary_controls, code_page, history_size, categories,
-           print_family, print_size, print_auto, print_justify, ascii_family, print_patterns, print_positions, original_patterns] {
+           print_family, print_size, print_auto, print_justify, ascii_family, print_patterns, print_positions, original_patterns,
+           index_type, reading_type] {
     auto next = settings_;
     for (const auto& control : booleans) next.*(control.member) = control.widget->isChecked();
     for (const auto& control : dictionary_controls) next.dictionary.*(control.member) = control.widget->isChecked();
@@ -368,6 +397,8 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
     }
     next.translation_code_page = code_page->currentData().toInt();
     next.history_size = history_size->value();
+    next.index_type = index_type->currentIndex();
+    next.reading_type = reading_type->currentIndex();
     next.print_font = {print_family->currentText(), qRound(print_size->value() * 10), print_auto->isChecked()};
     next.ascii_font.family = ascii_family->currentText();
     next.print_formatting.justify_ascii = print_justify->isChecked();

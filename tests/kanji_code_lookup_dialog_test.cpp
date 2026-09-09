@@ -24,6 +24,7 @@
 
 #include "jwpqt/core/kanji_info.h"
 #include "kanji_code_lookup_dialog.h"
+#include "kanji_reading_lookup_dialog.h"
 #include "text_bridge.h"
 #include "jwpqt/core/jwp_text_codec.h"
 
@@ -465,6 +466,42 @@ void test_artwork_palette_changes() {
                 spahn->currentItem() == spahn_item && dialog.results().size() == 1 && !timer->isActive(),
             "Changing artwork rebuilt selections, results or pending lookup work");
   }
+  QListWidgetItem* rare = nullptr;
+  QListWidgetItem* common = nullptr;
+  for (int row = 0; row < bushu->count(); ++row) {
+    auto* item = bushu->item(row);
+    if (!item->data(Qt::UserRole).isValid()) continue;
+    if (item->data(Qt::UserRole + 1).toInt() == 66) rare = item;
+    if (item->data(Qt::UserRole + 1).toInt() == 75) common = item;
+  }
+  require(rare && common, "Source rare radical fixture is missing");
+  for (bool dark : {false, true, false}) {
+    auto colors = dialog.palette();
+    colors.setColor(QPalette::Window, dark ? QColor(32, 35, 37) : QColor(240, 240, 240));
+    colors.setColor(QPalette::Text, dark ? QColor(240, 240, 240) : QColor(16, 16, 16));
+    dialog.setPalette(colors);
+    dialog.set_radical_preferences(false, true);
+    const auto rare_image = rare->icon().pixmap(QSize(16, 16), 1.0).toImage();
+    const auto common_image = common->icon().pixmap(QSize(16, 16), 1.0).toImage();
+    require(rare_image.pixelColor(4, 8) == QColor(128, 128, 128) &&
+            common_image.pixelColor(4, 8) == (dark ? colors.color(QPalette::Text) : QColor(Qt::black)) &&
+            bushu->currentItem() == bushu_item && dialog.results().size() == 1 && !timer->isActive(),
+            "Rare artwork changed the wrong glyph, selection or search state");
+    dialog.set_radical_preferences(false, false);
+    require(rare->icon().pixmap(QSize(16, 16), 1.0).toImage().pixelColor(4, 8) == common_image.pixelColor(4, 8),
+            "Disabling rare artwork did not restore ink");
+  }
+  const int full_stroke = stroke->count(), full_spahn = spahn->count();
+  const auto selected_bushu = stroke->currentItem()->data(Qt::UserRole);
+  dialog.set_radical_preferences(true, false);
+  require(stroke->count() < full_stroke && spahn->count() < full_spahn &&
+          stroke->currentItem()->data(Qt::UserRole) == selected_bushu && dialog.results().size() == 1 && !timer->isActive(),
+          "Variant reduction changed canonical selection/results or failed to hide choices");
+  dialog.set_radical_preferences(false, false);
+  require(stroke->count() == full_stroke && spahn->count() == full_spahn, "Variant expansion lost choices");
+  QPalette dark_again = dialog.palette();
+  dark_again.setColor(QPalette::Window, QColor(32, 35, 37));
+  dialog.setPalette(dark_again);
   dialog.findChild<QCheckBox*>(QStringLiteral("spahnVariants"))->setChecked(false);
   dialog.findChild<QSpinBox*>(QStringLiteral("strokeBushuRadicalStrokes"))->setValue(4);
   for (const auto* item : {spahn->item(0), stroke->item(1)})
@@ -482,6 +519,35 @@ void test_artwork_palette_changes() {
           "Changing artwork restarted or cancelled a pending code lookup");
 }
 
+void test_preference_callbacks() {
+  using namespace jwpqt::qt;
+  const auto source = database();
+  KanjiCodeLookupDialog dialog(source, {}, {});
+  require(dialog.findChild<QCheckBox*>("skipMisclassifications")->isEnabled(),
+          "Available SKIP references were disabled");
+  int calls = 0;
+  dialog.set_preferences_handler([&](bool, bool, bool, int) {
+    ++calls;
+    dialog.set_search_preferences(false, true, true, 20);
+  });
+  dialog.findChild<QCheckBox*>("bushuNelson")->click();
+  require(calls == 1 && !dialog.findChild<QCheckBox*>("bushuNelson")->isChecked() &&
+          !dialog.findChild<QCheckBox*>("strokeBushuNelson")->isChecked(),
+          "An older callback overwrote reentrant lookup preferences");
+  QPointer<KanjiCodeLookupDialog> dying = new KanjiCodeLookupDialog(source, {}, {});
+  dying->set_preferences_handler([&](bool, bool, bool, int) { delete dying.data(); });
+  dying->findChild<QCheckBox*>("bushuNelson")->click();
+  require(!dying, "Code preference callback did not dispose its owner safely");
+  dying = new KanjiCodeLookupDialog(source, {}, {});
+  dying->set_variants_handler([&](bool) { delete dying.data(); });
+  dying->findChild<QCheckBox*>("spahnVariants")->click();
+  require(!dying, "Variant preference callback did not dispose its owner safely");
+  QPointer<KanjiReadingLookupDialog> reading = new KanjiReadingLookupDialog(source, {}, {});
+  reading->set_preferences_handler([&](bool, bool, int) { delete reading.data(); });
+  reading->findChild<QCheckBox*>("kanjiReadingFlexibleKun")->click();
+  require(!reading, "Reading preference callback did not dispose its owner safely");
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -491,5 +557,6 @@ int main(int argc, char* argv[]) {
   test_index_dialog();
   test_result_keys_and_bushu_steps();
   test_artwork_palette_changes();
+  test_preference_callbacks();
   return EXIT_SUCCESS;
 }
