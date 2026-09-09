@@ -190,7 +190,7 @@ void test_dictionary_settings() {
           "Dictionary aliases, mask inversion or unsupported-field reporting changed");
   const auto encoded = write_application_settings(settings);
   const auto restored = read_application_settings(encoded);
-  require(restored.dictionary.monitor_clipboard && encoded.find("MonitorClipboard = true") != std::string::npos &&
+  require(restored.dictionary.monitor_clipboard && encoded.find("Dict_MonitorClipboard = true") != std::string::npos &&
                restored.dictionary.link_advanced_names && restored.dictionary.advanced && restored.dictionary.place_names &&
               restored.dictionary.compact && restored.dictionary.contingent && write_application_settings(restored) == encoded &&
               encoded.find("Dict_ExclusionFilters = 0x80000006") != std::string::npos &&
@@ -199,6 +199,26 @@ void test_dictionary_settings() {
               encoded.find("Future=\xff\n") != std::string::npos &&
               encoded.find("dict_advanced=") == std::string::npos,
           "Dictionary settings did not preserve unknown values and canonicalize aliases");
+  const auto migrated = read_application_settings(
+      "  MonitorClipboard=false\r\nDict_MonitorClipboard=true\nmonitorclipboard=false\r"
+      "dict_watchclip=yes\nFuture_Field=\xff\n");
+  require(migrated.dictionary.monitor_clipboard && migrated.unapplied == QStringList{QStringLiteral("Future_Field")},
+          "Clipboard policy source/native aliases did not follow source order");
+  const auto migration = write_application_settings(migrated);
+  int clipboard_keys = 0;
+  for (const auto& entry : jwpqt::core::parse_jwp_configuration(migration)) {
+    require(!jwpqt::core::JwpConfigurationKey{"MonitorClipboard", "dict_watchclip"}.matches(entry.name),
+            "Old native clipboard key survived canonical save");
+    if (entry.name == "Dict_MonitorClipboard") ++clipboard_keys;
+  }
+  require(clipboard_keys == 1 && migration.find("Future_Field=\xff\n") != std::string::npos &&
+              read_application_settings(migration).dictionary.monitor_clipboard &&
+              write_application_settings(read_application_settings(migration)) == migration,
+          "Clipboard policy migration lost unknown data or duplicated the canonical key");
+  require(read_application_settings("dIcT_mOnItOrClIpBoArD=true").dictionary.monitor_clipboard &&
+              !read_application_settings("MonitorClipboard=true\nDict_MonitorClipboard=false").dictionary.monitor_clipboard &&
+              read_application_settings("Dict_MonitorClipboard=false\nMonitorClipboard=true").dictionary.monitor_clipboard,
+          "Source clipboard policy or ordered native compatibility changed");
   for (unsigned bits = 0; bits < 16; ++bits) {
     const auto value = read_application_settings("Dict_ExclusionFilters=" + std::to_string(bits));
     require(value.dictionary.require_beginning == ((bits & 1U) != 0) &&
@@ -220,6 +240,7 @@ void test_dictionary_settings() {
   require(read_application_settings("dict_bits=0x100\ndict_bits=13").unapplied.isEmpty(),
           "Overridden unsupported mask bits produced a stale warning");
   for (const auto* bad : {"Dict_AdvancedSearches=bad\nDict_AdvancedSearches=true",
+                            "Dict_MonitorClipboard=bad\nMonitorClipboard=true",
                            "MonitorClipboard=bad\ndict_watchclip=true", "dict_watchclip=2",
                           "Dict_ContingentSearches=bad\nDict_ContingentSearches=true",
                           "dict_contingent=2",

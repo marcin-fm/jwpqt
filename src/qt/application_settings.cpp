@@ -70,7 +70,7 @@ constexpr BooleanDescriptor<EdictLookupOptions> kDictionaryBooleans[] = {
     {"Dict_Link_Adv_NoNames", "dict_link_adv_noname", &EdictLookupOptions::link_advanced_names},
     {"Dict_AdvancedSearches", "dict_advanced", &EdictLookupOptions::advanced},
     {"Dict_ContingentSearches", "dict_contingent", &EdictLookupOptions::contingent},
-    {"MonitorClipboard", "dict_watchclip", &EdictLookupOptions::monitor_clipboard},
+    {"Dict_MonitorClipboard", "dict_watchclip", &EdictLookupOptions::monitor_clipboard},
     {"Dict_AlwaysAdvancedSearch", "dict_always", &EdictLookupOptions::advanced_always},
     {"Dict_Adv_KeepSearching", "dict_showall", &EdictLookupOptions::advanced_show_all},
     {"Dict_Adv_Try_I_Adjectives", "dict_iadj", &EdictLookupOptions::i_adjectives},
@@ -144,7 +144,9 @@ ApplicationSettings read_application_settings(std::string_view text,
       }
       for (const auto& setting : kDictionaryBooleans) {
         if (!name.empty()) break;
-        if (!core::JwpConfigurationKey{setting.name, setting.alias}.matches(entry.name)) continue;
+        const bool old_native_key = setting.member == &EdictLookupOptions::monitor_clipboard &&
+            core::JwpConfigurationKey{"MonitorClipboard", ""}.matches(entry.name);
+        if (!core::JwpConfigurationKey{setting.name, setting.alias}.matches(entry.name) && !old_native_key) continue;
         name = setting.name;
         result.dictionary.*(setting.member) = core::parse_jwp_setting_bool(entry.value);
       }
@@ -297,7 +299,14 @@ std::string write_application_settings(const ApplicationSettings& settings) {
   updates.push_back({{"CharInfo_Fields", "kanji_info"}, fields});
   updates.push_back({{"CharInfo_Compact", "info_compress"}, settings.kanji_info.compact ? "true" : "false"});
   updates.push_back({{"CharInfo_ShowHeadings", "info_titles"}, settings.kanji_info.headings ? "true" : "false"});
-  return core::rewrite_jwp_configuration(settings.source, updates);
+  // Earlier native saves omitted the source's Dict_ prefix for this setting.
+  auto source = settings.source;
+  const auto entries = core::parse_jwp_configuration(source);
+  for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
+    if (core::JwpConfigurationKey{"MonitorClipboard", ""}.matches(it->name))
+      source.erase(it->begin, it->end - it->begin);
+  }
+  return core::rewrite_jwp_configuration(source, updates);
 }
 
 ApplicationSettings read_application_settings_file(const QString& path,
