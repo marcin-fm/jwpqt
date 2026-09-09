@@ -23,7 +23,8 @@ class PageLayoutDialog : public QDialog {
  public:
   PageLayoutDialog(const core::JwpDocument& document,
                    core::LegacyCodePage code_page, QWidget* parent = nullptr,
-                   const core::JwpPageDefaults* defaults = nullptr);
+                   const core::JwpPageDefaults* defaults = nullptr,
+                   bool metric_units = false);
 
   const core::JwpDocument& document() const noexcept;
   bool apply_changes();
@@ -33,6 +34,7 @@ class PageLayoutDialog : public QDialog {
   core::JwpDocument document_;
   core::LegacyCodePage code_page_;
   std::optional<core::JwpPageDefaults> defaults_;
+  bool metric_units_;
   std::array<bool, 4> margins_changed_{};
   std::array<QDoubleSpinBox*, 4> margins_;
   QCheckBox* landscape_;

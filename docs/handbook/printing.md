@@ -28,6 +28,12 @@ document; undo does not revert application preferences. Headers, summary and
 body text are not copied into the defaults. Text exports still require approval
 when page layout cannot be retained by their file format.
 
+Options > Default Page can display measurements in inches or centimeters. The
+same unit is used by Page Layout. Changing the display unit converts the values
+shown in those dialogs; JWP documents and saved defaults continue to store
+margins in inches, so switching units without editing a margin does not round or
+rewrite it.
+
 JWP supports separate odd/even header and footer fields and first-page
 suppression. The substitutions are case-insensitive:
 

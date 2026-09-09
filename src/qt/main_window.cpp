@@ -6059,7 +6059,9 @@ MainWindow::prompt_for_paragraph_format(
 std::optional<core::JwpDocument> MainWindow::prompt_for_page_layout(
     const core::JwpDocument& initial) {
   const QPointer<MainWindow> self(this);
-  QPointer<PageLayoutDialog> dialog = new PageLayoutDialog(initial, document_->jwp_code_page_, this, &application_settings_.default_page);
+  QPointer<PageLayoutDialog> dialog = new PageLayoutDialog(
+      initial, document_->jwp_code_page_, this,
+      &application_settings_.default_page, application_settings_.metric_units);
   const auto answer = dialog->exec();
   if (!self || !dialog) return std::nullopt;
   const auto cleanup = qScopeGuard([dialog] { if (dialog) delete dialog; });

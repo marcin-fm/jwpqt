@@ -42,6 +42,7 @@ struct ApplicationSettings {
   bool color_printing = false;
   core::JwpPrintFormatting print_formatting;
   core::JwpPageDefaults default_page;
+  bool metric_units = false;
   // Absent legacy overrides leave the existing native color store authoritative.
   std::array<std::optional<std::uint32_t>, 3> color_refs; // Highlight, list, uncommon (COLORREF).
   std::optional<int> color_kanji_mode;

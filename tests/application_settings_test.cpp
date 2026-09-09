@@ -173,6 +173,28 @@ void test_autoscroll_settings() {
   rejects([&] { (void)write_application_settings(invalid); });
 }
 
+void test_metric_unit_settings() {
+  using namespace jwpqt::qt;
+  const auto defaults = read_application_settings("");
+  require(!defaults.metric_units,
+          "Measurement-unit default differs from the source");
+
+  const auto settings = read_application_settings(
+      "units_cm=false\nMetricUnits=true\nFuture_Units=preserved");
+  const auto encoded = write_application_settings(settings);
+  require(settings.metric_units &&
+              read_application_settings(encoded).metric_units &&
+              encoded.find("units_cm") == std::string::npos &&
+              encoded.find("MetricUnits = true") != std::string::npos &&
+              encoded.find("Future_Units=preserved") != std::string::npos &&
+              write_application_settings(read_application_settings(encoded)) == encoded,
+          "Measurement-unit setting did not canonicalize and round-trip");
+
+  for (const auto* invalid : {"MetricUnits=maybe",
+                              "units_cm=bad\nMetricUnits=false"})
+    rejects([&] { (void)read_application_settings(invalid); });
+}
+
 void test_files(const QString& directory) {
   using namespace jwpqt::qt;
   const QString path = directory + QStringLiteral("/settings-\u65e5.cfg");
@@ -373,6 +395,7 @@ int main(int argc, char** argv) {
     test_conversion_choice_settings();
     test_duplicate_open_settings();
     test_autoscroll_settings();
+    test_metric_unit_settings();
     test_information_settings();
     test_dictionary_settings();
     test_files(directory.path());

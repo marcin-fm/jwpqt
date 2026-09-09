@@ -56,6 +56,7 @@ constexpr BooleanDescriptor<ApplicationSettings> kBooleans[] = {
     {"CtrlUpDownConvertKanji", "ctrl_up_down_convert", &ApplicationSettings::ctrl_up_down_convert},
     {"InsertOnSeparateLines", "paste_newpara", &ApplicationSettings::insert_on_separate_lines},
     {"ShowAllFonts", "all_fonts", &ApplicationSettings::show_all_fonts},
+    {"MetricUnits", "units_cm", &ApplicationSettings::metric_units},
     {"AutoScroll", "auto_scroll", &ApplicationSettings::auto_scroll},
     {"KeepBackupCopyWhenSaving", "backup_files", &ApplicationSettings::keep_backup_copy},
     {"CloseButton_Closes_File", "close_does_file", &ApplicationSettings::close_button_closes_file},

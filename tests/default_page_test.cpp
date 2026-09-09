@@ -16,6 +16,7 @@
 #include <QTimer>
 #include <QTabWidget>
 #include <QDir>
+#include <cmath>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -44,6 +45,36 @@ int main(int argc, char** argv) {
     require(text.find("Printing_DefaultLayout = ") != std::string::npos && text.find("Unknown=opaque") != std::string::npos, "Missing canonical defaults");
     require(core::encode_page_defaults(qt::read_application_settings(text).default_page) == bytes, "Settings roundtrip changed page");
     rejects([&] { qt::read_application_settings("page=00\n" + text); });
+    auto metric_settings = settings;
+    metric_settings.metric_units = true;
+    qt::ApplicationSettingsDialog metric_options(metric_settings);
+    auto* metric_check = metric_options.findChild<QCheckBox*>("settingsMetricUnits");
+    auto* metric_margin = metric_options.findChild<QDoubleSpinBox*>("settingsDefaultMargin0");
+    require(metric_check && metric_margin && metric_check->isChecked() &&
+                metric_margin->suffix() == " cm" &&
+                std::abs(metric_margin->value() - page.margins[0] * 2.54) < 0.000001,
+            "Options did not display stored page defaults in centimeters");
+    metric_check->setChecked(false);
+    require(metric_margin->suffix() == " in" &&
+                std::abs(metric_margin->value() - page.margins[0]) < 0.000001,
+            "Options did not convert centimeters back to inches");
+    metric_check->setChecked(true);
+    metric_margin->setValue(5.08);
+    metric_options.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+    require(metric_options.settings().metric_units &&
+                std::abs(metric_options.settings().default_page.margins[0] - 2.0F) < 0.000001,
+            "Options did not convert a changed centimeter default back to inches");
+    auto precise_settings = metric_settings;
+    precise_settings.default_page.margins[0] = 1.0e-20F;
+    const auto precise_bytes = core::encode_page_defaults(precise_settings.default_page);
+    qt::ApplicationSettingsDialog precise_options(precise_settings);
+    auto* precise_units = precise_options.findChild<QCheckBox*>("settingsMetricUnits");
+    precise_units->setChecked(false);
+    precise_units->setChecked(true);
+    precise_options.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+    require(core::encode_page_defaults(precise_options.settings().default_page) ==
+                precise_bytes,
+            "Toggling display units rounded an untouched page default");
     qt::ApplicationSettingsDialog cancel(settings);
     cancel.findChild<QDoubleSpinBox*>("settingsDefaultMargin0")->setValue(4);
     cancel.reject(); require(cancel.settings().default_page.margins[0] == page.margins[0], "Cancelled defaults changed");
@@ -88,6 +119,28 @@ int main(int argc, char** argv) {
     auto precise = previous; precise.margins[0] = 1.0e-20F;
     qt::PageLayoutDialog unchanged(precise, core::kDefaultLegacyCodePage);
     require(unchanged.apply_changes() && unchanged.document().margins == precise.margins, "Untouched margin was rounded");
+    qt::PageLayoutDialog metric(previous, core::kDefaultLegacyCodePage,
+                                nullptr, &page, true);
+    auto* metric_page_margin = metric.findChild<QDoubleSpinBox*>("leftMargin");
+    require(metric_page_margin && metric_page_margin->suffix() == " cm" &&
+                std::abs(metric_page_margin->value() - previous.margins[0] * 2.54) < 0.000001,
+            "Page Layout did not display document margins in centimeters");
+    require(metric.apply_changes() && metric.document().margins == previous.margins,
+            "Unchanged metric display changed stored document margins");
+    qt::PageLayoutDialog precise_metric(precise, core::kDefaultLegacyCodePage,
+                                        nullptr, nullptr, true);
+    require(precise_metric.apply_changes() &&
+                precise_metric.document().margins == precise.margins,
+            "Unchanged metric display rounded a stored document margin");
+    qt::PageLayoutDialog changed_metric(previous, core::kDefaultLegacyCodePage,
+                                        nullptr, &page, true);
+    changed_metric.findChild<QDoubleSpinBox*>("leftMargin")->setValue(5.08);
+    changed_metric.findChild<QPushButton*>("layoutSetDefault")->click();
+    require(changed_metric.apply_changes() &&
+                std::abs(changed_metric.document().margins[0] - 2.0F) < 0.000001 &&
+                changed_metric.default_page().has_value() &&
+                std::abs(changed_metric.default_page()->margins[0] - 2.0F) < 0.000001,
+            "Page Layout did not convert changed centimeter margins to inches");
     const auto file = temporary.filePath("body.txt");
     qt::write_text_file(file, {U"text", core::TextEncoding::kUtf8, false});
     require(window.open_path(file, core::TextEncoding::kUtf8, qt::OpenMode::kNonInteractive, true), "Text import failed");
@@ -111,11 +164,27 @@ int main(int argc, char** argv) {
     doomed->findChild<QAction*>("pageLayoutAction")->trigger();
     require(!doomed, "Page owner deletion fixture failed");
     app.sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    qt::write_application_settings_file(cfg, metric_settings);
+    qt::MainWindow metric_restored;
+    require(metric_restored.load_application_settings(cfg) &&
+                metric_restored.application_settings().metric_units,
+            "Settings restart lost the measurement unit");
+    QTimer::singleShot(0, &metric_restored, [&] {
+      auto* dialog = metric_restored.findChild<QDialog*>("pageLayoutDialog");
+      require(dialog &&
+                  dialog->findChild<QDoubleSpinBox*>("leftMargin")->suffix() == " cm",
+              "Main window did not apply the configured unit to Page Layout");
+      dialog->reject();
+    });
+    metric_restored.findChild<QAction*>("pageLayoutAction")->trigger();
     qt::MainWindow project;
-    require(project.apply_application_settings(settings), "Project settings failed");
+    require(project.apply_application_settings(metric_settings), "Project settings failed");
     const auto jpr = temporary.filePath("page.jpr"); require(project.save_project_path(jpr, false), "Project save failed");
     qt::MainWindow restored; qt::ProjectOpenOptions consent; consent.allow_unapplied_settings = true;
-    require(restored.open_project_path(jpr, consent) && core::encode_page_defaults(restored.application_settings().default_page) == bytes, "Project lost page defaults");
+    require(restored.open_project_path(jpr, consent) &&
+                restored.application_settings().metric_units &&
+                core::encode_page_defaults(restored.application_settings().default_page) == bytes,
+            "Project lost page defaults or their display unit");
     require(restored.current_jwp_document()->margins == page.margins && restored.current_jwp_document()->vertical,
         "Empty project did not create a document from restored defaults");
     qt::MainWindow unicode;

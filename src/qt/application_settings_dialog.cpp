@@ -38,6 +38,11 @@
 #include "text_bridge.h"
 
 namespace jwpqt::qt {
+namespace {
+
+constexpr double kCentimetersPerInch = 2.54;
+
+}  // namespace
 
 ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& settings, QWidget* parent,
                                                      bool dictionary_page)
@@ -385,17 +390,40 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   tabs->addTab(history, tr("History"));
   auto* defaults_page = new QWidget(tabs);
   auto* defaults_form = new QFormLayout(defaults_page);
+  auto* metric_units = new QCheckBox(tr("Display measurements in centimeters"), defaults_page);
+  metric_units->setObjectName(QStringLiteral("settingsMetricUnits"));
+  metric_units->setChecked(settings_.metric_units);
+  defaults_form->addRow(metric_units);
   std::array<QDoubleSpinBox*, 4> default_margins{};
-  std::array<double, 4> displayed_margins{};
   const char* margin_labels[] = {"Left", "Right", "Top", "Bottom"};
   for (std::size_t i = 0; i < 4; ++i) {
     auto* spin = new QDoubleSpinBox(defaults_page);
     spin->setObjectName(QStringLiteral("settingsDefaultMargin%1").arg(i));
-    spin->setRange(0, 10); spin->setDecimals(8); spin->setSingleStep(0.1); spin->setSuffix(tr(" in"));
-    spin->setValue(settings_.default_page.margins[i]);
-    default_margins[i] = spin; displayed_margins[i] = spin->value();
+    spin->setRange(0, settings_.metric_units ? 10 * kCentimetersPerInch : 10);
+    spin->setDecimals(8);
+    spin->setSingleStep(0.1);
+    spin->setSuffix(settings_.metric_units ? tr(" cm") : tr(" in"));
+    spin->setValue(settings_.default_page.margins[i] *
+                   (settings_.metric_units ? kCentimetersPerInch : 1));
+    connect(spin, &QDoubleSpinBox::valueChanged, spin,
+            [spin] { spin->setProperty("jwpqtChanged", true); });
+    default_margins[i] = spin;
     defaults_form->addRow(tr(margin_labels[i]), spin);
   }
+  connect(metric_units, &QCheckBox::toggled, this,
+          [default_margins, displayed_metric = settings_.metric_units](bool metric) mutable {
+            for (auto* margin : default_margins) {
+              const double inches = displayed_metric
+                                         ? margin->value() / kCentimetersPerInch
+                                         : margin->value();
+              const QSignalBlocker blocker(margin);
+              margin->setRange(0, metric ? 10 * kCentimetersPerInch : 10);
+              margin->setSuffix(metric ? ApplicationSettingsDialog::tr(" cm")
+                                       : ApplicationSettingsDialog::tr(" in"));
+              margin->setValue(metric ? inches * kCentimetersPerInch : inches);
+            }
+            displayed_metric = metric;
+          });
   auto* default_landscape = new QCheckBox(tr("Landscape"), defaults_page);
   auto* default_vertical = new QCheckBox(tr("Vertical printing"), defaults_page);
   default_landscape->setObjectName(QStringLiteral("settingsDefaultLandscape"));
@@ -535,12 +563,15 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   connect(buttons, &QDialogButtonBox::accepted, this,
           [this, booleans, font_controls, dictionary_controls, code_page, history_size, conversion_choices, undo_levels, categories,
            print_family, print_size, print_auto, print_justify, ascii_family, print_patterns, print_positions, original_patterns,
-           index_type, reading_type, duplicate_open, auto_scroll_speed, default_margins, displayed_margins, default_landscape, default_vertical,
+           index_type, reading_type, duplicate_open, auto_scroll_speed, default_margins, metric_units, default_landscape, default_vertical,
            color_fields, original_colors, color_mode, uncommon] {
     auto next = settings_;
     for (std::size_t i = 0; i < 4; ++i)
-      if (default_margins[i]->value() != displayed_margins[i])
-        next.default_page.margins[i] = static_cast<float>(default_margins[i]->value());
+      if (default_margins[i]->property("jwpqtChanged").toBool())
+        next.default_page.margins[i] = static_cast<float>(
+            default_margins[i]->value() /
+            (metric_units->isChecked() ? kCentimetersPerInch : 1));
+    next.metric_units = metric_units->isChecked();
     next.default_page.landscape = default_landscape->isChecked();
     next.default_page.vertical = default_vertical->isChecked();
     for (const auto& control : booleans) next.*(control.member) = control.widget->isChecked();

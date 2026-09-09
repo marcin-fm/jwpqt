@@ -32,14 +32,24 @@ constexpr std::array<const char*, 4> kHeaderSets{
     "Odd header", "Even header", "Odd footer", "Even footer"};
 constexpr std::array<const char*, 3> kHeaderPositions{"Left", "Center",
                                                       "Right"};
+constexpr double kCentimetersPerInch = 2.54;
 
-QDoubleSpinBox* margin_spin(const char* name, QWidget* parent) {
+double displayed_margin(double inches, bool metric) {
+  return metric ? inches * kCentimetersPerInch : inches;
+}
+
+double stored_margin(double value, bool metric) {
+  return metric ? value / kCentimetersPerInch : value;
+}
+
+QDoubleSpinBox* margin_spin(const char* name, QWidget* parent, bool metric) {
   auto* spin = new QDoubleSpinBox(parent);
   spin->setObjectName(QString::fromLatin1(name));
-  spin->setRange(0.0, 10.0);
+  spin->setRange(0.0, metric ? 10.0 * kCentimetersPerInch : 10.0);
   spin->setDecimals(8);
   spin->setSingleStep(0.1);
-  spin->setSuffix(PageLayoutDialog::tr(" in"));
+  spin->setSuffix(metric ? PageLayoutDialog::tr(" cm")
+                         : PageLayoutDialog::tr(" in"));
   return spin;
 }
 
@@ -47,14 +57,16 @@ QDoubleSpinBox* margin_spin(const char* name, QWidget* parent) {
 
 PageLayoutDialog::PageLayoutDialog(const core::JwpDocument& document,
                                    core::LegacyCodePage code_page,
-                                   QWidget* parent, const core::JwpPageDefaults* defaults)
+                                   QWidget* parent, const core::JwpPageDefaults* defaults,
+                                   bool metric_units)
     : QDialog(parent),
       document_(document),
       code_page_(code_page),
-      margins_{margin_spin(kMarginNames[0], this),
-               margin_spin(kMarginNames[1], this),
-               margin_spin(kMarginNames[2], this),
-               margin_spin(kMarginNames[3], this)},
+      metric_units_(metric_units),
+      margins_{margin_spin(kMarginNames[0], this, metric_units),
+               margin_spin(kMarginNames[1], this, metric_units),
+               margin_spin(kMarginNames[2], this, metric_units),
+               margin_spin(kMarginNames[3], this, metric_units)},
       landscape_(new QCheckBox(tr("&Landscape"), this)),
       vertical_(new QCheckBox(tr("&Vertical printing"), this)),
       separate_headers_(new QCheckBox(tr("Separate odd and even"), this)),
@@ -77,7 +89,8 @@ PageLayoutDialog::PageLayoutDialog(const core::JwpDocument& document,
   const std::array<QString, 4> margin_labels{tr("Left"), tr("Right"),
                                              tr("Top"), tr("Bottom")};
   for (std::size_t index = 0; index < margins_.size(); ++index) {
-    margins_[index]->setValue(document_.margins[index]);
+    margins_[index]->setValue(
+        displayed_margin(document_.margins[index], metric_units_));
     connect(margins_[index], &QDoubleSpinBox::valueChanged, this, [this, index] { margins_changed_[index] = true; });
     margins_layout->addRow(margin_labels[index], margins_[index]);
   }
@@ -95,12 +108,19 @@ PageLayoutDialog::PageLayoutDialog(const core::JwpDocument& document,
     margins_layout->addRow(load, save);
     connect(load, &QPushButton::clicked, this, [this] {
       document_.margins = defaults_->margins;
-      for (std::size_t i = 0; i < 4; ++i) { margins_[i]->setValue(document_.margins[i]); margins_changed_[i] = false; }
+      for (std::size_t i = 0; i < 4; ++i) {
+        margins_[i]->setValue(
+            displayed_margin(document_.margins[i], metric_units_));
+        margins_changed_[i] = false;
+      }
       landscape_->setChecked(defaults_->landscape); vertical_->setChecked(defaults_->vertical);
     });
     connect(save, &QPushButton::clicked, this, [this] {
       for (std::size_t i = 0; i < 4; ++i)
-        defaults_->margins[i] = margins_changed_[i] ? static_cast<float>(margins_[i]->value()) : document_.margins[i];
+        defaults_->margins[i] = margins_changed_[i]
+                                    ? static_cast<float>(stored_margin(
+                                          margins_[i]->value(), metric_units_))
+                                    : document_.margins[i];
       defaults_->landscape = landscape_->isChecked(); defaults_->vertical = vertical_->isChecked();
       status_->setText(tr("New defaults are staged. Accept this dialog to keep them."));
     });
@@ -167,7 +187,9 @@ bool PageLayoutDialog::apply_changes() {
   try {
     core::JwpDocument candidate = document_;
     for (std::size_t index = 0; index < candidate.margins.size(); ++index)
-      if (margins_changed_[index]) candidate.margins[index] = static_cast<float>(margins_[index]->value());
+      if (margins_changed_[index])
+        candidate.margins[index] = static_cast<float>(
+            stored_margin(margins_[index]->value(), metric_units_));
     candidate.landscape = landscape_->isChecked();
     candidate.vertical = vertical_->isChecked();
     candidate.separate_left_right_headers = separate_headers_->isChecked();
