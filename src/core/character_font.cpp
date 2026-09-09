@@ -165,16 +165,35 @@ std::string make_character_font(std::map<std::string, std::string> tables,
   }
   // Keep copyright, licensing, attribution and other original name records.
   const auto original = tables["name"];
-  if (get16(original, 0) > 1) throw std::invalid_argument("Unsupported native font name format");
+  const auto name_format = get16(original, 0);
+  if (name_format > 1) throw std::invalid_argument("Unsupported native font name format");
   const auto count = get16(original, 2), storage = get16(original, 4);
-  if (count > 4096 || 6 + count * 12 > original.size() || storage < 6 + count * 12)
+  if (count > 4096 || 6 + count * 12 > original.size() || storage < 6 + count * 12 || storage > original.size())
     throw std::invalid_argument("Invalid native font names");
+  std::vector<std::string> languages;
+  if (name_format == 1) {
+    const std::size_t start = 6 + count * 12;
+    const auto language_count = get16(original, start);
+    if (language_count > 4096 || storage < start + 2 + language_count * 4)
+      throw std::invalid_argument("Invalid native font language records");
+    std::size_t language_bytes = 0;
+    for (unsigned i = 0; i < language_count; ++i) {
+      const auto length = get16(original, start + 2 + i * 4), offset = get16(original, start + 4 + i * 4);
+      if (length % 2 || static_cast<std::size_t>(storage) + offset + length > original.size())
+        throw std::invalid_argument("Truncated native font language tag");
+      if (length > 60000 - language_bytes) throw std::invalid_argument("Native font language budget exceeded");
+      language_bytes += length;
+      languages.push_back(original.substr(storage + offset, length));
+    }
+  }
   std::vector<std::string> records;
   std::string strings;
   for (unsigned i = 0; i < count; ++i) {
     const std::size_t p = 6 + 12 * i;
     const auto id = get16(original, p + 6), length = get16(original, p + 8), offset = get16(original, p + 10);
-    if (get16(original, p + 4) >= 0x8000) throw std::invalid_argument("Native language-tagged font names are not supported");
+    const auto language = get16(original, p + 4);
+    if (language >= 0x8000 && language - 0x8000U >= languages.size())
+      throw std::invalid_argument("Invalid native font language index");
     if (static_cast<std::size_t>(storage) + offset + length > original.size()) throw std::invalid_argument("Truncated native font name");
     if (id == 1 || id == 2 || id == 3 || id == 4 || id == 6 || id == 16 || id == 17 || id == 18 || id == 21 || id == 22) continue;
     if (strings.size() + length > 60000) throw std::invalid_argument("Native font name budget exceeded");
@@ -190,10 +209,21 @@ std::string make_character_font(std::map<std::string, std::string> tables,
     records.push_back(std::move(record));
     for (char c : text) put16(strings, static_cast<unsigned char>(c));
   }
-  if (6 + records.size() * 12 + strings.size() > 65535) throw std::invalid_argument("Native font names exceed table bounds");
-  std::string name; put16(name, 0); put16(name, static_cast<unsigned>(records.size())); put16(name, static_cast<unsigned>(6 + records.size() * 12));
+  std::string language_records;
+  if (name_format == 1) {
+    put16(language_records, static_cast<unsigned>(languages.size()));
+    for (const auto& language : languages) {
+      if (strings.size() + language.size() > 60000) throw std::invalid_argument("Native font language budget exceeded");
+      put16(language_records, static_cast<unsigned>(language.size()));
+      put16(language_records, static_cast<unsigned>(strings.size()));
+      strings += language;
+    }
+  }
+  const auto string_start = 6 + records.size() * 12 + language_records.size();
+  if (string_start + strings.size() > 65535) throw std::invalid_argument("Native font names exceed table bounds");
+  std::string name; put16(name, name_format); put16(name, static_cast<unsigned>(records.size())); put16(name, static_cast<unsigned>(string_start));
   for (const auto& record : records) name += record;
-  tables["name"] = name + strings;
+  tables["name"] = name + language_records + strings;
   // JWP draws single-byte characters independently. Keep optional Latin
   // ligatures from introducing unmapped glyphs (and losing PDF text).
   if (auto found = tables.find("GSUB"); found != tables.end()) {

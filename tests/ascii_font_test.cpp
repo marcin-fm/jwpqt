@@ -259,6 +259,49 @@ int main(int argc, char** argv) {
     require(restricted.isValid() && restricted.supportsCharacter('A') && !restricted.supportsCharacter(0x611b), "Restricted native cmap leaked Japanese coverage");
     require(restricted.fontTable("OS/2").mid(8, 2) == original_raw.fontTable("OS/2").mid(8, 2), "Font embedding or license flags changed");
     require(restricted.pathForGlyph(glyph) == original_raw.pathForGlyph(glyph), "Character restriction changed outlines");
+    auto tagged = tables;
+    std::string tagged_name;
+    const auto word = [&](unsigned value) { tagged_name += static_cast<char>(value >> 8); tagged_name += static_cast<char>(value); };
+    for (unsigned value : {1U,1U,28U,3U,1U,0x8001U,13U,8U,0U,2U,10U,8U,10U,18U}) word(value);
+    for (char c : std::string("COPYen-USja-JP")) word(static_cast<unsigned char>(c));
+    tagged["name"] = tagged_name;
+    const auto tagged_bytes = core::make_character_font(tagged, {{U'A', glyph}}, "JwpqtLanguageTest");
+    QRawFont tagged_font(QByteArray::fromStdString(tagged_bytes), 24);
+    require(tagged_font.isValid() && tagged_font.pathForGlyph(glyph) == original_raw.pathForGlyph(glyph) &&
+        tagged_font.fontTable("OS/2").mid(8, 2) == original_raw.fontTable("OS/2").mid(8, 2), "Language-tagged font lost native outline or embedding flags");
+    const auto output_name = tagged_font.fontTable("name");
+    const auto read_word = [&](int at) { require(at >= 0 && at + 2 <= output_name.size(), "Short output name table"); return qFromBigEndian<quint16>(output_name.constData() + at); };
+    const int records = read_word(2), storage = read_word(4), languages = 6 + records * 12;
+    require(read_word(0) == 1 && read_word(languages) == 2 && read_word(10) == 0x8001 && read_word(12) == 13,
+        "Font name format, language index or license record changed");
+    require(output_name.mid(storage + read_word(16), read_word(14)) == QByteArray::fromStdString(tagged_name.substr(28, 8)),
+        "Language-tagged license bytes changed");
+    for (int i = 0; i < 2; ++i)
+      require(output_name.mid(storage + read_word(languages + 4 + i * 4), read_word(languages + 2 + i * 4)) ==
+          QByteArray::fromStdString(tagged_name.substr(36 + i * 10, 10)), "Font language tag data/order changed");
+    for (std::size_t length = 0; length < tagged_name.size(); ++length) {
+      auto bad = tagged; bad["name"].resize(length);
+      bool failed = false;
+      try { (void)core::make_character_font(bad, {{U'A', glyph}}, "JwpqtLanguageTest"); } catch (const std::invalid_argument&) { failed = true; }
+      require(failed, "Truncated language-tagged name table was accepted");
+    }
+    for (const auto& mutation : std::vector<std::pair<int, unsigned>>{{1,2}, {5,18}, {11,2}, {19,3}, {21,9}, {23,255}, {27,255}}) {
+      auto bad = tagged; bad["name"][mutation.first] = static_cast<char>(mutation.second);
+      bool failed = false;
+      try { (void)core::make_character_font(bad, {{U'A', glyph}}, "JwpqtLanguageTest"); } catch (const std::invalid_argument&) { failed = true; }
+      require(failed, "Invalid native name language offset/count/index was accepted");
+    }
+    auto excessive_languages = tagged;
+    excessive_languages["name"].resize(40028, '\0');
+    for (int at : {20, 24}) {
+      excessive_languages["name"][at] = static_cast<char>(0x9c);
+      excessive_languages["name"][at + 1] = 0x40;
+      excessive_languages["name"][at + 2] = excessive_languages["name"][at + 3] = 0;
+    }
+    bool language_budget_rejected = false;
+    try { (void)core::make_character_font(excessive_languages, {{U'A', glyph}}, "JwpqtLanguageTest"); }
+    catch (const std::invalid_argument&) { language_budget_rejected = true; }
+    require(language_budget_rejected, "Repeated font language references exceeded the aggregate budget");
     for (const auto& mapping : {std::map<char32_t, std::uint32_t>{{0xd800, glyph}}, {{U'A', 0}}, {{U'A', 0xffffffff}}}) {
       bool rejected = false;
       try { (void)core::make_character_font(tables, mapping, "JwpqtCharacterTest"); } catch (const std::invalid_argument&) { rejected = true; }
