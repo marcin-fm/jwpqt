@@ -243,6 +243,11 @@ ApplicationSettings read_application_settings(std::string_view text,
         name = "HistoryBuffers_NumChars";
         result.history_size = static_cast<int>(core::parse_jwp_setting_integer(entry.value, 0, 30000));
       }
+      if (name.empty() && core::JwpConfigurationKey{"ConversionChoicesStored", "convert_size"}.matches(entry.name)) {
+        name = "ConversionChoicesStored";
+        result.conversion_choices = static_cast<int>(
+            core::parse_jwp_setting_integer(entry.value, 10, 2000));
+      }
       if (name.empty() && core::JwpConfigurationKey{"MaximumUndoLevels", "undo_number"}.matches(entry.name)) {
         name = "MaximumUndoLevels";
         result.maximum_undo_levels = static_cast<int>(core::parse_jwp_setting_integer(entry.value, 3, 1000));
@@ -349,6 +354,8 @@ std::string write_application_settings(const ApplicationSettings& settings) {
     throw core::JwpConfigurationError("Autoscroll delay must be between 0 and 10000 ms");
   if (settings.history_size < 0 || settings.history_size > 30000)
     throw core::JwpConfigurationError("History storage is outside 0..30000 cells");
+  if (settings.conversion_choices < 10 || settings.conversion_choices > 2000)
+    throw core::JwpConfigurationError("Conversion choices must be between 10 and 2000");
   if (settings.duplicate_open < DuplicateOpenBehavior::kOpenAnother ||
       settings.duplicate_open > DuplicateOpenBehavior::kPrompt)
     throw core::JwpConfigurationError("Unknown duplicate-open behavior");
@@ -442,6 +449,8 @@ std::string write_application_settings(const ApplicationSettings& settings) {
                     "0x" + QString::number(bits, 16).toStdString()});
   updates.push_back({{"TranslationCodePage", "code_page"}, std::to_string(settings.translation_code_page)});
   updates.push_back({{"HistoryBuffers_NumChars", "history_size"}, std::to_string(settings.history_size)});
+  updates.push_back({{"ConversionChoicesStored", "convert_size"},
+                     std::to_string(settings.conversion_choices)});
   updates.push_back({{"MaximumUndoLevels", "undo_number"}, std::to_string(settings.maximum_undo_levels)});
   updates.push_back({{"AutoScroll_Speed", "scroll_speed"}, std::to_string(settings.auto_scroll_speed)});
   updates.push_back({{"DoubleOpenBehavior", "double_open"},

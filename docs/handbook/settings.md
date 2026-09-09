@@ -136,6 +136,13 @@ overwrites. Save As permits recovery to a new file. Turning automatic history
 saving off leaves an existing file untouched; explicit Clear still clears all
 three lists and the configured native archive after confirmation.
 
+Learned conversion choices controls how many kana-to-kanji preferences are kept
+(10-2000, default 200). Reducing it retains the most recent stored choices that
+fit; increasing it creates empty slots. A loaded conversion resource resizes
+immediately after Options is accepted. Finish or cancel an active candidate
+preview first so cancellation cannot restore an obsolete preference capacity.
+The setting is preserved in normal settings and projects.
+
 Exit asks about modified documents and failed persistence. Cancel keeps the
 workspace; Discard can exit without overwriting the conflicting archive.
 

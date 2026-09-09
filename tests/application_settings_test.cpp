@@ -102,6 +102,31 @@ void test_history_settings() {
   }
 }
 
+void test_conversion_choice_settings() {
+  using namespace jwpqt::qt;
+  const auto defaults = read_application_settings("");
+  require(defaults.conversion_choices == 200,
+          "Conversion-choice default differs from the source");
+  for (const int size : {10, 200, 2000}) {
+    const auto settings = read_application_settings(
+        "convert_size=10\nConversionChoicesStored=" + std::to_string(size));
+    const auto encoded = write_application_settings(settings);
+    require(settings.conversion_choices == size &&
+                encoded.find("convert_size=") == std::string::npos &&
+                read_application_settings(encoded).conversion_choices == size &&
+                write_application_settings(read_application_settings(encoded)) == encoded,
+            "Conversion-choice setting lost its bounds, alias, or canonical form");
+  }
+  for (const auto* invalid : {"ConversionChoicesStored=9", "convert_size=2001",
+                              "ConversionChoicesStored=bad\nconvert_size=200"})
+    rejects([&] { (void)read_application_settings(invalid); });
+  auto invalid = defaults;
+  for (const int size : {9, 2001}) {
+    invalid.conversion_choices = size;
+    rejects([&] { (void)write_application_settings(invalid); });
+  }
+}
+
 void test_duplicate_open_settings() {
   using namespace jwpqt::qt;
   const auto defaults = read_application_settings("");
@@ -345,6 +370,7 @@ int main(int argc, char** argv) {
     require(directory.isValid(), "Could not create temporary settings directory");
     test_model();
     test_history_settings();
+    test_conversion_choice_settings();
     test_duplicate_open_settings();
     test_autoscroll_settings();
     test_information_settings();

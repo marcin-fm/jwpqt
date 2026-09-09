@@ -91,6 +91,7 @@ struct ApplicationSettings {
   bool search_ignore_width = true;
   bool search_wrap = false;
   bool search_keep_open = true;
+  int conversion_choices = 200;
   int history_size = 300;
   int maximum_undo_levels = 50;
   int translation_code_page = 1252;

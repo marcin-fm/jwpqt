@@ -2936,6 +2936,74 @@ void test_undo_depth_policy(const QString& directory) {
           "Restored project editor did not apply its undo limit");
 }
 
+void test_conversion_choice_policy(const QString& directory) {
+  using namespace jwpqt::core;
+  using namespace jwpqt::qt;
+  const QString root = directory + "/conversion-choices";
+  require(QDir().mkpath(root), "Could not isolate conversion-choice settings");
+  const WnnFixture fixture = write_wnn_fixture(root);
+  write_bytes(fixture.preferences_path, QByteArray(20 * 8, '\0'));
+  JwpDocument source;
+  source.paragraphs.resize(1);
+  source.paragraphs[0].text = {0x2422};
+  const QString source_path = root + "/reading.jwp";
+  write_jwp_file(source_path, source);
+
+  MainWindow window;
+  ApplicationSettingsDialog cancelled(window.application_settings());
+  cancelled.findChild<QSpinBox*>("settingsConversionChoices")->setValue(10);
+  cancelled.reject();
+  require(window.application_settings().conversion_choices == 200,
+          "Cancel changed conversion-choice storage");
+  ApplicationSettingsDialog options(window.application_settings());
+  options.findChild<QSpinBox*>("settingsConversionChoices")->setValue(10);
+  options.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+  require(window.apply_application_settings(options.settings()) &&
+              window.open_jwp_path(source_path) &&
+              window.load_wnn_resources(fixture.index_path, fixture.data_path,
+                                        fixture.preferences_path) &&
+              window.resource_report().contains(
+                  QStringLiteral("Learned conversion choices: 10 slots")),
+          "Configured conversion-choice capacity was not used while loading");
+
+  window.active_editor()->selectAll();
+  require(window.convert_selection() && window.conversion_active(),
+          "Could not start conversion before capacity guard");
+  auto changed = window.application_settings();
+  changed.conversion_choices = 11;
+  require(!window.apply_application_settings(changed) &&
+              window.application_settings().conversion_choices == 10 &&
+              window.resource_report().contains(
+                  QStringLiteral("Learned conversion choices: 10 slots")),
+          "Capacity change was accepted during an active conversion");
+  require(window.cycle_conversion() && window.accept_conversion() &&
+              read_bytes(fixture.preferences_path).size() == 10 * 8,
+          "Accepted conversion did not write the configured preference capacity");
+
+  changed = window.application_settings();
+  changed.conversion_choices = 12;
+  require(window.apply_application_settings(changed) &&
+              window.resource_report().contains(
+                  QStringLiteral("Learned conversion choices: 12 slots")),
+          "Live conversion-choice capacity did not resize");
+  changed.conversion_choices = 10;
+  require(window.apply_application_settings(changed) &&
+              window.save_application_settings(root + "/settings.cfg") &&
+              window.save_project_path(root + "/project.jpr", false),
+          "Could not persist conversion-choice capacity");
+
+  MainWindow restored;
+  require(restored.load_application_settings(root + "/settings.cfg") &&
+              restored.application_settings().conversion_choices == 10 &&
+              restored.open_project_path(root + "/project.jpr") &&
+              restored.application_settings().conversion_choices == 10 &&
+              restored.load_wnn_resources(fixture.index_path, fixture.data_path,
+                                          fixture.preferences_path) &&
+              restored.resource_report().contains(
+                  QStringLiteral("Learned conversion choices: 10 slots")),
+          "Conversion-choice capacity did not survive settings and project restoration");
+}
+
 void test_selection_autoscroll_policy(const QString& directory) {
   using namespace jwpqt::qt;
   MainWindow window;
@@ -6112,6 +6180,7 @@ int main(int argc, char* argv[]) {
     test_katakana_policy(directory.path());
     test_control_arrow_conversion(directory.path());
     test_undo_depth_policy(directory.path());
+    test_conversion_choice_policy(directory.path());
     test_selection_autoscroll_policy(directory.path());
     test_result_list_insertion_policy(directory.path());
     test_selected_romaji(directory.path());

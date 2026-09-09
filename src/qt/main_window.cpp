@@ -1181,6 +1181,10 @@ bool MainWindow::apply_application_settings(const ApplicationSettings& settings,
     if (query_history_busy_ && (next.history_size != application_settings_.history_size ||
                                next.save_histories != application_settings_.save_histories))
       throw core::JwpConfigurationError("History settings cannot change during a history operation");
+    if (conversion_active() &&
+        next.conversion_choices != application_settings_.conversion_choices)
+      throw core::JwpConfigurationError(
+          "Finish the active conversion before changing learned-choice storage");
     std::optional<core::QueryHistories> histories;
     if (query_histories_->dictionary.storage_cells() != static_cast<std::size_t>(next.history_size)) {
       histories = *query_histories_;
@@ -1225,6 +1229,10 @@ bool MainWindow::apply_application_settings(const ApplicationSettings& settings,
       } restore{views};
       for (const auto& view : views)
         view.state->jwp_history_.set_max_entries(static_cast<std::size_t>(next.maximum_undo_levels));
+      if (wnn_resources_ && wnn_resources_->preferences.capacity() !=
+                                static_cast<std::size_t>(next.conversion_choices))
+        wnn_resources_->preferences.resize(
+            static_cast<std::size_t>(next.conversion_choices));
       application_settings_ = std::move(next);
       for (const auto& state : documents_)
         state->editor_->set_selection_autoscroll(
@@ -3300,6 +3308,8 @@ QString MainWindow::resource_report() const {
   if (wnn_resources_ != nullptr) {
     lines << tr("Conversion preferences: %1")
                  .arg(wnn_resources_->preferences_path)
+          << tr("Learned conversion choices: %1 slots")
+                 .arg(wnn_resources_->preferences.capacity())
           << tr("User conversions: %1")
                  .arg(wnn_resources_->user_dictionary_path);
   }
@@ -4075,10 +4085,14 @@ bool MainWindow::load_wnn_resources(const QString& index_path,
     core::WnnDictionary dictionary = core::WnnDictionary::parse(
         read_file_bytes(index_path), read_file_bytes(data_path));
     std::optional<core::WnnPreferences> loaded_preferences =
-        read_wnn_preferences_file(preferences_path);
+        read_wnn_preferences_file(
+            preferences_path,
+            static_cast<std::size_t>(application_settings_.conversion_choices));
     core::WnnPreferences preferences =
         loaded_preferences ? std::move(*loaded_preferences)
-                            : core::WnnPreferences{};
+                            : core::WnnPreferences(
+                                  static_cast<std::size_t>(
+                                      application_settings_.conversion_choices));
     std::optional<core::WnnUserDictionary> loaded_user_dictionary;
     if (!user_dictionary_path.isEmpty()) {
       loaded_user_dictionary =

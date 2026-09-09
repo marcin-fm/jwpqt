@@ -355,6 +355,11 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   history_size->setRange(0, 30000);
   history_size->setValue(settings_.history_size);
   history_form->addRow(tr("Storage cells per history"), history_size);
+  auto* conversion_choices = new QSpinBox(history);
+  conversion_choices->setObjectName(QStringLiteral("settingsConversionChoices"));
+  conversion_choices->setRange(10, 2000);
+  conversion_choices->setValue(settings_.conversion_choices);
+  history_form->addRow(tr("Learned conversion choices"), conversion_choices);
   auto* undo_levels = new QSpinBox(history);
   undo_levels->setObjectName(QStringLiteral("settingsUndoLevels"));
   undo_levels->setRange(3, 1000);
@@ -528,7 +533,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   outer->addWidget(buttons);
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
   connect(buttons, &QDialogButtonBox::accepted, this,
-          [this, booleans, font_controls, dictionary_controls, code_page, history_size, undo_levels, categories,
+          [this, booleans, font_controls, dictionary_controls, code_page, history_size, conversion_choices, undo_levels, categories,
            print_family, print_size, print_auto, print_justify, ascii_family, print_patterns, print_positions, original_patterns,
            index_type, reading_type, duplicate_open, auto_scroll_speed, default_margins, displayed_margins, default_landscape, default_vertical,
            color_fields, original_colors, color_mode, uncommon] {
@@ -552,6 +557,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
     }
     next.translation_code_page = code_page->currentData().toInt();
     next.history_size = history_size->value();
+    next.conversion_choices = conversion_choices->value();
     next.maximum_undo_levels = undo_levels->value();
     next.auto_scroll_speed = auto_scroll_speed->value();
     next.duplicate_open = static_cast<DuplicateOpenBehavior>(duplicate_open->currentData().toInt());
