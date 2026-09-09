@@ -210,7 +210,7 @@ image. Rendering uses a separate document, bounded at 262,144 selected UTF-16
 positions, 8,192 pixels per edge and 16 million pixels; oversized images are
 omitted with a status message while text remains available. **Bitmap.Vert**
 counter-rotates Japanese glyphs using the same source rules as PDF printing;
-Latin and the source punctuation exceptions stay horizontal. It uses the
+Latin stays horizontal; raster fonts retain the source punctuation exceptions. It uses the
 bitmap font's own settings even when Automatic is retained. This is the legacy
 clockwise-paper-turn convention, not a rotation of the entire image.
 **ColorKanji_Clipboard** applies persistent kanji foregrounds only while list
@@ -220,7 +220,11 @@ raster punctuation and small-kana positioning uses the source ink-bound rules.
 The raster header's extra-character count does not select substitutions in the
 source; standard glyph availability follows the physical table. Non-square
 raster rotation is rejected rather than reading outside the bitmap. TrueType
-vertical GSUB alternates remain a separate fidelity requirement.
+fonts with a `vert` GSUB feature use its first lookup/subtable and rotate all
+Japanese glyphs, including the substituted punctuation. Bounded private native
+faces retain original Unicode in PDF extraction, outlines, style and licensing
+metadata without changing horizontal fallback or exposing generated font names.
+Missing `vert` keeps the native fallback; malformed selected data fails explicitly.
 
 **Options > Fonts > ASCII and legacy extensions** selects an independent
 single-byte font at the Japanese role's height, without changing desktop menus

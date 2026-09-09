@@ -192,7 +192,7 @@ void test_vertical_and_color_bitmap() {
   settings.vertical_clipboard_bitmap = false; qt::set_japanese_fonts(owner, settings);
   require(qt::japanese_font(*editor, qt::JapaneseFontRole::kBitmap).pixelSize() == 23,
           "Horizontal automatic bitmap stopped inheriting File");
-  settings.fonts[bitmap_role] = {{}, 36, false};
+  settings.fonts[bitmap_role] = {QStringLiteral("Noto Sans CJK JP"), 36, false};
   const auto image = [&](const QString& text, bool vertical) {
     settings.vertical_clipboard_bitmap = vertical; qt::set_japanese_fonts(owner, settings);
     editor->setPlainText(text); editor->clear_kanji_colors(); editor->selectAll(); editor->copy();
@@ -203,7 +203,8 @@ void test_vertical_and_color_bitmap() {
   const auto latin = image(QStringLiteral("ABC"), false);
   require(!latin.isNull() && image(QStringLiteral("ABC"), true) == latin, "Vertical bitmap rotated or changed Latin");
   const auto punctuation = image(QStringLiteral("\u30fc"), false);
-  require(image(QStringLiteral("\u30fc"), true) == punctuation, "Source punctuation exception rotated");
+  require(!punctuation.isNull() && image(QStringLiteral("\u30fc"), true) != punctuation,
+          "TrueType vertical punctuation incorrectly used the raster exception");
   const auto horizontal = image(QStringLiteral("\u611b"), false);
   const auto vertical = image(QStringLiteral("\u611b"), true);
   require(!vertical.isNull() && vertical.size() == horizontal.size() && vertical != horizontal,

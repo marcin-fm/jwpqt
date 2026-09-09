@@ -26,11 +26,93 @@ std::uint32_t checksum(std::string_view text) {
 }
 }  // namespace
 
+std::optional<std::map<std::uint16_t, std::uint16_t>> vertical_glyph_substitutions(
+    std::string_view data, std::uint32_t glyph_count) {
+  if (data.empty()) return std::nullopt;
+  if (data.size() > 8 * 1024 * 1024 || !glyph_count || glyph_count > 65535 ||
+      get16(data, 0) != 1 || get16(data, 2) > 1)
+    throw std::invalid_argument("Unsupported vertical font table");
+  const auto span = [&](std::size_t at, std::size_t size) {
+    if (at > data.size() || size > data.size() - at)
+      throw std::invalid_argument("Truncated vertical font table");
+  };
+  const auto relative = [&](std::size_t base, std::uint32_t offset) {
+    if (!offset || base > data.size() || offset > data.size() - base)
+      throw std::invalid_argument("Invalid vertical font offset");
+    return base + offset;
+  };
+  span(0, get16(data, 2) == 1 ? 14 : 10);
+  const auto features = relative(0, get16(data, 6));
+  const auto count = get16(data, features);
+  if (count > 4096) throw std::invalid_argument("Vertical feature budget exceeded");
+  span(features + 2, count * 6);
+  std::size_t feature = 0;
+  for (unsigned i = 0; i < count; ++i) {
+    const auto record = features + 2 + i * 6;
+    if (data.substr(record, 4) == "vert") {
+      feature = relative(features, get16(data, record + 4));
+      break;
+    }
+  }
+  if (!feature) return std::nullopt;
+  const auto feature_count = get16(data, feature + 2);
+  if (!feature_count) throw std::invalid_argument("Empty vertical font feature");
+  span(feature + 4, feature_count * 2);
+  const auto lookups = relative(0, get16(data, 8));
+  const auto lookup_count = get16(data, lookups), index = get16(data, feature + 4);
+  if (index >= lookup_count) throw std::invalid_argument("Invalid vertical lookup index");
+  span(lookups + 2, lookup_count * 2);
+  const auto lookup = relative(lookups, get16(data, lookups + 2 + index * 2));
+  auto type = get16(data, lookup);
+  const auto sub_count = get16(data, lookup + 4);
+  if (!sub_count) throw std::invalid_argument("Empty vertical substitution lookup");
+  span(lookup + 6, sub_count * 2);
+  if (get16(data, lookup + 2) & 0x10) span(lookup + 6 + sub_count * 2, 2);
+  auto sub = relative(lookup, get16(data, lookup + 6));
+  if (type == 7) {
+    if (get16(data, sub) != 1) throw std::invalid_argument("Unsupported vertical extension");
+    type = get16(data, sub + 2);
+    const auto offset = (static_cast<std::uint32_t>(get16(data, sub + 4)) << 16) | get16(data, sub + 6);
+    sub = relative(sub, offset);
+  }
+  if (type != 1) throw std::invalid_argument("Unsupported vertical substitution lookup");
+  const auto format = get16(data, sub);
+  if (format != 1 && format != 2) throw std::invalid_argument("Unsupported vertical single substitution");
+  const auto value = get16(data, sub + 4);
+  if (format == 2) span(sub + 6, value * 2);
+  const auto coverage = relative(sub, get16(data, sub + 2));
+  const auto coverage_format = get16(data, coverage), coverage_count = get16(data, coverage + 2);
+  std::vector<std::uint16_t> from;
+  if (coverage_format == 1) {
+    span(coverage + 4, coverage_count * 2);
+    for (unsigned i = 0; i < coverage_count; ++i) from.push_back(static_cast<std::uint16_t>(get16(data, coverage + 4 + i * 2)));
+  } else if (coverage_format == 2) {
+    span(coverage + 4, coverage_count * 6);
+    for (unsigned i = 0; i < coverage_count; ++i) {
+      const auto record = coverage + 4 + i * 6;
+      const auto first = get16(data, record), last = get16(data, record + 2);
+      if (first > last || get16(data, record + 4) != from.size() ||
+          last >= glyph_count || from.size() + last - first + 1 > glyph_count)
+        throw std::invalid_argument("Invalid vertical coverage range");
+      for (unsigned glyph = first; glyph <= last; ++glyph) from.push_back(static_cast<std::uint16_t>(glyph));
+    }
+  } else throw std::invalid_argument("Unsupported vertical font coverage");
+  if (format == 2 && from.size() != value) throw std::invalid_argument("Vertical substitution count mismatch");
+  std::map<std::uint16_t, std::uint16_t> result;
+  for (std::size_t i = 0; i < from.size(); ++i) {
+    const auto to = format == 1 ? static_cast<std::uint16_t>(from[i] + value) : get16(data, sub + 6 + i * 2);
+    if (from[i] >= glyph_count || to >= glyph_count || (i && from[i] <= from[i - 1]))
+      throw std::invalid_argument("Invalid vertical glyph mapping");
+    result.emplace(from[i], to);
+  }
+  return result;
+}
+
 std::string make_character_font(std::map<std::string, std::string> tables,
                                const std::map<char32_t, std::uint32_t>& mappings,
-                               std::string_view family) {
+                               std::string_view family, bool japanese) {
   constexpr std::size_t limit = 64 * 1024 * 1024;
-  if (tables.size() > 64 || mappings.empty() || mappings.size() > 2048 || family.empty() || family.size() > 63 ||
+  if (tables.size() > 64 || mappings.empty() || mappings.size() > (japanese ? 8192U : 2048U) || family.empty() || family.size() > 63 ||
       !std::all_of(family.begin(), family.end(), [](char c) {
         return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-';
       })) throw std::invalid_argument("Invalid private character font request");
@@ -50,7 +132,8 @@ std::string make_character_font(std::map<std::string, std::string> tables,
   put16(cmap, 12); put16(cmap, 0); put32(cmap, static_cast<std::uint32_t>(16 + 12 * mappings.size()));
   put32(cmap, 0); put32(cmap, static_cast<std::uint32_t>(mappings.size()));
   for (const auto& mapping : mappings) {
-    if (mapping.first >= 0x3000 ||
+    if ((!japanese && mapping.first >= 0x3000) || mapping.first > 0x10ffff ||
+        (mapping.first >= 0xd800 && mapping.first <= 0xdfff) ||
         !mapping.second || mapping.second >= glyph_count) throw std::invalid_argument("Invalid native character font mapping");
     put32(cmap, mapping.first); put32(cmap, mapping.first); put32(cmap, mapping.second);
   }
@@ -60,8 +143,10 @@ std::string make_character_font(std::map<std::string, std::string> tables,
   if (auto found = tables.find("OS/2"); found != tables.end() && found->second.size() >= 78) {
     auto& os2 = found->second;
     os2.replace(42, 16, 16, '\0');
+    // Vertical faces are explicit drawing resources, never script fallbacks
+    // for horizontal widgets after application-local registration.
     std::uint32_t ranges = 0;
-    for (const auto& mapping : mappings) {
+    if (!japanese) for (const auto& mapping : mappings) {
       const auto c = mapping.first;
       if (c < 128) ranges |= 1U;
       else if (c < 256) ranges |= 2U;
@@ -75,7 +160,7 @@ std::string make_character_font(std::map<std::string, std::string> tables,
     }
     std::string value; put32(value, ranges); os2.replace(42, 4, value);
     if (os2.size() >= 86) {
-      value.clear(); put32(value, 0x1ff); put32(value, 0); os2.replace(78, 8, value);
+      value.clear(); put32(value, japanese ? 0 : 0x1ff); put32(value, 0); os2.replace(78, 8, value);
     }
   }
   // Keep copyright, licensing, attribution and other original name records.

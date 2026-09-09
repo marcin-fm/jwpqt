@@ -89,7 +89,8 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   const char* labels[] = {"System", "Query fields", "Lists and readings", "Candidate bar", "Document", "Large character", "Character Table", "Clipboard bitmap"};
   auto families = QFontDatabase::families();
   for (auto it = families.begin(); it != families.end();)
-    if (it->startsWith(QStringLiteral("JwpqtRaster-")) || it->startsWith(QStringLiteral("JwpqtAscii-"))) it = families.erase(it); else ++it;
+    if (it->startsWith(QStringLiteral("JwpqtRaster-")) || it->startsWith(QStringLiteral("JwpqtAscii-")) ||
+        it->startsWith(QStringLiteral("JwpqtVertical-"))) it = families.erase(it); else ++it;
   struct FontControl { QComboBox* family; QSpinBox* size; QCheckBox* automatic; };
   std::vector<FontControl> font_controls;
   auto* vertical_bitmap = new QCheckBox(tr("Vertical Japanese glyphs in clipboard images"), fonts);

@@ -19,15 +19,18 @@ document or undo. Images are bounded at 262,144 selected UTF-16 positions,
 8,192 pixels per edge and 16 million pixels; an omitted oversized image is
 reported while the text is still copied. Vertical clipboard mode uses the
 bitmap font's own settings, even with Automatic retained. Japanese glyphs are
-counter-rotated for reading after a clockwise turn; Latin and the source
-punctuation exceptions stay horizontal. It does not rotate the whole image.
+counter-rotated for reading after a clockwise turn; Latin stays horizontal, as
+do the source punctuation exceptions in raster fonts. It does not rotate the whole image.
 Color clipboard mode applies persistent kanji colors only when list coloring
 is active, never selection or conversion highlights. Both settings can be
 cancelled or saved like the other font options. Raster punctuation and small
 kana use the original ink-bound positioning rules. The raster header does not
 select alternate vertical glyphs; non-square raster rotation is rejected safely.
-TrueType vertical glyph alternates and some other font tuning remain separate
-fidelity work.
+TrueType fonts with a vertical substitution feature use their alternate glyphs
+and rotate Japanese punctuation as well. The private face retains the original
+text in PDF extraction and does not change horizontal fonts or saved settings.
+Fonts without that feature keep the native fallback. Other font tuning remains
+explicitly unfinished.
 
 ASCII and legacy extensions selects a separate single-byte font at the Japanese
 role's height. Even when that family contains Japanese, its private restricted
