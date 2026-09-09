@@ -55,6 +55,7 @@ constexpr BooleanDescriptor<ApplicationSettings> kBooleans[] = {
     {"OldKatakanaVowelHandling", "old_katakana_input", &ApplicationSettings::old_katakana_input},
     {"CtrlUpDownConvertKanji", "ctrl_up_down_convert", &ApplicationSettings::ctrl_up_down_convert},
     {"InsertOnSeparateLines", "paste_newpara", &ApplicationSettings::insert_on_separate_lines},
+    {"ShowAllFonts", "all_fonts", &ApplicationSettings::show_all_fonts},
     {"KeepBackupCopyWhenSaving", "backup_files", &ApplicationSettings::keep_backup_copy},
     {"CloseButton_Closes_File", "close_does_file", &ApplicationSettings::close_button_closes_file},
     {"LastFileConfirmExit", "confirm_exit", &ApplicationSettings::confirm_last_file_exit},

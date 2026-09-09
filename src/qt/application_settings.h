@@ -60,6 +60,7 @@ struct ApplicationSettings {
   bool old_katakana_input = false;
   bool ctrl_up_down_convert = false;
   bool insert_on_separate_lines = true;
+  bool show_all_fonts = false;
   bool startup_dictionary = false;
   bool reload_previous_files = false;
   bool keep_backup_copy = false;

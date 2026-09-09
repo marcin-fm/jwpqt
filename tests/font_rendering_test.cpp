@@ -272,8 +272,92 @@ void test_vertical_and_color_bitmap() {
   require(cancelled.settings().vertical_clipboard_bitmap, "Cancelled clipboard rendering options applied");
 }
 
+void test_font_listing_policy() {
+  namespace qt = jwpqt::qt;
+  auto settings = qt::read_application_settings(
+      "ShowAllFonts=false\nFuture=opaque\n");
+  require(!qt::ApplicationSettings{}.show_all_fonts &&
+              !settings.show_all_fonts,
+          "Show-all-fonts source default changed");
+  const auto serialized = qt::write_application_settings(settings);
+  require(serialized.find("ShowAllFonts = false") != std::string::npos &&
+              serialized.find("Future=opaque") != std::string::npos &&
+              qt::read_application_settings("all_fonts=true\n")
+                  .show_all_fonts,
+          "Show-all-fonts source keys did not roundtrip");
+  bool invalid = false;
+  try {
+    (void)qt::read_application_settings(
+        "ShowAllFonts=invalid\nall_fonts=true\n");
+  } catch (const std::exception&) {
+    invalid = true;
+  }
+  require(invalid, "Invalid earlier show-all-fonts value was ignored");
+
+  qt::ApplicationSettingsDialog options(settings);
+  auto* show_all = options.findChild<QCheckBox*>(
+      QStringLiteral("settingsShowAllFonts"));
+  auto* japanese = options.findChild<QComboBox*>(
+      QStringLiteral("settingsFont0"));
+  auto* ascii = options.findChild<QComboBox*>(
+      QStringLiteral("settingsAsciiFont"));
+  auto* print = options.findChild<QComboBox*>(
+      QStringLiteral("settingsPrintFamily"));
+  require(show_all && japanese && ascii && print &&
+              !show_all->isChecked() &&
+              japanese->count() == print->count() &&
+              japanese->count() <= ascii->count(),
+          "Recommended-font controls are missing or inconsistent");
+  for (int i = 0; i < japanese->count(); ++i) {
+    const QString family = japanese->itemText(i);
+    require(QFontDatabase::writingSystems(family).contains(
+                QFontDatabase::Japanese),
+            "Recommended Japanese font list contains an unsupported family");
+  }
+  const QString unavailable = QStringLiteral("Unavailable Japanese Font");
+  japanese->setEditText(unavailable);
+  print->setEditText(unavailable);
+  show_all->setChecked(true);
+  require(japanese->count() == ascii->count() &&
+              print->count() == ascii->count() &&
+              japanese->currentText() == unavailable &&
+              print->currentText() == unavailable,
+          "Show-all-fonts did not expose every public family or preserve manual input");
+  options.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+  require(options.settings().show_all_fonts,
+          "Show-all-fonts option did not apply");
+
+  qt::ApplicationSettingsDialog cancelled(settings);
+  cancelled.findChild<QCheckBox*>(QStringLiteral("settingsShowAllFonts"))
+      ->setChecked(true);
+  cancelled.reject();
+  require(!cancelled.settings().show_all_fonts,
+          "Cancelled show-all-fonts option changed settings");
+
+  QTemporaryDir directory;
+  require(directory.isValid(), "Show-all-fonts persistence directory failed");
+  const QString path = directory.filePath(QStringLiteral("settings.cfg"));
+  const QString project_path = directory.filePath(QStringLiteral("fonts.jpr"));
+  qt::MainWindow window;
+  auto persisted = window.application_settings();
+  persisted.show_all_fonts = true;
+  require(window.load_application_settings(path) &&
+              window.apply_application_settings(persisted) &&
+              window.save_application_settings() &&
+              window.save_project_path(project_path, false),
+          "Could not persist show-all-fonts policy");
+  qt::MainWindow restarted;
+  require(restarted.load_application_settings(path) &&
+              restarted.application_settings().show_all_fonts,
+          "Settings restart lost show-all-fonts policy");
+  qt::MainWindow project;
+  require(project.open_project_path(project_path) &&
+              project.application_settings().show_all_fonts,
+          "JPR restore lost show-all-fonts policy");
+}
+
 int main(int argc, char** argv) {
   QApplication application(argc, argv);
-  try { test_fallback_and_big(); test_bitmap(); test_vertical_and_color_bitmap(); std::cout << "Font rendering tests passed\n"; }
+  try { test_fallback_and_big(); test_bitmap(); test_vertical_and_color_bitmap(); test_font_listing_policy(); std::cout << "Font rendering tests passed\n"; }
   catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

@@ -12,6 +12,12 @@ role, including its size; the stored unavailable name and a diagnostic remain.
 Large characters fit their pane on resize. Table remains 16 logical pixels.
 Print has a separate physical font role.
 
+Show all installed families starts disabled. Japanese and printer font selectors
+normally list only families that advertise Japanese support; enabling it exposes
+all public system families. The ASCII selector always remains complete. Changing
+the checkbox does not change a chosen family, including a manually entered name
+or `.f00` path, until Options is accepted.
+
 Insert complete result-list entries on separate lines follows the original list
 insertion policy and starts enabled. Dictionary, accumulated-result, count and
 user-dictionary rows then become separate paragraphs, including the terminating

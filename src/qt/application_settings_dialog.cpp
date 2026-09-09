@@ -25,6 +25,7 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QTabWidget>
 #include <QVBoxLayout>
@@ -151,17 +152,31 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
 
   auto* fonts = new QWidget(tabs);
   auto* grid = new QGridLayout(fonts);
-  grid->addWidget(new QLabel(tr("Japanese content"), fonts), 0, 0);
-  grid->addWidget(new QLabel(tr("Font family or .f00 file (blank uses native default)"), fonts), 0, 1);
-  grid->addWidget(new QLabel(tr("Size"), fonts), 0, 2);
-  grid->addWidget(new QLabel(tr("Automatic"), fonts), 0, 3);
+  auto* show_all_fonts = new QCheckBox(tr("Show all installed families in Japanese font lists"), fonts);
+  show_all_fonts->setObjectName(QStringLiteral("settingsShowAllFonts"));
+  show_all_fonts->setChecked(settings_.show_all_fonts);
+  booleans.push_back({show_all_fonts, &ApplicationSettings::show_all_fonts});
+  grid->addWidget(show_all_fonts, 0, 0, 1, 4);
+  grid->addWidget(new QLabel(tr("Japanese content"), fonts), 1, 0);
+  grid->addWidget(new QLabel(tr("Font family or .f00 file (blank uses native default)"), fonts), 1, 1);
+  grid->addWidget(new QLabel(tr("Size"), fonts), 1, 2);
+  grid->addWidget(new QLabel(tr("Automatic"), fonts), 1, 3);
   const char* labels[] = {"System", "Query fields", "Lists and readings", "Candidate bar", "Document", "Large character", "Character Table", "Clipboard bitmap"};
-  auto families = QFontDatabase::families();
-  for (auto it = families.begin(); it != families.end();)
+  auto all_families = QFontDatabase::families();
+  for (auto it = all_families.begin(); it != all_families.end();)
     if (it->startsWith(QStringLiteral("JwpqtRaster-")) || it->startsWith(QStringLiteral("JwpqtAscii-")) ||
-        it->startsWith(QStringLiteral("JwpqtVertical-"))) it = families.erase(it); else ++it;
+        it->startsWith(QStringLiteral("JwpqtVertical-"))) it = all_families.erase(it); else ++it;
+  const auto listed_families = [all_families](bool show_all) {
+    if (show_all) return all_families;
+    QStringList recommended;
+    for (const auto& family : all_families)
+      if (QFontDatabase::writingSystems(family).contains(QFontDatabase::Japanese))
+        recommended.push_back(family);
+    return recommended;
+  };
   struct FontControl { QComboBox* family; QSpinBox* size; QCheckBox* automatic; };
   std::vector<FontControl> font_controls;
+  std::vector<QComboBox*> japanese_family_controls;
   auto* vertical_bitmap = new QCheckBox(tr("Vertical Japanese glyphs in clipboard images"), fonts);
   vertical_bitmap->setObjectName(QStringLiteral("settingsVerticalClipboardBitmap"));
   vertical_bitmap->setChecked(settings_.vertical_clipboard_bitmap);
@@ -169,12 +184,13 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   booleans.push_back({vertical_bitmap, &ApplicationSettings::vertical_clipboard_bitmap});
   for (std::size_t i = 0; i < settings_.fonts.size(); ++i) {
     const auto role = static_cast<JapaneseFontRole>(i);
-    const int row = static_cast<int>(i) + 1;
+    const int row = static_cast<int>(i) + 2;
     auto* family = new QComboBox(fonts);
-    family->addItems(families);
+    family->addItems(listed_families(settings_.show_all_fonts));
     family->setObjectName(QStringLiteral("settingsFont%1").arg(i));
     family->setEditable(true);
     family->setEditText(settings_.fonts[i].family);
+    japanese_family_controls.push_back(family);
     grid->addWidget(new QLabel(tr(labels[i]), fonts), row, 0);
     grid->addWidget(family, row, 1);
     QSpinBox* size = nullptr;
@@ -207,13 +223,24 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
     }
     font_controls.push_back({family, size, automatic});
   }
+  connect(show_all_fonts, &QCheckBox::toggled, this,
+          [listed_families, japanese_family_controls](bool checked) {
+            const auto families = listed_families(checked);
+            for (auto* control : japanese_family_controls) {
+              const QString current = control->currentText();
+              const QSignalBlocker blocker(control);
+              control->clear();
+              control->addItems(families);
+              control->setEditText(current);
+            }
+          });
   auto* explanation = new QLabel(tr("Automatic query/document fonts inherit System; lists and candidates inherit query fields. "
       "These settings do not change desktop menu fonts. Unavailable families or invalid raster files use a native fallback; their names remain stored."), fonts);
   explanation->setWordWrap(true);
-  const int ascii_row = static_cast<int>(settings_.fonts.size()) + 1;
+  const int ascii_row = static_cast<int>(settings_.fonts.size()) + 2;
   auto* ascii_family = new QComboBox(fonts);
   ascii_family->setObjectName(QStringLiteral("settingsAsciiFont"));
-  ascii_family->addItems(families);
+  ascii_family->addItems(all_families);
   ascii_family->setEditable(true);
   ascii_family->setEditText(settings_.ascii_font.family);
   grid->addWidget(new QLabel(tr("ASCII and legacy extensions"), fonts), ascii_row, 0);
@@ -363,10 +390,18 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   auto* printing = new QWidget(tabs);
   auto* print_form = new QFormLayout(printing);
   auto* print_family = new QComboBox(printing);
-  print_family->addItems(families);
+  print_family->addItems(listed_families(settings_.show_all_fonts));
   print_family->setEditable(true);
   print_family->setObjectName(QStringLiteral("settingsPrintFamily"));
   print_family->setEditText(settings_.print_font.family);
+  connect(show_all_fonts, &QCheckBox::toggled, this,
+          [listed_families, print_family](bool checked) {
+            const QString current = print_family->currentText();
+            const QSignalBlocker blocker(print_family);
+            print_family->clear();
+            print_family->addItems(listed_families(checked));
+            print_family->setEditText(current);
+          });
   auto* print_size = new QDoubleSpinBox(printing);
   print_size->setObjectName(QStringLiteral("settingsPrintSize"));
   print_size->setRange(1, 144); print_size->setDecimals(1); print_size->setSingleStep(0.1);
