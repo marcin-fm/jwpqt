@@ -74,13 +74,16 @@ results retain exact structured fields for the copy commands; because that
 window uses atomic list rows, both word-selection shortcuts select its current
 row.
 
-In the focused dictionary result document, Ctrl+left-click and Ctrl+Space toggle
-independent result rows and plain Space adds the current row. Copy and Insert use
-those rows in visible order, excluding section labels; Ctrl+A selects all result
-rows. With no selection, Ctrl+C and Ctrl+Insert copy the current canonical entry
-without changing the selection. Ctrl+K, Ctrl+J and Ctrl+6 control the query's
-local input mode; Ctrl+A selects ASCII mode when the result list is empty. An
-ordinary text selection, a new search or Sort clears the independent row set.
+In the focused dictionary result document, a plain click selects a complete row;
+Ctrl+left-click and Ctrl+Space toggle independent rows. Shift+click and
+Shift+Up/Down extend a contiguous row range. Up/Down, Home/End and Page Up/Page
+Down select the destination row, while Ctrl navigation moves the current row and
+preserves existing selections. Plain Space adds the current row. Copy and Insert
+use selected rows in visible order, excluding section labels; Ctrl+A selects all
+result rows. With no selection, Ctrl+C and Ctrl+Insert copy the current canonical
+entry without changing the selection. Ctrl+K, Ctrl+J and Ctrl+6 control the
+query's local input mode; Ctrl+A selects ASCII mode when the result list is empty.
+An ordinary within-result text selection, a new search or Sort clears the row set.
 The Add/Remove kanji-color-list prompt provides K/A/J input, shared
 Insert/Overwrite behavior and pending-kana completion before validating the
 edited list.

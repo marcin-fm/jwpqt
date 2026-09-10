@@ -683,7 +683,7 @@ bool EdictLookupDialog::publish_results(EdictResourceSearchReport candidate,
   rendered_rows_ = std::move(rows);
   row_ranges_ = std::move(ranges);
   display_order_ = std::move(display_order);
-  selected_result_rows_.clear();
+  clear_result_row_selection();
   sort_state_ = sort_state;
   sort_reverse_ = reverse;
   query_had_kanji_ = query_had_kanji;
@@ -1033,6 +1033,7 @@ void EdictLookupDialog::select_result_row(std::size_t row, bool toggle) {
   } else {
     selected_result_rows_.push_back(row);
   }
+  result_selection_anchor_ = row;
 
   const auto range = row_ranges_.at(row);
   updating_result_selection_ = true;
@@ -1046,6 +1047,100 @@ void EdictLookupDialog::select_result_row(std::size_t row, bool toggle) {
 
 void EdictLookupDialog::clear_result_row_selection() {
   selected_result_rows_.clear();
+  result_selection_anchor_.reset();
+}
+
+void EdictLookupDialog::navigate_result_rows(
+    int key, Qt::KeyboardModifiers modifiers) {
+  if (display_order_.empty()) return;
+  auto current = current_result_row();
+  auto current_position = current
+      ? std::find(display_order_.begin(), display_order_.end(), *current)
+      : display_order_.end();
+  std::size_t index = current_position == display_order_.end()
+      ? 0U : static_cast<std::size_t>(current_position - display_order_.begin());
+  const int visible_lines = std::max(1, results_->viewport()->height() /
+                                         std::max(1, results_->fontMetrics().lineSpacing()));
+  const std::size_t page = static_cast<std::size_t>(std::max(1, visible_lines - 1));
+  switch (key) {
+    case Qt::Key_Up:
+      if (index > 0) --index;
+      break;
+    case Qt::Key_Down:
+      if (index + 1 < display_order_.size()) ++index;
+      break;
+    case Qt::Key_Home:
+      index = 0;
+      break;
+    case Qt::Key_End:
+      index = display_order_.size() - 1;
+      break;
+    case Qt::Key_PageUp:
+      index = index > page ? index - page : 0;
+      break;
+    case Qt::Key_PageDown:
+      index = std::min(display_order_.size() - 1, index + page);
+      break;
+    default:
+      return;
+  }
+
+  const bool vertical = key == Qt::Key_Up || key == Qt::Key_Down;
+  const bool extend = modifiers.testFlag(Qt::ShiftModifier) &&
+      (vertical || !modifiers.testFlag(Qt::ControlModifier));
+  move_result_row_selection(display_order_.at(index), extend,
+      modifiers.testFlag(Qt::ControlModifier) && !extend);
+}
+
+void EdictLookupDialog::move_result_row_selection(
+    std::size_t target, bool extend, bool preserve) {
+  if (target >= row_ranges_.size()) return;
+  const auto current = current_result_row();
+  if ((extend || preserve) && selected_result_rows_.empty()) {
+    const QTextCursor cursor = results_->textCursor();
+    if (cursor.hasSelection()) {
+      for (const std::size_t row : display_order_) {
+        const auto range = row_ranges_.at(row);
+        if (cursor.selectionEnd() > range.first &&
+            cursor.selectionStart() < range.second) {
+          selected_result_rows_.push_back(row);
+        }
+      }
+    }
+  }
+  if (extend) {
+    const std::size_t anchor = result_selection_anchor_.value_or(
+        current.value_or(target));
+    auto anchor_position = std::find(
+        display_order_.begin(), display_order_.end(), anchor);
+    const auto target_position = std::find(
+        display_order_.begin(), display_order_.end(), target);
+    if (target_position == display_order_.end()) return;
+    if (anchor_position == display_order_.end()) anchor_position = target_position;
+    const std::size_t anchor_index = static_cast<std::size_t>(
+        anchor_position - display_order_.begin());
+    const std::size_t target_index = static_cast<std::size_t>(
+        target_position - display_order_.begin());
+    clear_result_row_selection();
+    const std::size_t first = std::min(anchor_index, target_index);
+    const std::size_t last = std::max(anchor_index, target_index);
+    selected_result_rows_.insert(selected_result_rows_.end(),
+        display_order_.begin() + static_cast<std::ptrdiff_t>(first),
+        display_order_.begin() + static_cast<std::ptrdiff_t>(last + 1));
+    result_selection_anchor_ = anchor;
+  } else if (!preserve) {
+    selected_result_rows_.assign(1, target);
+    result_selection_anchor_ = target;
+  }
+
+  updating_result_selection_ = true;
+  QTextCursor cursor(results_->document());
+  cursor.setPosition(row_ranges_.at(target).first);
+  results_->setTextCursor(cursor);
+  results_->ensureCursorVisible();
+  updating_result_selection_ = false;
+  update_highlights();
+  update_actions();
 }
 
 void EdictLookupDialog::copy_current_result_field(bool reading) {
@@ -1120,15 +1215,25 @@ bool EdictLookupDialog::eventFilter(QObject* watched, QEvent* event) {
             : results_->viewport()->mapFrom(results_, mouse->position().toPoint());
         const auto row = result_row_at(results_->cursorForPosition(point).position());
         const auto modifiers = mouse->modifiers() & ~Qt::KeypadModifier;
-        if (modifiers == Qt::ControlModifier) {
+        if (modifiers.testFlag(Qt::ControlModifier) &&
+            !(modifiers & (Qt::AltModifier | Qt::MetaModifier))) {
           event->accept();
           if (!query_busy_ && row) select_result_row(*row, true);
           return true;
         }
-        if (!selected_result_rows_.empty()) {
+        if (modifiers == Qt::ShiftModifier) {
+          event->accept();
+          if (!query_busy_ && row) move_result_row_selection(*row, true, false);
+          return true;
+        }
+        if (modifiers == Qt::NoModifier) {
           clear_result_row_selection();
-          update_highlights();
-          update_actions();
+          if (!query_busy_ && row) {
+            select_result_row(*row, false);
+          } else {
+            update_highlights();
+            update_actions();
+          }
         }
       }
     }
@@ -1174,11 +1279,19 @@ bool EdictLookupDialog::eventFilter(QObject* watched, QEvent* event) {
                               key->key() == Qt::Key_A;
       const bool input_mode = modifiers == Qt::ControlModifier &&
           (key->key() == Qt::Key_J || key->key() == Qt::Key_K ||
-           key->key() == Qt::Key_6);
-      if (copy_field || copy_rows || select_field || select_row || select_all || input_mode) {
+            key->key() == Qt::Key_6);
+      const bool navigate_rows =
+          (key->key() == Qt::Key_Up || key->key() == Qt::Key_Down ||
+           key->key() == Qt::Key_Home || key->key() == Qt::Key_End ||
+           key->key() == Qt::Key_PageUp || key->key() == Qt::Key_PageDown) &&
+          !(modifiers & (Qt::AltModifier | Qt::MetaModifier));
+      if (copy_field || copy_rows || select_field || select_row || select_all || input_mode ||
+          navigate_rows) {
         event->accept();
         if (event->type() == QEvent::KeyPress && !query_busy_) {
-          if (copy_field) {
+          if (navigate_rows) {
+            navigate_result_rows(key->key(), modifiers);
+          } else if (copy_field) {
             copy_current_result_field(key->key() == Qt::Key_R);
           } else if (copy_rows) {
             copy_selected();
@@ -1197,6 +1310,7 @@ bool EdictLookupDialog::eventFilter(QObject* watched, QEvent* event) {
               query_field_->set_input_mode(InputMode::kAscii);
             } else {
               selected_result_rows_ = display_order_;
+              result_selection_anchor_ = current_result_row().value_or(display_order_.front());
               QTextCursor cursor = results_->textCursor();
               cursor.clearSelection();
               results_->setTextCursor(cursor);

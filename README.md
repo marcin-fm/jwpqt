@@ -467,14 +467,17 @@ the headword and `Ctrl+Shift+W` selects the complete rendered result. The
 accumulated-results list provides the same field-copy commands and selects its
 atomic current row for either word-selection shortcut.
 
-Focused dictionary results also retain source-style disjoint row selections.
-`Ctrl`+left-click and `Ctrl`+Space toggle the current result, while plain Space
-adds it; `Ctrl+A` selects every result. Copy and Insert process selected entries
-in visible order and never include presentation labels. With no selection,
-`Ctrl+C` or `Ctrl+Insert` copies the current canonical entry without changing the
-visible selection. `Ctrl+K`, `Ctrl+J`, and Ctrl+6 select or toggle the lookup's
-local input mode. A new search, Sort, or ordinary within-result text selection
-clears the disjoint row set. On an empty result list, `Ctrl+A` selects ASCII mode.
+Focused dictionary results also retain source-style row selection and navigation.
+A plain click selects its complete result; `Ctrl`+left-click and `Ctrl`+Space
+toggle the current result, while Shift+left-click and Shift+Up/Down extend a row
+range. Unmodified Up/Down/Home/End/Page Up/Page Down select the destination row;
+Ctrl navigation preserves existing selections. Plain Space adds the current row
+and `Ctrl+A` selects every result. Copy and Insert process selected entries in
+visible order and never include presentation labels. With no selection, `Ctrl+C`
+or `Ctrl+Insert` copies the current canonical entry without changing the visible
+selection. `Ctrl+K`, `Ctrl+J`, and Ctrl+6 select or toggle the lookup's local
+input mode. A new search, Sort, or ordinary within-result text selection clears
+the row set. On an empty result list, `Ctrl+A` selects ASCII mode.
 
 ### Document printing and preview
 

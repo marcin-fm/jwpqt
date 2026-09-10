@@ -432,6 +432,123 @@ void test_result_keyboard_commands() {
           "Ctrl+A did not select ASCII input mode for an empty result list");
 }
 
+void test_result_row_navigation() {
+  namespace qt = jwpqt::qt;
+  std::u32string inserted;
+  qt::EdictLookupDialog dialog([](const auto&, const auto&, bool) {
+    qt::EdictResourceSearchReport report;
+    report.results = {
+        result(0, {}, U"cat", {}, {U"feline"}),
+        result(0, {}, U"dog", {}, {U"canine"}),
+        result(0, {}, U"eel", {}, {U"fish"})};
+    return report;
+  }, [&](const std::u32string& text) { inserted = text; return true; });
+  dialog.set_query(U"cat");
+  dialog.show();
+  require(dialog.search(), "Could not prepare result row navigation");
+  auto* results = dialog.findChild<QTextEdit*>("edictResults");
+  auto key = [&](int code, Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+    QKeyEvent override(QEvent::ShortcutOverride, code, modifiers);
+    QApplication::sendEvent(results, &override);
+    require(override.isAccepted(), "Result row navigation did not own its shortcut");
+    QKeyEvent event(QEvent::KeyPress, code, modifiers);
+    QApplication::sendEvent(results, &event);
+    require(event.isAccepted(), "Result row navigation did not own its key");
+  };
+
+  key(Qt::Key_Down, Qt::ControlModifier);
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() == QStringLiteral("cat /feline/"),
+          "Ctrl navigation did not preserve the initial selected result row");
+
+  QTextCursor dog(results->document());
+  dog.setPosition(results->toPlainText().indexOf(QStringLiteral("dog")));
+  const QPoint dog_point = results->cursorRect(dog).center();
+  auto click = [&](const QPoint& point, Qt::KeyboardModifiers modifiers) {
+    QMouseEvent press(QEvent::MouseButtonPress, QPointF(point),
+        QPointF(results->viewport()->mapToGlobal(point)), Qt::LeftButton,
+        Qt::LeftButton, modifiers);
+    QApplication::sendEvent(results->viewport(), &press);
+    QMouseEvent release(QEvent::MouseButtonRelease, QPointF(point),
+        QPointF(results->viewport()->mapToGlobal(point)), Qt::LeftButton,
+        Qt::NoButton, modifiers);
+    QApplication::sendEvent(results->viewport(), &release);
+  };
+  click(dog_point, Qt::NoModifier);
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() == QStringLiteral("dog /canine/") &&
+              results->extraSelections().size() >= 1,
+          "Plain result click did not select the complete canonical row");
+  QTextCursor cat(results->document());
+  cat.setPosition(results->toPlainText().indexOf(QStringLiteral("cat")));
+  const QPoint cat_point = results->cursorRect(cat).center();
+  click(cat_point, Qt::ShiftModifier);
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() ==
+              QStringLiteral("cat /feline/\ndog /canine/"),
+          "Shift+left did not extend result-row selection");
+  click(cat_point, Qt::ControlModifier | Qt::ShiftModifier);
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() == QStringLiteral("dog /canine/"),
+          "Ctrl+Shift+left did not use source toggle precedence");
+  click(dog_point, Qt::NoModifier);
+
+  key(Qt::Key_Down);
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() == QStringLiteral("eel /fish/"),
+          "Down did not replace selection with the next result row");
+  key(Qt::Key_Up, Qt::ShiftModifier);
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() ==
+              QStringLiteral("dog /canine/\neel /fish/"),
+          "Shift+Up did not extend a contiguous result-row selection");
+  key(Qt::Key_Home, Qt::ControlModifier);
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() ==
+              QStringLiteral("dog /canine/\neel /fish/"),
+          "Ctrl+Home did not preserve selected result rows");
+  key(Qt::Key_Space, Qt::ControlModifier);
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() ==
+              QStringLiteral("cat /feline/\ndog /canine/\neel /fish/"),
+          "Ctrl+Space did not toggle the navigated result row");
+
+  key(Qt::Key_End);
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() == QStringLiteral("eel /fish/"),
+          "End did not select only the last result row");
+  key(Qt::Key_PageUp);
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() == QStringLiteral("cat /feline/"),
+          "Page Up did not move by the bounded visible-row step");
+  key(Qt::Key_PageDown);
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() == QStringLiteral("eel /fish/"),
+          "Page Down did not move by the bounded visible-row step");
+
+  key(Qt::Key_Home);
+  key(Qt::Key_Down, Qt::ControlModifier);
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() == QStringLiteral("cat /feline/"),
+          "Ctrl+Down did not move the current row while preserving selection");
+  key(Qt::Key_Down, Qt::ControlModifier | Qt::ShiftModifier);
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() ==
+              QStringLiteral("cat /feline/\ndog /canine/\neel /fish/"),
+          "Ctrl+Shift+Down did not use source vertical extension precedence");
+  require(dialog.insert_selected() && inserted ==
+              U"cat /feline/\ndog /canine/\neel /fish/",
+          "Navigated row selection lost canonical insertion identity");
+
+  QTextCursor partial(results->document());
+  partial.setPosition(results->toPlainText().indexOf(QStringLiteral("canine")));
+  partial.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor, 3);
+  results->setTextCursor(partial);
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() == QStringLiteral("can"),
+          "Within-result text selection did not replace row navigation selection");
+}
+
 void test_linked_names() {
   namespace qt = jwpqt::qt;
   int searches = 0, notifications = 0;
@@ -1685,6 +1802,7 @@ int main(int argc, char** argv) {
     test_names_and_clipboard();
     test_management_commands();
     test_result_keyboard_commands();
+    test_result_row_navigation();
     test_linked_names();
     test_search_render_status_copy_and_insert();
     test_compact_presentation();
