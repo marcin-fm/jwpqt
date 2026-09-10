@@ -11,11 +11,14 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QPointer>
 #include <QPushButton>
 #include <QTextBrowser>
 #include <QTextBlock>
 #include <QTextFragment>
+#include <QTimer>
+#include <QToolButton>
 #include <iostream>
 #include <stdexcept>
 
@@ -63,6 +66,41 @@ int main(int argc, char** argv) {
     child<QAction>(window, "aboutAction")->trigger();
     require(browser->toPlainText().contains(QStringLiteral("WITHOUT"), Qt::CaseInsensitive) &&
             browser->toPlainText().contains(QStringLiteral("Glenn Rosenthal")), "About credits/warranty missing");
+    bool about_qt_seen = false;
+    QTimer::singleShot(0, &app, [&] {
+      auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+      if (!dialog) return;
+      QString text;
+      for (auto* label : dialog->findChildren<QLabel*>()) text += label->text();
+      about_qt_seen = dialog->windowTitle().contains(QStringLiteral("Qt")) &&
+                      text.contains(QStringLiteral("Qt"));
+      dialog->accept();
+    });
+    child<QAction>(window, "aboutQtAction")->trigger();
+    require(about_qt_seen, "About Qt action did not open the Qt information dialog");
+
+    const QString resource_report = window.resource_report();
+    const auto inspect_resources = [&](bool use_action, const char* failure) {
+      bool seen = false;
+      QTimer::singleShot(0, &app, [&] {
+        auto* dialog = window.findChild<QMessageBox*>(
+            QStringLiteral("resourceStatusDialog"), Qt::FindDirectChildrenOnly);
+        if (!dialog) return;
+        seen = dialog->textFormat() == Qt::PlainText &&
+               dialog->text() == resource_report;
+        dialog->accept();
+      });
+      if (use_action)
+        child<QAction>(window, "resourceStatusAction")->trigger();
+      else
+        child<QToolButton>(window, "resourceStatus")->click();
+      require(seen, failure);
+    };
+    inspect_resources(true, "Runtime Resources action showed the wrong report");
+    inspect_resources(false, "Runtime resource button showed the wrong report");
+    require(jwpqt::qt::document_plain_text(*editor->document()) == original &&
+                editor->document()->availableUndoSteps() == undo,
+            "Help or resource actions changed document content or undo");
     help->open_topic(QStringLiteral("start.md"));
     browser->anchorClicked(QUrl(QStringLiteral("editing.md")));
     require(browser->source().path().endsWith(QStringLiteral("editing.md")), "Relative handbook link failed");
@@ -172,6 +210,17 @@ int main(int argc, char** argv) {
     owned_help->open_topic();
     require(!disposable, "Help navigation did not tolerate owner deletion");
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-    std::cout << "Offline topics, licenses, search, navigation, context, isolation and lifetime passed\n";
+    QPointer<jwpqt::qt::MainWindow> resource_owner = new jwpqt::qt::MainWindow;
+    bool owned_resource_seen = false;
+    QTimer::singleShot(0, &app, [&] {
+      owned_resource_seen = resource_owner &&
+          resource_owner->findChild<QMessageBox*>(
+              QStringLiteral("resourceStatusDialog"), Qt::FindDirectChildrenOnly);
+      delete resource_owner.data();
+    });
+    child<QAction>(*resource_owner, "resourceStatusAction")->trigger();
+    require(owned_resource_seen && !resource_owner,
+            "Runtime Resources did not tolerate owner deletion");
+    std::cout << "Offline topics, licenses, About Qt, resources, search, navigation, context, isolation and lifetime passed\n";
   } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

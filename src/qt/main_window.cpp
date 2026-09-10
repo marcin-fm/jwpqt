@@ -3484,11 +3484,15 @@ void MainWindow::create_actions() {
   QAction* resources = help_menu->addAction(tr("Runtime &Resources..."));
   resources->setObjectName(QStringLiteral("resourceStatusAction"));
   connect(resources, &QAction::triggered, this, [this] {
-    QMessageBox dialog(QMessageBox::Information, tr("Runtime Resources"), {},
-                       QMessageBox::Ok, this);
-    dialog.setTextFormat(Qt::PlainText);
-    dialog.setText(resource_report());
-    dialog.exec();
+    auto* dialog = new QMessageBox(QMessageBox::Information,
+                                   tr("Runtime Resources"), {},
+                                   QMessageBox::Ok, this);
+    dialog->setObjectName(QStringLiteral("resourceStatusDialog"));
+    dialog->setTextFormat(Qt::PlainText);
+    dialog->setText(resource_report());
+    QPointer<QMessageBox> guard(dialog);
+    dialog->exec();
+    if (guard) guard->deleteLater();
   });
   connect(resource_status_button_, &QToolButton::clicked,
           resources, &QAction::trigger);
