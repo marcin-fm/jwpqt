@@ -5,6 +5,8 @@ Settings resets implemented values while preserving genuinely unknown fields.
 Import Settings validates every supported assignment, including invalid earlier
 values followed by valid overrides. Unsupported source lines remain preserved
 and are disclosed rather than silently applied.
+The Options and Page Layout Help buttons open the corresponding topic in the
+workspace's embedded handbook without accepting or cancelling the dialog.
 
 Settings are stored in jwpqt.cfg. Japanese System/Edit/List/KanjiBar/File/Big/Table
 and Bitmap fonts are not desktop menu fonts. Missing families inherit the parent

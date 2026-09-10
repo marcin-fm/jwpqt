@@ -34,6 +34,8 @@
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QDir>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QEvent>
 #include <QFile>
 #include <QFileDialog>
@@ -84,6 +86,7 @@
 #include <QTabWidget>
 #include <QTextEdit>
 #include <QToolBar>
+#include <QUrl>
 #include <QVBoxLayout>
 
 #include "application_settings_dialog.h"
@@ -421,6 +424,7 @@ MainWindow::MainWindow(QWidget* parent)
       input_mode_actions_(new QActionGroup(this)),
       encoding_actions_(new QActionGroup(this)),
       jwp_code_page_menu_(nullptr) {
+  setAcceptDrops(true);
   documents_.push_back(std::make_unique<DocumentState>(
       this, application_settings_.maximum_undo_levels,
       application_settings_.auto_scroll, application_settings_.auto_scroll_speed));
@@ -518,6 +522,37 @@ MainWindow::MainWindow(QWidget* parent)
 
   new_document();
   window_geometry_ = new WindowGeometry(*this, application_settings_);
+}
+
+void MainWindow::dragEnterEvent(QDragEnterEvent* event) {
+  if (!event || !event->mimeData()->hasUrls() || event->mimeData()->urls().isEmpty()) {
+    if (event) event->ignore();
+    return;
+  }
+  for (const auto& url : event->mimeData()->urls()) {
+    if (!url.isLocalFile() || !QFileInfo(url.toLocalFile()).isFile()) {
+      event->ignore();
+      return;
+    }
+  }
+  event->acceptProposedAction();
+}
+
+void MainWindow::dropEvent(QDropEvent* event) {
+  if (!event || !event->mimeData()->hasUrls() || event->mimeData()->urls().isEmpty()) {
+    if (event) event->ignore();
+    return;
+  }
+  const auto urls = event->mimeData()->urls();
+  for (const auto& url : urls) {
+    if (!url.isLocalFile() || !QFileInfo(url.toLocalFile()).isFile()) {
+      event->ignore();
+      return;
+    }
+  }
+  event->acceptProposedAction();
+  for (const auto& url : urls)
+    open_path_detected(url.toLocalFile(), OpenMode::kInteractive, true);
 }
 
 void MainWindow::connect_editor(JwpEditor* editor) {
@@ -2736,17 +2771,20 @@ void MainWindow::create_actions() {
 
   QAction* save_action = file_menu->addAction(tr("&Save"));
   save_action->setObjectName(QStringLiteral("saveDocumentAction"));
-  save_action->setShortcut(QKeySequence::Save);
+  save_action->setShortcuts(
+      {QKeySequence::Save, QKeySequence(Qt::ALT | Qt::Key_S)});
   connect(save_action, &QAction::triggered, this,
           [this] { save_document(); });
   QAction* save_all_action = file_menu->addAction(tr("Save All"));
   save_all_action->setObjectName(QStringLiteral("saveAllDocumentsAction"));
+  save_all_action->setShortcut(QKeySequence(Qt::ALT | Qt::Key_V));
   connect(save_all_action, &QAction::triggered, this,
           [this] { save_all_documents(); });
 
   QAction* save_as_action = file_menu->addAction(tr("Save &As..."));
   save_as_action->setObjectName(QStringLiteral("saveAsDocumentAction"));
-  save_as_action->setShortcut(QKeySequence::SaveAs);
+  save_as_action->setShortcuts(
+      {QKeySequence::SaveAs, QKeySequence(Qt::ALT | Qt::Key_A)});
   connect(save_as_action, &QAction::triggered, this,
           [this] { save_document_as(); });
 
@@ -2757,6 +2795,7 @@ void MainWindow::create_actions() {
 
   delete_action_ = file_menu->addAction(tr("&Delete File"));
   delete_action_->setObjectName(QStringLiteral("deleteDocumentAction"));
+  delete_action_->setShortcut(QKeySequence(Qt::ALT | Qt::Key_D));
   connect(delete_action_, &QAction::triggered, this,
           [this] { (void)delete_current_document(); });
 
@@ -2770,7 +2809,8 @@ void MainWindow::create_actions() {
   file_menu->addSeparator();
   print_action_ = file_menu->addAction(tr("&Print..."));
   print_action_->setObjectName(QStringLiteral("printAction"));
-  print_action_->setShortcut(QKeySequence::Print);
+  print_action_->setShortcuts(
+      {QKeySequence::Print, QKeySequence(Qt::ALT | Qt::Key_P)});
   connect(print_action_, &QAction::triggered, this,
           [this] { print_current_document(); });
   auto* preview = file_menu->addAction(tr("Print Pre&view..."));
@@ -2803,7 +2843,8 @@ void MainWindow::create_actions() {
   file_menu->addSeparator();
   QAction* quit_action = file_menu->addAction(tr("&Quit"));
   quit_action->setObjectName(QStringLiteral("quitAction"));
-  quit_action->setShortcut(QKeySequence::Quit);
+  quit_action->setShortcuts(
+      {QKeySequence::Quit, QKeySequence(Qt::ALT | Qt::Key_X)});
   connect(quit_action, &QAction::triggered, this, [this] { close_application(); });
 
   QMenu* edit_menu = menuBar()->addMenu(tr("&Edit"));
@@ -2868,27 +2909,33 @@ void MainWindow::create_actions() {
   edit_menu->addSeparator();
   QAction* find_action = edit_menu->addAction(tr("&Find..."));
   find_action->setObjectName(QStringLiteral("findAction"));
-  find_action->setShortcut(QKeySequence::Find);
+  find_action->setShortcuts(
+      {QKeySequence::Find, QKeySequence(Qt::Key_F8)});
   connect(find_action, &QAction::triggered, this,
           [this] { find_document(); });
 
   QAction* find_next_action = edit_menu->addAction(tr("Find &Next"));
   find_next_action->setObjectName(QStringLiteral("findNextAction"));
-  find_next_action->setShortcut(QKeySequence::FindNext);
+  find_next_action->setShortcuts(
+      {QKeySequence::FindNext, QKeySequence(Qt::Key_F9)});
   connect(find_next_action, &QAction::triggered, this, [this] {
     find_again(core::JwpSearchDirection::kForward);
   });
 
   QAction* find_previous_action = edit_menu->addAction(tr("Find Pre&vious"));
   find_previous_action->setObjectName(QStringLiteral("findPreviousAction"));
-  find_previous_action->setShortcut(QKeySequence::FindPrevious);
+  find_previous_action->setShortcuts(
+      {QKeySequence::FindPrevious, QKeySequence(Qt::Key_F7),
+       QKeySequence(Qt::CTRL | Qt::Key_B)});
   connect(find_previous_action, &QAction::triggered, this, [this] {
     find_again(core::JwpSearchDirection::kBackward);
   });
 
   QAction* replace_action = edit_menu->addAction(tr("&Replace..."));
   replace_action->setObjectName(QStringLiteral("replaceAction"));
-  replace_action->setShortcut(QKeySequence::Replace);
+  replace_action->setShortcuts(
+      {QKeySequence::Replace, QKeySequence(Qt::SHIFT | Qt::Key_F8),
+       QKeySequence(Qt::CTRL | Qt::Key_R)});
   connect(replace_action, &QAction::triggered, this,
           [this] { replace_document(); });
 
@@ -2917,7 +2964,9 @@ void MainWindow::create_actions() {
   input_menu->addSeparator();
   toggle_input_mode_action_ = input_menu->addAction(tr("Switch Kanji/ASCII"));
   toggle_input_mode_action_->setObjectName(QStringLiteral("toggleInputModeAction"));
-  toggle_input_mode_action_->setShortcut(QKeySequence(Qt::Key_F4));
+  toggle_input_mode_action_->setShortcuts(
+      {QKeySequence(Qt::Key_F4), QKeySequence(Qt::ALT | Qt::Key_6),
+       QKeySequence(Qt::ALT | Qt::SHIFT | Qt::Key_6)});
   connect(toggle_input_mode_action_, &QAction::triggered, this, [this] {
     set_input_mode(document_->input_mode_ == InputMode::kKanji ? InputMode::kAscii
                                                    : InputMode::kKanji);

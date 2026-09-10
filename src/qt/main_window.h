@@ -46,6 +46,8 @@
 class QAction;
 class QActionGroup;
 class QCloseEvent;
+class QDragEnterEvent;
+class QDropEvent;
 class QEvent;
 class QLabel;
 class QListWidget;
@@ -272,6 +274,8 @@ class MainWindow : public QMainWindow {
  protected:
   void changeEvent(QEvent* event) override;
   void closeEvent(QCloseEvent* event) override;
+  void dragEnterEvent(QDragEnterEvent* event) override;
+  void dropEvent(QDropEvent* event) override;
   bool eventFilter(QObject* watched, QEvent* event) override;
   virtual std::optional<core::TextEncoding> prompt_for_encoding(
       const std::vector<core::TextEncoding>& candidates,

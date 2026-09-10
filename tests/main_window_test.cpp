@@ -18,6 +18,8 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QFile>
 #include <QFileDialog>
 #include <QFontMetricsF>
@@ -51,6 +53,7 @@
 #include <QTimer>
 #include <QToolBar>
 #include <QToolButton>
+#include <QUrl>
 
 #include "file_io.h"
 #include "edict_lookup_dialog.h"
@@ -811,7 +814,7 @@ void test_document_tabs(const QString& directory) {
               read_bytes(unicode_path) == prior_bytes && window.current_path() == native_path,
           "Save As overwrote another open document");
   const QString malformed = directory + QStringLiteral("/tab-invalid.txt");
-  write_bytes(malformed, QByteArray::fromHex("fffe00d8"));
+  write_bytes(malformed, QByteArray::fromHex("67260242"));
   require(!window.open_path_detected(malformed, OpenMode::kNonInteractive, true) &&
               window.document_count() == 2 && window.active_editor() == native &&
               *window.current_jwp_document() == edited,
@@ -900,6 +903,86 @@ void test_document_tabs(const QString& directory) {
               window.active_editor()->toPlainText().isEmpty() && window.is_jwp_document() &&
               !window.document_modified() && !find_action(window, "nextFileAction")->isEnabled(),
           "Closing all tabs did not leave a clean usable Japanese document");
+}
+
+void test_main_window_file_drop(const QString& directory) {
+  using jwpqt::core::TextEncoding;
+  const QString first = directory + QStringLiteral("/drop-first.txt");
+  const QString second = directory + QStringLiteral("/drop-second.txt");
+  const QString malformed = directory + QStringLiteral("/drop-malformed.jwp");
+  jwpqt::qt::write_text_file(first, {U"First", TextEncoding::kUtf8, true});
+  jwpqt::qt::write_text_file(second, {U"Second", TextEncoding::kUtf8, true});
+  write_bytes(malformed, QByteArray::fromHex("67260242"));
+  const QByteArray malformed_source = read_bytes(malformed);
+  require(jwpqt::core::has_jwp_document_magic(
+              {malformed_source.constData(),
+               static_cast<std::size_t>(malformed_source.size())}),
+          "Malformed drop fixture did not retain JWP magic");
+
+  jwpqt::qt::MainWindow window;
+  window.show();
+  require(window.acceptDrops(), "Main window did not enable file drops");
+  QMimeData files;
+  files.setUrls({QUrl::fromLocalFile(first), QUrl::fromLocalFile(second)});
+  QDragEnterEvent enter(QPoint(2, 2), Qt::CopyAction, &files,
+                        Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(&window, &enter);
+  require(enter.isAccepted(), "Main window rejected local regular files");
+  QDropEvent drop(QPointF(2, 2), Qt::CopyAction, &files,
+                  Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(&window, &drop);
+  require(drop.isAccepted() && window.document_count() == 3 &&
+              window.current_document_index() == 2 &&
+              window.active_editor()->toPlainText() == QStringLiteral("Second") &&
+              window.activate_document(1) &&
+              window.active_editor()->toPlainText() == QStringLiteral("First"),
+          "File drop did not open every file in source order");
+
+  jwpqt::qt::MainWindow partial;
+  partial.show();
+  QMimeData mixed;
+  mixed.setUrls({QUrl::fromLocalFile(first), QUrl::fromLocalFile(malformed),
+                 QUrl::fromLocalFile(second)});
+  QDragEnterEvent mixed_enter(QPoint(2, 2), Qt::CopyAction, &mixed,
+                              Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(&partial, &mixed_enter);
+  require(mixed_enter.isAccepted(), "Main window rejected a local mixed drop");
+  bool reported = false;
+  QTimer error_closer;
+  QObject::connect(&error_closer, &QTimer::timeout, [&] {
+    auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    if (!prompt) return;
+    reported = true;
+    prompt->button(QMessageBox::Ok)->click();
+  });
+  error_closer.start(0);
+  QDropEvent mixed_drop(QPointF(2, 2), Qt::CopyAction, &mixed,
+                        Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(&partial, &mixed_drop);
+  error_closer.stop();
+  require(reported, "Malformed dropped file did not report an error");
+  require(mixed_drop.isAccepted(), "Main window did not handle a local mixed drop");
+  require(partial.document_count() == 3,
+          "Malformed dropped file changed the number of successfully opened files");
+  require(partial.current_document_index() == 2 &&
+              partial.active_editor()->toPlainText() == QStringLiteral("Second"),
+          "Malformed dropped file stopped the later valid file");
+  require(partial.activate_document(1) &&
+              partial.active_editor()->toPlainText() == QStringLiteral("First"),
+          "Malformed dropped file changed the earlier valid file");
+
+  QMimeData remote;
+  remote.setUrls({QUrl(QStringLiteral("https://example.invalid/document.jwp"))});
+  QDragEnterEvent remote_enter(QPoint(2, 2), Qt::CopyAction, &remote,
+                               Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(&window, &remote_enter);
+  require(!remote_enter.isAccepted(), "Main window accepted a nonlocal file drop");
+  QMimeData folder;
+  folder.setUrls({QUrl::fromLocalFile(directory)});
+  QDragEnterEvent folder_enter(QPoint(2, 2), Qt::CopyAction, &folder,
+                               Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(&window, &folder_enter);
+  require(!folder_enter.isAccepted(), "Main window accepted a directory drop");
 }
 
 void test_workspace_kanji_count() {
@@ -5124,9 +5207,41 @@ void test_input_mode_workflow(const QString& directory) {
   QTextEdit* editor = window.findChild<QTextEdit*>();
   auto* mode = window.findChild<QToolButton*>(QStringLiteral("inputMode"));
   require(editor != nullptr && mode != nullptr && mode->isEnabled() &&
-              mode->text() == QStringLiteral("Kanji") &&
-              find_action(window, "kanaInputAction")->isChecked(),
-          "Fresh editor did not expose its default input mode");
+               mode->text() == QStringLiteral("Kanji") &&
+               find_action(window, "kanaInputAction")->isChecked(),
+           "Fresh editor did not expose its default input mode");
+  const auto has_shortcut = [&](const char* name, QKeySequence shortcut) {
+    return find_action(window, name)->shortcuts().contains(shortcut);
+  };
+  require(has_shortcut("findAction", QKeySequence(Qt::Key_F8)) &&
+              has_shortcut("replaceAction", QKeySequence(Qt::SHIFT | Qt::Key_F8)) &&
+              has_shortcut("findPreviousAction", QKeySequence(Qt::Key_F7)) &&
+              has_shortcut("findNextAction", QKeySequence(Qt::Key_F9)) &&
+              has_shortcut("saveAsDocumentAction", QKeySequence(Qt::ALT | Qt::Key_A)) &&
+              has_shortcut("findPreviousAction", QKeySequence(Qt::CTRL | Qt::Key_B)) &&
+              has_shortcut("deleteDocumentAction", QKeySequence(Qt::ALT | Qt::Key_D)) &&
+              has_shortcut("pageLayoutAction", QKeySequence(Qt::ALT | Qt::Key_L)) &&
+              has_shortcut("printAction", QKeySequence(Qt::ALT | Qt::Key_P)) &&
+              has_shortcut("replaceAction", QKeySequence(Qt::CTRL | Qt::Key_R)) &&
+              has_shortcut("revertDocumentAction", QKeySequence(Qt::ALT | Qt::Key_R)) &&
+              has_shortcut("saveDocumentAction", QKeySequence(Qt::ALT | Qt::Key_S)) &&
+              has_shortcut("saveAllDocumentsAction", QKeySequence(Qt::ALT | Qt::Key_V)) &&
+              has_shortcut("filesAction", QKeySequence(Qt::ALT | Qt::Key_W)) &&
+              has_shortcut("quitAction", QKeySequence(Qt::ALT | Qt::Key_X)) &&
+              has_shortcut("toggleInputModeAction", QKeySequence(Qt::ALT | Qt::Key_6)) &&
+              has_shortcut("toggleInputModeAction",
+                           QKeySequence(Qt::ALT | Qt::SHIFT | Qt::Key_6)),
+          "Non-conflicting recovered accelerator aliases are missing");
+  require(!has_shortcut("closeDocumentAction", QKeySequence(Qt::ALT | Qt::Key_C)) &&
+              !has_shortcut("closeAllDocumentsAction",
+                            QKeySequence(Qt::ALT | Qt::SHIFT | Qt::Key_C)) &&
+              !has_shortcut("newDocumentAction", QKeySequence(Qt::ALT | Qt::Key_N)) &&
+              !has_shortcut("openDocumentAction", QKeySequence(Qt::ALT | Qt::Key_O)) &&
+              !has_shortcut("findNextAction", QKeySequence(Qt::CTRL | Qt::Key_N)) &&
+              !has_shortcut("applicationOptionsAction", QKeySequence(Qt::CTRL | Qt::Key_O)) &&
+              !has_shortcut("findAction", QKeySequence(Qt::CTRL | Qt::Key_S)) &&
+              !has_shortcut("previousFileAction", QKeySequence(Qt::SHIFT | Qt::Key_Tab)),
+          "Conflicting recovered accelerator unexpectedly replaced native navigation");
   std::vector<QKeySequence> shortcuts;
   for (const QAction* action : window.findChildren<QAction*>()) {
     for (const QKeySequence& shortcut : action->shortcuts()) {
@@ -6560,6 +6675,7 @@ int main(int argc, char* argv[]) {
     test_duplicate_open_policy(directory.path());
     test_document_line_width_policy(directory.path());
     test_document_tabs(directory.path());
+    test_main_window_file_drop(directory.path());
     test_workspace_kanji_count();
     test_tab_conversion_lifetimes(directory.path());
     test_recent_file_workflow(directory.path());

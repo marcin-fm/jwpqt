@@ -12,14 +12,21 @@
 #include <QApplication>
 #include <QAction>
 #include <QDialogButtonBox>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QFile>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMimeData>
 #include <QPushButton>
+#include <QTemporaryDir>
 #include <QTimer>
 #include <QToolButton>
+#include <QUrl>
 
+#include "file_io.h"
 #include "jwpqt/core/jwp_text_codec.h"
 
 namespace {
@@ -109,6 +116,75 @@ void test_import_insert_and_failed_save() {
   const std::vector<WnnUserEntry> before = dialog.entries();
   require(!dialog.save_changes() && dialog.entries() == before,
           "Failed dictionary save changed the working entries");
+}
+
+void test_multi_file_import_drop() {
+  QTemporaryDir temporary;
+  require(temporary.isValid(), "Could not create WNN drop fixture directory");
+  const WnnUserEntry first = entry({0x2422}, {0x3021});
+  const WnnUserEntry imported_a = entry({0x2424}, {0x3022});
+  const WnnUserEntry imported_b = entry({0x2426}, {0x3023});
+  const QString path_a = temporary.filePath(QStringLiteral("first.dat"));
+  const QString path_b = temporary.filePath(QStringLiteral("second.dat"));
+  const QString malformed = temporary.filePath(QStringLiteral("malformed.dat"));
+  jwpqt::qt::write_wnn_user_dictionary_file(
+      path_a, WnnUserDictionary::from_entries({imported_a}));
+  jwpqt::qt::write_wnn_user_dictionary_file(
+      path_b, WnnUserDictionary::from_entries({imported_b}));
+  QFile bad(malformed);
+  require(bad.open(QIODevice::WriteOnly) && bad.write("\0", 1) == 1,
+          "Could not write malformed WNN drop fixture");
+  bad.close();
+
+  WnnUserDictionaryDialog dialog(WnnUserDictionary::from_entries({first}),
+                                 [](WnnUserDictionary) { return true; });
+  QMimeData files;
+  files.setUrls({QUrl::fromLocalFile(path_a), QUrl::fromLocalFile(path_b)});
+  QDragEnterEvent enter(QPoint(2, 2), Qt::CopyAction, &files,
+                        Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(&dialog, &enter);
+  require(enter.isAccepted(), "Local WNN dictionary drag was not accepted");
+  QDropEvent drop(QPointF(2, 2), Qt::CopyAction, &files,
+                  Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(&dialog, &drop);
+  require(drop.isAccepted() &&
+              dialog.entries() ==
+                  std::vector<WnnUserEntry>{first, imported_a, imported_b} &&
+              dialog.findChild<QLabel*>(QStringLiteral("wnnUserStatus"))
+                  ->text()
+                  .contains(QStringLiteral("2 files")),
+          "Multi-file WNN drop lost source order or status");
+
+  WnnUserDictionaryDialog atomic(WnnUserDictionary::from_entries({first}),
+                                 [](WnnUserDictionary) { return true; });
+  QListWidget* list =
+      atomic.findChild<QListWidget*>(QStringLiteral("wnnUserEntries"));
+  list->setCurrentRow(0);
+  const bool modified = atomic.isWindowModified();
+  QMimeData mixed;
+  mixed.setUrls({QUrl::fromLocalFile(path_a), QUrl::fromLocalFile(malformed)});
+  QDragEnterEvent mixed_enter(QPoint(2, 2), Qt::CopyAction, &mixed,
+                              Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(&atomic, &mixed_enter);
+  QDropEvent mixed_drop(QPointF(2, 2), Qt::CopyAction, &mixed,
+                        Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(&atomic, &mixed_drop);
+  require(mixed_enter.isAccepted() && mixed_drop.isAccepted() &&
+              atomic.entries() == std::vector<WnnUserEntry>{first} &&
+              list->currentRow() == 0 && atomic.isWindowModified() == modified &&
+              !atomic.findChild<QLabel*>(QStringLiteral("wnnUserStatus"))
+                   ->text()
+                   .isEmpty(),
+          "Malformed WNN drop partially changed the working copy");
+
+  QMimeData remote;
+  remote.setUrls({QUrl(QStringLiteral("https://example.invalid/user.dat"))});
+  QDragEnterEvent remote_enter(QPoint(2, 2), Qt::CopyAction, &remote,
+                               Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(&atomic, &remote_enter);
+  require(!remote_enter.isAccepted() &&
+              atomic.entries() == std::vector<WnnUserEntry>{first},
+          "Nonlocal WNN dictionary drag was accepted");
 }
 
 void test_invalid_edit_is_atomic() {
@@ -250,6 +326,7 @@ int main(int argc, char** argv) {
   try {
     test_editing_and_save();
     test_import_insert_and_failed_save();
+    test_multi_file_import_drop();
     test_invalid_edit_is_atomic();
     test_imported_inflection_round_trip();
     test_japanese_entry_fields();

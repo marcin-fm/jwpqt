@@ -13,12 +13,16 @@
 #include <QAction>
 #include <QComboBox>
 #include <QDialogButtonBox>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMimeData>
 #include <QPushButton>
 #include <QStringList>
 #include <QVBoxLayout>
@@ -136,6 +140,7 @@ WnnUserDictionaryDialog::WnnUserDictionaryDialog(
   setWindowModified(false);
   setModal(false);
   resize(760, 480);
+  setAcceptDrops(true);
 
   auto* outer = new QVBoxLayout(this);
   auto* content = new QHBoxLayout();
@@ -229,6 +234,28 @@ WnnUserDictionaryDialog::WnnUserDictionaryDialog(
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
   refresh();
+}
+
+void WnnUserDictionaryDialog::dragEnterEvent(QDragEnterEvent* event) {
+  if (!event->mimeData()->hasUrls() || event->mimeData()->urls().isEmpty()) return;
+  for (const auto& url : event->mimeData()->urls())
+    if (!url.isLocalFile() || !QFileInfo(url.toLocalFile()).isFile()) return;
+  event->acceptProposedAction();
+}
+
+void WnnUserDictionaryDialog::dropEvent(QDropEvent* event) {
+  QStringList paths;
+  for (const auto& url : event->mimeData()->urls()) {
+    if (!url.isLocalFile() || !QFileInfo(url.toLocalFile()).isFile()) return;
+    paths.push_back(url.toLocalFile());
+  }
+  if (paths.isEmpty()) return;
+  try {
+    import_paths(paths);
+  } catch (const std::exception& error) {
+    show_operation_error(QString::fromUtf8(error.what()));
+  }
+  event->acceptProposedAction();
 }
 
 const std::vector<core::WnnUserEntry>& WnnUserDictionaryDialog::entries()
@@ -409,19 +436,36 @@ WnnUserDictionaryDialog::prompt_for_entry(
 
 std::optional<core::WnnUserDictionary>
 WnnUserDictionaryDialog::prompt_for_import() {
-  const QString path = QFileDialog::getOpenFileName(
+  const QStringList paths = QFileDialog::getOpenFileNames(
       this, tr("Import User Conversion Dictionary"), {},
       tr("JWP user conversion dictionaries (*.cnv);;All files (*)"));
-  if (path.isEmpty()) {
-    return std::nullopt;
+  if (paths.isEmpty()) return std::nullopt;
+  return read_imports(paths);
+}
+
+core::WnnUserDictionary WnnUserDictionaryDialog::read_imports(
+    const QStringList& paths) const {
+  std::vector<core::WnnUserEntry> entries;
+  for (const auto& path : paths) {
+    const auto imported = read_wnn_user_dictionary_file(path);
+    if (!imported.has_value())
+      throw core::WnnUserDictionaryError(
+          "Selected user dictionary no longer exists");
+    if (imported->entries().size() > kMaximumVisibleEntries - entries.size())
+      throw core::WnnUserDictionaryError(
+          "Imported dictionary is too large for interactive editing");
+    entries.insert(entries.end(), imported->entries().begin(),
+                   imported->entries().end());
   }
-  std::optional<core::WnnUserDictionary> imported =
-      read_wnn_user_dictionary_file(path);
-  if (!imported.has_value()) {
-    throw core::WnnUserDictionaryError(
-        "Selected user dictionary no longer exists");
-  }
-  return imported;
+  return core::WnnUserDictionary::from_entries(std::move(entries));
+}
+
+void WnnUserDictionaryDialog::import_paths(const QStringList& paths) {
+  const std::size_t before = entries().size();
+  append_dictionary(read_imports(paths));
+  status_label_->setText(tr("Imported %1 entries from %2 files.")
+                             .arg(entries().size() - before)
+                             .arg(paths.size()));
 }
 
 void WnnUserDictionaryDialog::refresh(

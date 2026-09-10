@@ -16,6 +16,7 @@
 #include <QVBoxLayout>
 
 #include "jwpqt/core/jwp_text_codec.h"
+#include "help_window.h"
 #include "kana_input_field.h"
 #include "text_bridge.h"
 
@@ -174,8 +175,14 @@ PageLayoutDialog::PageLayoutDialog(const core::JwpDocument& document,
   status_->setObjectName(QStringLiteral("pageLayoutStatus"));
   outer->addWidget(status_);
   auto* buttons = new QDialogButtonBox(
-      QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+      QDialogButtonBox::Ok | QDialogButtonBox::Cancel | QDialogButtonBox::Help,
+      this);
+  auto* help = buttons->button(QDialogButtonBox::Help);
+  help->setObjectName(QStringLiteral("pageLayoutHelp"));
   outer->addWidget(buttons);
+  connect(help, &QPushButton::clicked, this, [this] {
+    HelpWindow::open_owner_topic(this, QStringLiteral("printing.md"));
+  });
   connect(buttons, &QDialogButtonBox::accepted, this, [this] {
     if (apply_changes()) accept();
   });

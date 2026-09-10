@@ -12,12 +12,16 @@
 
 #include <QAction>
 #include <QDialogButtonBox>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMimeData>
 #include <QPushButton>
 #include <QVBoxLayout>
 
@@ -72,6 +76,7 @@ EdictUserDictionaryDialog::EdictUserDictionaryDialog(
   setWindowModified(false);
   setModal(false);
   resize(780, 500);
+  setAcceptDrops(true);
 
   auto* outer = new QVBoxLayout(this);
   auto* content = new QHBoxLayout();
@@ -173,6 +178,28 @@ EdictUserDictionaryDialog::EdictUserDictionaryDialog(
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
   refresh();
+}
+
+void EdictUserDictionaryDialog::dragEnterEvent(QDragEnterEvent* event) {
+  if (!event->mimeData()->hasUrls() || event->mimeData()->urls().isEmpty()) return;
+  for (const auto& url : event->mimeData()->urls())
+    if (!url.isLocalFile() || !QFileInfo(url.toLocalFile()).isFile()) return;
+  event->acceptProposedAction();
+}
+
+void EdictUserDictionaryDialog::dropEvent(QDropEvent* event) {
+  QStringList paths;
+  for (const auto& url : event->mimeData()->urls()) {
+    if (!url.isLocalFile() || !QFileInfo(url.toLocalFile()).isFile()) return;
+    paths.push_back(url.toLocalFile());
+  }
+  if (paths.isEmpty()) return;
+  try {
+    import_paths(paths);
+  } catch (const std::exception& error) {
+    show_operation_error(QString::fromUtf8(error.what()));
+  }
+  event->acceptProposedAction();
 }
 
 const std::vector<core::EdictUserEntry>&
@@ -361,19 +388,36 @@ EdictUserDictionaryDialog::prompt_for_entry(
 
 std::optional<core::EdictUserDictionary>
 EdictUserDictionaryDialog::prompt_for_import() {
-  const QString path = QFileDialog::getOpenFileName(
+  const QStringList paths = QFileDialog::getOpenFileNames(
       this, tr("Import User Dictionary"), {},
       tr("JWP user dictionaries (*.dct);;All files (*)"));
-  if (path.isEmpty()) {
-    return std::nullopt;
+  if (paths.isEmpty()) return std::nullopt;
+  return read_imports(paths);
+}
+
+core::EdictUserDictionary EdictUserDictionaryDialog::read_imports(
+    const QStringList& paths) const {
+  std::vector<core::EdictUserEntry> entries;
+  for (const auto& path : paths) {
+    const auto imported = read_edict_user_dictionary_file(path, code_page_);
+    if (!imported.has_value())
+      throw core::EdictUserDictionaryError(
+          "Selected user dictionary no longer exists");
+    if (imported->entries().size() > kMaximumVisibleEntries - entries.size())
+      throw core::EdictUserDictionaryError(
+          "Imported dictionary is too large for interactive editing");
+    entries.insert(entries.end(), imported->entries().begin(),
+                   imported->entries().end());
   }
-  std::optional<core::EdictUserDictionary> imported =
-      read_edict_user_dictionary_file(path, code_page_);
-  if (!imported.has_value()) {
-    throw core::EdictUserDictionaryError(
-        "Selected user dictionary no longer exists");
-  }
-  return imported;
+  return core::EdictUserDictionary::from_entries(std::move(entries));
+}
+
+void EdictUserDictionaryDialog::import_paths(const QStringList& paths) {
+  const std::size_t before = entries().size();
+  append_dictionary(read_imports(paths));
+  status_label_->setText(tr("Imported %1 entries from %2 files.")
+                             .arg(entries().size() - before)
+                             .arg(paths.size()));
 }
 
 void EdictUserDictionaryDialog::refresh(

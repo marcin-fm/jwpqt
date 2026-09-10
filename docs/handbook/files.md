@@ -10,6 +10,11 @@ opening a modal prompt. Save All visits unnamed files too; cancellation stops
 without discarding unprocessed documents. Close All and Exit ask about every
 modified document before discarding the workspace.
 
+You can drop one or more local files on the main window. They open in source
+order through the same format detection, project and duplicate-file policies as
+menu Open. An unreadable file reports its error without preventing later files
+in the same drop from opening. Directories and nonlocal URLs are not accepted.
+
 Closing the last tab normally asks whether to exit. No keeps a clean unnamed
 Japanese document; it does not restore edits you already chose to discard.
 Display And Files settings can disable this confirmation or make the window

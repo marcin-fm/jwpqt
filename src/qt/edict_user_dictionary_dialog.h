@@ -9,10 +9,13 @@
 
 #include <QDialog>
 #include <QPointer>
+#include <QStringList>
 
 #include "jwpqt/core/edict_user_dictionary.h"
 
 class QAction;
+class QDragEnterEvent;
+class QDropEvent;
 class QLabel;
 class QListWidget;
 class QPushButton;
@@ -42,6 +45,8 @@ class EdictUserDictionaryDialog : public QDialog {
   void set_overwrite_action(QAction* action);
 
  protected:
+  void dragEnterEvent(QDragEnterEvent* event) override;
+  void dropEvent(QDropEvent* event) override;
   virtual std::optional<core::EdictUserEntry> prompt_for_entry(
       const std::optional<core::EdictUserEntry>& initial);
   virtual std::optional<core::EdictUserDictionary> prompt_for_import();
@@ -50,6 +55,8 @@ class EdictUserDictionaryDialog : public QDialog {
   static constexpr std::size_t kMaximumVisibleEntries = 100'000;
 
   void refresh(std::optional<std::size_t> selected = std::nullopt);
+  core::EdictUserDictionary read_imports(const QStringList& paths) const;
+  void import_paths(const QStringList& paths);
   std::optional<std::size_t> selected_index() const;
   void add_from_prompt();
   void edit_from_prompt();

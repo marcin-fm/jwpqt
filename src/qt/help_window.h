@@ -13,6 +13,7 @@ class HelpWindow final : public QDialog {
   explicit HelpWindow(QWidget* owner);
   ~HelpWindow() override;
   void open_topic(const QString& topic = QStringLiteral("start.md"));
+  static void open_owner_topic(QWidget* origin, const QString& topic);
  protected:
   bool eventFilter(QObject* watched, QEvent* event) override;
  private:

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "application_settings_dialog.h"
+#include "help_window.h"
 #include "kanji_lookup_names.h"
 
 #include <algorithm>
@@ -624,8 +625,15 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
     retained->setPlainText(tr("These imported settings are retained, but not yet applied:\n\n") + settings_.unapplied.join(QLatin1Char('\n')));
     tabs->addTab(retained, tr("Retained Settings"));
   }
-  auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+  auto* buttons = new QDialogButtonBox(
+      QDialogButtonBox::Ok | QDialogButtonBox::Cancel | QDialogButtonBox::Help,
+      this);
+  auto* help = buttons->button(QDialogButtonBox::Help);
+  help->setObjectName(QStringLiteral("applicationSettingsHelp"));
   outer->addWidget(buttons);
+  connect(help, &QPushButton::clicked, this, [this] {
+    HelpWindow::open_owner_topic(this, QStringLiteral("settings.md"));
+  });
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
   connect(buttons, &QDialogButtonBox::accepted, this,
           [this, booleans, font_controls, dictionary_controls, code_page, history_size, conversion_choices, undo_levels, categories,

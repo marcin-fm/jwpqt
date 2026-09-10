@@ -64,6 +64,12 @@ Tools > User Conversions manages WNN readings and candidate lists in the same
 way. Its Add and Edit fields also provide K/A/J input and shared overwrite
 behavior. Separate multiple candidates with `/`.
 
+Import in either user-dictionary window accepts multiple files, and local files
+can be dropped directly on the window. Every file is parsed in source order
+before the working copy changes, so a missing, malformed or oversized file does
+not leave a partially imported dictionary. Saving remains a separate explicit
+operation.
+
 ## Manage Dictionaries
 
 Tools > Manage Dictionaries, or Dictionaries in lookup, opens a staged editor

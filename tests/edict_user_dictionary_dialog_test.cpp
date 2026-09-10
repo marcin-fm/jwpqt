@@ -12,14 +12,21 @@
 #include <QApplication>
 #include <QAction>
 #include <QDialogButtonBox>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QFile>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMimeData>
 #include <QPushButton>
+#include <QTemporaryDir>
 #include <QTimer>
 #include <QToolButton>
+#include <QUrl>
 
+#include "file_io.h"
 #include "jwpqt/core/jwp_text_codec.h"
 
 namespace {
@@ -111,6 +118,80 @@ void test_import_insert_and_failed_save() {
   const std::vector<EdictUserEntry> before = dialog.entries();
   require(!dialog.save_changes() && dialog.entries() == before,
           "Failed dictionary save changed the working entries");
+}
+
+void test_multi_file_import_drop() {
+  QTemporaryDir temporary;
+  require(temporary.isValid(), "Could not create EDICT drop fixture directory");
+  const EdictUserEntry first = entry({0x2422}, U"first");
+  const EdictUserEntry imported_a = entry({0x2424}, U"second");
+  const EdictUserEntry imported_b = entry({0x2426}, U"third", {0x3021});
+  const QString path_a = temporary.filePath(QStringLiteral("first.dct"));
+  const QString path_b = temporary.filePath(QStringLiteral("second.dct"));
+  const QString malformed = temporary.filePath(QStringLiteral("malformed.dct"));
+  jwpqt::qt::write_edict_user_dictionary_file(
+      path_a, EdictUserDictionary::from_entries({imported_a}),
+      LegacyCodePage::k1252);
+  jwpqt::qt::write_edict_user_dictionary_file(
+      path_b, EdictUserDictionary::from_entries({imported_b}),
+      LegacyCodePage::k1252);
+  QFile bad(malformed);
+  require(bad.open(QIODevice::WriteOnly) &&
+              bad.write("word /unterminated\n") == 19,
+          "Could not write malformed EDICT drop fixture");
+  bad.close();
+
+  EdictUserDictionaryDialog dialog(
+      EdictUserDictionary::from_entries({first}), LegacyCodePage::k1252,
+      [](EdictUserDictionary) { return true; });
+  QMimeData files;
+  files.setUrls({QUrl::fromLocalFile(path_a), QUrl::fromLocalFile(path_b)});
+  QDragEnterEvent enter(QPoint(2, 2), Qt::CopyAction, &files,
+                        Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(&dialog, &enter);
+  require(enter.isAccepted(), "Local EDICT dictionary drag was not accepted");
+  QDropEvent drop(QPointF(2, 2), Qt::CopyAction, &files,
+                  Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(&dialog, &drop);
+  require(drop.isAccepted() &&
+              dialog.entries() ==
+                  std::vector<EdictUserEntry>{first, imported_a, imported_b} &&
+              dialog.findChild<QLabel*>(QStringLiteral("edictUserStatus"))
+                  ->text()
+                  .contains(QStringLiteral("2 files")),
+          "Multi-file EDICT drop lost source order or status");
+
+  EdictUserDictionaryDialog atomic(
+      EdictUserDictionary::from_entries({first}), LegacyCodePage::k1252,
+      [](EdictUserDictionary) { return true; });
+  QListWidget* list =
+      atomic.findChild<QListWidget*>(QStringLiteral("edictUserEntries"));
+  list->setCurrentRow(0);
+  const bool modified = atomic.isWindowModified();
+  QMimeData mixed;
+  mixed.setUrls({QUrl::fromLocalFile(path_a), QUrl::fromLocalFile(malformed)});
+  QDragEnterEvent mixed_enter(QPoint(2, 2), Qt::CopyAction, &mixed,
+                              Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(&atomic, &mixed_enter);
+  QDropEvent mixed_drop(QPointF(2, 2), Qt::CopyAction, &mixed,
+                        Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(&atomic, &mixed_drop);
+  require(mixed_enter.isAccepted() && mixed_drop.isAccepted() &&
+              atomic.entries() == std::vector<EdictUserEntry>{first} &&
+              list->currentRow() == 0 && atomic.isWindowModified() == modified &&
+              !atomic.findChild<QLabel*>(QStringLiteral("edictUserStatus"))
+                   ->text()
+                   .isEmpty(),
+          "Malformed EDICT drop partially changed the working copy");
+
+  QMimeData remote;
+  remote.setUrls({QUrl(QStringLiteral("https://example.invalid/user.dct"))});
+  QDragEnterEvent remote_enter(QPoint(2, 2), Qt::CopyAction, &remote,
+                               Qt::LeftButton, Qt::NoModifier);
+  QApplication::sendEvent(&atomic, &remote_enter);
+  require(!remote_enter.isAccepted() &&
+              atomic.entries() == std::vector<EdictUserEntry>{first},
+          "Nonlocal EDICT dictionary drag was accepted");
 }
 
 void test_invalid_edit_is_atomic() {
@@ -235,6 +316,7 @@ int main(int argc, char** argv) {
   try {
     test_editing_and_save();
     test_import_insert_and_failed_save();
+    test_multi_file_import_drop();
     test_invalid_edit_is_atomic();
     test_imported_empty_meaning_round_trip();
     test_japanese_entry_fields();

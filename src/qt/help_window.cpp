@@ -203,6 +203,17 @@ void HelpWindow::open_topic(const QString& topic) {
   if (self) activateWindow();
 }
 
+void HelpWindow::open_owner_topic(QWidget* origin, const QString& topic) {
+  if (!origin) return;
+  QWidget* owner = origin;
+  while (owner->parentWidget()) owner = owner->parentWidget();
+  HelpWindow* help = nullptr;
+  for (QObject* child : owner->children())
+    if ((help = dynamic_cast<HelpWindow*>(child))) break;
+  if (!help) help = new HelpWindow(owner);
+  help->open_topic(topic);
+}
+
 bool HelpWindow::eventFilter(QObject* watched, QEvent* event) {
   if (event->type() != QEvent::ShortcutOverride && event->type() != QEvent::KeyPress) return false;
   auto* key = static_cast<QKeyEvent*>(event);

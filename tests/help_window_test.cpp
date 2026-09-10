@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include "help_window.h"
+#include "application_settings_dialog.h"
 #include "main_window.h"
 #include "jwp_editor.h"
+#include "page_layout_dialog.h"
 #include <QAction>
 #include <QApplication>
 #include <QDialog>
@@ -30,6 +32,7 @@ int main(int argc, char** argv) {
     window.show();
     auto* editor = window.active_editor();
     editor->insertPlainText(QStringLiteral("Private document"));
+    QCoreApplication::processEvents();
     const QString original = jwpqt::qt::document_plain_text(*editor->document());
     const int undo = editor->document()->availableUndoSteps();
     child<QAction>(window, "helpContentsAction")->trigger();
@@ -91,6 +94,36 @@ int main(int argc, char** argv) {
       QKeyEvent key(QEvent::KeyPress, Qt::Key_F1, Qt::NoModifier);
       QApplication::sendEvent(&query, &key);
       require(browser->source().path().endsWith(QStringLiteral("dictionary.md")), "Dictionary context help failed");
+    }
+    {
+      jwpqt::qt::ApplicationSettingsDialog options(
+          window.application_settings(), &window);
+      options.show();
+      QCoreApplication::processEvents();
+      child<QPushButton>(options, "applicationSettingsHelp")->click();
+      require(options.isVisible() &&
+                  browser->source().path().endsWith(QStringLiteral("settings.md")),
+              "Options Help did not preserve the dialog or open Settings");
+      options.reject();
+      require(jwpqt::qt::document_plain_text(*editor->document()) == original &&
+                  editor->document()->availableUndoSteps() == undo,
+              "Options Help changed document content or undo");
+    }
+    {
+      const auto* document = window.current_jwp_document();
+      require(document, "Page Layout Help requires a JWP document");
+      jwpqt::qt::PageLayoutDialog layout(
+          *document, jwpqt::core::kDefaultLegacyCodePage, &window);
+      layout.show();
+      QCoreApplication::processEvents();
+      child<QPushButton>(layout, "pageLayoutHelp")->click();
+      require(layout.isVisible() &&
+                  browser->source().path().endsWith(QStringLiteral("printing.md")),
+              "Page Layout Help did not preserve the dialog or open Printing");
+      layout.reject();
+      require(jwpqt::qt::document_plain_text(*editor->document()) == original &&
+                  editor->document()->availableUndoSteps() == undo,
+              "Page Layout Help changed document content or undo");
     }
     help->close();
     child<QAction>(window, "helpContentsAction")->trigger();
