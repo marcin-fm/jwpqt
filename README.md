@@ -291,6 +291,9 @@ hard page breaks without losing paragraph metadata or being silently restored.
 Ctrl+W selects the source character-class word at the caret; Ctrl+Shift+W
 selects the current wrapped visual line. Convert Selection uses the recovered
 F2 and Ctrl+> shortcuts instead of occupying Ctrl+W.
+F3 repeats Find Next when there is no selection, the selection is not kana or
+the selected kana matches the previous query; otherwise it converts backward.
+Shift+F2 or Shift+F3 finalizes the current or default conversion candidate.
 
 Ctrl+[ and Ctrl+] match nested curly braces when the caret is on or immediately
 after one. Otherwise they snap to the nearest brace on the current wrapped

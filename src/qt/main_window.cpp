@@ -191,6 +191,23 @@ core::JwpText document_word_units(const core::JwpDocumentModel& model) {
   return units;
 }
 
+bool equivalent_search_text(const core::JwpText& left,
+                            const core::JwpText& right,
+                            core::JwpSearchOptions options) {
+  if (left.size() != right.size()) return false;
+  core::JwpDocument document;
+  document.paragraphs.resize(2);
+  document.paragraphs[0].text = left;
+  core::JwpDocumentModel model(std::move(document));
+  options.direction = core::JwpSearchDirection::kForward;
+  options.wrap = true;
+  const core::JwpSearchResult result =
+      core::find_next(model, right, {1, 0}, options);
+  return result.match.has_value() && result.match->begin.paragraph == 0 &&
+         result.match->begin.offset == 0 && result.match->end.paragraph == 0 &&
+         result.match->end.offset == left.size();
+}
+
 QString encoding_name(core::TextEncoding encoding) {
   const std::string_view name = core::text_encoding_name(encoding);
   return QString::fromLatin1(name.data(), static_cast<qsizetype>(name.size()));
@@ -4528,6 +4545,39 @@ void MainWindow::navigate_document_word(bool forward, bool extend_selection) {
   if (self && editor && document_->editor_ == editor) editor->ensureCursorVisible();
 }
 
+bool MainWindow::should_repeat_find_from_f3() const {
+  if (!document_->jwp_document_ || document_->kana_input_.pending()) return false;
+  const QTextCursor cursor = document_->editor_->textCursor();
+  if (!cursor.hasSelection()) return !search_text_.isEmpty();
+
+  try {
+    const QString plain = document_plain_text(*document_->editor_->document());
+    const core::JwpPosition begin = core::jwp_plain_text_position(
+        *document_->jwp_document_,
+        utf32_offset_for_utf16(plain, cursor.selectionStart()));
+    const core::JwpPosition end = core::jwp_plain_text_position(
+        *document_->jwp_document_,
+        utf32_offset_for_utf16(plain, cursor.selectionEnd()));
+    if (begin.paragraph != end.paragraph) return true;
+    const core::JwpText& paragraph =
+        document_->jwp_document_->paragraph(begin.paragraph).text;
+    const core::JwpText selection(paragraph.begin() + begin.offset,
+                                  paragraph.begin() + end.offset);
+    const bool kana = !selection.empty() &&
+        std::all_of(selection.begin(), selection.end(), [](core::JisCode code) {
+          const core::JisCode row = static_cast<core::JisCode>(code & 0x7f00U);
+          return row == 0x2400U || row == 0x2500U;
+        });
+    if (!kana) return true;
+    if (search_text_.isEmpty()) return false;
+    const core::JwpText query =
+        core::encode_jwp_text(from_qstring(search_text_), document_->jwp_code_page_);
+    return equivalent_search_text(selection, query, search_options_);
+  } catch (const std::exception&) {
+    return false;
+  }
+}
+
 bool MainWindow::apply_jwp_model_edit(
     DocumentState* target, const QTextCursor& cursor,
     const std::function<core::JwpPosition(core::JwpDocumentModel&)>& edit,
@@ -4847,6 +4897,36 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
       event->accept();
       if (event->type() == QEvent::ShortcutOverride) return true;
       select_document_word_or_line(line);
+      return true;
+    }
+    const bool forward_conversion =
+        (key->key() == Qt::Key_F2 &&
+         !(modifiers & (Qt::ControlModifier | Qt::AltModifier |
+                        Qt::MetaModifier))) ||
+        (key->key() == Qt::Key_Greater &&
+         modifiers.testFlag(Qt::ControlModifier) &&
+         !(modifiers & (Qt::AltModifier | Qt::MetaModifier)));
+    const bool backward_conversion =
+        (key->key() == Qt::Key_F3 &&
+         !(modifiers & (Qt::ControlModifier | Qt::AltModifier |
+                        Qt::MetaModifier))) ||
+        (key->key() == Qt::Key_Less &&
+         modifiers.testFlag(Qt::ControlModifier) &&
+         !(modifiers & (Qt::AltModifier | Qt::MetaModifier)));
+    if (forward_conversion || backward_conversion) {
+      event->accept();
+      if (event->type() == QEvent::ShortcutOverride) return true;
+      const bool function_key = key->key() == Qt::Key_F2 ||
+                                key->key() == Qt::Key_F3;
+      if (function_key && modifiers.testFlag(Qt::ShiftModifier)) {
+        if (!conversion_active()) convert_selection(backward_conversion);
+        if (conversion_active()) accept_conversion();
+      } else if (backward_conversion && !conversion_active() &&
+                 should_repeat_find_from_f3()) {
+        find_again(core::JwpSearchDirection::kForward);
+      } else {
+        convert_selection(backward_conversion, backward_conversion);
+      }
       return true;
     }
   }
@@ -6217,6 +6297,10 @@ bool MainWindow::conversion_active() const noexcept {
 }
 
 bool MainWindow::convert_selection(bool previous) {
+  return convert_selection(previous, false);
+}
+
+bool MainWindow::convert_selection(bool previous, bool initial_previous) {
   if (document_->updating_editor_ || document_->applying_kana_input_) return false;
   if (document_->editor_->isReadOnly() && !conversion_active()) return false;
   if (document_->jwp_document_ && application_settings_.revert_to_kanji_mode &&
@@ -6305,6 +6389,7 @@ bool MainWindow::convert_selection(bool previous) {
       statusBar()->showMessage(tr("No conversion candidates"), 3000);
       return false;
     }
+    if (initial_previous) (void)transaction->cycle_previous();
     document_->jwp_conversion_ = std::move(transaction);
     document_->editor_->setReadOnly(true);
     restore_jwp_conversion_state();

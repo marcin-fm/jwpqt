@@ -47,6 +47,11 @@ and repetition-mark rules are retained. Ctrl+Shift+W selects the current
 wrapped visual line. Both commands finish pending Japanese input first and do
 not edit the document. Convert Selection uses F2 or Ctrl+>.
 
+F3 repeats Find Next when there is no selection, the selection is not kana or
+the selected kana matches the previous query. Otherwise it converts backward;
+Ctrl+< provides the same backward conversion directly. Shift+F2 or Shift+F3
+finalizes the current or default conversion candidate.
+
 Ctrl+[ and Ctrl+] move between matching nested curly braces when the caret is
 on or immediately after a brace. With no starting brace, the command moves to
 the nearest brace on the current wrapped visual line, preferring one before the

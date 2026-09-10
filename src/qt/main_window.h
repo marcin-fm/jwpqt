@@ -371,6 +371,8 @@ class MainWindow : public QMainWindow {
   void select_document_word_or_line(bool line);
   void navigate_document_brace(bool extend_selection);
   void navigate_document_word(bool forward, bool extend_selection);
+  bool should_repeat_find_from_f3() const;
+  bool convert_selection(bool previous, bool initial_previous);
   bool apply_jwp_model_edit(
       DocumentState* target, const QTextCursor& cursor,
       const std::function<core::JwpPosition(core::JwpDocumentModel&)>& edit,

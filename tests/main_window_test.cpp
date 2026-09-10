@@ -3618,6 +3618,184 @@ void test_navigation_input_finalization(const QString& directory) {
           "Reentrant navigation did not retain the accepted conversion");
 }
 
+void test_conversion_search_shortcuts(const QString& directory) {
+  using namespace jwpqt::core;
+  using namespace jwpqt::qt;
+  const QString fixture_directory =
+      directory + QStringLiteral("/conversion-search-wnn");
+  require(QDir().mkpath(fixture_directory),
+          "Could not create F2/F3 WNN directory");
+  const WnnFixture fixture = write_wnn_fixture(fixture_directory);
+  const QString path = directory + "/conversion-search-shortcuts.jwp";
+  const QString source = QString(QChar(0x3042));
+  const QString forward_candidate =
+      to_qstring(decode_jwp_text(JwpText{0x3021}));
+  const QString previous_candidate =
+      to_qstring(decode_jwp_text(JwpText{0x3022}));
+  JwpDocument source_document;
+  source_document.paragraphs = {paragraph(U"\u3042")};
+  write_jwp_file(path, source_document);
+  MainWindow window;
+  require(window.load_wnn_resources(fixture.index_path, fixture.data_path,
+                                    fixture.preferences_path),
+          "Could not configure F2/F3 conversion fixture");
+  require(window.open_jwp_path(path), "Could not open F2/F3 shortcut fixture");
+  auto* editor = window.active_editor();
+  require(editor != nullptr, "F2/F3 shortcut editor is missing");
+
+  auto press = [&](int key, Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+    QKeyEvent override(QEvent::ShortcutOverride, key, modifiers);
+    QApplication::sendEvent(editor, &override);
+    QKeyEvent event(QEvent::KeyPress, key, modifiers);
+    QApplication::sendEvent(editor, &event);
+    QKeyEvent release(QEvent::KeyRelease, key, modifiers);
+    QApplication::sendEvent(editor, &release);
+    QCoreApplication::processEvents();
+  };
+  auto select_all = [&] {
+    QTextCursor cursor = editor->textCursor();
+    cursor.select(QTextCursor::Document);
+    editor->setTextCursor(cursor);
+  };
+  auto replace_text = [&](const QString& text) {
+    QTextCursor cursor = editor->textCursor();
+    cursor.select(QTextCursor::Document);
+    cursor.insertText(text);
+    QCoreApplication::processEvents();
+    return editor->toPlainText() == text;
+  };
+  int fixture_generation = 0;
+  auto reset_wnn_preferences = [&] {
+    const QString fresh_directory =
+        directory + QStringLiteral("/shortcut-wnn-%1").arg(++fixture_generation);
+    require(QDir().mkpath(fresh_directory),
+            "Could not create fresh shortcut WNN directory");
+    const WnnFixture fresh = write_wnn_fixture(fresh_directory);
+    require(window.load_wnn_resources(fresh.index_path, fresh.data_path,
+                                      fresh.preferences_path),
+            "Could not reset shortcut WNN preferences");
+  };
+
+  require(replace_text("N N N"),
+          "Could not set F3 Find text");
+  editor->moveCursor(QTextCursor::Start);
+  require(window.find_text("N"), "Could not establish F3 Find query");
+  QTextCursor cursor = editor->textCursor();
+  const int initial_find_start = cursor.selectionStart();
+  cursor.clearSelection();
+  editor->setTextCursor(cursor);
+  press(Qt::Key_F3);
+  if (!editor->textCursor().hasSelection() ||
+      editor->textCursor().selectedText() != QStringLiteral("N") ||
+      editor->textCursor().selectionStart() == initial_find_start) {
+    throw std::runtime_error(
+        "F3 did not repeat Find without a selection: initial=" +
+        std::to_string(initial_find_start) + " current=" +
+        std::to_string(editor->textCursor().selectionStart()) + ":" +
+        std::to_string(editor->textCursor().selectionEnd()) + " conversion=" +
+        std::to_string(window.conversion_active()) + " status=" +
+        window.statusBar()->currentMessage().toStdString());
+  }
+
+  cursor = editor->textCursor();
+  cursor.setPosition(0);
+  cursor.setPosition(1, QTextCursor::KeepAnchor);
+  editor->setTextCursor(cursor);
+  press(Qt::Key_F3);
+  require(editor->textCursor().selectionStart() == 2 &&
+              editor->textCursor().selectionEnd() == 3,
+          "F3 did not repeat Find for a non-kana selection");
+
+  const QString kana_pair = source + " " + source;
+  require(replace_text(kana_pair),
+          "Could not set equal-kana F3 text");
+  editor->moveCursor(QTextCursor::Start);
+  require(window.find_text(source), "Could not establish equal-kana F3 query");
+  cursor = editor->textCursor();
+  cursor.setPosition(0);
+  cursor.setPosition(1, QTextCursor::KeepAnchor);
+  editor->setTextCursor(cursor);
+  press(Qt::Key_F3);
+  require(editor->textCursor().selectionStart() == 2 &&
+              editor->textCursor().selectionEnd() == 3 &&
+              !window.conversion_active(),
+          "F3 did not repeat Find for the previous kana query");
+
+  require(replace_text(source),
+          "Could not restore backward-conversion text");
+  require(!window.find_text(QString(QChar(0x3044))),
+          "Different kana query unexpectedly matched");
+  select_all();
+  press(Qt::Key_F3);
+  if (!window.conversion_active() ||
+      editor->toPlainText() != source) {
+    throw std::runtime_error(
+        "F3 did not start backward conversion for different selected kana: text=" +
+        editor->toPlainText().toUtf8().toHex().toStdString() + " active=" +
+        std::to_string(window.conversion_active()) + " status=" +
+        window.statusBar()->currentMessage().toStdString());
+  }
+  press(Qt::Key_F3);
+  if (!window.conversion_active() ||
+      editor->toPlainText() != previous_candidate) {
+    throw std::runtime_error(
+        "Repeated F3 did not continue backward conversion: text=" +
+        editor->toPlainText().toUtf8().toHex().toStdString() + " active=" +
+        std::to_string(window.conversion_active()) + " status=" +
+        window.statusBar()->currentMessage().toStdString());
+  }
+  press(Qt::Key_F3, Qt::ShiftModifier);
+  require(!window.conversion_active() &&
+              editor->toPlainText() == previous_candidate,
+          "Shift+F3 did not finalize backward conversion");
+  find_action(window, "undoAction")->trigger();
+  require(editor->toPlainText() == source,
+          "Undo did not restore Shift+F3 conversion");
+
+  reset_wnn_preferences();
+  select_all();
+  press(Qt::Key_F2);
+  require(window.conversion_active() &&
+              editor->toPlainText() == forward_candidate,
+          "F2 did not start forward conversion");
+  press(Qt::Key_F2, Qt::ShiftModifier);
+  require(!window.conversion_active() &&
+              editor->toPlainText() == forward_candidate,
+          "Shift+F2 did not finalize forward conversion");
+  find_action(window, "undoAction")->trigger();
+  require(editor->toPlainText() == source,
+          "Undo did not restore Shift+F2 conversion");
+
+  select_all();
+  press(Qt::Key_Less, Qt::ControlModifier);
+  require(window.conversion_active() && editor->toPlainText() == source,
+          "Control+< did not start backward conversion");
+  press(Qt::Key_Less, Qt::ControlModifier);
+  require(window.conversion_active() &&
+              editor->toPlainText() == previous_candidate,
+          "Repeated Control+< did not continue backward conversion");
+  require(window.accept_conversion(), "Could not accept Control+< conversion");
+  find_action(window, "undoAction")->trigger();
+  reset_wnn_preferences();
+  select_all();
+  press(Qt::Key_Greater, Qt::ControlModifier);
+  require(window.conversion_active() &&
+              editor->toPlainText() == forward_candidate,
+          "Control+> did not start forward conversion");
+  require(window.accept_conversion(), "Could not accept Control+> conversion");
+  find_action(window, "undoAction")->trigger();
+
+  require(replace_text(""),
+          "Could not clear pending-kana F3 text");
+  require(!window.find_text("missing"), "Pending-kana Find query unexpectedly matched");
+  find_action(window, "kanaInputAction")->trigger();
+  QTest::keyClick(editor, Qt::Key_N);
+  press(Qt::Key_F3);
+  require(editor->toPlainText() == QString(QChar(0x3093)) &&
+              !window.conversion_active(),
+          "Pending kana did not take precedence over F3 Find");
+}
+
 void test_page_break_paragraph_joins(const QString& directory) {
   using namespace jwpqt::core;
   using namespace jwpqt::qt;
@@ -8453,6 +8631,7 @@ int main(int argc, char* argv[]) {
     test_brace_navigation(directory.path());
     test_word_navigation(directory.path());
     test_navigation_input_finalization(directory.path());
+    test_conversion_search_shortcuts(directory.path());
     test_page_break_paragraph_joins(directory.path());
     test_application_settings_workflow(directory.path());
     test_application_settings_preview(directory.path());
