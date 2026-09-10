@@ -3848,16 +3848,21 @@ void MainWindow::restore_jwp_history_state(core::JwpPosition caret) {
 
 void MainWindow::apply_jwp_presentation(const core::JwpDocument& document,
                                         core::LegacyCodePage code_page) {
-  document_->editor_->apply_jwp_layout(document);
-  document_->editor_->apply_jwp_fonts(document, code_page);
-  document_->editor_->set_character_line_width(
-      document_line_width(*document_, document));
-  document_->editor_->apply_margin_relaxation(
+  apply_jwp_presentation(*document_, document, code_page);
+}
+
+void MainWindow::apply_jwp_presentation(DocumentState& state,
+                                        const core::JwpDocument& document,
+                                        core::LegacyCodePage code_page) {
+  state.editor_->apply_jwp_layout(document);
+  state.editor_->apply_jwp_fonts(document, code_page);
+  state.editor_->set_character_line_width(document_line_width(state, document));
+  state.editor_->apply_margin_relaxation(
       document, code_page,
-      document_->jwp_format_ && application_settings_.relax_margin_punctuation,
-      document_->jwp_format_ && application_settings_.relax_margin_small_kana);
-  document_->editor_->apply_kanji_colors(document, kanji_color_list_,
-                               kanji_color_policy_, code_page);
+      state.jwp_format_ && application_settings_.relax_margin_punctuation,
+      state.jwp_format_ && application_settings_.relax_margin_small_kana);
+  state.editor_->apply_kanji_colors(document, kanji_color_list_,
+                                    kanji_color_policy_, code_page);
 }
 
 std::optional<int> MainWindow::document_line_width(
@@ -4521,6 +4526,107 @@ void MainWindow::navigate_document_word(bool forward, bool extend_selection) {
   if (self && editor && document_->editor_ == editor) editor->ensureCursorVisible();
 }
 
+bool MainWindow::join_document_paragraph(bool backward) {
+  DocumentState* const target = document_;
+  if (!target->jwp_document_ || target->editor_->isReadOnly() ||
+      conversion_active() || document_->kana_input_.pending()) {
+    return false;
+  }
+
+  QTextCursor cursor = target->editor_->textCursor();
+  if (cursor.hasSelection()) return false;
+  const QTextBlock block = cursor.block();
+  const bool at_boundary =
+      backward ? cursor.position() == block.position() && block.previous().isValid()
+               : cursor.position() == block.position() + block.length() - 1 &&
+                     block.next().isValid();
+  if (!at_boundary) return false;
+
+  try {
+    const QString original_text =
+        document_plain_text(*target->editor_->document());
+    const bool original_modified = target->editor_->document()->isModified();
+    const core::JwpPosition before = core::jwp_plain_text_position(
+        *target->jwp_document_,
+        utf32_offset_for_utf16(original_text, cursor.position()));
+    const std::size_t paragraph = static_cast<std::size_t>(block.blockNumber());
+    const std::size_t joined_paragraph = backward ? paragraph - 1 : paragraph;
+
+    core::JwpDocumentModel candidate = *target->jwp_document_;
+    core::JwpDocumentHistory history = target->jwp_history_;
+    history.begin(candidate, before);
+    const core::JwpPosition after = candidate.join_with_next(joined_paragraph);
+    if (!history.commit(candidate, after, core::JwpHistoryKind::kDeletion)) {
+      return true;
+    }
+
+    std::u32string rendered =
+        core::decode_jwp_plain_text(candidate, target->jwp_code_page_);
+    const int qt_caret = utf16_offset_for_utf32(
+        rendered, core::jwp_plain_text_offset(candidate, after));
+    const QPointer<MainWindow> self(this);
+    const QPointer<JwpEditor> editor(target->editor_);
+    target->updating_editor_ = true;
+    try {
+      editor->setPlainText(to_qstring(rendered));
+      if (!self || !editor ||
+          std::none_of(documents_.begin(), documents_.end(),
+                       [target](const auto& state) {
+                         return state.get() == target;
+                       })) {
+        return true;
+      }
+      apply_jwp_presentation(*target, candidate.document(),
+                             target->jwp_code_page_);
+      QTextCursor updated(editor->document());
+      updated.setPosition(qt_caret);
+      editor->setTextCursor(updated);
+      if (!self || !editor ||
+          std::none_of(documents_.begin(), documents_.end(),
+                       [target](const auto& state) {
+                         return state.get() == target;
+                       })) {
+        return true;
+      }
+    } catch (...) {
+      if (self && editor &&
+          std::any_of(documents_.begin(), documents_.end(),
+                      [target](const auto& state) {
+                        return state.get() == target;
+                      })) {
+        editor->setPlainText(original_text);
+        apply_jwp_presentation(*target, target->jwp_document_->document(),
+                               target->jwp_code_page_);
+        editor->setTextCursor(cursor);
+        editor->document()->setModified(original_modified);
+        target->updating_editor_ = false;
+      }
+      throw;
+    }
+    target->updating_editor_ = false;
+
+    target->jwp_document_ = std::move(candidate);
+    target->jwp_history_ = std::move(history);
+    target->jwp_caret_ = after;
+    target->expected_jwp_caret_.reset();
+    target->rendered_jwp_text_ = std::move(rendered);
+    editor->document()->setModified(
+        !target->saved_jwp_document_.has_value() ||
+        target->jwp_document_->document() != *target->saved_jwp_document_);
+    if (document_ == target) {
+      update_undo_actions();
+      update_title();
+    }
+    return true;
+  } catch (const std::exception& error) {
+    statusBar()->showMessage(
+        tr("Could not join paragraphs: %1")
+            .arg(QString::fromUtf8(error.what())),
+        5000);
+    return true;
+  }
+}
+
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
   if (watched == main_toolbar_ && event->type() == QEvent::Move && !updating_toolbar_) {
     QTimer::singleShot(0, this, [this] { sync_toolbar_position(); });
@@ -4703,6 +4809,27 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
        event->type() == QEvent::KeyPress)) {
     const auto* key = static_cast<QKeyEvent*>(event);
     const Qt::KeyboardModifiers modifiers = key->modifiers();
+    const bool paragraph_join =
+        (key->key() == Qt::Key_Backspace || key->key() == Qt::Key_Delete) &&
+        modifiers == Qt::NoModifier && document_->jwp_document_ &&
+        !conversion_active() &&
+        !document_->editor_->textCursor().hasSelection();
+    if (paragraph_join) {
+      QTextCursor cursor = document_->editor_->textCursor();
+      const QTextBlock block = cursor.block();
+      const bool at_boundary =
+          key->key() == Qt::Key_Backspace
+              ? cursor.position() == block.position() &&
+                    block.previous().isValid()
+              : cursor.position() == block.position() + block.length() - 1 &&
+                    block.next().isValid();
+      if (at_boundary && !document_->kana_input_.pending()) {
+        event->accept();
+        if (event->type() == QEvent::ShortcutOverride) return true;
+        join_document_paragraph(key->key() == Qt::Key_Backspace);
+        return true;
+      }
+    }
     const bool shift_delete =
         key->key() == Qt::Key_Backspace || key->key() == Qt::Key_Delete;
     if (shift_delete && modifiers.testFlag(Qt::ShiftModifier) &&

@@ -370,6 +370,7 @@ class MainWindow : public QMainWindow {
   void select_document_word_or_line(bool line);
   void navigate_document_brace(bool extend_selection);
   void navigate_document_word(bool forward, bool extend_selection);
+  bool join_document_paragraph(bool backward);
   enum class DuplicateOpenResolution { kOpenAnother, kHandled, kCancelled };
   DuplicateOpenResolution resolve_duplicate_open(const QString& path, int existing,
                                                   OpenMode mode);
@@ -408,7 +409,10 @@ class MainWindow : public QMainWindow {
   void set_text_encoding(core::TextEncoding encoding, bool mark_modified);
   void set_jwp_code_page(core::LegacyCodePage code_page);
   void apply_jwp_presentation(const core::JwpDocument& document,
-                               core::LegacyCodePage code_page);
+                              core::LegacyCodePage code_page);
+  void apply_jwp_presentation(DocumentState& state,
+                              const core::JwpDocument& document,
+                              core::LegacyCodePage code_page);
   std::optional<int> document_line_width(const DocumentState& state,
                                          const core::JwpDocument& document) const;
   void apply_document_line_width(DocumentState& state);

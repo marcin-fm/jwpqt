@@ -279,6 +279,12 @@ their ordinary native paths. Shift+Backspace/Delete cut an existing selection;
 without one, they delete to the beginning/end of the current visual line without
 changing the clipboard. Each deletion is one undoable edit.
 
+At a native paragraph boundary, ordinary Backspace and Delete use the recovered
+paragraph join rather than a plain-text newline edit. Joining through a hard
+page break removes that break exactly as JWPxp did; an empty paragraph immediately
+before a page-break paragraph is removed while the page break itself remains.
+Each join is one native Undo operation and retains the surviving paragraph's format.
+
 Ctrl+W selects the source character-class word at the caret; Ctrl+Shift+W
 selects the current wrapped visual line. Convert Selection uses the recovered
 F2 and Ctrl+> shortcuts instead of occupying Ctrl+W.

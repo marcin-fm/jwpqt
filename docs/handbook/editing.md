@@ -28,6 +28,12 @@ they delete from the caret to the beginning or end of the current wrapped visual
 line without replacing the clipboard. A line-edge no-op does not dirty the file,
 and each actual deletion is one undoable edit.
 
+Ordinary Backspace or Delete at a native paragraph boundary performs the original
+JWP paragraph join. A hard page break at the join is removed, except for the source
+special case where an empty paragraph immediately before a page-break paragraph is
+removed and the page break remains. The surviving paragraph keeps its format, and
+Undo restores the complete text, formatting and page-break structure.
+
 ## Word And Line Selection
 
 Ctrl+W selects a source-style word using separate ASCII, punctuation, JASCII,

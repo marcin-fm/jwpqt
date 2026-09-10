@@ -3409,6 +3409,139 @@ void test_word_navigation(const QString& directory) {
           "Word navigation published state after a reentrant tab switch");
 }
 
+void test_page_break_paragraph_joins(const QString& directory) {
+  using namespace jwpqt::core;
+  using namespace jwpqt::qt;
+  const auto send_delete = [](JwpEditor* editor, Qt::Key key) {
+    QKeyEvent override(QEvent::ShortcutOverride, key, Qt::NoModifier);
+    QApplication::sendEvent(editor, &override);
+    require(override.isAccepted(),
+            "Paragraph-join shortcut override was not accepted");
+    QKeyEvent press(QEvent::KeyPress, key, Qt::NoModifier);
+    QApplication::sendEvent(editor, &press);
+    QKeyEvent release(QEvent::KeyRelease, key, Qt::NoModifier);
+    QApplication::sendEvent(editor, &release);
+  };
+  const auto set_cursor = [](JwpEditor* editor, int position) {
+    QTextCursor cursor = editor->textCursor();
+    cursor.clearSelection();
+    cursor.setPosition(position);
+    editor->setTextCursor(cursor);
+  };
+
+  JwpDocument source;
+  source.paragraphs = {paragraph(U"A", 110), paragraph(U"", 120),
+                       paragraph(U"B", 130)};
+  source.paragraphs[1].page_break = true;
+  const QString path = directory + QStringLiteral("/page-break-joins.jwp");
+  write_jwp_file(path, source);
+
+  MainWindow window;
+  require(window.open_jwp_path(path), "Could not open page-break join fixture");
+  JwpEditor* editor = window.active_editor();
+  QAction* undo = find_action(window, "undoAction");
+  require(undo != nullptr, "Page-break join has no native Undo action");
+
+  set_cursor(editor, 3);
+  send_delete(editor, Qt::Key_Backspace);
+  JwpDocument expected = source;
+  expected.paragraphs = {source.paragraphs[0], source.paragraphs[1]};
+  expected.paragraphs[1].text = encode_jwp_text(U"B");
+  expected.paragraphs[1].page_break = false;
+  require(window.current_jwp_document() != nullptr &&
+              *window.current_jwp_document() == expected &&
+              editor->toPlainText() == QStringLiteral("A\nB") &&
+              editor->textCursor().position() == 2,
+          "Backspace did not clear and join the preceding page break");
+  undo->trigger();
+  require(*window.current_jwp_document() == source &&
+              editor->textCursor().position() == 3,
+          "Undo did not restore a Backspace page-break join");
+
+  set_cursor(editor, 1);
+  send_delete(editor, Qt::Key_Delete);
+  expected = source;
+  expected.paragraphs = {source.paragraphs[0], source.paragraphs[2]};
+  require(*window.current_jwp_document() == expected &&
+              editor->toPlainText() == QStringLiteral("A\nB") &&
+              editor->textCursor().position() == 1,
+          "Delete did not remove the following page-break paragraph");
+  undo->trigger();
+  require(*window.current_jwp_document() == source,
+          "Undo did not restore a Delete page-break join");
+
+  JwpDocument special;
+  special.paragraphs = {paragraph(U"", 110), paragraph(U"", 120),
+                        paragraph(U"B", 130)};
+  special.paragraphs[1].page_break = true;
+  const QString special_path =
+      directory + QStringLiteral("/page-break-special-join.jwp");
+  write_jwp_file(special_path, special);
+  MainWindow special_window;
+  require(special_window.open_jwp_path(special_path),
+          "Could not open special page-break join fixture");
+  JwpEditor* special_editor = special_window.active_editor();
+  set_cursor(special_editor, 0);
+  send_delete(special_editor, Qt::Key_Delete);
+  expected = special;
+  expected.paragraphs.erase(expected.paragraphs.begin());
+  require(*special_window.current_jwp_document() == expected &&
+              special_editor->textCursor().position() == 0 &&
+              special_window.current_jwp_document()->paragraphs[0].page_break,
+          "Empty predecessor join did not preserve the page-break paragraph");
+  find_action(special_window, "undoAction")->trigger();
+  require(*special_window.current_jwp_document() == special,
+          "Undo did not restore the empty predecessor");
+
+  JwpDocument normal;
+  normal.paragraphs = {paragraph(U"A", 110), paragraph(U"B", 120)};
+  const QString normal_path = directory + QStringLiteral("/normal-join.jwp");
+  write_jwp_file(normal_path, normal);
+  MainWindow normal_window;
+  require(normal_window.open_jwp_path(normal_path),
+          "Could not open normal paragraph join fixture");
+  JwpEditor* normal_editor = normal_window.active_editor();
+  set_cursor(normal_editor, 1);
+  send_delete(normal_editor, Qt::Key_Delete);
+  expected = normal;
+  expected.paragraphs = {normal.paragraphs[0]};
+  expected.paragraphs[0].text = encode_jwp_text(U"AB");
+  require(*normal_window.current_jwp_document() == expected &&
+              normal_editor->textCursor().position() == 1,
+          "Ordinary paragraph join no longer follows the native model");
+  find_action(normal_window, "undoAction")->trigger();
+  require(*normal_window.current_jwp_document() == normal,
+          "Ordinary paragraph join was not one native undo operation");
+
+  normal_window.show();
+  normal_editor->setFocus();
+  set_cursor(normal_editor, 2);
+  send_text_key(normal_editor, Qt::Key_N, QStringLiteral("n"));
+  send_delete(normal_editor, Qt::Key_Backspace);
+  require(*normal_window.current_jwp_document() == normal,
+          "Paragraph join deleted text while discarding pending kana");
+  normal_editor->setReadOnly(true);
+  send_delete(normal_editor, Qt::Key_Backspace);
+  require(*normal_window.current_jwp_document() == normal,
+          "Read-only paragraph join changed native content");
+
+  MainWindow reentrant;
+  require(reentrant.open_jwp_path(normal_path) &&
+              reentrant.new_document_tab(false) == 1 &&
+              reentrant.activate_document(0),
+          "Could not prepare reentrant paragraph join fixture");
+  JwpEditor* reentrant_editor = reentrant.active_editor();
+  set_cursor(reentrant_editor, 1);
+  QObject::connect(reentrant_editor, &QTextEdit::textChanged, &reentrant,
+                   [&reentrant] { reentrant.activate_document(1); });
+  send_delete(reentrant_editor, Qt::Key_Delete);
+  require(reentrant.current_document_index() == 0 &&
+              reentrant.active_editor()->toPlainText() == QStringLiteral("AB") &&
+              reentrant.activate_document(1) &&
+              reentrant.active_editor()->toPlainText().isEmpty(),
+          "Paragraph join did not contain a reentrant active-tab change");
+}
+
 void test_application_settings_workflow(const QString& directory) {
   using namespace jwpqt::qt;
   MainWindow window;
@@ -8031,6 +8164,7 @@ int main(int argc, char* argv[]) {
     test_word_and_line_selection(directory.path());
     test_brace_navigation(directory.path());
     test_word_navigation(directory.path());
+    test_page_break_paragraph_joins(directory.path());
     test_application_settings_workflow(directory.path());
     test_application_settings_preview(directory.path());
     test_application_settings_exit(directory.path());
