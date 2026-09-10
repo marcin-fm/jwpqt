@@ -184,6 +184,7 @@ class MainWindow : public QMainWindow {
                          OpenMode mode = OpenMode::kNonInteractive);
   QString current_project_path() const;
   QString project_warning() const;
+  QString last_open_error() const;
 
   // A new-tab open preserves other buffers and activates already-open paths.
   bool open_path(const QString& path, core::TextEncoding encoding,
@@ -475,6 +476,7 @@ class MainWindow : public QMainWindow {
   bool application_settings_persistence_enabled_ = true;
   QString project_path_;
   QString project_warning_;
+  QString last_open_error_;
   QString session_path_;
   QString session_warning_;
   std::optional<std::string> session_source_;

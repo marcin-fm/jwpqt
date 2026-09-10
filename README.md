@@ -39,7 +39,8 @@ Run the editor, optionally opening documents and projects in order:
 An unreadable argument is reported without preventing later arguments from
 opening. Repeated paths activate the existing tab instead of creating hidden
 duplicates. If every supplied path fails, noninteractive startup exits with a
-failure status.
+failure status. Each diagnostic belongs to that argument; a project error is
+never reused for a later ordinary file.
 
 ## Help And Installation
 
@@ -84,6 +85,11 @@ the native Qt application configuration/data locations are used. Do not change
 `XDG_CONFIG_HOME` just to isolate jwpqt: that can also hide the desktop's Qt theme
 settings. `user.dct` remains beside `dict.cfg`, unless the registry specifies an
 absolute path.
+
+JWPxp's first-argument `+directory`/`-directory` network syntax split Win32
+configuration paths and could suppress resource errors. It is not accepted as
+an ambiguous positional alias. Use the explicit native directory options above;
+resource failures remain visible in Runtime Resources.
 
 Place `dict.cfg`, its configured dictionaries/indexes, `kanjinfo.dat`,
 `radical.dat`, `stroke.dat`, and `radicals.bmp` in the configuration directory.

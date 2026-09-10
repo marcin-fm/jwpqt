@@ -192,16 +192,21 @@ int main(int argc, char* argv[]) {
                                               project_options.append);
     if (!opened) {
       if (interaction_mode == jwpqt::qt::OpenMode::kNonInteractive) {
-        QTextStream(stderr) << "Could not open " << path << ": ";
-        if (!window.project_warning().isEmpty()) {
-          QTextStream(stderr) << window.project_warning();
+        QTextStream error_stream(stderr);
+        const QString detail = window.last_open_error();
+        const QString prefix = QStringLiteral("Could not open ") + path;
+        if (detail.startsWith(prefix)) {
+          error_stream << detail;
+        } else if (!detail.isEmpty()) {
+          error_stream << prefix << ": " << detail;
         } else if (encoding.has_value()) {
-          QTextStream(stderr) << "the requested encoding failed";
+          error_stream << prefix << ": the requested encoding failed";
         } else {
-          QTextStream(stderr) << "the file type or encoding could not be "
-                                 "determined noninteractively";
+          error_stream << prefix
+                       << ": the file type or encoding could not be "
+                          "determined noninteractively";
         }
-        QTextStream(stderr) << '\n';
+        error_stream << '\n';
       }
       continue;
     }

@@ -20,6 +20,11 @@ jwpqt --encoding utf-8 /path/to/document.txt
 jwpqt --project /path/to/workspace.jpr
 ```
 
+These explicit options replace JWPxp's first-argument `+directory` and
+`-directory` network forms. The old forms divided several Win32 configuration
+paths implicitly and the minus form hid resource errors; the native application
+keeps each directory choice explicit and reports unavailable resources instead.
+
 ## Optional Data: User Provisioning
 
 Acquire data from a source you are entitled to use and retain its notices.

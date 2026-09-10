@@ -1027,12 +1027,14 @@ core::LegacyCodePage MainWindow::default_jwp_code_page() const noexcept {
 
 QString MainWindow::current_project_path() const { return project_path_; }
 QString MainWindow::project_warning() const { return project_warning_; }
+QString MainWindow::last_open_error() const { return last_open_error_; }
 
 bool MainWindow::open_project_path(const QString& path, const ProjectOpenOptions& options, OpenMode mode) {
   return open_workspace_path(path, options, mode, false);
 }
 
 bool MainWindow::open_workspace_path(const QString& path, const ProjectOpenOptions& options, OpenMode mode, bool session) {
+  if (!session) last_open_error_.clear();
   try {
     const auto project_bytes = read_file_bytes(path, core::JwpProjectLimits{}.encoded_bytes);
     const auto project = core::parse_jwp_project(project_bytes);
@@ -1289,6 +1291,7 @@ bool MainWindow::open_workspace_path(const QString& path, const ProjectOpenOptio
         : tr("Opened project %1 (%2 documents)").arg(path).arg(workspace.documents.size()), 5000);
     return true;
   } catch (const std::exception& error) {
+    if (!session) last_open_error_ = QString::fromUtf8(error.what());
     (session ? session_warning_ : project_warning_) = tr("Could not open workspace: %1").arg(QString::fromUtf8(error.what()));
     update_resource_status();
     if (mode == OpenMode::kInteractive) show_error(tr("Could not open project %1").arg(path), error);
@@ -5869,6 +5872,7 @@ MainWindow::DuplicateOpenResolution MainWindow::resolve_duplicate_open(
 
 bool MainWindow::open_path(const QString& path, core::TextEncoding encoding,
                            OpenMode mode, bool new_tab) {
+  last_open_error_.clear();
   const int existing = find_document_path(path);
   if (existing >= 0 && (new_tab || existing != current_document_index())) {
     const auto resolution = resolve_duplicate_open(
@@ -5887,6 +5891,7 @@ bool MainWindow::open_path(const QString& path, core::TextEncoding encoding,
     record_recent_document(*document_);
     return true;
   } catch (const std::exception& error) {
+    last_open_error_ = QString::fromUtf8(error.what());
     if (mode == OpenMode::kInteractive) {
       show_error(tr("Could not open %1").arg(path), error);
     }
@@ -5947,6 +5952,7 @@ bool MainWindow::open_jwp_path_impl(const QString& path,
                                     core::LegacyCodePage code_page,
                                     OpenMode mode, bool new_tab,
                                     bool allow_recovery) {
+  last_open_error_.clear();
   const int existing = find_document_path(path);
   if (existing >= 0 && (new_tab || existing != current_document_index())) {
     const auto resolution = resolve_duplicate_open(
@@ -5978,6 +5984,7 @@ bool MainWindow::open_jwp_path_impl(const QString& path,
     record_recent_document(*document_);
     return true;
   } catch (const std::exception& error) {
+    last_open_error_ = QString::fromUtf8(error.what());
     if (mode == OpenMode::kInteractive) {
       show_error(tr("Could not open %1").arg(path), error);
     }
@@ -6028,6 +6035,7 @@ std::optional<core::JwpDocument> MainWindow::decode_jwp_for_open(
 }
 
 bool MainWindow::open_path_detected(const QString& path, OpenMode mode, bool new_tab) {
+  last_open_error_.clear();
   const auto open_project = [&] {
     if (mode == OpenMode::kInteractive) return open_project_dialog(path);
     ProjectOpenOptions options;
@@ -6121,6 +6129,7 @@ bool MainWindow::open_path_detected(const QString& path, OpenMode mode, bool new
     record_recent_document(*document_);
     return true;
   } catch (const std::exception& error) {
+    last_open_error_ = QString::fromUtf8(error.what());
     if (mode == OpenMode::kInteractive) {
       show_error(tr("Could not open %1").arg(path), error);
     }

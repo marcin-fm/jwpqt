@@ -251,6 +251,7 @@ void test_multiple_startup_paths(const QString& executable,
   const QString first = fixture_root + QStringLiteral("/first.jwp");
   const QString second = fixture_root + QStringLiteral("/second.utf");
   const QString project = fixture_root + QStringLiteral("/workspace.jpr");
+  const QString broken_project = fixture_root + QStringLiteral("/broken.jpr");
   const QString missing = fixture_root + QStringLiteral("/missing.jwp");
   require(QDir().mkpath(fixture_root),
           QStringLiteral("Could not create multi-file startup fixture directory"));
@@ -266,6 +267,7 @@ void test_multiple_startup_paths(const QString& executable,
   startup_project.current_directory = fixture_root.toStdU32String();
   startup_project.paths = {first.toStdU32String()};
   jwpqt::qt::write_jwp_project_file(project, startup_project);
+  write_file(broken_project, QByteArray("bad"));
 
   auto prepare_case = [&](const QString& name) {
     const QString directory = fixture_root + QLatin1Char('/') + name;
@@ -320,6 +322,28 @@ void test_multiple_startup_paths(const QString& executable,
           QStringLiteral("Startup paths did not append in argument order"));
   require(QFileInfo(first).isFile(),
           QStringLiteral("Ordered startup removed its source document"));
+
+  const QString diagnostics = prepare_case(QStringLiteral("diagnostics"));
+  const QString diagnostic_output =
+      run(diagnostics, {broken_project, missing, second}, 0);
+  const QString project_prefix =
+      QStringLiteral("Could not open ") + broken_project + QStringLiteral(": ");
+  const QString missing_prefix =
+      QStringLiteral("Could not open ") + missing + QStringLiteral(": ");
+  QString project_error;
+  QString missing_error;
+  for (const QString& line : diagnostic_output.split(QLatin1Char('\n'))) {
+    if (line.startsWith(project_prefix)) project_error = line;
+    if (line.startsWith(missing_prefix)) missing_error = line;
+  }
+  require(project_error.contains(QStringLiteral("JWP project is truncated")) &&
+              missing_error.contains(QStringLiteral("No such file or directory")) &&
+              !missing_error.contains(QStringLiteral("JWP project")),
+          QStringLiteral("Startup failures did not retain per-path diagnostics: ") +
+              diagnostic_output);
+  require(session_paths(diagnostics) ==
+              std::vector<std::u32string>{second.toStdU32String()},
+          QStringLiteral("Startup did not continue after distinct failures"));
 
   const QString document_then_project =
       prepare_case(QStringLiteral("document then project"));

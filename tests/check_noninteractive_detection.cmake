@@ -31,7 +31,7 @@ if(NOT explicit_result EQUAL 1)
 endif()
 
 set(explicit_expected
-    "Could not open ${EUC_FILE}: the requested encoding failed")
+    "Could not open ${EUC_FILE}: Invalid UTF-8 at byte 6")
 string(FIND "${explicit_error}" "${explicit_expected}" explicit_found)
 if(explicit_found EQUAL -1)
   message(FATAL_ERROR "Expected explicit-open diagnostic, got: ${explicit_error}")
