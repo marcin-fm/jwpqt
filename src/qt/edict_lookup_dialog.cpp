@@ -957,6 +957,50 @@ std::u32string EdictLookupDialog::selected_rows() const {
   return rows;
 }
 
+std::optional<std::size_t> EdictLookupDialog::current_result_row() const {
+  const QTextCursor cursor = results_->textCursor();
+  const int position = cursor.hasSelection() ? cursor.selectionStart()
+                                             : cursor.position();
+  for (std::size_t row : display_order_) {
+    const auto range = row_ranges_.at(row);
+    if (position >= range.first &&
+        (position < range.second ||
+         (position == range.second && row == display_order_.back()))) {
+      return row;
+    }
+  }
+  return std::nullopt;
+}
+
+void EdictLookupDialog::copy_current_result_field(bool reading) {
+  const auto row = current_result_row();
+  if (!row) {
+    QApplication::clipboard()->clear();
+    return;
+  }
+  const core::EdictRecord& record = report_.results.at(*row).result.record;
+  const std::u32string& field = reading && !record.readings.empty()
+                                    ? record.readings.front()
+                                    : record.headword;
+  QApplication::clipboard()->setText(to_qstring(field));
+}
+
+void EdictLookupDialog::select_current_result(bool whole_row) {
+  const auto row = current_result_row();
+  if (!row) return;
+  const auto range = row_ranges_.at(*row);
+  int end = range.second;
+  if (!whole_row) {
+    end = range.first +
+          to_qstring(report_.results.at(*row).result.record.headword).size();
+  }
+  if (end <= range.first || end > range.second) return;
+  QTextCursor cursor(results_->document());
+  cursor.setPosition(range.first);
+  cursor.setPosition(end, QTextCursor::KeepAnchor);
+  results_->setTextCursor(cursor);
+}
+
 void EdictLookupDialog::update_actions() {
   const auto cursor = results_->textCursor();
   const bool entry_selected = cursor.hasSelection() && std::any_of(row_ranges_.begin(), row_ranges_.end(),
@@ -1014,6 +1058,24 @@ bool EdictLookupDialog::eventFilter(QObject* watched, QEvent* event) {
     }
     if (event->type() == QEvent::ShortcutOverride || event->type() == QEvent::KeyPress) {
       auto* key = static_cast<QKeyEvent*>(event);
+      const auto modifiers = key->modifiers() & ~Qt::KeypadModifier;
+      const bool copy_field = modifiers == Qt::ControlModifier &&
+                              (key->key() == Qt::Key_E ||
+                               key->key() == Qt::Key_R);
+      const bool select_field = key->key() == Qt::Key_W &&
+          (modifiers == Qt::ControlModifier ||
+           modifiers == (Qt::ControlModifier | Qt::ShiftModifier));
+      if (copy_field || select_field) {
+        event->accept();
+        if (event->type() == QEvent::KeyPress && !query_busy_) {
+          if (copy_field) {
+            copy_current_result_field(key->key() == Qt::Key_R);
+          } else {
+            select_current_result(modifiers.testFlag(Qt::ShiftModifier));
+          }
+        }
+        return true;
+      }
       const bool plain = !(key->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier));
       const bool enter = key->key() == Qt::Key_Return || key->key() == Qt::Key_Enter;
       const bool typing = !key->text().isEmpty() && key->text().front().unicode() >= 0x20U &&

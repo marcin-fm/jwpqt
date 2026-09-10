@@ -460,6 +460,13 @@ and preview are described below. The recovered main-menu command inventory and
 configuration surface are covered by native implementations or explicit platform
 replacements and exclusions.
 
+Focused dictionary results retain structured fields independently of their
+rendered layout. `Ctrl+E` copies the current headword; `Ctrl+R` copies its first
+reading, falling back to the headword when no reading exists. `Ctrl+W` selects
+the headword and `Ctrl+Shift+W` selects the complete rendered result. The
+accumulated-results list provides the same field-copy commands and selects its
+atomic current row for either word-selection shortcut.
+
 ### Document printing and preview
 
 **File > Print** and **Print Preview** use a frozen document,

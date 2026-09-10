@@ -18,6 +18,8 @@
 #include <QApplication>
 #include <QClipboard>
 #include <QHBoxLayout>
+#include <QItemSelectionModel>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QListWidget>
 #include <QPushButton>
@@ -130,7 +132,11 @@ void EdictResultsWindow::append_report(EdictResourceSearchReport report) {
   std::vector<QString> rendered;
   additions.reserve(report.results.size());
   for (const EdictResourceSearchResult& result : report.results) {
-    additions.push_back({render_record(result.result.record), result.label});
+    const core::EdictRecord& record = result.result.record;
+    additions.push_back({render_record(record), record.headword,
+                         record.readings.empty() ? record.headword
+                                                 : record.readings.front(),
+                         result.label});
     rendered.push_back(from_utf32(additions.back().text));
   }
   std::size_t new_rejected = rejected_;
@@ -175,7 +181,44 @@ void EdictResultsWindow::update_highlights() {
 
 bool EdictResultsWindow::eventFilter(QObject* watched, QEvent* event) {
   if (watched == results_ && event->type() == QEvent::PaletteChange) update_highlights();
+  if (watched == results_ &&
+      (event->type() == QEvent::ShortcutOverride ||
+       event->type() == QEvent::KeyPress)) {
+    const auto* key = static_cast<QKeyEvent*>(event);
+    const auto modifiers = key->modifiers() & ~Qt::KeypadModifier;
+    const bool copy_field = modifiers == Qt::ControlModifier &&
+                            (key->key() == Qt::Key_E ||
+                             key->key() == Qt::Key_R);
+    const bool select_result = key->key() == Qt::Key_W &&
+        (modifiers == Qt::ControlModifier ||
+         modifiers == (Qt::ControlModifier | Qt::ShiftModifier));
+    if (copy_field || select_result) {
+      event->accept();
+      if (event->type() == QEvent::KeyPress) {
+        if (copy_field) copy_current_field(key->key() == Qt::Key_R);
+        else select_current_result();
+      }
+      return true;
+    }
+  }
   return QWidget::eventFilter(watched, event);
+}
+
+void EdictResultsWindow::copy_current_field(bool reading) {
+  const int row = results_->currentRow();
+  if (row < 0 || static_cast<std::size_t>(row) >= stored_results_.size()) {
+    QApplication::clipboard()->clear();
+    return;
+  }
+  const StoredResult& result = stored_results_[static_cast<std::size_t>(row)];
+  QApplication::clipboard()->setText(
+      from_utf32(reading ? result.reading : result.headword));
+}
+
+void EdictResultsWindow::select_current_result() {
+  const int row = results_->currentRow();
+  if (row < 0) return;
+  results_->setCurrentRow(row, QItemSelectionModel::ClearAndSelect);
 }
 
 void EdictResultsWindow::clear_results() {

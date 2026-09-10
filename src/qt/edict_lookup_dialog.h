@@ -5,6 +5,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -77,6 +78,9 @@ class EdictLookupDialog : public QDialog {
   enum class HistoryCommand { kOlder, kNewer, kList };
 
   std::u32string selected_rows() const;
+  std::optional<std::size_t> current_result_row() const;
+  void copy_current_result_field(bool reading);
+  void select_current_result(bool whole_row);
   void history_command(HistoryCommand command);
   bool recall_history(std::u32string_view text, int index, bool changed);
   bool publish_results(EdictResourceSearchReport report, int sort_state,

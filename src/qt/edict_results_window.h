@@ -34,9 +34,13 @@ class EdictResultsWindow : public QWidget {
  private:
   struct StoredResult {
     std::u32string text;
+    std::u32string headword;
+    std::u32string reading;
     QString source;
   };
 
+  void copy_current_field(bool reading);
+  void select_current_result();
   void copy_selected();
   void insert_selected();
   std::vector<int> selected_rows() const;

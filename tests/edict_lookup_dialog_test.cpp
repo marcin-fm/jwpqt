@@ -214,7 +214,10 @@ void test_result_keyboard_commands() {
   qt::EdictLookupDialog dialog([&](const auto&, const auto&, bool) {
     ++searches;
     qt::EdictResourceSearchReport report;
-    report.results = {result(0, QStringLiteral("Main"), U"cat", {}, {U"feline"})};
+    report.results = {
+        result(0, QStringLiteral("Main"), U"cat", {}, {U"feline"}),
+        result(0, QStringLiteral("Main"), U"\u72ac", {U"\u3044\u306c"},
+               {U"dog"})};
     return report;
   }, [&](const std::u32string& text) {
     ++inserts; inserted = text; return !reject_insert;
@@ -278,6 +281,41 @@ void test_result_keyboard_commands() {
   key(Qt::Key_C, Qt::ControlModifier, QStringLiteral("c"));
   require(query->text() == QStringLiteral("kept") && !QApplication::clipboard()->text().isEmpty(),
           "Result typing stole native Copy");
+  QTextCursor dog(results->document());
+  dog.setPosition(results->toPlainText().indexOf(QStringLiteral("\u72ac")));
+  results->setTextCursor(dog);
+  QKeyEvent field_override(QEvent::ShortcutOverride, Qt::Key_E,
+                           Qt::ControlModifier);
+  field_override.ignore();
+  QApplication::sendEvent(results, &field_override);
+  require(field_override.isAccepted(),
+          "Dictionary field Copy did not own its shortcut");
+  key(Qt::Key_E, Qt::ControlModifier);
+  require(QApplication::clipboard()->text() == QStringLiteral("\u72ac"),
+          "Ctrl+E did not copy the current headword");
+  require(!results->textCursor().hasSelection(),
+          "Ctrl+E changed the result selection");
+  key(Qt::Key_R, Qt::ControlModifier);
+  require(QApplication::clipboard()->text() == QStringLiteral("\u3044\u306c"),
+          "Ctrl+R did not copy the current reading");
+  key(Qt::Key_W, Qt::ControlModifier);
+  require(results->textCursor().selectedText() == QStringLiteral("\u72ac"),
+          "Ctrl+W did not select the current headword");
+  key(Qt::Key_W, Qt::ControlModifier | Qt::ShiftModifier);
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() ==
+              QStringLiteral("\u72ac [\u3044\u306c]\ndog"),
+          "Ctrl+Shift+W did not select the complete current result");
+  reject_insert = false;
+  key(Qt::Key_Return, Qt::NoModifier);
+  require(inserted == U"\u72ac [\u3044\u306c] /dog/",
+          "Field selection changed canonical result insertion");
+  QTextCursor cat(results->document());
+  cat.setPosition(results->toPlainText().indexOf(QStringLiteral("cat")));
+  results->setTextCursor(cat);
+  key(Qt::Key_R, Qt::ControlModifier);
+  require(QApplication::clipboard()->text() == QStringLiteral("cat"),
+          "Reading Copy did not fall back to a reading-only headword");
   key(Qt::Key_unknown, Qt::NoModifier);
   const auto before = query->text();
   key(Qt::Key_Left, Qt::NoModifier);

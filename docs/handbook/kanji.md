@@ -67,6 +67,12 @@ Result strips provide canonical insertion and per-character information menus.
 Count Kanji can inspect current or all open documents without changing their
 text or accepting a conversion preview. Its snapshots follow edits and closed
 tabs. The accumulated dictionary result window opens only on explicit request.
+In focused dictionary results, Ctrl+E copies the current headword and Ctrl+R
+copies its first reading, or the headword when the entry has no reading. Ctrl+W
+selects the headword and Ctrl+Shift+W selects the complete result. Accumulated
+results retain exact structured fields for the copy commands; because that
+window uses atomic list rows, both word-selection shortcuts select its current
+row.
 The Add/Remove kanji-color-list prompt provides K/A/J input, shared
 Insert/Overwrite behavior and pending-kana completion before validating the
 edited list.

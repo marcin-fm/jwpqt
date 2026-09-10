@@ -14,6 +14,7 @@
 #include <QClipboard>
 #include <QListWidget>
 #include <QLabel>
+#include <QKeyEvent>
 #include <QPushButton>
 #include <QTextEdit>
 #include <iostream>
@@ -94,13 +95,35 @@ int main(int argc, char** argv) {
     auto* list = accumulated.findChild<QListWidget*>(QStringLiteral("edictResultsList"));
     require(list->count() == 3 && list->item(1)->foreground().color() == QColor("#0000cc") &&
             list->item(0)->foreground().style() == Qt::NoBrush, "Accumulated provenance lost");
-    list->item(1)->setSelected(true);
+    list->setCurrentRow(1);
     const auto canonical = list->item(1)->text();
     accumulated.set_insert_handler([&](const auto& value) { inserted = value; return true; });
     accumulated.set_highlight_color(QColor("#006000"));
     require(list->item(1)->isSelected() && list->item(1)->text() == canonical, "Accumulated recolor changed selection/text");
     accumulated.findChild<QPushButton*>(QStringLiteral("edictResultsInsert"))->click();
     require(qt::to_qstring(inserted) == canonical, "Accumulated insertion changed");
+    QKeyEvent copy_headword(QEvent::KeyPress, Qt::Key_E,
+                            Qt::ControlModifier);
+    QApplication::sendEvent(list, &copy_headword);
+    require(QApplication::clipboard()->text() == QStringLiteral("special"),
+            "Accumulated Ctrl+E did not copy the structured headword");
+    QKeyEvent copy_reading(QEvent::KeyPress, Qt::Key_R,
+                           Qt::ControlModifier);
+    QApplication::sendEvent(list, &copy_reading);
+    require(QApplication::clipboard()->text() == QStringLiteral("special"),
+            "Accumulated reading Copy did not fall back to the headword");
+    list->clearSelection();
+    list->setCurrentItem(nullptr);
+    QApplication::clipboard()->setText(QStringLiteral("stale"));
+    QApplication::sendEvent(list, &copy_headword);
+    require(QApplication::clipboard()->text().isEmpty(),
+            "Accumulated field Copy retained stale clipboard text without a row");
+    list->setCurrentRow(1);
+    QKeyEvent select_row(QEvent::KeyPress, Qt::Key_W,
+                         Qt::ControlModifier | Qt::ShiftModifier);
+    QApplication::sendEvent(list, &select_row);
+    require(list->selectedItems() == QList<QListWidgetItem*>{list->item(1)},
+            "Accumulated Ctrl+Shift+W did not select the current result row");
     accumulated.setPalette(dark); QApplication::processEvents();
     require(list->item(1)->foreground().color() == qt::source_highlight_color(list->palette(), QColor("#006000")), "Accumulated theme stale");
 
