@@ -30,7 +30,8 @@ class WnnUserDictionaryDialog : public QDialog {
 
   explicit WnnUserDictionaryDialog(
       const core::WnnUserDictionary& dictionary, SaveHandler save_handler,
-      InsertHandler insert_handler = {}, QWidget* parent = nullptr);
+      InsertHandler insert_handler = {}, QWidget* parent = nullptr,
+      QString dictionary_path = {});
 
   const std::vector<core::WnnUserEntry>& entries() const noexcept;
   std::size_t add_entry(core::WnnUserEntry entry);
@@ -68,6 +69,7 @@ class WnnUserDictionaryDialog : public QDialog {
   core::WnnUserDictionaryEditor editor_model_;
   SaveHandler save_handler_;
   InsertHandler insert_handler_;
+  QString dictionary_path_;
   QPointer<QAction> overwrite_action_;
   QListWidget* entries_list_;
   QLabel* status_label_;

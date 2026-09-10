@@ -76,7 +76,9 @@ Import in either user-dictionary window accepts multiple files, and local files
 can be dropped directly on the window. Every file is parsed in source order
 before the working copy changes, so a missing, malformed or oversized file does
 not leave a partially imported dictionary. Saving remains a separate explicit
-operation.
+operation. User Conversions first warns that Import is additive and defaults to
+No. Both Import commands start in the directory containing the configured user
+file, rather than depending on the application's working directory.
 
 Application exit checks both user-dictionary working copies before documents
 or settings. Save publishes through the same atomic file boundary as the

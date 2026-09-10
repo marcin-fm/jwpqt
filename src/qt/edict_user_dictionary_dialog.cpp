@@ -64,12 +64,13 @@ bool reading_contains_non_kana(const core::JwpText& reading) noexcept {
 EdictUserDictionaryDialog::EdictUserDictionaryDialog(
     const core::EdictUserDictionary& dictionary,
     core::LegacyCodePage code_page, SaveHandler save_handler,
-    InsertHandler insert_handler, QWidget* parent)
+    InsertHandler insert_handler, QWidget* parent, QString dictionary_path)
     : QDialog(parent),
       editor_model_(dictionary, code_page),
       code_page_(code_page),
       save_handler_(std::move(save_handler)),
       insert_handler_(std::move(insert_handler)),
+      dictionary_path_(std::move(dictionary_path)),
       entries_list_(new QListWidget(this)),
       status_label_(new QLabel(this)),
       edit_button_(new QPushButton(tr("&Edit..."), this)),
@@ -480,10 +481,17 @@ EdictUserDictionaryDialog::prompt_for_entry(
 
 std::optional<core::EdictUserDictionary>
 EdictUserDictionaryDialog::prompt_for_import() {
+  const QString expected_path = dictionary_path_;
+  const QPointer<EdictUserDictionaryDialog> self(this);
+  const QString initial_directory =
+      expected_path.isEmpty() ? QString{}
+                              : QFileInfo(expected_path).absolutePath();
   const QStringList paths = QFileDialog::getOpenFileNames(
-      this, tr("Import User Dictionary"), {},
-      tr("JWP user dictionaries (*.dct);;All files (*)"));
-  if (paths.isEmpty()) return std::nullopt;
+      this, tr("Import User Dictionary"), initial_directory,
+      tr("All files (*)"));
+  if (!self || dictionary_path_ != expected_path || paths.isEmpty()) {
+    return std::nullopt;
+  }
   return read_imports(paths);
 }
 

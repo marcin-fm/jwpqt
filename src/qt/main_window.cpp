@@ -4569,7 +4569,7 @@ void MainWindow::show_wnn_user_dictionary_dialog() {
               "Could not insert the user conversion into the document");
         }
       },
-      this);
+      this, wnn_resources_->user_dictionary_path);
   dialog->set_overwrite_action(overwrite_action_);
   dialog->setObjectName(QStringLiteral("userDictionaryDialog"));
   dialog->setAttribute(Qt::WA_DeleteOnClose);
@@ -4607,7 +4607,7 @@ void MainWindow::show_edict_user_dictionary_dialog() {
               "Could not insert the user dictionary entry into the document");
         }
       },
-      this);
+      this, edict_user_resources_->path);
   dialog->set_overwrite_action(overwrite_action_);
   dialog->setObjectName(QStringLiteral("edictUserDictionaryDialog"));
   dialog->setAttribute(Qt::WA_DeleteOnClose);

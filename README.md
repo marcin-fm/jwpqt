@@ -130,6 +130,9 @@ close attempt, so a later cancellation leaves the working copy dirty.
 Closing either editor from its title bar separately asks whether to save, with
 Save as the safe default; No closes that working copy without publishing it.
 The editor's explicit Cancel button remains the intentional discard command.
+User Conversions warns before its additive Import and defaults to No. Both
+editors start Import in the directory of their configured user file, then parse
+every selected file before appending anything to the working copy.
 The [handbook](docs/handbook/dictionary.md) describes the complete native workflow.
 
 The clickable **Resources** status and **Help > Runtime Resources** show loaded

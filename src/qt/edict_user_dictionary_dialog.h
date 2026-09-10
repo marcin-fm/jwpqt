@@ -31,7 +31,8 @@ class EdictUserDictionaryDialog : public QDialog {
   explicit EdictUserDictionaryDialog(
       const core::EdictUserDictionary& dictionary,
       core::LegacyCodePage code_page, SaveHandler save_handler,
-      InsertHandler insert_handler = {}, QWidget* parent = nullptr);
+      InsertHandler insert_handler = {}, QWidget* parent = nullptr,
+      QString dictionary_path = {});
 
   const std::vector<core::EdictUserEntry>& entries() const noexcept;
   std::size_t add_entry(core::EdictUserEntry entry);
@@ -72,6 +73,7 @@ class EdictUserDictionaryDialog : public QDialog {
   QPointer<QAction> overwrite_action_;
   SaveHandler save_handler_;
   InsertHandler insert_handler_;
+  QString dictionary_path_;
   QListWidget* entries_list_;
   QLabel* status_label_;
   QPushButton* edit_button_;

@@ -13,9 +13,12 @@
 #include <QAction>
 #include <QComboBox>
 #include <QDialogButtonBox>
+#include <QDir>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QFile>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
@@ -219,6 +222,71 @@ void test_title_bar_close() {
   (void)deleted->close();
   require(deletion_prompt && deleted_guard.isNull(),
           "Deleting user conversions during its close prompt used stale state");
+}
+
+void test_import_command() {
+  QTemporaryDir temporary;
+  require(temporary.isValid(), "Could not create WNN import fixture directory");
+  const QString directory = temporary.filePath(QStringLiteral("dictionary"));
+  require(QDir().mkpath(directory), "Could not create WNN import source directory");
+  const QString backing_path = directory + QStringLiteral("/user.cnv");
+  const QString import_path = directory + QStringLiteral("/import.any");
+  const WnnUserEntry imported = entry({0x242b}, {0x3022});
+  jwpqt::qt::write_wnn_user_dictionary_file(
+      import_path, WnnUserDictionary::from_entries({imported}));
+
+  WnnUserDictionaryDialog dialog(
+      WnnUserDictionary::from_entries({}),
+      [](WnnUserDictionary) { return true; }, {}, nullptr, backing_path);
+  QPushButton* import_button =
+      dialog.findChild<QPushButton*>(QStringLiteral("wnnUserImport"));
+  require(import_button != nullptr, "WNN Import button is unavailable");
+
+  bool safe_default = false;
+  QTimer::singleShot(0, [&] {
+    auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    safe_default =
+        prompt && prompt->objectName() ==
+                      QStringLiteral("confirmWnnUserDictionaryImportPrompt") &&
+        prompt->defaultButton() == prompt->button(QMessageBox::No);
+    if (prompt) prompt->button(QMessageBox::No)->click();
+  });
+  import_button->click();
+  require(safe_default && dialog.entries().empty() &&
+              dialog.findChild<QFileDialog*>() == nullptr,
+          "Declining additive WNN Import opened a chooser or changed entries");
+
+  bool chooser_verified = false;
+  QTimer::singleShot(0, [&] {
+    auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    if (prompt) prompt->button(QMessageBox::Yes)->click();
+    QTimer::singleShot(0, [&] {
+      auto* chooser = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+      chooser_verified =
+          chooser && chooser->directory().absolutePath() == directory &&
+          chooser->nameFilters().contains(QStringLiteral("All files (*)"));
+      if (chooser) {
+        chooser->selectFile(import_path);
+        static_cast<QDialog*>(chooser)->accept();
+      }
+    });
+  });
+  import_button->click();
+  require(chooser_verified && dialog.entries() ==
+                                  std::vector<WnnUserEntry>{imported} &&
+              dialog.isWindowModified(),
+          "WNN Import did not use the configured directory or append entries");
+
+  auto* deleted = new WnnUserDictionaryDialog(
+      WnnUserDictionary::from_entries({}),
+      [](WnnUserDictionary) { return true; }, {}, nullptr, backing_path);
+  QPushButton* deleted_button =
+      deleted->findChild<QPushButton*>(QStringLiteral("wnnUserImport"));
+  QPointer<WnnUserDictionaryDialog> deleted_guard(deleted);
+  QTimer::singleShot(0, [&] { delete deleted; });
+  deleted_button->click();
+  require(deleted_guard.isNull(),
+          "Deleting WNN Import during confirmation used stale dialog state");
 }
 
 void test_multi_file_import_drop() {
@@ -592,6 +660,7 @@ int main(int argc, char** argv) {
     test_editing_and_save();
     test_import_insert_and_failed_save();
     test_title_bar_close();
+    test_import_command();
     test_multi_file_import_drop();
     test_invalid_edit_is_atomic();
     test_imported_inflection_round_trip();

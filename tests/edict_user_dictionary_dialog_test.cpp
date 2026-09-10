@@ -12,9 +12,12 @@
 #include <QApplication>
 #include <QAction>
 #include <QDialogButtonBox>
+#include <QDir>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QFile>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
@@ -220,6 +223,57 @@ void test_title_bar_close() {
   (void)deleted->close();
   require(deletion_prompt && deleted_guard.isNull(),
           "Deleting the user dictionary during close used stale state");
+}
+
+void test_import_command() {
+  QTemporaryDir temporary;
+  require(temporary.isValid(), "Could not create EDICT import fixture directory");
+  const QString directory = temporary.filePath(QStringLiteral("dictionary"));
+  require(QDir().mkpath(directory),
+          "Could not create EDICT import source directory");
+  const QString backing_path = directory + QStringLiteral("/user.dct");
+  const QString import_path = directory + QStringLiteral("/import.any");
+  const EdictUserEntry imported = entry({0x242b}, U"imported", {0x3021});
+  jwpqt::qt::write_edict_user_dictionary_file(
+      import_path, EdictUserDictionary::from_entries({imported}),
+      jwpqt::core::LegacyCodePage::k1252);
+
+  EdictUserDictionaryDialog dialog(
+      EdictUserDictionary::from_entries({}),
+      jwpqt::core::LegacyCodePage::k1252,
+      [](EdictUserDictionary) { return true; }, {}, nullptr, backing_path);
+  QPushButton* import_button =
+      dialog.findChild<QPushButton*>(QStringLiteral("edictUserImport"));
+  require(import_button != nullptr, "EDICT Import button is unavailable");
+
+  bool chooser_verified = false;
+  QTimer::singleShot(0, [&] {
+    auto* chooser = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+    chooser_verified =
+        chooser && chooser->directory().absolutePath() == directory &&
+        chooser->nameFilters().contains(QStringLiteral("All files (*)"));
+    if (chooser) {
+      chooser->selectFile(import_path);
+      static_cast<QDialog*>(chooser)->accept();
+    }
+  });
+  import_button->click();
+  require(chooser_verified && dialog.entries() ==
+                                  std::vector<EdictUserEntry>{imported} &&
+              dialog.isWindowModified(),
+          "EDICT Import did not use the configured directory or append entries");
+
+  auto* deleted = new EdictUserDictionaryDialog(
+      EdictUserDictionary::from_entries({}),
+      jwpqt::core::LegacyCodePage::k1252,
+      [](EdictUserDictionary) { return true; }, {}, nullptr, backing_path);
+  QPushButton* deleted_button =
+      deleted->findChild<QPushButton*>(QStringLiteral("edictUserImport"));
+  QPointer<EdictUserDictionaryDialog> deleted_guard(deleted);
+  QTimer::singleShot(0, [&] { delete deleted; });
+  deleted_button->click();
+  require(deleted_guard.isNull(),
+          "Deleting EDICT Import during its chooser used stale dialog state");
 }
 
 void test_multi_file_import_drop() {
@@ -581,6 +635,7 @@ int main(int argc, char** argv) {
     test_editing_and_save();
     test_import_insert_and_failed_save();
     test_title_bar_close();
+    test_import_command();
     test_multi_file_import_drop();
     test_invalid_edit_is_atomic();
     test_imported_empty_meaning_round_trip();

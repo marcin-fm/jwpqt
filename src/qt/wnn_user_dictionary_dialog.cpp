@@ -127,11 +127,12 @@ bool reading_is_hiragana(const core::JwpText& reading) noexcept {
 
 WnnUserDictionaryDialog::WnnUserDictionaryDialog(
     const core::WnnUserDictionary& dictionary, SaveHandler save_handler,
-    InsertHandler insert_handler, QWidget* parent)
+    InsertHandler insert_handler, QWidget* parent, QString dictionary_path)
     : QDialog(parent),
       editor_model_(dictionary),
       save_handler_(std::move(save_handler)),
       insert_handler_(std::move(insert_handler)),
+      dictionary_path_(std::move(dictionary_path)),
       entries_list_(new QListWidget(this)),
       status_label_(new QLabel(this)),
       edit_button_(new QPushButton(tr("&Edit..."), this)),
@@ -519,10 +520,32 @@ WnnUserDictionaryDialog::prompt_for_entry(
 
 std::optional<core::WnnUserDictionary>
 WnnUserDictionaryDialog::prompt_for_import() {
+  const QString expected_path = dictionary_path_;
+  const QPointer<WnnUserDictionaryDialog> self(this);
+  QPointer<QMessageBox> warning = new QMessageBox(
+      QMessageBox::Warning, tr("Import User Conversions"),
+      tr("Import will add to the current set of conversions."),
+      QMessageBox::Yes | QMessageBox::No, this);
+  warning->setObjectName(
+      QStringLiteral("confirmWnnUserDictionaryImportPrompt"));
+  warning->setDefaultButton(QMessageBox::No);
+  warning->setEscapeButton(QMessageBox::No);
+  const int answer = warning->exec();
+  if (warning) delete warning.data();
+  if (!self || answer != QMessageBox::Yes ||
+      dictionary_path_ != expected_path) {
+    return std::nullopt;
+  }
+
+  const QString initial_directory =
+      expected_path.isEmpty() ? QString{}
+                              : QFileInfo(expected_path).absolutePath();
   const QStringList paths = QFileDialog::getOpenFileNames(
-      this, tr("Import User Conversion Dictionary"), {},
-      tr("JWP user conversion dictionaries (*.cnv);;All files (*)"));
-  if (paths.isEmpty()) return std::nullopt;
+      this, tr("Import User Conversions"), initial_directory,
+      tr("All files (*)"));
+  if (!self || dictionary_path_ != expected_path || paths.isEmpty()) {
+    return std::nullopt;
+  }
   return read_imports(paths);
 }
 
