@@ -2955,8 +2955,10 @@ void MainWindow::create_actions() {
   cut_action->setShortcut(QKeySequence::Cut);
   cut_action->setEnabled(false);
   connect(cut_action, &QAction::triggered, this, [this] {
+    const QPointer<JwpEditor> editor(document_->editor_);
     finish_kana_input();
-    document_->editor_->cut();
+    if (!editor || document_->editor_ != editor) return;
+    if (!delete_document_selection(true)) editor->cut();
   });
 
   QAction* copy_action = edit_menu->addAction(tr("&Copy"));
@@ -4526,22 +4528,10 @@ void MainWindow::navigate_document_word(bool forward, bool extend_selection) {
   if (self && editor && document_->editor_ == editor) editor->ensureCursorVisible();
 }
 
-bool MainWindow::join_document_paragraph(bool backward) {
-  DocumentState* const target = document_;
-  if (!target->jwp_document_ || target->editor_->isReadOnly() ||
-      conversion_active() || document_->kana_input_.pending()) {
-    return false;
-  }
-
-  QTextCursor cursor = target->editor_->textCursor();
-  if (cursor.hasSelection()) return false;
-  const QTextBlock block = cursor.block();
-  const bool at_boundary =
-      backward ? cursor.position() == block.position() && block.previous().isValid()
-               : cursor.position() == block.position() + block.length() - 1 &&
-                     block.next().isValid();
-  if (!at_boundary) return false;
-
+bool MainWindow::apply_jwp_model_edit(
+    DocumentState* target, const QTextCursor& cursor,
+    const std::function<core::JwpPosition(core::JwpDocumentModel&)>& edit,
+    const QString& failure_message) {
   try {
     const QString original_text =
         document_plain_text(*target->editor_->document());
@@ -4549,13 +4539,11 @@ bool MainWindow::join_document_paragraph(bool backward) {
     const core::JwpPosition before = core::jwp_plain_text_position(
         *target->jwp_document_,
         utf32_offset_for_utf16(original_text, cursor.position()));
-    const std::size_t paragraph = static_cast<std::size_t>(block.blockNumber());
-    const std::size_t joined_paragraph = backward ? paragraph - 1 : paragraph;
 
     core::JwpDocumentModel candidate = *target->jwp_document_;
     core::JwpDocumentHistory history = target->jwp_history_;
     history.begin(candidate, before);
-    const core::JwpPosition after = candidate.join_with_next(joined_paragraph);
+    const core::JwpPosition after = edit(candidate);
     if (!history.commit(candidate, after, core::JwpHistoryKind::kDeletion)) {
       return true;
     }
@@ -4620,11 +4608,83 @@ bool MainWindow::join_document_paragraph(bool backward) {
     return true;
   } catch (const std::exception& error) {
     statusBar()->showMessage(
-        tr("Could not join paragraphs: %1")
+        failure_message.arg(QString::fromUtf8(error.what())),
+        5000);
+    return true;
+  }
+}
+
+bool MainWindow::delete_document_selection(bool copy_to_clipboard) {
+  DocumentState* const target = document_;
+  if (!target->jwp_document_ || target->editor_->isReadOnly() ||
+      conversion_active() || target->kana_input_.pending()) {
+    return false;
+  }
+
+  const QPointer<MainWindow> self(this);
+  const QPointer<JwpEditor> editor(target->editor_);
+  QTextCursor cursor = editor->textCursor();
+  if (!cursor.hasSelection()) return false;
+  QTextDocument* const source_document = editor->document();
+  const int source_revision = source_document->revision();
+  const int anchor = cursor.anchor();
+  const int position = cursor.position();
+  if (copy_to_clipboard) {
+    editor->copy();
+    if (!self || !editor || document_ != target || target->editor_ != editor ||
+        editor->document() != source_document ||
+        source_document->revision() != source_revision ||
+        editor->textCursor().anchor() != anchor ||
+        editor->textCursor().position() != position) {
+      return true;
+    }
+  }
+
+  try {
+    const QString text = document_plain_text(*editor->document());
+    const core::JwpRange range{
+        core::jwp_plain_text_position(
+            *target->jwp_document_,
+            utf32_offset_for_utf16(text, cursor.selectionStart())),
+        core::jwp_plain_text_position(
+            *target->jwp_document_,
+            utf32_offset_for_utf16(text, cursor.selectionEnd()))};
+    return apply_jwp_model_edit(
+        target, cursor,
+        [range](core::JwpDocumentModel& model) { return model.erase(range); },
+        tr("Could not delete selection: %1"));
+  } catch (const std::exception& error) {
+    statusBar()->showMessage(
+        tr("Could not delete selection: %1")
             .arg(QString::fromUtf8(error.what())),
         5000);
     return true;
   }
+}
+
+bool MainWindow::join_document_paragraph(bool backward) {
+  DocumentState* const target = document_;
+  if (!target->jwp_document_ || target->editor_->isReadOnly() ||
+      conversion_active() || document_->kana_input_.pending()) {
+    return false;
+  }
+
+  QTextCursor cursor = target->editor_->textCursor();
+  if (cursor.hasSelection()) return false;
+  const QTextBlock block = cursor.block();
+  const bool at_boundary =
+      backward ? cursor.position() == block.position() && block.previous().isValid()
+               : cursor.position() == block.position() + block.length() - 1 &&
+                     block.next().isValid();
+  if (!at_boundary) return false;
+  const std::size_t paragraph = static_cast<std::size_t>(block.blockNumber());
+  const std::size_t joined_paragraph = backward ? paragraph - 1 : paragraph;
+  return apply_jwp_model_edit(
+      target, cursor,
+      [joined_paragraph](core::JwpDocumentModel& model) {
+        return model.join_with_next(joined_paragraph);
+      },
+      tr("Could not join paragraphs: %1"));
 }
 
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
@@ -4809,6 +4869,18 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
        event->type() == QEvent::KeyPress)) {
     const auto* key = static_cast<QKeyEvent*>(event);
     const Qt::KeyboardModifiers modifiers = key->modifiers();
+    const bool selected_delete =
+        (key->key() == Qt::Key_Backspace || key->key() == Qt::Key_Delete) &&
+        (modifiers == Qt::NoModifier || modifiers == Qt::ShiftModifier) &&
+        document_->jwp_document_ && !conversion_active() &&
+        !document_->kana_input_.pending() &&
+        document_->editor_->textCursor().hasSelection();
+    if (selected_delete) {
+      event->accept();
+      if (event->type() == QEvent::ShortcutOverride) return true;
+      delete_document_selection(modifiers == Qt::ShiftModifier);
+      return true;
+    }
     const bool paragraph_join =
         (key->key() == Qt::Key_Backspace || key->key() == Qt::Key_Delete) &&
         modifiers == Qt::NoModifier && document_->jwp_document_ &&

@@ -26,13 +26,17 @@ disabled in a read-only document.
 Shift+Backspace and Shift+Delete cut an existing selection. With no selection,
 they delete from the caret to the beginning or end of the current wrapped visual
 line without replacing the clipboard. A line-edge no-op does not dirty the file,
-and each actual deletion is one undoable edit.
+and each actual deletion is one undoable edit. Native selections that cross hard
+page breaks are removed through the structured document model; Cut retains both
+ordinary clipboard text and the exact native JWP fragment.
 
 Ordinary Backspace or Delete at a native paragraph boundary performs the original
 JWP paragraph join. A hard page break at the join is removed, except for the source
 special case where an empty paragraph immediately before a page-break paragraph is
 removed and the page break remains. The surviving paragraph keeps its format, and
 Undo restores the complete text, formatting and page-break structure.
+Selected Backspace/Delete follows the same metadata-aware path, including reversed
+selections and ranges spanning one or more hard page breaks.
 
 ## Word And Line Selection
 

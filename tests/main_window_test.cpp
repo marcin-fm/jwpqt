@@ -3412,14 +3412,15 @@ void test_word_navigation(const QString& directory) {
 void test_page_break_paragraph_joins(const QString& directory) {
   using namespace jwpqt::core;
   using namespace jwpqt::qt;
-  const auto send_delete = [](JwpEditor* editor, Qt::Key key) {
-    QKeyEvent override(QEvent::ShortcutOverride, key, Qt::NoModifier);
+  const auto send_delete = [](JwpEditor* editor, Qt::Key key,
+                              Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+    QKeyEvent override(QEvent::ShortcutOverride, key, modifiers);
     QApplication::sendEvent(editor, &override);
     require(override.isAccepted(),
             "Paragraph-join shortcut override was not accepted");
-    QKeyEvent press(QEvent::KeyPress, key, Qt::NoModifier);
+    QKeyEvent press(QEvent::KeyPress, key, modifiers);
     QApplication::sendEvent(editor, &press);
-    QKeyEvent release(QEvent::KeyRelease, key, Qt::NoModifier);
+    QKeyEvent release(QEvent::KeyRelease, key, modifiers);
     QApplication::sendEvent(editor, &release);
   };
   const auto set_cursor = [](JwpEditor* editor, int position) {
@@ -3513,6 +3514,63 @@ void test_page_break_paragraph_joins(const QString& directory) {
   require(*normal_window.current_jwp_document() == normal,
           "Ordinary paragraph join was not one native undo operation");
 
+  QTextCursor selected = editor->textCursor();
+  selected.setPosition(3);
+  selected.setPosition(1, QTextCursor::KeepAnchor);
+  editor->setTextCursor(selected);
+  send_delete(editor, Qt::Key_Delete);
+  expected = source;
+  expected.paragraphs = {source.paragraphs[0]};
+  expected.paragraphs[0].text = encode_jwp_text(U"AB");
+  require(*window.current_jwp_document() == expected &&
+              editor->toPlainText() == QStringLiteral("AB") &&
+              editor->textCursor().position() == 1 &&
+              !editor->textCursor().hasSelection(),
+          "Selected Delete did not remove hard page breaks through the native model");
+  undo->trigger();
+  require(*window.current_jwp_document() == source,
+          "Selected Delete across a page break was not one undo operation");
+
+  selected = editor->textCursor();
+  selected.setPosition(1);
+  selected.setPosition(3, QTextCursor::KeepAnchor);
+  editor->setTextCursor(selected);
+  find_action(window, "cutAction")->trigger();
+  const QMimeData* copied = QApplication::clipboard()->mimeData();
+  const QByteArray private_bytes =
+      copied->data(QString::fromLatin1(kJwpClipboardMime));
+  const auto fragment = decode_jwp_clipboard_fragment(std::string_view(
+      private_bytes.constData(), static_cast<std::size_t>(private_bytes.size())));
+  require(*window.current_jwp_document() == expected &&
+              QApplication::clipboard()->text() == QStringLiteral("\n\n") &&
+              fragment.document.paragraphs.size() == 3 &&
+              fragment.document.paragraphs[1].page_break &&
+              editor->textCursor().position() == 1,
+          "Cut lost selected page-break clipboard data or native deletion");
+  undo->trigger();
+  require(*window.current_jwp_document() == source,
+          "Cut across a page break was not one undo operation");
+
+  selected = editor->textCursor();
+  selected.setPosition(3);
+  selected.setPosition(1, QTextCursor::KeepAnchor);
+  editor->setTextCursor(selected);
+  send_delete(editor, Qt::Key_Delete, Qt::ShiftModifier);
+  require(*window.current_jwp_document() == expected &&
+              QApplication::clipboard()->text() == QStringLiteral("\n\n"),
+          "Shift+Delete did not cut a selected native page-break range");
+  undo->trigger();
+  editor->setReadOnly(true);
+  selected = editor->textCursor();
+  selected.setPosition(1);
+  selected.setPosition(3, QTextCursor::KeepAnchor);
+  editor->setTextCursor(selected);
+  send_delete(editor, Qt::Key_Backspace);
+  require(*window.current_jwp_document() == source &&
+              editor->textCursor().hasSelection(),
+          "Read-only selected deletion changed native content");
+  editor->setReadOnly(false);
+
   normal_window.show();
   normal_editor->setFocus();
   set_cursor(normal_editor, 2);
@@ -3540,6 +3598,27 @@ void test_page_break_paragraph_joins(const QString& directory) {
               reentrant.activate_document(1) &&
               reentrant.active_editor()->toPlainText().isEmpty(),
           "Paragraph join did not contain a reentrant active-tab change");
+
+  MainWindow reentrant_cut;
+  require(reentrant_cut.open_jwp_path(path) &&
+              reentrant_cut.new_document_tab(false) == 1 &&
+              reentrant_cut.activate_document(0),
+          "Could not prepare reentrant selected-Cut fixture");
+  JwpEditor* reentrant_cut_editor = reentrant_cut.active_editor();
+  selected = reentrant_cut_editor->textCursor();
+  selected.setPosition(1);
+  selected.setPosition(3, QTextCursor::KeepAnchor);
+  reentrant_cut_editor->setTextCursor(selected);
+  const QMetaObject::Connection clipboard_connection = QObject::connect(
+      QApplication::clipboard(), &QClipboard::dataChanged, &reentrant_cut,
+      [&reentrant_cut] { reentrant_cut.activate_document(1); });
+  find_action(reentrant_cut, "cutAction")->trigger();
+  QObject::disconnect(clipboard_connection);
+  require(reentrant_cut.current_document_index() == 1 &&
+              reentrant_cut.activate_document(0) &&
+              *reentrant_cut.current_jwp_document() == source &&
+              reentrant_cut.active_editor()->textCursor().hasSelection(),
+          "Selected Cut published after its clipboard callback changed tabs");
 }
 
 void test_application_settings_workflow(const QString& directory) {

@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <exception>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -370,6 +371,11 @@ class MainWindow : public QMainWindow {
   void select_document_word_or_line(bool line);
   void navigate_document_brace(bool extend_selection);
   void navigate_document_word(bool forward, bool extend_selection);
+  bool apply_jwp_model_edit(
+      DocumentState* target, const QTextCursor& cursor,
+      const std::function<core::JwpPosition(core::JwpDocumentModel&)>& edit,
+      const QString& failure_message);
+  bool delete_document_selection(bool copy_to_clipboard);
   bool join_document_paragraph(bool backward);
   enum class DuplicateOpenResolution { kOpenAnother, kHandled, kCancelled };
   DuplicateOpenResolution resolve_duplicate_open(const QString& path, int existing,

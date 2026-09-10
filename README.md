@@ -274,16 +274,19 @@ metadata without changing horizontal fallback or exposing generated font names.
 Missing `vert` keeps the native fallback; malformed selected data fails explicitly.
 With no selection, the recovered Ctrl+C shortcut copies the current visual line
 and restores the cursor; Ctrl+X cuts that line as one undoable edit. Empty lines
-and read-only Cut are no-ops. Selected Copy/Cut and every clipboard format keep
-their ordinary native paths. Shift+Backspace/Delete cut an existing selection;
-without one, they delete to the beginning/end of the current visual line without
-changing the clipboard. Each deletion is one undoable edit.
+and read-only Cut are no-ops. Selected native Cut retains every clipboard format
+and removes page-break-spanning ranges through the structured document model.
+Shift+Backspace/Delete cut an existing selection; without one, they delete to the
+beginning/end of the current visual line without changing the clipboard. Each
+deletion is one undoable edit.
 
 At a native paragraph boundary, ordinary Backspace and Delete use the recovered
 paragraph join rather than a plain-text newline edit. Joining through a hard
 page break removes that break exactly as JWPxp did; an empty paragraph immediately
 before a page-break paragraph is removed while the page break itself remains.
 Each join is one native Undo operation and retains the surviving paragraph's format.
+Selected Backspace/Delete uses the same structured model, so a selection may cross
+hard page breaks without losing paragraph metadata or being silently restored.
 
 Ctrl+W selects the source character-class word at the caret; Ctrl+Shift+W
 selects the current wrapped visual line. Convert Selection uses the recovered
