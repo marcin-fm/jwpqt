@@ -301,6 +301,11 @@ locale word boundaries. They skip source whitespace and retain kana long-vowel
 rules; Ctrl+Left stops at the current wrapped visual-line start before crossing
 it. Add Shift to extend the existing selection.
 
+Home/End and their Ctrl/Shift forms retain visual-line, document and selection
+navigation. Cursor, page and Tab navigation first accepts an active WNN
+candidate, so the read-only preview cannot be moved away from its transaction.
+In Kanji input mode, unmodified Caps Lock flushes ambiguous pending kana.
+
 Double-click and Ctrl+left-click use the same source word boundaries.
 Shift+left-click opens Character Information for the exact character, while
 Alt+left-click opens the native editor popup. Holding an unmodified left click

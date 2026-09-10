@@ -3409,6 +3409,157 @@ void test_word_navigation(const QString& directory) {
           "Word navigation published state after a reentrant tab switch");
 }
 
+void test_navigation_input_finalization(const QString& directory) {
+  using namespace jwpqt::core;
+  using namespace jwpqt::qt;
+  const auto set_cursor = [](JwpEditor* editor, int position) {
+    QTextCursor cursor = editor->textCursor();
+    cursor.setPosition(position);
+    editor->setTextCursor(cursor);
+  };
+  const auto key = [](JwpEditor* editor, Qt::Key code,
+                      Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+    QKeyEvent override(QEvent::ShortcutOverride, code, modifiers);
+    QApplication::sendEvent(editor, &override);
+    QKeyEvent press(QEvent::KeyPress, code, modifiers);
+    QApplication::sendEvent(editor, &press);
+    QKeyEvent release(QEvent::KeyRelease, code, modifiers);
+    QApplication::sendEvent(editor, &release);
+  };
+
+  JwpDocument movement;
+  movement.paragraphs = {paragraph(U"abc"), paragraph(U"def")};
+  const QString movement_path =
+      directory + QStringLiteral("/navigation-finalization.jwp");
+  write_jwp_file(movement_path, movement);
+  MainWindow window;
+  require(window.open_jwp_path(movement_path),
+          "Could not open navigation-finalization fixture");
+  JwpEditor* editor = window.active_editor();
+  const int revision = editor->document()->revision();
+  set_cursor(editor, 2);
+  key(editor, Qt::Key_Home);
+  require(editor->textCursor().position() == 0,
+          "Home did not move to the visual-line start");
+  set_cursor(editor, 1);
+  key(editor, Qt::Key_End, Qt::ShiftModifier);
+  require(editor->textCursor().anchor() == 1 &&
+              editor->textCursor().position() == 3,
+          "Shift+End did not extend to the visual-line end");
+  key(editor, Qt::Key_End, Qt::ControlModifier);
+  require(!editor->textCursor().hasSelection() &&
+              editor->textCursor().position() ==
+                  editor->document()->characterCount() - 1,
+          "Ctrl+End did not move to the document end");
+  key(editor, Qt::Key_Home,
+      Qt::ControlModifier | Qt::ShiftModifier);
+  require(editor->textCursor().position() == 0 &&
+              editor->textCursor().anchor() ==
+                  editor->document()->characterCount() - 1,
+          "Ctrl+Shift+Home did not extend to the document start");
+  require(*window.current_jwp_document() == movement &&
+              !window.document_modified() &&
+              editor->document()->revision() == revision,
+          "Home/End navigation changed native document state");
+
+  JwpDocument blank;
+  blank.paragraphs.resize(1);
+  const QString blank_path = directory + QStringLiteral("/caps-kana.jwp");
+  write_jwp_file(blank_path, blank);
+  MainWindow caps;
+  require(caps.open_jwp_path(blank_path),
+          "Could not open Caps Lock kana fixture");
+  editor = caps.active_editor();
+  send_text_key(editor, Qt::Key_N, QStringLiteral("n"));
+  require(editor->toPlainText().isEmpty(),
+          "Ambiguous kana was emitted before Caps Lock");
+  key(editor, Qt::Key_CapsLock);
+  require(editor->toPlainText() == QStringLiteral("\u3093") &&
+              caps.document_modified(),
+          "Caps Lock did not flush pending kana");
+  find_action(caps, "undoAction")->trigger();
+  require(*caps.current_jwp_document() == blank &&
+              !caps.document_modified(),
+          "Caps Lock kana flush did not preserve one-step undo");
+  send_text_key(editor, Qt::Key_N, QStringLiteral("n"));
+  key(editor, Qt::Key_CapsLock, Qt::ShiftModifier);
+  require(editor->toPlainText().isEmpty(),
+          "Modified Caps Lock unexpectedly flushed pending kana");
+  send_text_key(editor, Qt::Key_A, QStringLiteral("a"));
+  require(editor->toPlainText() == QStringLiteral("\u306a"),
+          "Modified Caps Lock discarded the pending kana sequence");
+  find_action(caps, "undoAction")->trigger();
+  require(*caps.current_jwp_document() == blank &&
+              !caps.document_modified(),
+          "Modified Caps Lock sequence damaged the undo baseline");
+
+  const QString root = directory + QStringLiteral("/navigation-conversion");
+  require(QDir().mkpath(root),
+          "Could not isolate navigation-conversion resources");
+  const auto fixture = write_wnn_fixture(root);
+  JwpDocument reading;
+  reading.paragraphs = {paragraph(U"\u3042")};
+  const QString reading_path = root + QStringLiteral("/reading.jwp");
+  write_jwp_file(reading_path, reading);
+  MainWindow conversion;
+  require(conversion.open_jwp_path(reading_path) &&
+              conversion.load_wnn_resources(
+                  fixture.index_path, fixture.data_path,
+                  fixture.preferences_path),
+          "Could not prepare navigation conversion");
+  editor = conversion.active_editor();
+  editor->selectAll();
+  require(conversion.convert_selection() && conversion.conversion_active(),
+          "Could not start navigation conversion");
+  key(editor, Qt::Key_End);
+  require(!conversion.conversion_active() && !editor->isReadOnly() &&
+              conversion.current_jwp_document()->paragraphs[0].text ==
+                  JwpText{0x3021} &&
+              editor->textCursor().position() ==
+                  editor->document()->characterCount() - 1,
+          "End did not accept conversion before moving");
+  find_action(conversion, "undoAction")->trigger();
+  require(*conversion.current_jwp_document() == reading &&
+              !conversion.document_modified(),
+          "Navigation conversion acceptance damaged undo");
+
+  editor->selectAll();
+  require(conversion.convert_selection() && conversion.conversion_active(),
+          "Could not restart conversion for word navigation");
+  key(editor, Qt::Key_Left, Qt::ControlModifier);
+  require(!conversion.conversion_active() && !editor->isReadOnly() &&
+              conversion.current_jwp_document()->paragraphs[0].text ==
+                  JwpText{0x3021} &&
+              editor->textCursor().position() == 0,
+          "Ctrl+Left did not accept conversion before JWP word navigation");
+  find_action(conversion, "undoAction")->trigger();
+  require(*conversion.current_jwp_document() == reading &&
+              !conversion.document_modified(),
+          "Conversion word navigation damaged undo");
+
+  require(conversion.new_document_tab(false) == 1 &&
+              conversion.activate_document(0),
+          "Could not prepare reentrant navigation conversion");
+  editor = conversion.active_editor();
+  editor->selectAll();
+  require(conversion.convert_selection() && conversion.conversion_active(),
+          "Could not restart navigation conversion");
+  QObject::connect(conversion.statusBar(), &QStatusBar::messageChanged,
+                   &conversion, [&conversion](const QString& message) {
+                     if (message == QStringLiteral("Accepted conversion"))
+                       conversion.activate_document(1);
+                   });
+  key(editor, Qt::Key_Right);
+  require(conversion.current_document_index() == 1 &&
+              conversion.active_editor()->toPlainText().isEmpty(),
+          "Navigation key reached a different active document after acceptance");
+  require(conversion.activate_document(0) &&
+              !conversion.conversion_active() &&
+              conversion.current_jwp_document()->paragraphs[0].text ==
+                  JwpText{0x3021},
+          "Reentrant navigation did not retain the accepted conversion");
+}
+
 void test_page_break_paragraph_joins(const QString& directory) {
   using namespace jwpqt::core;
   using namespace jwpqt::qt;
@@ -8243,6 +8394,7 @@ int main(int argc, char* argv[]) {
     test_word_and_line_selection(directory.path());
     test_brace_navigation(directory.path());
     test_word_navigation(directory.path());
+    test_navigation_input_finalization(directory.path());
     test_page_break_paragraph_joins(directory.path());
     test_application_settings_workflow(directory.path());
     test_application_settings_preview(directory.path());

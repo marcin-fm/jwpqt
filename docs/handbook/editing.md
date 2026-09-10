@@ -59,6 +59,13 @@ katakana long-vowel rules. Ctrl+Left first stops at the beginning of the current
 wrapped visual line; invoke it there to cross into the preceding line or
 paragraph. Add Shift to extend the existing selection.
 
+Home and End move to the current visual-line edges; Ctrl moves to the document
+edges and Shift extends the selection. Left/Right, ordinary Up/Down, Home/End,
+Page Up/Down and Tab accept an active WNN candidate before navigating. Configured
+Ctrl+Up/Down conversion cycling and ordinary Ctrl+Up/Down scrolling remain
+independent. In Kanji mode, unmodified Caps Lock flushes ambiguous pending kana
+at the current caret before the operating system changes its lock state.
+
 The mouse follows the same boundaries: double-click or Ctrl+left-click selects
 a source-style word. Shift+left-click opens Character Information for the
 exact character under the pointer; Alt+left-click opens the editor popup.

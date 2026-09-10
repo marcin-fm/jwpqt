@@ -4850,6 +4850,42 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
       return true;
     }
   }
+  if (watched == document_->editor_ && conversion_active() &&
+      (event->type() == QEvent::ShortcutOverride ||
+       event->type() == QEvent::KeyPress)) {
+    const auto* key = static_cast<QKeyEvent*>(event);
+    const Qt::KeyboardModifiers modifiers = key->modifiers();
+    const bool command_modifier =
+        modifiers.testFlag(Qt::AltModifier) ||
+        modifiers.testFlag(Qt::MetaModifier);
+    const bool horizontal = key->key() == Qt::Key_Left ||
+                            key->key() == Qt::Key_Right;
+    const bool vertical = (key->key() == Qt::Key_Up ||
+                           key->key() == Qt::Key_Down) &&
+                          !modifiers.testFlag(Qt::ControlModifier);
+    const bool home_end = key->key() == Qt::Key_Home ||
+                          key->key() == Qt::Key_End;
+    const bool page = (key->key() == Qt::Key_PageUp ||
+                       key->key() == Qt::Key_PageDown) &&
+                      !modifiers.testFlag(Qt::ControlModifier);
+    const bool tab = key->key() == Qt::Key_Tab && modifiers == Qt::NoModifier;
+    if (!command_modifier && (horizontal || vertical || home_end || page || tab)) {
+      event->accept();
+      if (event->type() == QEvent::ShortcutOverride) return true;
+      const QPointer<MainWindow> self(this);
+      const QPointer<JwpEditor> editor(document_->editor_);
+      if (!accept_conversion() || !self || !editor ||
+          document_->editor_ != editor) {
+        return true;
+      }
+      if (horizontal && modifiers.testFlag(Qt::ControlModifier)) {
+        navigate_document_word(key->key() == Qt::Key_Right,
+                               modifiers.testFlag(Qt::ShiftModifier));
+        return true;
+      }
+      return QMainWindow::eventFilter(watched, event);
+    }
+  }
   if (watched == document_->editor_ &&
       (event->type() == QEvent::ShortcutOverride ||
        event->type() == QEvent::KeyPress)) {
@@ -5029,6 +5065,12 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
   }
 
   auto* key_event = static_cast<QKeyEvent*>(event);
+  if (key_event->key() == Qt::Key_CapsLock &&
+      key_event->modifiers() == Qt::NoModifier &&
+      document_->kana_input_.pending()) {
+    finish_kana_input();
+    return QMainWindow::eventFilter(watched, event);
+  }
   if (document_->kana_input_.pending() &&
       (key_event->key() == Qt::Key_Backspace ||
        key_event->key() == Qt::Key_Delete ||
