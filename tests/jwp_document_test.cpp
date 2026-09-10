@@ -67,6 +67,29 @@ void write_current_paragraph_header(ByteWriter& writer,
   writer.write_bytes(std::string(7, '\0'));
 }
 
+void write_legacy_undo_header(ByteWriter& writer, std::int16_t action,
+                              std::uint32_t next) {
+  for (int index = 0; index < 4; ++index) {
+    writer.write_i16_le(0);
+  }
+  writer.write_i32_le(0);
+  writer.write_i16_le(action);
+  writer.write_u32_le(1);
+  writer.write_u32_le(next);
+  writer.write_u32_le(0);
+}
+
+void write_legacy_undo_paragraph(ByteWriter& writer, std::uint32_t previous,
+                                 const jwpqt::core::JwpText& text) {
+  writer.write_bytes(std::string(24, '\0'));
+  writer.write_u32_le(previous);
+  writer.write_u32_le(0);
+  writer.write_i16_le(static_cast<std::int16_t>(text.size()));
+  for (const JisCode code : text) {
+    writer.write_u16_le(code);
+  }
+}
+
 void test_magic_recognition() {
   expect(jwpqt::core::has_jwp_document_magic(
              std::string("\x67\x26\x02\x42", 4)),
@@ -265,11 +288,6 @@ void test_invalid_documents() {
       [&] { jwpqt::core::decode_jwp_document(negative_count.bytes()); },
       "negative paragraph count");
 
-  ByteWriter undo;
-  write_header(undo, "J1.20", 0, 0, 1);
-  expect_error([&] { jwpqt::core::decode_jwp_document(undo.bytes()); },
-               "native undo data");
-
   ByteWriter negative_metadata;
   write_header(negative_metadata, "J1.20", 0, 0x02U);
   negative_metadata.write_i16_le(-1);
@@ -306,6 +324,93 @@ void test_invalid_documents() {
   trailing.write_u8(0);
   expect_error([&] { jwpqt::core::decode_jwp_document(trailing.bytes()); },
                "trailing bytes");
+}
+
+void test_embedded_undo_compatibility() {
+  ByteWriter writer;
+  write_header(writer, "J1.20", 1, 0x02U, 2);
+  writer.write_i16_le(1);
+  writer.write_u16_le(static_cast<std::uint16_t>('S'));
+  for (int index = 1; index < 5; ++index) {
+    writer.write_i16_le(0);
+  }
+  write_legacy_undo_header(writer, 1, 1);
+  write_legacy_undo_paragraph(writer, 1, {static_cast<JisCode>('A')});
+  write_legacy_undo_paragraph(writer, 0, {0x2422});
+  write_legacy_undo_header(writer, 0, 0);
+  write_current_paragraph_header(writer, 2);
+  writer.write_u8('Z');
+  writer.write_u8('\n');
+
+  const JwpDocument decoded =
+      jwpqt::core::decode_jwp_document(writer.bytes());
+  expect(decoded.summary[0] ==
+             jwpqt::core::JwpText({static_cast<JisCode>('S')}) &&
+             decoded.paragraphs.size() == 1 &&
+             decoded.paragraphs[0].text ==
+                 jwpqt::core::JwpText({static_cast<JisCode>('Z')}),
+         "embedded undo bytes changed the decoded document");
+  const auto recovery =
+      jwpqt::core::decode_jwp_document_recovering(writer.bytes());
+  expect(!recovery.recovered() && recovery.document == decoded,
+         "valid embedded undo data entered damaged-file recovery");
+
+  const std::string canonical = jwpqt::core::encode_jwp_document(decoded);
+  expect(static_cast<std::uint8_t>(canonical[29]) == 0 &&
+             static_cast<std::uint8_t>(canonical[30]) == 0 &&
+             jwpqt::core::decode_jwp_document(canonical) == decoded,
+         "canonical writer retained embedded undo data");
+
+  ByteWriter early_end;
+  write_header(early_end, "J1.20", 1, 0, 3);
+  write_legacy_undo_header(early_end, 0, 0);
+  write_current_paragraph_header(early_end, 2);
+  early_end.write_u8('E');
+  early_end.write_u8('\n');
+  expect(jwpqt::core::decode_jwp_document(early_end.bytes())
+                 .paragraphs[0]
+                 .text == jwpqt::core::JwpText({static_cast<JisCode>('E')}),
+         "null undo next pointer did not end the serialized chain");
+}
+
+void test_invalid_embedded_undo() {
+  ByteWriter negative_count;
+  write_header(negative_count, "J1.20", 0, 0, -1);
+  expect_error(
+      [&] { jwpqt::core::decode_jwp_document(negative_count.bytes()); },
+      "negative embedded undo count");
+
+  ByteWriter truncated_header;
+  write_header(truncated_header, "J1.20", 0, 0, 1);
+  truncated_header.write_bytes(std::string(25, '\0'));
+  expect_error(
+      [&] { jwpqt::core::decode_jwp_document(truncated_header.bytes()); },
+      "truncated embedded undo header");
+  expect_error(
+      [&] {
+        jwpqt::core::decode_jwp_document_recovering(
+            truncated_header.bytes());
+      },
+      "recovery across truncated embedded undo header");
+
+  ByteWriter negative_string;
+  write_header(negative_string, "J1.20", 0, 0, 1);
+  write_legacy_undo_header(negative_string, 1, 0);
+  negative_string.write_bytes(std::string(32, '\0'));
+  negative_string.write_i16_le(-1);
+  expect_error(
+      [&] { jwpqt::core::decode_jwp_document(negative_string.bytes()); },
+      "negative embedded undo string length");
+
+  ByteWriter truncated_string;
+  write_header(truncated_string, "J1.20", 0, 0, 1);
+  write_legacy_undo_header(truncated_string, 1, 0);
+  truncated_string.write_bytes(std::string(32, '\0'));
+  truncated_string.write_i16_le(2);
+  truncated_string.write_u16_le(static_cast<std::uint16_t>('A'));
+  expect_error(
+      [&] { jwpqt::core::decode_jwp_document(truncated_string.bytes()); },
+      "truncated embedded undo string");
 }
 
 void test_damaged_document_recovery() {
@@ -459,6 +564,8 @@ int main() {
   test_reserved_bytes_are_canonicalized();
   test_decoded_text_budget();
   test_invalid_documents();
+  test_embedded_undo_compatibility();
+  test_invalid_embedded_undo();
   test_damaged_document_recovery();
   test_invalid_models();
   return 0;

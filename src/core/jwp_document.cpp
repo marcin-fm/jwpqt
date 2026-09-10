@@ -18,6 +18,7 @@ constexpr std::uint8_t kSeparateHeaders = 0x08;
 constexpr std::uint8_t kNoFirstPage = 0x10;
 constexpr std::uint8_t kVertical = 0x20;
 constexpr std::size_t kMaxDecodedTextUnits = 16U * 1024U * 1024U;
+constexpr std::size_t kMaxLegacyUndoSnapshots = 1'000'000U;
 
 JwpFormatError format_error(const std::string& message) {
   return JwpFormatError("Invalid JWP document: " + message);
@@ -98,6 +99,66 @@ void write_kstring(ByteWriter& writer, const JwpText& text) {
   }
 }
 
+std::uint16_t u16_le_at(std::string_view bytes, std::size_t offset) noexcept {
+  return static_cast<std::uint16_t>(
+      static_cast<std::uint8_t>(bytes[offset]) |
+      (static_cast<std::uint16_t>(static_cast<std::uint8_t>(bytes[offset + 1]))
+       << 8U));
+}
+
+std::uint32_t u32_le_at(std::string_view bytes, std::size_t offset) noexcept {
+  return static_cast<std::uint32_t>(u16_le_at(bytes, offset)) |
+         (static_cast<std::uint32_t>(u16_le_at(bytes, offset + 2U)) << 16U);
+}
+
+struct LegacyUndoHeader {
+  std::int16_t action = 0;
+  std::uint32_t next = 0;
+};
+
+LegacyUndoHeader read_legacy_undo_header(ByteReader& reader) {
+  const std::string_view bytes = reader.read_bytes(26);
+  return {static_cast<std::int16_t>(u16_le_at(bytes, 12)),
+          u32_le_at(bytes, 18)};
+}
+
+std::uint32_t read_legacy_undo_paragraph(ByteReader& reader) {
+  const std::string_view bytes = reader.read_bytes(32);
+  return u32_le_at(bytes, 24);
+}
+
+void skip_legacy_undo_kstring(ByteReader& reader,
+                              std::size_t& skipped_text_units) {
+  const std::int16_t length = reader.read_i16_le();
+  if (length < 0) {
+    throw format_error("negative embedded undo string length");
+  }
+  add_decoded_units(static_cast<std::size_t>(length), skipped_text_units);
+  static_cast<void>(
+      reader.read_bytes(static_cast<std::size_t>(length) * 2U));
+}
+
+void skip_legacy_undo(ByteReader& reader, std::int16_t undo_count) {
+  std::size_t snapshots = 0;
+  std::size_t skipped_text_units = 0;
+  for (std::int16_t index = 0; index < undo_count; ++index) {
+    const LegacyUndoHeader header = read_legacy_undo_header(reader);
+    if (header.action >= 1) {
+      std::uint32_t previous = 0;
+      do {
+        if (++snapshots > kMaxLegacyUndoSnapshots) {
+          throw format_error("embedded undo data exceeds the safety limit");
+        }
+        previous = read_legacy_undo_paragraph(reader);
+        skip_legacy_undo_kstring(reader, skipped_text_units);
+      } while (previous != 0);
+    }
+    if (header.next == 0) {
+      break;
+    }
+  }
+}
+
 JwpParagraph read_paragraph(ByteReader& reader, JwpVersion version,
                             std::size_t& decoded_units) {
   JwpParagraph paragraph;
@@ -166,6 +227,7 @@ JwpParagraph read_paragraph(ByteReader& reader, JwpVersion version,
 struct DocumentPrefix {
   JwpDocument document;
   std::int16_t paragraph_count = 0;
+  std::int16_t undo_count = 0;
   std::size_t decoded_units = 0;
 };
 
@@ -194,12 +256,9 @@ DocumentPrefix read_document_prefix(ByteReader& reader) {
       (flags & kNoFirstPage) != 0;
   prefix.document.vertical = (flags & kVertical) != 0;
 
-  const std::int16_t undo_count = reader.read_i16_le();
-  if (undo_count < 0) {
+  prefix.undo_count = reader.read_i16_le();
+  if (prefix.undo_count < 0) {
     throw format_error("negative undo count");
-  }
-  if (undo_count != 0) {
-    throw format_error("embedded native-ABI undo data is unsupported");
   }
   static_cast<void>(reader.read_bytes(97));
 
@@ -333,6 +392,7 @@ void write_paragraph(ByteWriter& writer, const JwpParagraph& paragraph) {
 JwpDocument decode_impl(std::string_view bytes) {
   ByteReader reader(bytes);
   DocumentPrefix prefix = read_document_prefix(reader);
+  skip_legacy_undo(reader, prefix.undo_count);
   prefix.document.paragraphs.reserve(
       static_cast<std::size_t>(prefix.paragraph_count));
   for (std::int16_t index = 0; index < prefix.paragraph_count; ++index) {
@@ -373,6 +433,7 @@ JwpDocumentRecovery decode_jwp_document_recovering(std::string_view bytes) {
     try {
       ByteReader reader(bytes);
       DocumentPrefix prefix = read_document_prefix(reader);
+      skip_legacy_undo(reader, prefix.undo_count);
       JwpDocumentRecovery recovery;
       recovery.document = std::move(prefix.document);
       recovery.declared_paragraphs =

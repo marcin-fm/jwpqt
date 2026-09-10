@@ -59,9 +59,12 @@ Interactive Open offers a best-effort recovery when a structured JWP document
 has a valid header and metadata but a damaged paragraph stream. The warning
 defaults to No and reports complete paragraphs, any retained partial paragraph
 and ignored trailing bytes. Accepted content opens as modified; use Save As to
-preserve the damaged source while writing a strict recovered document. Invalid
-headers, metadata, embedded native-ABI undo data and safety-limit violations are
-fatal. Automated opens, project restoration and Revert never recover implicitly.
+preserve the damaged source while writing a strict recovered document. Valid
+packed JWPxp x86 undo payloads are skipped, as they were by the source loader,
+and are not restored into native history. Invalid headers, metadata, malformed
+undo payloads and safety-limit violations are fatal; only the recovered x86
+layout is recognized. Automated opens, project restoration and Revert never
+recover implicitly.
 
 Save As can transfer between formats after validation and any required loss
 confirmation. Export Copy leaves the live file, history and saved baseline

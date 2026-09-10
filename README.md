@@ -330,8 +330,10 @@ Interactive Open can recover the readable paragraph prefix of a damaged JWP
 document after its header and metadata have validated. The warning defaults to
 No and reports what was retained; an accepted recovery is marked modified, and
 the damaged source is not rewritten until an explicit save. Automated opens,
-project staging and Revert remain strict, as do malformed headers, metadata,
-embedded native-ABI undo data and safety-limit failures.
+project staging and Revert remain strict. Valid packed JWPxp x86 undo payloads
+are skipped because the source loader did not restore them. Malformed or
+truncated payloads, bad metadata and safety-limit failures remain fatal; only
+the recovered x86 layout is recognized. Native saves always omit embedded undo.
 JFC files are plain text:
 opening prefers UTF-8, with a strict fallback for the recovered old-EUC
 extensions, and saving always writes UTF-8 without a BOM. The `.jfc` extension,
