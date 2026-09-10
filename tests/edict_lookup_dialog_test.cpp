@@ -445,6 +445,8 @@ void test_result_row_navigation() {
   }, [&](const std::u32string& text) { inserted = text; return true; });
   dialog.set_query(U"cat");
   dialog.show();
+  dialog.activateWindow();
+  QApplication::processEvents();
   require(dialog.search(), "Could not prepare result row navigation");
   auto* results = dialog.findChild<QTextEdit*>("edictResults");
   auto key = [&](int code, Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
@@ -547,6 +549,24 @@ void test_result_row_navigation() {
   dialog.copy_selected();
   require(QApplication::clipboard()->text() == QStringLiteral("can"),
           "Within-result text selection did not replace row navigation selection");
+
+  auto* query = dialog.findChild<QLineEdit*>("edictQuery");
+  query->setText(QStringLiteral("abcdef"));
+  query->setCursorPosition(3);
+  results->setFocus();
+  key(Qt::Key_Left);
+  require(query->hasFocus() && query->cursorPosition() == 2 && !query->hasSelectedText(),
+          "Left did not transfer focus and navigation to the dictionary query");
+  results->setFocus();
+  key(Qt::Key_Right, Qt::ShiftModifier);
+  require(query->hasFocus() && query->selectedText() == QStringLiteral("c"),
+          "Shift+Right did not extend the dictionary query selection");
+  results->setFocus();
+  key(Qt::Key_D, Qt::ControlModifier);
+  require(query->hasFocus(), "Ctrl+D did not focus the dictionary query");
+  results->setFocus();
+  key(Qt::Key_F6);
+  require(query->hasFocus(), "F6 did not focus the dictionary query");
 }
 
 void test_linked_names() {

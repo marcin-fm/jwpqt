@@ -478,6 +478,10 @@ or `Ctrl+Insert` copies the current canonical entry without changing the visible
 selection. `Ctrl+K`, `Ctrl+J`, and Ctrl+6 select or toggle the lookup's local
 input mode. A new search, Sort, or ordinary within-result text selection clears
 the row set. On an empty result list, `Ctrl+A` selects ASCII mode.
+Left and Right transfer focus to the dictionary query and perform the same
+navigation there, including Ctrl and Shift modifiers. `Ctrl+D` or `F6` focuses
+the query without moving it. Result-list Find retains the recovered aliases:
+`Ctrl+F`, `Ctrl+S`, or `F8` opens it, while `Ctrl+N`, `F3`, or `F9` repeats it.
 
 ### Document printing and preview
 

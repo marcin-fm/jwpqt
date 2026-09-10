@@ -32,6 +32,13 @@ AuxiliaryFind* finder(QWidget* target) {
 void key(QWidget* widget, int code, Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
   QKeyEvent event(QEvent::KeyPress, code, modifiers); QApplication::sendEvent(widget, &event);
 }
+void shortcut_key(QWidget* widget, int code,
+                  Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+  QKeyEvent shortcut(QEvent::ShortcutOverride, code, modifiers);
+  QApplication::sendEvent(widget, &shortcut);
+  require(shortcut.isAccepted(), "Auxiliary Find did not own its shortcut alias");
+  key(widget, code, modifiers);
+}
 FindReplaceRequest request(QString text, bool wrap = true, bool back = false) {
   FindReplaceRequest value; value.text = std::move(text); value.options.wrap = wrap;
   value.options.direction = back ? core::JwpSearchDirection::kBackward : core::JwpSearchDirection::kForward;
@@ -76,7 +83,7 @@ void test_logical_navigation() {
           "Existence search must stop after first match without overspending budget");
 }
 void test_dialog_and_workspace() {
-  MainWindow window; auto* list = new QListWidget(&window); auto* find = new AuxiliaryFind(list);
+  MainWindow window; auto* list = new QListWidget(&window); new AuxiliaryFind(list);
   list->addItems({"skip", QString::fromUtf8("かな cat"), "last cat"}); list->setCurrentRow(0);
   const auto document = *window.current_jwp_document();
   window.show(); list->show();
@@ -95,7 +102,12 @@ void test_dialog_and_workspace() {
   key(list, Qt::Key_F3); require(list->currentRow() == 2, "F3 repeats auxiliary Find");
   key(list, Qt::Key_F3, Qt::ShiftModifier); require(list->currentRow() == 1, "Shift F3 searches backward");
   dialog->close(); QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-  find->open(); dialog = window.findChild<QDialog*>("auxiliaryFindDialog");
+  shortcut_key(list, Qt::Key_S, Qt::ControlModifier);
+  dialog = window.findChild<QDialog*>("auxiliaryFindDialog");
+  require(dialog && dialog->isVisible(), "Ctrl+S did not open auxiliary Find");
+  dialog->close(); QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+  shortcut_key(list, Qt::Key_F8);
+  dialog = window.findChild<QDialog*>("auxiliaryFindDialog");
   require(dialog && dialog->findChild<QLineEdit*>("findText")->text() == "cat", "Reopened auxiliary query retained");
   auto* second = new QListWidget(&window); auto* another = new AuxiliaryFind(second);
   another->open();
@@ -106,6 +118,10 @@ void test_dialog_and_workspace() {
   require(another->find(request("last")).valid, "Another list can publish the shared search term");
   list->setCurrentRow(0); key(list, Qt::Key_F3);
   require(list->currentRow() == 2, "Repeat uses current workspace search, not a stale list-local term");
+  list->setCurrentRow(0); shortcut_key(list, Qt::Key_N, Qt::ControlModifier);
+  require(list->currentRow() == 2, "Ctrl+N did not repeat auxiliary Find");
+  list->setCurrentRow(0); shortcut_key(list, Qt::Key_F9);
+  require(list->currentRow() == 2, "F9 did not repeat auxiliary Find");
   auto* query = dialog->findChild<QLineEdit*>("findText"); query->clear();
   for (const auto ch : QStringLiteral("kana")) {
     QKeyEvent typed(QEvent::KeyPress, ch.toUpper().unicode(), Qt::NoModifier, QString(ch));

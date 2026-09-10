@@ -260,9 +260,15 @@ bool AuxiliaryFind::eventFilter(QObject* object, QEvent* event) {
   if (object == target_ && (event->type() == QEvent::KeyPress || event->type() == QEvent::ShortcutOverride)) {
     auto* key = static_cast<QKeyEvent*>(event);
     QAction* action = nullptr;
-    if (key->key() == Qt::Key_F && key->modifiers() == Qt::ControlModifier) action = open_;
+    if ((key->key() == Qt::Key_F || key->key() == Qt::Key_S) &&
+        key->modifiers() == Qt::ControlModifier) action = open_;
+    if (key->key() == Qt::Key_F8 && key->modifiers() == Qt::NoModifier) action = open_;
     if (repeat_keys_ && key->key() == Qt::Key_F3 && key->modifiers() == Qt::NoModifier) action = next_;
     if (repeat_keys_ && key->key() == Qt::Key_F3 && key->modifiers() == Qt::ShiftModifier) action = previous_;
+    if (repeat_keys_ && key->key() == Qt::Key_N &&
+        key->modifiers() == Qt::ControlModifier) action = next_;
+    if (repeat_keys_ && key->key() == Qt::Key_F9 &&
+        key->modifiers() == Qt::NoModifier) action = next_;
     if (action) { event->accept(); if (event->type() == QEvent::KeyPress) action->trigger(); return true; }
   }
   if (event->type() == QEvent::ContextMenu && qobject_cast<QListWidget*>(target_)) {

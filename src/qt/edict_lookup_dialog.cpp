@@ -1285,12 +1285,40 @@ bool EdictLookupDialog::eventFilter(QObject* watched, QEvent* event) {
            key->key() == Qt::Key_Home || key->key() == Qt::Key_End ||
            key->key() == Qt::Key_PageUp || key->key() == Qt::Key_PageDown) &&
           !(modifiers & (Qt::AltModifier | Qt::MetaModifier));
+      const bool handoff_query =
+          (key->key() == Qt::Key_Left || key->key() == Qt::Key_Right) &&
+          !(modifiers & (Qt::AltModifier | Qt::MetaModifier));
+      const bool focus_query =
+          (key->key() == Qt::Key_F6 && modifiers == Qt::NoModifier) ||
+          (key->key() == Qt::Key_D && modifiers == Qt::ControlModifier);
       if (copy_field || copy_rows || select_field || select_row || select_all || input_mode ||
-          navigate_rows) {
+          navigate_rows || handoff_query || focus_query) {
         event->accept();
         if (event->type() == QEvent::KeyPress && !query_busy_) {
           if (navigate_rows) {
             navigate_result_rows(key->key(), modifiers);
+          } else if (handoff_query) {
+            const QPointer<EdictLookupDialog> self(this);
+            const QPointer<QLineEdit> query(query_edit_);
+            const int cursor_position = query->cursorPosition();
+            const int selection_start = query->selectionStart();
+            const int selection_length = query->selectedText().size();
+            query->setFocus();
+            if (self && query) {
+              if (selection_start < 0) {
+                query->deselect();
+                query->setCursorPosition(cursor_position);
+              } else if (cursor_position == selection_start) {
+                query->setSelection(selection_start + selection_length, -selection_length);
+              } else {
+                query->setSelection(selection_start, selection_length);
+              }
+              QKeyEvent forwarded(key->type(), key->key(), key->modifiers(), key->text(),
+                                  key->isAutoRepeat(), static_cast<ushort>(key->count()));
+              QApplication::sendEvent(query, &forwarded);
+            }
+          } else if (focus_query) {
+            query_edit_->setFocus();
           } else if (copy_field) {
             copy_current_result_field(key->key() == Qt::Key_R);
           } else if (copy_rows) {

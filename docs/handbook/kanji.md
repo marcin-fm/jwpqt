@@ -84,6 +84,9 @@ result rows. With no selection, Ctrl+C and Ctrl+Insert copy the current canonica
 entry without changing the selection. Ctrl+K, Ctrl+J and Ctrl+6 control the
 query's local input mode; Ctrl+A selects ASCII mode when the result list is empty.
 An ordinary within-result text selection, a new search or Sort clears the row set.
+Left and Right hand focus and the original modifiers to the dictionary query.
+Ctrl+D or F6 only focuses that field. Ctrl+F, Ctrl+S or F8 opens result-list
+Find; Ctrl+N, F3 or F9 repeats it, and Shift+F3 repeats backward.
 The Add/Remove kanji-color-list prompt provides K/A/J input, shared
 Insert/Overwrite behavior and pending-kana completion before validating the
 edited list.
