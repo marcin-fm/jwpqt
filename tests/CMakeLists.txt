@@ -43,6 +43,11 @@ target_link_libraries(jwpqt_line_relaxation_tests PRIVATE jwpqt_core)
 target_compile_options(jwpqt_line_relaxation_tests PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME core_line_relaxation COMMAND jwpqt_line_relaxation_tests)
 
+add_executable(jwpqt_jwp_word_selection_tests jwp_word_selection_test.cpp)
+target_link_libraries(jwpqt_jwp_word_selection_tests PRIVATE jwpqt_core)
+target_compile_options(jwpqt_jwp_word_selection_tests PRIVATE -Wall -Wextra -Wpedantic)
+add_test(NAME core_jwp_word_selection COMMAND jwpqt_jwp_word_selection_tests)
+
 add_executable(jwpqt_jwp_clipboard_tests jwp_clipboard_test.cpp)
 target_link_libraries(jwpqt_jwp_clipboard_tests PRIVATE jwpqt_core)
 target_compile_options(jwpqt_jwp_clipboard_tests PRIVATE -Wall -Wextra -Wpedantic)

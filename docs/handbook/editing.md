@@ -23,6 +23,15 @@ Ctrl+X cuts that visual line as one undoable edit. Native JWP clipboard data kee
 its original byte/JIS identity. An empty line copies or cuts nothing, and Cut is
 disabled in a read-only document.
 
+## Word And Line Selection
+
+Ctrl+W selects a source-style word using separate ASCII, punctuation, JASCII,
+kana and kanji classes. Whitespace advances to the following word, a caret at
+the paragraph end selects the preceding word, and the original kana long-vowel
+and repetition-mark rules are retained. Ctrl+Shift+W selects the current
+wrapped visual line. Both commands finish pending Japanese input first and do
+not edit the document. Convert Selection uses F2 or Ctrl+>.
+
 WNN conversion requires wnn.dix and wnn.dat. Choose a candidate in the candidate
 bar and accept it as one undo transaction. User conversions and learned choices
 have separate user-data files. Selected printable romaji can be converted to

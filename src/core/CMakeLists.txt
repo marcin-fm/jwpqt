@@ -39,6 +39,7 @@ add_library(jwpqt_core STATIC
   jwp_search.cpp
   unicode_search.cpp
   jwp_text_codec.cpp
+  jwp_word_selection.cpp
   legacy_code_page.cpp
   legacy_text.cpp
   line_relaxation.cpp

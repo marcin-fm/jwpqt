@@ -26,6 +26,7 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QCheckBox>
+#include <QChar>
 #include <QCloseEvent>
 #include <QColorDialog>
 #include <QComboBox>
@@ -81,6 +82,7 @@
 #include <QStatusBar>
 #include <QStringList>
 #include <QStyle>
+#include <QTextBlock>
 #include <QTextCursor>
 #include <QTextDocument>
 #include <QTabWidget>
@@ -118,6 +120,7 @@
 #include "jwpqt/core/jwp_clipboard.h"
 #include "jwpqt/core/jwp_plain_text.h"
 #include "jwpqt/core/jwp_text_codec.h"
+#include "jwpqt/core/jwp_word_selection.h"
 #include "jwpqt/core/plain_text_change.h"
 #include "jwpqt/core/romaji_conversion.h"
 #include "jwpqt/core/text_detection.h"
@@ -142,6 +145,39 @@ constexpr std::array<core::LegacyCodePage, 9> kLegacyCodePages{
     core::LegacyCodePage::k1256, core::LegacyCodePage::k1257,
     core::LegacyCodePage::k1258,
 };
+
+core::JwpText unicode_word_units(std::u32string_view text,
+                                 core::LegacyCodePage code_page) {
+  core::JwpText units;
+  units.reserve(text.size());
+  for (const char32_t code_point : text) {
+    if (const auto code = core::unicode_to_jwp_code(code_point, code_page)) {
+      units.push_back(*code);
+      continue;
+    }
+    const QChar::Category category = QChar::category(code_point);
+    if (category == QChar::Separator_Space || category == QChar::Separator_Line ||
+        category == QChar::Separator_Paragraph || code_point == U'\t' ||
+        code_point == U'\n' || code_point == U'\r') {
+      units.push_back(static_cast<core::JisCode>(' '));
+    } else if (category == QChar::Letter_Uppercase ||
+               category == QChar::Letter_Lowercase ||
+               category == QChar::Letter_Titlecase ||
+               category == QChar::Letter_Modifier ||
+               category == QChar::Letter_Other ||
+               category == QChar::Mark_NonSpacing ||
+               category == QChar::Mark_SpacingCombining ||
+               category == QChar::Mark_Enclosing ||
+               category == QChar::Number_DecimalDigit ||
+               category == QChar::Number_Letter ||
+               category == QChar::Number_Other) {
+      units.push_back(static_cast<core::JisCode>('a'));
+    } else {
+      units.push_back(0x2122);
+    }
+  }
+  return units;
+}
 
 QString encoding_name(core::TextEncoding encoding) {
   const std::string_view name = core::text_encoding_name(encoding);
@@ -3287,7 +3323,8 @@ void MainWindow::create_actions() {
   QMenu* convert_menu = menuBar()->addMenu(tr("&Convert"));
   convert_action_ = convert_menu->addAction(tr("Convert &Selection"));
   convert_action_->setObjectName(QStringLiteral("convertSelectionAction"));
-  convert_action_->setShortcut(QKeySequence(QStringLiteral("Ctrl+W")));
+  convert_action_->setShortcuts(
+      {QKeySequence(Qt::Key_F2), QKeySequence(QStringLiteral("Ctrl+>"))});
   connect(convert_action_, &QAction::triggered, this,
           [this] { convert_selection(); });
 
@@ -4373,6 +4410,81 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
         if (event->type() == QEvent::KeyPress) convert_selection(key->key() == Qt::Key_Down);
         return true;
       }
+    }
+  }
+  if (watched == document_->editor_ &&
+      (event->type() == QEvent::ShortcutOverride ||
+       event->type() == QEvent::KeyPress)) {
+    const auto* key = static_cast<QKeyEvent*>(event);
+    const Qt::KeyboardModifiers modifiers = key->modifiers();
+    const bool word = key->key() == Qt::Key_W &&
+                      modifiers == Qt::ControlModifier;
+    const bool line = key->key() == Qt::Key_W &&
+                      modifiers == (Qt::ControlModifier | Qt::ShiftModifier);
+    if (word || line) {
+      event->accept();
+      if (event->type() == QEvent::ShortcutOverride) return true;
+      QPointer<MainWindow> self(this);
+      QPointer<JwpEditor> guarded_editor(document_->editor_);
+      if (!finish_document_input() || !self || !guarded_editor ||
+          document_->editor_ != guarded_editor) {
+        return true;
+      }
+
+      QTextCursor cursor = guarded_editor->textCursor();
+      if (line) {
+        cursor.movePosition(QTextCursor::StartOfLine);
+        cursor.movePosition(QTextCursor::EndOfLine, QTextCursor::KeepAnchor);
+        guarded_editor->setTextCursor(cursor);
+        guarded_editor->ensureCursorVisible();
+        return true;
+      }
+
+      const bool preceding_selection =
+          cursor.hasSelection() && cursor.position() == cursor.selectionEnd();
+      int begin = 0;
+      int end = 0;
+      try {
+        if (document_->jwp_document_) {
+          const QString current =
+              document_plain_text(*guarded_editor->document());
+          const core::JwpPosition position = core::jwp_plain_text_position(
+              *document_->jwp_document_,
+              utf32_offset_for_utf16(current, cursor.position()));
+          const auto& paragraph =
+              document_->jwp_document_->document().paragraphs.at(position.paragraph);
+          const core::JwpWordRange range = core::select_jwp_word(
+              paragraph.text, position.offset, preceding_selection);
+          const std::size_t paragraph_begin = core::jwp_plain_text_offset(
+              *document_->jwp_document_, {position.paragraph, range.begin});
+          const std::size_t paragraph_end = core::jwp_plain_text_offset(
+              *document_->jwp_document_, {position.paragraph, range.end});
+          begin = utf16_offset_for_utf32(document_->rendered_jwp_text_, paragraph_begin);
+          end = utf16_offset_for_utf32(document_->rendered_jwp_text_, paragraph_end);
+        } else {
+          const QTextBlock block = cursor.block();
+          const QString block_text = block.text();
+          const std::u32string text = from_qstring(block_text);
+          const int local_utf16 =
+              std::clamp(cursor.position() - block.position(), 0,
+                         static_cast<int>(block_text.size()));
+          const std::size_t local =
+              utf32_offset_for_utf16(block_text, local_utf16);
+          const core::JwpWordRange range = core::select_jwp_word(
+              unicode_word_units(text, document_->jwp_code_page_), local,
+              preceding_selection);
+          begin = block.position() + utf16_offset_for_utf32(text, range.begin);
+          end = block.position() + utf16_offset_for_utf32(text, range.end);
+        }
+      } catch (const std::exception& exception) {
+        statusBar()->showMessage(QString::fromUtf8(exception.what()), 5000);
+        return true;
+      }
+      cursor.setPosition(begin);
+      cursor.setPosition(end, QTextCursor::KeepAnchor);
+      guarded_editor->setTextCursor(cursor);
+      guarded_editor->ensureCursorVisible();
+      return true;
     }
   }
   if (watched == document_->editor_ &&

@@ -2831,6 +2831,129 @@ void test_empty_selection_line_clipboard(const QString& directory) {
           "Read-only empty-selection Cut changed the document");
 }
 
+void test_word_and_line_selection(const QString& directory) {
+  using namespace jwpqt::core;
+  using namespace jwpqt::qt;
+  const auto select = [](JwpEditor* editor, Qt::KeyboardModifiers modifiers) {
+    QKeyEvent override(QEvent::ShortcutOverride, Qt::Key_W, modifiers);
+    QApplication::sendEvent(editor, &override);
+    require(override.isAccepted(), "Word/line shortcut override was not accepted");
+    QKeyEvent press(QEvent::KeyPress, Qt::Key_W, modifiers);
+    QApplication::sendEvent(editor, &press);
+    QKeyEvent release(QEvent::KeyRelease, Qt::Key_W, Qt::NoModifier);
+    QApplication::sendEvent(editor, &release);
+    QKeyEvent reset(QEvent::KeyPress, Qt::Key_unknown, Qt::NoModifier);
+    QApplication::sendEvent(editor, &reset);
+  };
+  const auto set_cursor = [](JwpEditor* editor, int position) {
+    QTextCursor cursor = editor->textCursor();
+    cursor.clearSelection();
+    cursor.setPosition(position);
+    editor->setTextCursor(cursor);
+  };
+  const auto require_selection = [](JwpEditor* editor, int begin, int end,
+                                    const char* message) {
+    const QTextCursor cursor = editor->textCursor();
+    require(cursor.selectionStart() == begin && cursor.selectionEnd() == end,
+            message);
+  };
+
+  JwpDocument source;
+  JwpParagraph paragraph;
+  paragraph.text = {'a', 'b', ' ', '!', '?', ' ', 0x2422, 0x213c,
+                    0x2423, 0x2472, 0x2424, ' ', 0x3021, 0x3022};
+  source.paragraphs = {paragraph};
+  const QString path = directory + QStringLiteral("/word-selection.jwp");
+  write_jwp_file(path, source);
+  MainWindow window;
+  require(window.open_jwp_path(path), "Could not open word-selection fixture");
+  JwpEditor* editor = window.active_editor();
+  const int original_revision = editor->document()->revision();
+
+  set_cursor(editor, 1);
+  select(editor, Qt::ControlModifier);
+  require_selection(editor, 0, 2, "Ctrl+W did not select an ASCII word");
+  set_cursor(editor, 2);
+  select(editor, Qt::ControlModifier);
+  require_selection(editor, 3, 5,
+                    "Ctrl+W did not advance whitespace to punctuation");
+  set_cursor(editor, 7);
+  select(editor, Qt::ControlModifier);
+  require_selection(editor, 6, 9,
+                    "Ctrl+W did not apply the kana long-vowel leniency");
+  set_cursor(editor, 9);
+  select(editor, Qt::ControlModifier);
+  require_selection(editor, 9, 10,
+                    "Ctrl+W did not isolate hiragana wo");
+  set_cursor(editor, 14);
+  select(editor, Qt::ControlModifier);
+  require_selection(editor, 12, 14,
+                    "Ctrl+W did not select the preceding end-of-line word");
+  QTextCursor preceding = editor->textCursor();
+  preceding.setPosition(0);
+  preceding.setPosition(2, QTextCursor::KeepAnchor);
+  editor->setTextCursor(preceding);
+  select(editor, Qt::ControlModifier);
+  require_selection(editor, 3, 5,
+                    "Ctrl+W did not continue from a preceding selection");
+  require(*window.current_jwp_document() == source &&
+              !window.document_modified() &&
+              editor->document()->revision() == original_revision,
+          "Word selection changed native document content or history");
+
+  require(window.new_document_tab(false) == 1,
+          "Could not create Unicode selection fixture");
+  editor = window.active_editor();
+  editor->setPlainText(QStringLiteral("\u03b1\u03b2  !?  \U0001f600\U0001f600"));
+  editor->document()->setModified(false);
+  set_cursor(editor, 1);
+  select(editor, Qt::ControlModifier);
+  require(editor->textCursor().selectedText() == QStringLiteral("\u03b1\u03b2"),
+          "Ctrl+W did not group Unicode letters");
+  set_cursor(editor, 8);
+  select(editor, Qt::ControlModifier);
+  require(editor->textCursor().selectedText() ==
+              QStringLiteral("\U0001f600\U0001f600"),
+          "Ctrl+W split supplementary Unicode symbols");
+
+  editor->setPlainText(QStringLiteral("abcdefghij"));
+  editor->document()->setModified(false);
+  editor->setLineWrapMode(QTextEdit::FixedColumnWidth);
+  editor->setLineWrapColumnOrWidth(4);
+  window.resize(260, 300);
+  window.show();
+  QApplication::processEvents();
+  set_cursor(editor, 7);
+  QTextCursor expected_line = editor->textCursor();
+  expected_line.movePosition(QTextCursor::StartOfLine);
+  expected_line.movePosition(QTextCursor::EndOfLine, QTextCursor::KeepAnchor);
+  select(editor, Qt::ControlModifier | Qt::ShiftModifier);
+  require(editor->textCursor().selectedText() == expected_line.selectedText() &&
+              !editor->document()->isModified(),
+          "Ctrl+Shift+W did not select the current visual line cleanly");
+
+  MainWindow pending;
+  JwpEditor* pending_editor = pending.active_editor();
+  send_text_key(pending_editor, Qt::Key_N, QStringLiteral("n"));
+  select(pending_editor, Qt::ControlModifier);
+  require(pending_editor->textCursor().selectedText() == QStringLiteral("\u3093"),
+          "Ctrl+W did not finish pending kana before selecting");
+  pending.show();
+  pending_editor->setFocus();
+  QApplication::processEvents();
+  QTest::keyClick(pending_editor, Qt::Key_F4);
+  pending_editor->moveCursor(QTextCursor::End);
+  send_text_key(pending_editor, Qt::Key_K, QStringLiteral("k"));
+  send_text_key(pending_editor, Qt::Key_A, QStringLiteral("a"));
+  QTextCursor romaji = pending_editor->textCursor();
+  romaji.setPosition(1);
+  romaji.setPosition(3, QTextCursor::KeepAnchor);
+  pending_editor->setTextCursor(romaji);
+  QTest::keyClick(pending_editor, Qt::Key_F2);
+  require(pending_editor->textCursor().selectedText() == QStringLiteral("\u304b"),
+          "F2 did not invoke selected-romaji conversion");
+}
+
 void test_application_settings_workflow(const QString& directory) {
   using namespace jwpqt::qt;
   MainWindow window;
@@ -5965,6 +6088,9 @@ void test_input_mode_workflow(const QString& directory) {
               has_shortcut("saveAllDocumentsAction", QKeySequence(Qt::ALT | Qt::Key_V)) &&
               has_shortcut("filesAction", QKeySequence(Qt::ALT | Qt::Key_W)) &&
               has_shortcut("quitAction", QKeySequence(Qt::ALT | Qt::Key_X)) &&
+              has_shortcut("convertSelectionAction", QKeySequence(Qt::Key_F2)) &&
+              has_shortcut("convertSelectionAction",
+                           QKeySequence(QStringLiteral("Ctrl+>"))) &&
               has_shortcut("toggleInputModeAction", QKeySequence(Qt::ALT | Qt::Key_6)) &&
               has_shortcut("toggleInputModeAction",
                            QKeySequence(Qt::ALT | Qt::SHIFT | Qt::Key_6)),
@@ -5977,6 +6103,8 @@ void test_input_mode_workflow(const QString& directory) {
               !has_shortcut("findNextAction", QKeySequence(Qt::CTRL | Qt::Key_N)) &&
               !has_shortcut("applicationOptionsAction", QKeySequence(Qt::CTRL | Qt::Key_O)) &&
               !has_shortcut("findAction", QKeySequence(Qt::CTRL | Qt::Key_S)) &&
+              !has_shortcut("convertSelectionAction",
+                            QKeySequence(Qt::CTRL | Qt::Key_W)) &&
               !has_shortcut("previousFileAction", QKeySequence(Qt::SHIFT | Qt::Key_Tab)),
           "Conflicting recovered accelerator unexpectedly replaced native navigation");
   std::vector<QKeySequence> shortcuts;
@@ -7444,6 +7572,7 @@ int main(int argc, char* argv[]) {
     test_jwp_open_edit_and_save(directory.path());
     test_jwp_clipboard_changes(directory.path());
     test_empty_selection_line_clipboard(directory.path());
+    test_word_and_line_selection(directory.path());
     test_application_settings_workflow(directory.path());
     test_application_settings_preview(directory.path());
     test_application_settings_exit(directory.path());

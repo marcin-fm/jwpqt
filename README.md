@@ -277,6 +277,10 @@ and restores the cursor; Ctrl+X cuts that line as one undoable edit. Empty lines
 and read-only Cut are no-ops. Selected Copy/Cut and every clipboard format keep
 their ordinary native paths.
 
+Ctrl+W selects the source character-class word at the caret; Ctrl+Shift+W
+selects the current wrapped visual line. Convert Selection uses the recovered
+F2 and Ctrl+> shortcuts instead of occupying Ctrl+W.
+
 **Options > Fonts > ASCII and legacy extensions** selects an independent
 single-byte font at the Japanese role's height, without changing desktop menus
 or document formatting. A private character-restricted face prevents a font
