@@ -39,6 +39,12 @@ Omit Unicode also suppresses rich text so it cannot leak an unrequested Unicode
 copy, while retaining native and configured encoded representations. Linux MIME
 types replace the Windows clipboard IDs; applications that advertise a standard
 `text/plain;charset=...` representation can exchange the configured encoding.
+On fresh settings, import is Unicode, the additional encoded export is Shift-JIS,
+standard Unicode is still published, bitmap output is omitted, and the translation
+code page is Automatic (native CP1252). Choose Auto Detect when external encoded
+representations should be examined before ordinary Unicode, or enable bitmap
+output when an image representation is needed. The private JWP fragment always
+retains first priority for compatible native documents.
 
 Selection autoscroll starts enabled with the original 100 ms repeat delay.
 While extending a mouse selection within one-third of a text line from the top

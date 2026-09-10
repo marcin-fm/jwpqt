@@ -72,6 +72,7 @@ void test_fallback_and_big() {
 
 void test_bitmap() {
   qt::ApplicationSettings settings;
+  settings.omit_clipboard_bitmap = false;
   constexpr auto bitmap = static_cast<std::size_t>(qt::JapaneseFontRole::kBitmap);
   settings.fonts[bitmap] = {{}, 24, false};
   auto stored = qt::read_application_settings("clip_font.size=24\nclip_font.automatic=false\nno_BITMAP=false\nFuture=opaque\n");
@@ -168,7 +169,7 @@ void test_bitmap() {
 void test_vertical_and_color_bitmap() {
   namespace core = jwpqt::core;
   auto settings = qt::read_application_settings(
-      "Bitmap.Vert=true\nColorKanji_Clipboard=true\nFuture=opaque\n");
+      "no_BITMAP=false\nBitmap.Vert=true\nColorKanji_Clipboard=true\nFuture=opaque\n");
   require(settings.vertical_clipboard_bitmap && settings.color_clipboard_bitmap,
           "Clipboard rendering settings did not parse");
   const auto serialized = qt::write_application_settings(settings);

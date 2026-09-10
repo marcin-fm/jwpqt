@@ -48,9 +48,9 @@ struct ApplicationSettings {
   JapaneseFontSetting print_font{{}, 120, true}; // Size is tenths of a point, not screen pixels.
   JapaneseFontSetting ascii_font{{}, 0, true}; // Source size/automatic are retained; height follows each Japanese role.
   bool show_toolbar = true;
-  bool omit_clipboard_bitmap = false;
+  bool omit_clipboard_bitmap = true;
   ClipboardTextFormat clipboard_export = ClipboardTextFormat::kShiftJis;
-  ClipboardTextFormat clipboard_import = ClipboardTextFormat::kAutoDetect;
+  ClipboardTextFormat clipboard_import = ClipboardTextFormat::kUnicode;
   bool omit_clipboard_unicode = false;
   bool vertical_clipboard_bitmap = false;
   bool color_clipboard_bitmap = false;
@@ -114,7 +114,7 @@ struct ApplicationSettings {
   int conversion_choices = 200;
   int history_size = 300;
   int maximum_undo_levels = 50;
-  int translation_code_page = 1252;
+  int translation_code_page = 0;
   KanjiInfoOptions kanji_info;
   EdictLookupOptions dictionary;
   std::uint32_t dictionary_extra_exclusions = 0;

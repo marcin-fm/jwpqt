@@ -160,8 +160,10 @@ void test_clipboard_settings() {
   using namespace jwpqt::qt;
   const auto defaults = read_application_settings("");
   require(defaults.clipboard_export == ClipboardTextFormat::kShiftJis &&
-              defaults.clipboard_import == ClipboardTextFormat::kAutoDetect &&
-              !defaults.omit_clipboard_unicode,
+              defaults.clipboard_import == ClipboardTextFormat::kUnicode &&
+              defaults.omit_clipboard_bitmap &&
+              !defaults.omit_clipboard_unicode &&
+              defaults.translation_code_page == 0,
           "Clipboard protocol defaults differ from the source");
   for (int value = 6; value <= 13; ++value) {
     const auto format = static_cast<ClipboardTextFormat>(value);

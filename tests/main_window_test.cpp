@@ -2538,6 +2538,59 @@ void test_jwp_open_edit_and_save(const QString& directory) {
 }
 
 void test_jwp_clipboard_changes(const QString& directory) {
+  {
+    jwpqt::qt::MainWindow defaults;
+    const auto settings = defaults.application_settings();
+    require(settings.clipboard_import ==
+                    jwpqt::qt::ClipboardTextFormat::kUnicode &&
+                settings.clipboard_export ==
+                    jwpqt::qt::ClipboardTextFormat::kShiftJis &&
+                settings.omit_clipboard_bitmap &&
+                settings.translation_code_page == 0,
+            "Fresh clipboard defaults differ from the desktop source");
+    jwpqt::qt::ApplicationSettingsDialog options(settings, &defaults);
+    auto* import = options.findChild<QComboBox*>(
+        QStringLiteral("settingsClipboardImport"));
+    auto* omit_bitmap = options.findChild<QCheckBox*>(
+        QStringLiteral("settingsOmitClipboardBitmap"));
+    auto* code_page = options.findChild<QComboBox*>(
+        QStringLiteral("settingsCodePage"));
+    require(import != nullptr && omit_bitmap != nullptr &&
+                code_page != nullptr &&
+                import->currentData().toInt() == static_cast<int>(
+                    jwpqt::qt::ClipboardTextFormat::kUnicode) &&
+                omit_bitmap->isChecked() &&
+                code_page->currentData().toInt() == 0,
+            "Options did not present the source clipboard defaults");
+
+    auto* editor = defaults.active_editor();
+    editor->insertPlainText(QStringLiteral("A"));
+    editor->selectAll();
+    editor->copy();
+    const auto* copied = QApplication::clipboard()->mimeData();
+    require(copied->hasText(),
+            "Fresh Copy did not publish Unicode text");
+    require(!copied->hasImage(),
+            "Fresh Copy ignored source-default bitmap omission");
+    require(copied->hasFormat(QString::fromLatin1(
+                jwpqt::qt::kJwpClipboardMime)),
+            "Fresh Copy did not publish the private JWP fragment");
+    require(copied->hasFormat(QString::fromLatin1(
+                jwpqt::qt::kEncodedClipboardMime)),
+            "Fresh Copy did not publish the encoded text representation");
+
+    auto* conflicting = new QMimeData;
+    jwpqt::qt::add_clipboard_text_formats(
+        *conflicting, QStringLiteral("encoded"),
+        jwpqt::qt::ClipboardTextFormat::kShiftJis, 1252, false);
+    conflicting->setText(QStringLiteral("unicode"));
+    QApplication::clipboard()->setMimeData(conflicting);
+    editor->selectAll();
+    editor->paste();
+    require(editor->toPlainText() == QStringLiteral("unicode"),
+            "Fresh Paste did not prefer source-default Unicode text");
+  }
+
   struct Case {
     QString before;
     int begin;

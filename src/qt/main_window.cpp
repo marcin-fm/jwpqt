@@ -601,6 +601,7 @@ MainWindow::MainWindow(QWidget* parent)
   resource_status_button_->setAutoRaise(true);
   resource_status_button_->setAccessibleName(tr("Runtime resources"));
   statusBar()->addPermanentWidget(resource_status_button_);
+  application_font_warnings_ = set_japanese_fonts(*this, application_settings_);
   update_resource_status();
   update_encoding_display();
   resize(900, 680);

@@ -256,6 +256,14 @@ not applied, corrupt startup files are not automatically overwritten, and saving
 cannot overwrite an open document. Font changes preserve every tab's text,
 history and selection, including an active conversion preview.
 
+Fresh settings follow JWPxp's final clipboard defaults: public text import uses
+Unicode, the separately encoded export is Shift-JIS, standard Unicode remains
+available on Copy, and the optional bitmap image is omitted. The translation
+code page is stored as Automatic and resolves to native CP1252 on Linux. Auto
+Detect import and bitmap output remain explicit Options choices. A private JWP
+fragment still takes priority for same-application paste, preserving structured
+paragraphs and original byte/JIS identity.
+
 The **Bitmap** font role controls the image representation of copied document
 text, inheriting File when automatic. Copy/Cut retain plain text (including
 nonbreaking spaces and Unicode signatures) and Qt's rich formats, and add a

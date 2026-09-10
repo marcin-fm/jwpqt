@@ -215,6 +215,7 @@ int main(int argc, char** argv) {
     qt::MainWindow window;
     require(window.load_application_settings(directory.filePath(QStringLiteral("jwpqt.cfg"))), "Could not initialize font directory");
     auto settings = window.application_settings();
+    settings.omit_clipboard_bitmap = false;
     auto& system = settings.fonts[static_cast<std::size_t>(qt::JapaneseFontRole::kSystem)];
     system.family = QStringLiteral("test.f00"); system.size = 42;
     require(window.apply_application_settings(settings) && window.application_settings_warning().isEmpty(), "Native raster preferences failed");

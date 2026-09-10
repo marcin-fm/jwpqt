@@ -166,6 +166,7 @@ void test_representation() {
   qt::write_jwp_file(path, source);
   qt::MainWindow window;
   qt::ApplicationSettings settings;
+  settings.omit_clipboard_bitmap = false;
   settings.fonts[0] = {QStringLiteral("Noto Sans CJK JP"), 24, false};
   settings.fonts[static_cast<std::size_t>(qt::JapaneseFontRole::kBitmap)] = {QStringLiteral("Noto Sans CJK JP"), 24, false};
   const auto ascii_family = QRawFont::fromFont(QFontDatabase::systemFont(QFontDatabase::GeneralFont)).familyName();
