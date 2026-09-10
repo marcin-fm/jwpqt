@@ -21,6 +21,7 @@
 #include <QMessageBox>
 #include <QListWidget>
 #include <QMimeData>
+#include <QPointer>
 #include <QPushButton>
 #include <QTemporaryDir>
 #include <QTimer>
@@ -119,6 +120,106 @@ void test_import_insert_and_failed_save() {
   const std::vector<EdictUserEntry> before = dialog.entries();
   require(!dialog.save_changes() && dialog.entries() == before,
           "Failed dictionary save changed the working entries");
+}
+
+void test_title_bar_close() {
+  const EdictUserEntry first = entry({0x2422}, U"first");
+
+  int discarded_saves = 0;
+  EdictUserDictionaryDialog discarded(
+      EdictUserDictionary::from_entries({}), LegacyCodePage::k1252,
+      [&](EdictUserDictionary) {
+        ++discarded_saves;
+        return true;
+      });
+  discarded.add_entry(first);
+  discarded.show();
+  bool no_prompt = false;
+  QTimer::singleShot(0, [&] {
+    auto* prompt =
+        qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    no_prompt = prompt &&
+                prompt->objectName() ==
+                    QStringLiteral("saveEdictUserDictionaryClosePrompt") &&
+                prompt->defaultButton() == prompt->button(QMessageBox::Yes);
+    if (prompt) prompt->button(QMessageBox::No)->click();
+  });
+  require(discarded.close() && no_prompt && !discarded.isVisible() &&
+              discarded.isWindowModified() && discarded_saves == 0,
+          "Closing the user dictionary with No saved or retained the window");
+
+  int accepted_saves = 0;
+  EdictUserDictionary saved;
+  EdictUserDictionaryDialog accepted(
+      EdictUserDictionary::from_entries({}), LegacyCodePage::k1252,
+      [&](EdictUserDictionary dictionary) {
+        ++accepted_saves;
+        saved = std::move(dictionary);
+        return true;
+      });
+  accepted.add_entry(first);
+  accepted.show();
+  QTimer::singleShot(0, [] {
+    auto* prompt =
+        qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    if (prompt) prompt->button(QMessageBox::Yes)->click();
+  });
+  require(accepted.close() && accepted_saves == 1 &&
+              saved.entries() == std::vector<EdictUserEntry>{first} &&
+              !accepted.isWindowModified() && !accepted.isVisible(),
+          "Closing the user dictionary with Yes did not save exactly once");
+
+  int failed_saves = 0;
+  EdictUserDictionaryDialog failed(
+      EdictUserDictionary::from_entries({}), LegacyCodePage::k1252,
+      [&](EdictUserDictionary) {
+        ++failed_saves;
+        return false;
+      });
+  failed.add_entry(first);
+  failed.show();
+  QTimer::singleShot(0, [] {
+    auto* prompt =
+        qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    if (prompt) prompt->button(QMessageBox::Yes)->click();
+  });
+  require(!failed.close() && failed_saves == 1 && failed.isVisible() &&
+              failed.isWindowModified(),
+          "A failed user-dictionary save closed or cleared the editor");
+
+  int cancel_saves = 0;
+  EdictUserDictionaryDialog cancelled(
+      EdictUserDictionary::from_entries({}), LegacyCodePage::k1252,
+      [&](EdictUserDictionary) {
+        ++cancel_saves;
+        return true;
+      });
+  cancelled.add_entry(first);
+  cancelled.show();
+  cancelled.reject();
+  require(!cancelled.isVisible() && cancelled.isWindowModified() &&
+              cancel_saves == 0 &&
+              cancelled.findChild<QMessageBox*>() == nullptr,
+          "Explicit user-dictionary Cancel prompted or saved changes");
+
+  auto* deleted = new EdictUserDictionaryDialog(
+      EdictUserDictionary::from_entries({}), LegacyCodePage::k1252,
+      [](EdictUserDictionary) { return true; });
+  deleted->add_entry(first);
+  deleted->show();
+  QPointer<EdictUserDictionaryDialog> deleted_guard(deleted);
+  bool deletion_prompt = false;
+  QTimer::singleShot(0, [&] {
+    auto* prompt =
+        qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    deletion_prompt = prompt &&
+                      prompt->objectName() ==
+                          QStringLiteral("saveEdictUserDictionaryClosePrompt");
+    delete deleted;
+  });
+  (void)deleted->close();
+  require(deletion_prompt && deleted_guard.isNull(),
+          "Deleting the user dictionary during close used stale state");
 }
 
 void test_multi_file_import_drop() {
@@ -479,6 +580,7 @@ int main(int argc, char** argv) {
   try {
     test_editing_and_save();
     test_import_insert_and_failed_save();
+    test_title_bar_close();
     test_multi_file_import_drop();
     test_invalid_edit_is_atomic();
     test_imported_empty_meaning_round_trip();

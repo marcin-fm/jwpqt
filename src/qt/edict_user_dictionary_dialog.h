@@ -14,6 +14,7 @@
 #include "jwpqt/core/edict_user_dictionary.h"
 
 class QAction;
+class QCloseEvent;
 class QDragEnterEvent;
 class QDropEvent;
 class QLabel;
@@ -45,6 +46,7 @@ class EdictUserDictionaryDialog : public QDialog {
   void set_overwrite_action(QAction* action);
 
  protected:
+  void closeEvent(QCloseEvent* event) override;
   void dragEnterEvent(QDragEnterEvent* event) override;
   void dropEvent(QDropEvent* event) override;
   virtual std::optional<core::EdictUserEntry> prompt_for_entry(

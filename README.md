@@ -127,6 +127,9 @@ it; declining still applies the staged path, encoding and companion-index data.
 Quitting with unsaved WNN or EDICT user-dictionary edits offers Save, Discard
 or Cancel before document and settings checks. Discard applies only to that
 close attempt, so a later cancellation leaves the working copy dirty.
+Closing either editor from its title bar separately asks whether to save, with
+Save as the safe default; No closes that working copy without publishing it.
+The editor's explicit Cancel button remains the intentional discard command.
 The [handbook](docs/handbook/dictionary.md) describes the complete native workflow.
 
 The clickable **Resources** status and **Help > Runtime Resources** show loaded

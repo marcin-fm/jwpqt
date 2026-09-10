@@ -12,6 +12,7 @@
 
 #include <QAction>
 #include <QComboBox>
+#include <QCloseEvent>
 #include <QDialogButtonBox>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -243,6 +244,30 @@ WnnUserDictionaryDialog::WnnUserDictionaryDialog(
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
   refresh();
+}
+
+void WnnUserDictionaryDialog::closeEvent(QCloseEvent* event) {
+  if (!isWindowModified()) {
+    QDialog::closeEvent(event);
+    return;
+  }
+
+  const QPointer<WnnUserDictionaryDialog> self(this);
+  QPointer<QMessageBox> prompt = new QMessageBox(
+      QMessageBox::Question, tr("Closing User Conversions!"),
+      tr("The user conversions may have changed. Do you want to save the changes?"),
+      QMessageBox::Yes | QMessageBox::No, this);
+  prompt->setObjectName(QStringLiteral("saveWnnUserDictionaryClosePrompt"));
+  prompt->setDefaultButton(QMessageBox::Yes);
+  prompt->setEscapeButton(QMessageBox::No);
+  const int answer = prompt->exec();
+  if (prompt) delete prompt.data();
+  if (!self) return;
+  if (answer == QMessageBox::Yes && !save_changes()) {
+    event->ignore();
+    return;
+  }
+  QDialog::closeEvent(event);
 }
 
 void WnnUserDictionaryDialog::dragEnterEvent(QDragEnterEvent* event) {

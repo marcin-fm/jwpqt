@@ -11,6 +11,7 @@
 #include <utility>
 
 #include <QAction>
+#include <QCloseEvent>
 #include <QDialogButtonBox>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -189,6 +190,30 @@ EdictUserDictionaryDialog::EdictUserDictionaryDialog(
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
   refresh();
+}
+
+void EdictUserDictionaryDialog::closeEvent(QCloseEvent* event) {
+  if (!isWindowModified()) {
+    QDialog::closeEvent(event);
+    return;
+  }
+
+  const QPointer<EdictUserDictionaryDialog> self(this);
+  QPointer<QMessageBox> prompt = new QMessageBox(
+      QMessageBox::Question, tr("Closing User Dictionary!"),
+      tr("The user dictionary may have changed. Do you want to save the changes?"),
+      QMessageBox::Yes | QMessageBox::No, this);
+  prompt->setObjectName(QStringLiteral("saveEdictUserDictionaryClosePrompt"));
+  prompt->setDefaultButton(QMessageBox::Yes);
+  prompt->setEscapeButton(QMessageBox::No);
+  const int answer = prompt->exec();
+  if (prompt) delete prompt.data();
+  if (!self) return;
+  if (answer == QMessageBox::Yes && !save_changes()) {
+    event->ignore();
+    return;
+  }
+  QDialog::closeEvent(event);
 }
 
 void EdictUserDictionaryDialog::dragEnterEvent(QDragEnterEvent* event) {

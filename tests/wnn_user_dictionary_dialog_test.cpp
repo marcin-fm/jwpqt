@@ -22,6 +22,7 @@
 #include <QListWidget>
 #include <QMessageBox>
 #include <QMimeData>
+#include <QPointer>
 #include <QPushButton>
 #include <QTemporaryDir>
 #include <QTimer>
@@ -118,6 +119,106 @@ void test_import_insert_and_failed_save() {
   const std::vector<WnnUserEntry> before = dialog.entries();
   require(!dialog.save_changes() && dialog.entries() == before,
           "Failed dictionary save changed the working entries");
+}
+
+void test_title_bar_close() {
+  const WnnUserEntry first = entry({0x2422}, {0x3021});
+
+  int discarded_saves = 0;
+  WnnUserDictionaryDialog discarded(
+      WnnUserDictionary::from_entries({}),
+      [&](WnnUserDictionary) {
+        ++discarded_saves;
+        return true;
+      });
+  discarded.add_entry(first);
+  discarded.show();
+  bool no_prompt = false;
+  QTimer::singleShot(0, [&] {
+    auto* prompt =
+        qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    no_prompt = prompt &&
+                prompt->objectName() ==
+                    QStringLiteral("saveWnnUserDictionaryClosePrompt") &&
+                prompt->defaultButton() == prompt->button(QMessageBox::Yes);
+    if (prompt) prompt->button(QMessageBox::No)->click();
+  });
+  require(discarded.close() && no_prompt && !discarded.isVisible() &&
+              discarded.isWindowModified() && discarded_saves == 0,
+          "Closing user conversions with No saved or retained the window");
+
+  int accepted_saves = 0;
+  WnnUserDictionary saved;
+  WnnUserDictionaryDialog accepted(
+      WnnUserDictionary::from_entries({}),
+      [&](WnnUserDictionary dictionary) {
+        ++accepted_saves;
+        saved = std::move(dictionary);
+        return true;
+      });
+  accepted.add_entry(first);
+  accepted.show();
+  QTimer::singleShot(0, [] {
+    auto* prompt =
+        qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    if (prompt) prompt->button(QMessageBox::Yes)->click();
+  });
+  require(accepted.close() && accepted_saves == 1 &&
+              saved.entries() == std::vector<WnnUserEntry>{first} &&
+              !accepted.isWindowModified() && !accepted.isVisible(),
+          "Closing user conversions with Yes did not save exactly once");
+
+  int failed_saves = 0;
+  WnnUserDictionaryDialog failed(
+      WnnUserDictionary::from_entries({}),
+      [&](WnnUserDictionary) {
+        ++failed_saves;
+        return false;
+      });
+  failed.add_entry(first);
+  failed.show();
+  QTimer::singleShot(0, [] {
+    auto* prompt =
+        qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    if (prompt) prompt->button(QMessageBox::Yes)->click();
+  });
+  require(!failed.close() && failed_saves == 1 && failed.isVisible() &&
+              failed.isWindowModified(),
+          "A failed user-conversion save closed or cleared the editor");
+
+  int cancel_saves = 0;
+  WnnUserDictionaryDialog cancelled(
+      WnnUserDictionary::from_entries({}),
+      [&](WnnUserDictionary) {
+        ++cancel_saves;
+        return true;
+      });
+  cancelled.add_entry(first);
+  cancelled.show();
+  cancelled.reject();
+  require(!cancelled.isVisible() && cancelled.isWindowModified() &&
+              cancel_saves == 0 &&
+              cancelled.findChild<QMessageBox*>() == nullptr,
+          "Explicit user-conversion Cancel prompted or saved changes");
+
+  auto* deleted = new WnnUserDictionaryDialog(
+      WnnUserDictionary::from_entries({}),
+      [](WnnUserDictionary) { return true; });
+  deleted->add_entry(first);
+  deleted->show();
+  QPointer<WnnUserDictionaryDialog> deleted_guard(deleted);
+  bool deletion_prompt = false;
+  QTimer::singleShot(0, [&] {
+    auto* prompt =
+        qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    deletion_prompt = prompt &&
+                      prompt->objectName() ==
+                          QStringLiteral("saveWnnUserDictionaryClosePrompt");
+    delete deleted;
+  });
+  (void)deleted->close();
+  require(deletion_prompt && deleted_guard.isNull(),
+          "Deleting user conversions during its close prompt used stale state");
 }
 
 void test_multi_file_import_drop() {
@@ -490,6 +591,7 @@ int main(int argc, char** argv) {
   try {
     test_editing_and_save();
     test_import_insert_and_failed_save();
+    test_title_bar_close();
     test_multi_file_import_drop();
     test_invalid_edit_is_atomic();
     test_imported_inflection_round_trip();

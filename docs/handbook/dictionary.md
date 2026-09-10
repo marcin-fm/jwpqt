@@ -84,6 +84,13 @@ window's Save button. Discard applies only to the current close attempt; if a
 later document or settings prompt cancels the exit, the dictionary remains
 modified and asks again. Cancel and failed saves keep the application open.
 
+Closing a modified user-dictionary or user-conversion window from its title bar
+asks Yes or No whether to save, with Yes as the safe default. Yes uses the same
+atomic Save operation; a failed save keeps the window and its working copy open.
+No closes without publishing the changes. The window's explicit Cancel button
+is different: it deliberately closes without another question, matching the
+original editor's discard command.
+
 ## Manage Dictionaries
 
 Tools > Manage Dictionaries, or Dictionaries in lookup, opens a staged editor
