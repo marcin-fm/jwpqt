@@ -65,7 +65,12 @@ fields in the editor.
 
 Tools > User Conversions manages WNN readings and candidate lists in the same
 way. Its Add and Edit fields also provide K/A/J input and shared overwrite
-behavior. Separate multiple candidates with `/`.
+behavior. Readings must be nonempty hiragana and candidates must be nonempty.
+Inflected entries must satisfy the recovered Godan, Ichidan or i-adjective
+length, ending, cardinality and slash rules. An error keeps the same editor open
+with the reading, candidates and inflection intact. Separate multiple candidates
+with `/`. Imported records retain the broader legacy file compatibility rather
+than being silently rewritten by editor validation.
 
 Import in either user-dictionary window accepts multiple files, and local files
 can be dropped directly on the window. Every file is parsed in source order

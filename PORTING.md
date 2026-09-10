@@ -172,7 +172,10 @@ legacy file structures.
 48. New editable WNN entries use a strict portable factory separate from the
     permissive import codec. It derives all nine godan endings, validates the
     recovered ichidan i/e stem set and i-adjective endings, rejects multiple
-    inflected candidates, and strips a matching kana suffix exactly once.
+    inflected candidates, and strips a matching kana suffix exactly once. The
+    native entry editor additionally requires hiragana readings and keeps the
+    fields and inflection open after every validation error, while imported
+    source-compatible records remain accepted by the broader file boundary.
 49. Explicit user-dictionary sorting reproduces the recovered display-row
     ordering, including slash-separated candidates and bracketed inflections,
     with the source-shaped selection algorithm rather than assuming a strict

@@ -22,9 +22,11 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QMimeData>
 #include <QPushButton>
 #include <QStringList>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include "file_io.h"
@@ -112,6 +114,12 @@ core::WnnUserEntry entry_from_fields(
   }
   return core::make_wnn_user_entry(std::move(reading), std::move(candidates),
                                    inflection);
+}
+
+bool reading_is_hiragana(const core::JwpText& reading) noexcept {
+  return std::all_of(reading.begin(), reading.end(), [](core::JisCode code) {
+    return (code & 0x7f00U) == 0x2400U;
+  });
 }
 
 }  // namespace
@@ -419,20 +427,69 @@ WnnUserDictionaryDialog::prompt_for_entry(
   layout->addLayout(form);
   auto* buttons = new QDialogButtonBox(
       QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-  connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
   connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
   layout->addWidget(buttons);
-  if (dialog.exec() != QDialog::Accepted) {
-    return std::nullopt;
-  }
-  reading->finish_input();
-  candidates->finish_input();
-  return entry_from_fields(
-      core::encode_jwp_text(from_qstring(reading->edit()->text().trimmed())),
-      parse_candidates(candidates->edit()->text()),
-      static_cast<core::WnnUserInflection>(
-          inflection->currentData().toInt()),
-      initial);
+  std::optional<core::WnnUserEntry> accepted_entry;
+  connect(buttons, &QDialogButtonBox::accepted, &dialog, [&] {
+    reading->finish_input();
+    candidates->finish_input();
+
+    auto show_error = [&](const QString& message, QLineEdit* field) {
+      QMessageBox warning(QMessageBox::Warning, tr("Invalid User Conversion"),
+                          message, QMessageBox::Ok, &dialog);
+      warning.setObjectName(QStringLiteral("wnnUserEntryError"));
+      warning.exec();
+      field->setFocus();
+      QTimer::singleShot(10, field, [field] { field->setFocus(); });
+    };
+
+    core::JwpText encoded_reading;
+    try {
+      encoded_reading =
+          core::encode_jwp_text(from_qstring(reading->edit()->text()));
+    } catch (const std::exception& error) {
+      show_error(QString::fromUtf8(error.what()), reading->edit());
+      return;
+    }
+    if (encoded_reading.empty()) {
+      show_error(tr("Reading must not be empty"), reading->edit());
+      return;
+    }
+    if (!reading_is_hiragana(encoded_reading)) {
+      show_error(tr("Reading must contain only hiragana"), reading->edit());
+      return;
+    }
+
+    std::vector<core::JwpText> encoded_candidates;
+    try {
+      encoded_candidates = parse_candidates(candidates->edit()->text());
+    } catch (const std::exception& error) {
+      show_error(QString::fromUtf8(error.what()), candidates->edit());
+      return;
+    }
+
+    try {
+      core::WnnUserEntry entry = entry_from_fields(
+          std::move(encoded_reading), std::move(encoded_candidates),
+          static_cast<core::WnnUserInflection>(
+              inflection->currentData().toInt()),
+          initial);
+      accepted_entry = initial.has_value() && entry == *initial
+                           ? initial
+                           : std::optional<core::WnnUserEntry>{std::move(entry)};
+    } catch (const std::exception& error) {
+      const QString message = QString::fromUtf8(error.what());
+      show_error(message,
+                 message.contains(QStringLiteral("candidate"),
+                                  Qt::CaseInsensitive)
+                     ? candidates->edit()
+                     : reading->edit());
+      return;
+    }
+    dialog.accept();
+  });
+  return dialog.exec() == QDialog::Accepted ? std::move(accepted_entry)
+                                             : std::nullopt;
 }
 
 std::optional<core::WnnUserDictionary>

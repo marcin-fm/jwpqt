@@ -11,6 +11,7 @@
 
 #include <QApplication>
 #include <QAction>
+#include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -19,6 +20,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QMimeData>
 #include <QPushButton>
 #include <QTemporaryDir>
@@ -300,6 +302,168 @@ void test_japanese_entry_fields() {
           "Expired overwrite action did not fall back safely or Cancel mutated input");
 }
 
+void test_invalid_entry_stays_open() {
+  PromptTestDialog dialog(WnnUserDictionary::from_entries({}),
+                          [](WnnUserDictionary) { return true; });
+  bool empty_error_verified = false;
+  bool empty_fields_retained = false;
+  QTimer::singleShot(0, [&] {
+    QWidget* modal = QApplication::activeModalWidget();
+    auto* reading = modal ? modal->findChild<QLineEdit*>(
+                                QStringLiteral("wnnUserReading"))
+                          : nullptr;
+    auto* candidates = modal ? modal->findChild<QLineEdit*>(
+                                   QStringLiteral("wnnUserCandidates"))
+                             : nullptr;
+    auto* buttons = modal ? modal->findChild<QDialogButtonBox*>() : nullptr;
+    if (!reading || !candidates || !buttons) {
+      if (modal) modal->close();
+      return;
+    }
+    reading->setText(QStringLiteral("かな"));
+    candidates->clear();
+    QTimer::singleShot(0, [&] {
+      auto* error = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+      if (!error ||
+          error->objectName() != QStringLiteral("wnnUserEntryError")) {
+        if (error) error->reject();
+        return;
+      }
+      empty_error_verified =
+          error->text().contains(QStringLiteral("Candidates cannot be empty"));
+      auto* entry_dialog = qobject_cast<QDialog*>(error->parentWidget());
+      QObject::connect(error, &QDialog::finished, entry_dialog,
+                       [&, entry_dialog] {
+        auto* retry_reading = entry_dialog->findChild<QLineEdit*>(
+            QStringLiteral("wnnUserReading"));
+        auto* retry_candidates = entry_dialog->findChild<QLineEdit*>(
+            QStringLiteral("wnnUserCandidates"));
+        empty_fields_retained =
+            retry_reading && retry_candidates &&
+            retry_reading->text() == QStringLiteral("かな") &&
+            retry_candidates->text().isEmpty();
+        entry_dialog->reject();
+      }, Qt::QueuedConnection);
+      error->button(QMessageBox::Ok)->click();
+    });
+    buttons->button(QDialogButtonBox::Ok)->click();
+  });
+  require(!dialog.prompt(std::nullopt).has_value() && empty_error_verified &&
+              empty_fields_retained,
+          "Empty candidate validation closed the editor or lost fields");
+
+  bool reading_error_verified = false;
+  bool reading_fields_retained = false;
+  QTimer::singleShot(0, [&] {
+    QWidget* modal = QApplication::activeModalWidget();
+    auto* reading = modal ? modal->findChild<QLineEdit*>(
+                                QStringLiteral("wnnUserReading"))
+                          : nullptr;
+    auto* candidates = modal ? modal->findChild<QLineEdit*>(
+                                   QStringLiteral("wnnUserCandidates"))
+                             : nullptr;
+    auto* buttons = modal ? modal->findChild<QDialogButtonBox*>() : nullptr;
+    if (!reading || !candidates || !buttons) {
+      if (modal) modal->close();
+      return;
+    }
+    reading->setText(QStringLiteral("日本"));
+    candidates->setText(QStringLiteral("候補"));
+    QTimer::singleShot(0, [&] {
+      auto* error = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+      if (!error ||
+          error->objectName() != QStringLiteral("wnnUserEntryError")) {
+        if (error) error->reject();
+        return;
+      }
+      reading_error_verified =
+          error->text().contains(QStringLiteral("only hiragana"));
+      auto* entry_dialog = qobject_cast<QDialog*>(error->parentWidget());
+      QObject::connect(error, &QDialog::finished, entry_dialog,
+                       [&, entry_dialog] {
+        auto* retry_reading = entry_dialog->findChild<QLineEdit*>(
+            QStringLiteral("wnnUserReading"));
+        auto* retry_candidates = entry_dialog->findChild<QLineEdit*>(
+            QStringLiteral("wnnUserCandidates"));
+        reading_fields_retained =
+            retry_reading && retry_candidates &&
+            retry_reading->text() == QStringLiteral("日本") &&
+            retry_candidates->text() == QStringLiteral("候補");
+        entry_dialog->reject();
+      }, Qt::QueuedConnection);
+      error->button(QMessageBox::Ok)->click();
+    });
+    buttons->button(QDialogButtonBox::Ok)->click();
+  });
+  require(!dialog.prompt(std::nullopt).has_value() &&
+              reading_error_verified && reading_fields_retained,
+          "Non-hiragana validation closed the editor or lost fields");
+
+  bool inflection_error_verified = false;
+  bool inflection_fields_retained = false;
+  QTimer::singleShot(0, [&] {
+    QWidget* modal = QApplication::activeModalWidget();
+    auto* reading = modal ? modal->findChild<QLineEdit*>(
+                                QStringLiteral("wnnUserReading"))
+                          : nullptr;
+    auto* candidates = modal ? modal->findChild<QLineEdit*>(
+                                   QStringLiteral("wnnUserCandidates"))
+                             : nullptr;
+    auto* inflection = modal ? modal->findChild<QComboBox*>(
+                                   QStringLiteral("wnnUserInflection"))
+                             : nullptr;
+    auto* buttons = modal ? modal->findChild<QDialogButtonBox*>() : nullptr;
+    if (!reading || !candidates || !inflection || !buttons) {
+      if (modal) modal->close();
+      return;
+    }
+    reading->setText(QStringLiteral("か"));
+    candidates->setText(QStringLiteral("候補"));
+    inflection->setCurrentIndex(inflection->findData(
+        static_cast<int>(jwpqt::core::WnnUserInflection::kGodan)));
+    QTimer::singleShot(0, [&] {
+      auto* error = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+      if (!error ||
+          error->objectName() != QStringLiteral("wnnUserEntryError")) {
+        if (error) error->reject();
+        return;
+      }
+      inflection_error_verified = error->text().contains(
+          QStringLiteral("at least two kana"));
+      auto* entry_dialog = qobject_cast<QDialog*>(error->parentWidget());
+      QObject::connect(error, &QDialog::finished, entry_dialog,
+                       [&, entry_dialog] {
+        auto* retry_reading = entry_dialog->findChild<QLineEdit*>(
+            QStringLiteral("wnnUserReading"));
+        auto* retry_candidates = entry_dialog->findChild<QLineEdit*>(
+            QStringLiteral("wnnUserCandidates"));
+        auto* retry_buttons = entry_dialog->findChild<QDialogButtonBox*>();
+        inflection_fields_retained =
+            retry_reading && retry_candidates && retry_buttons &&
+            retry_reading->text() == QStringLiteral("か") &&
+            retry_candidates->text() == QStringLiteral("候補");
+        if (!inflection_fields_retained) {
+          entry_dialog->reject();
+          return;
+        }
+        retry_reading->setText(QStringLiteral("かく"));
+        retry_candidates->setText(QStringLiteral("書く"));
+        retry_buttons->button(QDialogButtonBox::Ok)->click();
+      }, Qt::QueuedConnection);
+      error->button(QMessageBox::Ok)->click();
+    });
+    buttons->button(QDialogButtonBox::Ok)->click();
+  });
+  const std::optional<WnnUserEntry> accepted = dialog.prompt(std::nullopt);
+  require(inflection_error_verified && inflection_fields_retained &&
+              accepted.has_value() &&
+              accepted->reading == jwpqt::core::encode_jwp_text(U"かく") &&
+              accepted->ending == 'k' &&
+              accepted->candidates == std::vector<JwpText>{
+                                          jwpqt::core::encode_jwp_text(U"書")},
+          "Invalid inflection closed the editor or lost fields");
+}
+
 void test_insert_exception_is_contained() {
   const WnnUserEntry first = entry({0x2422}, {0x3021});
   WnnUserDictionaryDialog dialog(
@@ -330,6 +494,7 @@ int main(int argc, char** argv) {
     test_invalid_edit_is_atomic();
     test_imported_inflection_round_trip();
     test_japanese_entry_fields();
+    test_invalid_entry_stays_open();
     test_insert_exception_is_contained();
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {
