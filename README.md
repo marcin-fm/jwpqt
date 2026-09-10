@@ -30,11 +30,16 @@ Installed-delivery tests also require `desktop-file-validate`, `update-mime-data
 and CPack. They stage and extract packages under the build directory, without root
 installation or access to the user's configuration.
 
-Run the editor, optionally opening a document:
+Run the editor, optionally opening documents and projects in order:
 
 ```sh
-/srv/tmp/jwpqt-build/src/qt/jwpqt [file]
+/srv/tmp/jwpqt-build/src/qt/jwpqt [file...]
 ```
+
+An unreadable argument is reported without preventing later arguments from
+opening. Repeated paths activate the existing tab instead of creating hidden
+duplicates. If every supplied path fails, noninteractive startup exits with a
+failure status.
 
 ## Help And Installation
 

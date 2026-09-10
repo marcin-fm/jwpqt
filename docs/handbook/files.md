@@ -23,6 +23,12 @@ Ctrl-close forces file close. Explicit Quit always uses the whole-workspace
 save checks. The optional startup dictionary opens only without an explicit
 document/project and with available dictionary resources.
 
+Command-line startup accepts multiple documents and projects and processes them
+in the order supplied. Projects append to documents already opened by an earlier
+argument. An unreadable path is reported without preventing later paths from
+opening, and a repeated path activates its existing tab. Noninteractive startup
+returns a failure only when no supplied path can be opened.
+
 **Restore main window** retains its normal position, size and maximized state.
 Minimizing does not replace the saved normal bounds. Character Information,
 Dictionary, Count, More Info and both user-dictionary windows independently

@@ -10,7 +10,8 @@ if(NOT result EQUAL 1)
   message(FATAL_ERROR "Expected exit 1, got ${result}: ${output}${error}")
 endif()
 
-set(expected "Could not determine the file encoding noninteractively; specify --encoding.")
+set(expected
+    "Could not open ${ASCII_FILE}: the file type or encoding could not be determined noninteractively")
 string(FIND "${error}" "${expected}" found)
 if(found EQUAL -1)
   message(FATAL_ERROR "Expected noninteractive diagnostic, got: ${error}")
@@ -29,7 +30,8 @@ if(NOT explicit_result EQUAL 1)
     "Expected explicit decode exit 1, got ${explicit_result}: ${explicit_output}${explicit_error}")
 endif()
 
-set(explicit_expected "Could not open the file using the requested encoding.")
+set(explicit_expected
+    "Could not open ${EUC_FILE}: the requested encoding failed")
 string(FIND "${explicit_error}" "${explicit_expected}" explicit_found)
 if(explicit_found EQUAL -1)
   message(FATAL_ERROR "Expected explicit-open diagnostic, got: ${explicit_error}")

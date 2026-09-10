@@ -7,6 +7,8 @@
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
+#include <utility>
+#include <vector>
 
 #include <QAction>
 #include <QApplication>
@@ -241,6 +243,113 @@ void test_runtime_paths(const QString& executable, const QString& root) {
   QFile preserved(desktop_settings);
   require(preserved.open(QIODevice::ReadOnly) && preserved.readAll() == settings,
           QStringLiteral("Desktop settings were modified"));
+}
+
+void test_multiple_startup_paths(const QString& executable,
+                                 const QString& root) {
+  const QString fixture_root = root + QStringLiteral("/multiple startup");
+  const QString first = fixture_root + QStringLiteral("/first.jwp");
+  const QString second = fixture_root + QStringLiteral("/second.utf");
+  const QString project = fixture_root + QStringLiteral("/workspace.jpr");
+  const QString missing = fixture_root + QStringLiteral("/missing.jwp");
+  require(QDir().mkpath(fixture_root),
+          QStringLiteral("Could not create multi-file startup fixture directory"));
+
+  jwpqt::core::JwpDocument document;
+  jwpqt::core::JwpParagraph paragraph;
+  paragraph.text = {static_cast<jwpqt::core::JisCode>('A')};
+  document.paragraphs.push_back(std::move(paragraph));
+  jwpqt::qt::write_jwp_file(first, document);
+  write_file(second, QByteArray::fromHex("efbbbf") + QByteArray("second"));
+
+  jwpqt::core::JwpProject startup_project;
+  startup_project.current_directory = fixture_root.toStdU32String();
+  startup_project.paths = {first.toStdU32String()};
+  jwpqt::qt::write_jwp_project_file(project, startup_project);
+
+  auto prepare_case = [&](const QString& name) {
+    const QString directory = fixture_root + QLatin1Char('/') + name;
+    write_file(directory + QStringLiteral("/jwpqt.cfg"),
+               QByteArray("ReloadPreviousFiles=true\n"
+                          "LastFileConfirmExit=false\n"
+                          "SaveSettingsOnExit=false\n"
+                          "Save_Histories=false\n"));
+    return directory;
+  };
+  auto run = [&](const QString& configuration, const QStringList& paths,
+                 int expected) {
+    QProcess process;
+    auto environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QStringLiteral("QT_QPA_PLATFORM"),
+                       QStringLiteral("offscreen"));
+    environment.insert(QStringLiteral("XDG_CONFIG_HOME"),
+                       fixture_root + QStringLiteral("/desktop"));
+    environment.insert(QStringLiteral("XDG_DATA_HOME"),
+                       fixture_root + QStringLiteral("/desktop data"));
+    process.setProcessEnvironment(environment);
+    process.setWorkingDirectory(fixture_root);
+    QStringList arguments{QStringLiteral("--smoke-test"),
+                          QStringLiteral("--config-dir"), configuration,
+                          QStringLiteral("--user-data-dir"),
+                          configuration + QStringLiteral("/user data")};
+    arguments.append(paths);
+    process.start(executable, arguments);
+    require(process.waitForFinished(15000),
+            QStringLiteral("Multi-file startup did not finish: ") +
+                process.errorString());
+    const QString output = QString::fromUtf8(process.readAllStandardOutput()) +
+                           QString::fromUtf8(process.readAllStandardError());
+    require(process.exitStatus() == QProcess::NormalExit &&
+                process.exitCode() == expected,
+            QStringLiteral("Unexpected multi-file startup exit: ") + output);
+    return output;
+  };
+  auto session_paths = [&](const QString& configuration) {
+    return jwpqt::qt::read_jwp_project_file(
+               configuration + QStringLiteral("/last-session.jpr"))
+        .paths;
+  };
+
+  const QString ordered = prepare_case(QStringLiteral("ordered"));
+  const QString output = run(ordered, {project, missing, second}, 0);
+  require(output.contains(QStringLiteral("Could not open ") + missing),
+          QStringLiteral("Failed middle startup path was not disclosed"));
+  require(session_paths(ordered) ==
+              std::vector<std::u32string>{first.toStdU32String(),
+                                          second.toStdU32String()},
+          QStringLiteral("Startup paths did not append in argument order"));
+  require(QFileInfo(first).isFile(),
+          QStringLiteral("Ordered startup removed its source document"));
+
+  const QString document_then_project =
+      prepare_case(QStringLiteral("document then project"));
+  run(document_then_project, {second, project}, 0);
+  require(session_paths(document_then_project) ==
+              std::vector<std::u32string>{second.toStdU32String(),
+                                          first.toStdU32String()},
+          QStringLiteral("Later startup project replaced an earlier document"));
+
+  const QString duplicate = prepare_case(QStringLiteral("duplicate"));
+  run(duplicate, {first, first}, 0);
+  require(session_paths(duplicate) ==
+              std::vector<std::u32string>{first.toStdU32String()},
+          QStringLiteral("Duplicate startup path opened another document"));
+
+  const QString relative = prepare_case(QStringLiteral("relative"));
+  run(relative, {QStringLiteral("first.jwp"), QStringLiteral("second.utf")}, 0);
+  const auto relative_session = jwpqt::qt::read_jwp_project_file(
+      relative + QStringLiteral("/last-session.jpr"));
+  require(relative_session.current_directory == fixture_root.toStdU32String() &&
+              relative_session.paths ==
+                  std::vector<std::u32string>{first.toStdU32String(),
+                                              second.toStdU32String()},
+          QStringLiteral("Relative startup paths lost the launch directory"));
+
+  const QString failed = prepare_case(QStringLiteral("failed"));
+  const QString failed_output = run(failed, {missing, missing}, 1);
+  require(failed_output.count(QStringLiteral("Could not open ") + missing) == 2 &&
+              !QFile::exists(failed + QStringLiteral("/last-session.jpr")),
+          QStringLiteral("All-failed startup was accepted or saved a session"));
 }
 
 QPalette menu_palette(bool dark) {
@@ -1159,6 +1268,8 @@ int main(int argc, char* argv[]) {
         QStringLiteral("runtime-environment-XXXXXX")));
     require(directory.isValid(), QStringLiteral("Could not create test directory"));
     test_runtime_paths(QString::fromLocal8Bit(argv[1]), directory.path());
+    test_multiple_startup_paths(QString::fromLocal8Bit(argv[1]),
+                                directory.path());
     test_visible_menus(false);
     test_visible_menus(true);
     test_menu_palette_changes();

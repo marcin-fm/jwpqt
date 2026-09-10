@@ -40,8 +40,8 @@ int main(int argc, char* argv[]) {
   parser.addOption(encoding_option);
   const QCommandLineOption project_option(
       QStringLiteral("project"),
-      QStringLiteral("Open a JWP project; --encoding is the fallback for "
-                     "ambiguous legacy references."));
+      QStringLiteral("Open every positional path as a JWP project; --encoding "
+                     "is the fallback for ambiguous legacy references."));
   parser.addOption(project_option);
   const QCommandLineOption wnn_data_directory_option(
       QStringLiteral("wnn-data-dir"),
@@ -66,14 +66,14 @@ int main(int argc, char* argv[]) {
   const QCommandLineOption handbook_option(QStringLiteral("handbook"),
       QStringLiteral("Open the bundled offline handbook."));
   parser.addOption(handbook_option);
-  parser.addPositionalArgument(QStringLiteral("file"),
-                               QStringLiteral("Document or JWP project to open."),
-                               QStringLiteral("[file]"));
+  parser.addPositionalArgument(
+      QStringLiteral("file"),
+      QStringLiteral("Documents or JWP projects to open in order."),
+      QStringLiteral("[file...]"));
   parser.process(application);
 
   const QStringList positional_arguments = parser.positionalArguments();
-  if (positional_arguments.size() > 1 ||
-      (parser.isSet(project_option) && positional_arguments.isEmpty())) {
+  if (parser.isSet(project_option) && positional_arguments.isEmpty()) {
     parser.showHelp(2);
   }
 
@@ -175,34 +175,41 @@ int main(int argc, char* argv[]) {
   }
   window.load_previous_session(config.filePath(QStringLiteral("last-session.jpr")), !parser.isSet(resource_report_option));
   if (!window.session_warning().isEmpty()) QTextStream(stderr) << window.session_warning() << '\n';
-  if (!positional_arguments.isEmpty()) {
+  bool opened_argument = false;
+  for (const QString& path : positional_arguments) {
     jwpqt::qt::ProjectOpenOptions project_options;
     project_options.legacy_encoding = encoding;
-    project_options.append = window.document_count() > 1 || !window.current_path().isEmpty();
+    project_options.append =
+        opened_argument || window.document_count() > 1 ||
+        !window.current_path().isEmpty();
     const bool opened =
         parser.isSet(project_option)
-            ? window.open_project_path(positional_arguments.constFirst(),
-                                       project_options, interaction_mode)
+            ? window.open_project_path(path, project_options, interaction_mode)
             : encoding.has_value()
-            ? window.open_path(positional_arguments.constFirst(), *encoding,
-                               interaction_mode, project_options.append)
-            : window.open_path_detected(positional_arguments.constFirst(),
-                                        interaction_mode, project_options.append);
+                  ? window.open_path(path, *encoding, interaction_mode,
+                                     project_options.append)
+                  : window.open_path_detected(path, interaction_mode,
+                                              project_options.append);
     if (!opened) {
       if (interaction_mode == jwpqt::qt::OpenMode::kNonInteractive) {
+        QTextStream(stderr) << "Could not open " << path << ": ";
         if (!window.project_warning().isEmpty()) {
-          QTextStream(stderr) << window.project_warning() << '\n';
+          QTextStream(stderr) << window.project_warning();
         } else if (encoding.has_value()) {
-          QTextStream(stderr)
-              << "Could not open the file using the requested encoding.\n";
+          QTextStream(stderr) << "the requested encoding failed";
         } else {
-          QTextStream(stderr)
-              << "Could not determine the file encoding noninteractively; "
-                 "specify --encoding.\n";
+          QTextStream(stderr) << "the file type or encoding could not be "
+                                 "determined noninteractively";
         }
+        QTextStream(stderr) << '\n';
       }
-      return 1;
+      continue;
     }
+    opened_argument = true;
+  }
+  if (!positional_arguments.isEmpty() && !opened_argument &&
+      interaction_mode == jwpqt::qt::OpenMode::kNonInteractive) {
+    return 1;
   }
   if (parser.isSet(resource_report_option)) {
     QTextStream(stdout)
