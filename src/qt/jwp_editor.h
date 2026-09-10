@@ -7,6 +7,7 @@
 #include <string_view>
 
 #include <QList>
+#include <QPoint>
 #include <QTextEdit>
 #include <QTextFormat>
 
@@ -31,6 +32,7 @@ class JwpEditor final : public QTextEdit {
   using ClipboardExportHandler =
       std::function<void(QMimeData&, const QTextCursor&)>;
   using ClipboardImportHandler = std::function<bool(const QMimeData&)>;
+  using MouseHoldHandler = std::function<void(const QPoint&, const QPoint&)>;
 
   static constexpr int kPageBreakProperty = QTextFormat::UserProperty + 1;
 
@@ -38,6 +40,7 @@ class JwpEditor final : public QTextEdit {
 
   void insert_composed_text(std::u32string_view text, bool allow_overwrite = true);
   void set_character_line_width(std::optional<int> characters);
+  void set_mouse_hold_handler(MouseHoldHandler handler);
   std::optional<int> configured_character_line_width() const noexcept;
   int character_page_width() const;
   void apply_jwp_layout(const core::JwpDocument& document);
@@ -74,6 +77,7 @@ class JwpEditor final : public QTextEdit {
   void inputMethodEvent(QInputMethodEvent* event) override;
   void keyPressEvent(QKeyEvent* event) override;
   void mouseMoveEvent(QMouseEvent* event) override;
+  void mouseDoubleClickEvent(QMouseEvent* event) override;
   void mousePressEvent(QMouseEvent* event) override;
   void mouseReleaseEvent(QMouseEvent* event) override;
   void paintEvent(QPaintEvent* event) override;
@@ -91,14 +95,18 @@ class JwpEditor final : public QTextEdit {
   core::LegacyCodePage color_code_page_ = core::kDefaultLegacyCodePage;
   QList<QTextEdit::ExtraSelection> transient_extra_selections_;
   QTimer* selection_scroll_timer_;
+  QTimer* mouse_hold_timer_;
   bool selection_autoscroll_ = true;
   bool mouse_selecting_ = false;
   int selection_scroll_interval_ = 100;
   int selection_scroll_direction_ = 0;
   int selection_scroll_x_ = 0;
+  QPoint mouse_hold_position_;
+  QPoint mouse_hold_global_position_;
   std::optional<int> character_line_width_;
   ClipboardExportHandler clipboard_export_handler_;
   ClipboardImportHandler clipboard_import_handler_;
+  MouseHoldHandler mouse_hold_handler_;
 };
 
 }  // namespace jwpqt::qt

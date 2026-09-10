@@ -2951,6 +2951,27 @@ void test_word_and_line_selection(const QString& directory) {
   QTest::mouseClick(editor->viewport(), Qt::LeftButton, Qt::AltModifier,
                     character_point(editor, 0));
   require(saw_popup, "Alt+left-click did not open the native editor popup");
+
+  const int saved_double_click_interval = QApplication::doubleClickInterval();
+  QApplication::setDoubleClickInterval(25);
+  bool saw_hold_popup = false;
+  QTimer::singleShot(40, [&saw_hold_popup] {
+    auto* popup = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+    if (popup != nullptr) {
+      saw_hold_popup = popup->findChild<QMenu*>(
+                           QStringLiteral("editorInputModeMenu")) != nullptr;
+      popup->close();
+    }
+  });
+  const QPoint hold_position = character_point(editor, 10);
+  QTest::mousePress(editor->viewport(), Qt::LeftButton, Qt::NoModifier,
+                    hold_position);
+  QTest::qWait(70);
+  QTest::mouseRelease(editor->viewport(), Qt::LeftButton, Qt::NoModifier,
+                      hold_position);
+  QApplication::setDoubleClickInterval(saved_double_click_interval);
+  require(saw_hold_popup,
+          "Stationary left-button hold did not open the editor popup");
   require(*window.current_jwp_document() == source &&
               !window.document_modified() &&
               editor->document()->revision() == original_revision,

@@ -625,6 +625,16 @@ void MainWindow::connect_editor(JwpEditor* editor) {
       [this, editor](const QMimeData& mime) {
         return import_clipboard_data(editor, mime);
       });
+  editor->set_mouse_hold_handler(
+      [this, editor](const QPoint& position, const QPoint& global_position) {
+        if (document_->editor_ != editor) return;
+        editor->setTextCursor(editor->cursorForPosition(position));
+        QContextMenuEvent context(QContextMenuEvent::Mouse, position,
+                                  global_position);
+        show_character_context_menu(
+            *editor, context,
+            [this](CharacterTarget target) { show_kanji_info_dialog(target); });
+      });
   connect(editor->document(), &QTextDocument::contentsChange, this,
           [this, editor](int position, int chars_removed, int chars_added) {
             if (document_->editor_ == editor)

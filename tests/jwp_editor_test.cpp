@@ -597,6 +597,54 @@ void test_selection_autoscroll() {
           "Invalid autoscroll delay changed the editor policy");
 }
 
+void test_mouse_hold_popup() {
+  jwpqt::qt::JwpEditor editor;
+  editor.resize(240, 120);
+  editor.setPlainText(QStringLiteral("hold popup"));
+  editor.show();
+  QApplication::processEvents();
+
+  int calls = 0;
+  QPoint held_position;
+  QPoint held_global_position;
+  editor.set_mouse_hold_handler(
+      [&](const QPoint& position, const QPoint& global_position) {
+        ++calls;
+        held_position = position;
+        held_global_position = global_position;
+      });
+  const int saved_interval = QApplication::doubleClickInterval();
+  QApplication::setDoubleClickInterval(25);
+  const QPoint start(12, 12);
+  send_mouse(editor, QEvent::MouseButtonPress, start,
+             Qt::LeftButton, Qt::LeftButton);
+  wait_for_events(60);
+  require(calls == 1 && held_position == start &&
+              held_global_position == editor.viewport()->mapToGlobal(start),
+          "Stationary left-button hold did not invoke the popup handler");
+  send_mouse(editor, QEvent::MouseButtonRelease, start,
+             Qt::LeftButton, Qt::NoButton);
+
+  send_mouse(editor, QEvent::MouseButtonPress, start,
+             Qt::LeftButton, Qt::LeftButton);
+  send_mouse(editor, QEvent::MouseButtonRelease, start,
+             Qt::LeftButton, Qt::NoButton);
+  wait_for_events(60);
+  require(calls == 1, "Released left click invoked the hold popup");
+
+  send_mouse(editor, QEvent::MouseButtonPress, start,
+             Qt::LeftButton, Qt::LeftButton);
+  const QPoint moved = start +
+      QPoint(QApplication::startDragDistance() + 1, 0);
+  send_mouse(editor, QEvent::MouseMove, moved,
+             Qt::NoButton, Qt::LeftButton);
+  wait_for_events(60);
+  send_mouse(editor, QEvent::MouseButtonRelease, moved,
+             Qt::LeftButton, Qt::NoButton);
+  QApplication::setDoubleClickInterval(saved_interval);
+  require(calls == 1, "Dragged left press invoked the hold popup");
+}
+
 void test_control_line_scroll() {
   using namespace jwpqt::qt;
   JwpEditor editor;
@@ -774,6 +822,7 @@ int main(int argc, char** argv) {
     test_kanji_color_validation_is_atomic();
     test_composed_overwrite();
     test_selection_autoscroll();
+    test_mouse_hold_popup();
     test_control_line_scroll();
     test_character_line_width();
     test_margin_relaxation();

@@ -14,6 +14,7 @@
 
 #include <QAbstractTextDocumentLayout>
 #include <QAbstractSlider>
+#include <QApplication>
 #include <QColor>
 #include <QCoreApplication>
 #include <QFontMetricsF>
@@ -242,11 +243,20 @@ QString document_plain_text(const QTextDocument& document) {
 }
 
 JwpEditor::JwpEditor(QWidget* parent)
-    : QTextEdit(parent), selection_scroll_timer_(new QTimer(this)) {
+    : QTextEdit(parent),
+      selection_scroll_timer_(new QTimer(this)),
+      mouse_hold_timer_(new QTimer(this)) {
   setAcceptRichText(false);
   selection_scroll_timer_->setSingleShot(false);
   connect(selection_scroll_timer_, &QTimer::timeout, this,
           [this] { scroll_mouse_selection(); });
+  mouse_hold_timer_->setSingleShot(true);
+  connect(mouse_hold_timer_, &QTimer::timeout, this, [this] {
+    stop_mouse_autoscroll();
+    mouse_selecting_ = false;
+    const auto handler = mouse_hold_handler_;
+    if (handler) handler(mouse_hold_position_, mouse_hold_global_position_);
+  });
 }
 
 void JwpEditor::set_clipboard_handlers(
@@ -264,6 +274,10 @@ void JwpEditor::set_selection_autoscroll(bool enabled, int interval_ms) {
   if (!enabled) stop_mouse_autoscroll();
   else if (selection_scroll_timer_->isActive())
     selection_scroll_timer_->setInterval(std::max(1, interval_ms));
+}
+
+void JwpEditor::set_mouse_hold_handler(MouseHoldHandler handler) {
+  mouse_hold_handler_ = std::move(handler);
 }
 
 bool JwpEditor::selection_autoscroll_enabled() const noexcept {
@@ -305,11 +319,26 @@ void JwpEditor::scroll_view_line(int direction) {
 
 void JwpEditor::mousePressEvent(QMouseEvent* event) {
   stop_mouse_autoscroll();
+  mouse_hold_timer_->stop();
   QTextEdit::mousePressEvent(event);
   mouse_selecting_ = event->button() == Qt::LeftButton;
+  if (mouse_selecting_ && event->modifiers() == Qt::NoModifier &&
+      mouse_hold_handler_) {
+    mouse_hold_position_ = event->position().toPoint();
+    mouse_hold_global_position_ = event->globalPosition().toPoint();
+    mouse_hold_timer_->start(QApplication::doubleClickInterval());
+  }
 }
 
 void JwpEditor::mouseMoveEvent(QMouseEvent* event) {
+  if (mouse_hold_timer_->isActive()) {
+    const QPoint movement = event->position().toPoint() - mouse_hold_position_;
+    const int threshold = QApplication::startDragDistance();
+    if (std::abs(movement.x()) > threshold ||
+        std::abs(movement.y()) > threshold) {
+      mouse_hold_timer_->stop();
+    }
+  }
   if (!mouse_selecting_ || !(event->buttons() & Qt::LeftButton)) {
     stop_mouse_autoscroll();
     QTextEdit::mouseMoveEvent(event);
@@ -351,8 +380,14 @@ void JwpEditor::mouseMoveEvent(QMouseEvent* event) {
   event->accept();
 }
 
+void JwpEditor::mouseDoubleClickEvent(QMouseEvent* event) {
+  mouse_hold_timer_->stop();
+  QTextEdit::mouseDoubleClickEvent(event);
+}
+
 void JwpEditor::mouseReleaseEvent(QMouseEvent* event) {
   stop_mouse_autoscroll();
+  mouse_hold_timer_->stop();
   mouse_selecting_ = false;
   QTextEdit::mouseReleaseEvent(event);
 }
