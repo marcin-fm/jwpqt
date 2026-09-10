@@ -182,8 +182,7 @@ existing windows are not relocated by importing settings. New placements are bou
 and clamped to available native screens, and independent information viewers remain
 independent. Geometry is included in settings/JPR.
 
-**Restore named files from the previous session** is enabled by default, matching
-JWPxp; it can be turned off explicitly. It reads app-scoped
+**Restore named files from the previous session** is opt-in. It reads app-scoped
 `last-session.jpr` before command-line files, preserving saved formats and active
 tab order while keeping current preferences. Missing or invalid references are
 reported; usable files still open. Named files are recorded after exit save/discard

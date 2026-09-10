@@ -58,16 +58,15 @@ int main(int argc, char** argv) {
     write_text_file(first, {U"first", core::TextEncoding::kUtf16Be, false});
     write_text_file(second, {U"second", core::TextEncoding::kUtf8, false});
     put(bad, QByteArray(1, '\xff'));
-    auto settings = read_application_settings("reload_files=false\nSaveSettingsOnExit=false\nSave_Histories=false\n");
-    require(!settings.reload_previous_files && ApplicationSettings{}.reload_previous_files, "Reload defaults/alias wrong");
-    require(!read_application_settings(write_application_settings(settings)).reload_previous_files, "Reload serialization lost");
+    auto settings = read_application_settings("reload_files=true\nSaveSettingsOnExit=false\nSave_Histories=false\n");
+    require(settings.reload_previous_files && !ApplicationSettings{}.reload_previous_files, "Reload defaults/alias wrong");
+    require(read_application_settings(write_application_settings(settings)).reload_previous_files, "Reload serialization lost");
     rejects([] { (void)read_application_settings("ReloadPreviousFiles=bad\nreload_files=true\n"); });
     ApplicationSettingsDialog options(settings);
     options.findChild<QCheckBox*>("settingsReloadFiles")->click(); options.reject();
-    require(!settings.reload_previous_files, "Cancel mutated settings");
+    require(settings.reload_previous_files, "Cancel mutated settings");
     options.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
-    require(options.settings().reload_previous_files, "Options did not accept the reload control");
-    settings = options.settings();
+    require(!options.settings().reload_previous_files, "Options did not accept the reload control");
     MainWindow project_settings;
     require(project_settings.apply_application_settings(settings) &&
         project_settings.save_project_path(directory.filePath("preferences.jpr"), false), "Project preferences save failed");
@@ -133,10 +132,7 @@ int main(int argc, char** argv) {
         current_preferences.application_settings().reload_previous_files && !current_preferences.application_settings().show_toolbar,
         "Embedded session settings replaced current preferences");
     MainWindow disabled;
-    ApplicationSettings disabled_settings;
-    disabled_settings.reload_previous_files = false;
-    require(disabled.apply_application_settings(disabled_settings) &&
-        disabled.load_previous_session(session) && disabled.document_count() == 1 && disabled.current_path().isEmpty(),
+    require(disabled.load_previous_session(session) && disabled.document_count() == 1 && disabled.current_path().isEmpty(),
         "Disabled restore loaded documents");
     restored.active_editor()->insertPlainText("kept");
     require(restored.load_previous_session(session) && restored.active_editor()->toPlainText().contains("kept"),

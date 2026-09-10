@@ -44,7 +44,6 @@
 #include <QToolButton>
 
 #include "main_window.h"
-#include "project_workspace.h"
 #include "jwp_editor.h"
 #include "edict_lookup_dialog.h"
 #include "kanji_info_dialog.h"
@@ -297,18 +296,9 @@ void test_multiple_startup_paths(const QString& executable,
                           configuration + QStringLiteral("/user data")};
     arguments.append(paths);
     process.start(executable, arguments);
-    if (!process.waitForFinished(15000)) {
-      process.terminate();
-      if (!process.waitForFinished(2000)) process.kill();
-      process.waitForFinished(2000);
-      throw std::runtime_error(
-          (QStringLiteral("Multi-file startup did not finish for ") +
-           configuration + QStringLiteral(" with ") +
-           paths.join(QLatin1Char('|')) + QStringLiteral(": ") +
-           process.errorString() + QStringLiteral("\n") +
-           QString::fromUtf8(process.readAllStandardOutput()) +
-           QString::fromUtf8(process.readAllStandardError())).toStdString());
-    }
+    require(process.waitForFinished(15000),
+            QStringLiteral("Multi-file startup did not finish: ") +
+                process.errorString());
     const QString output = QString::fromUtf8(process.readAllStandardOutput()) +
                            QString::fromUtf8(process.readAllStandardError());
     require(process.exitStatus() == QProcess::NormalExit &&
@@ -321,26 +311,6 @@ void test_multiple_startup_paths(const QString& executable,
                configuration + QStringLiteral("/last-session.jpr"))
         .paths;
   };
-
-  const QString source_default = fixture_root + QStringLiteral("/source default");
-  require(QDir().mkpath(source_default),
-          QStringLiteral("Could not create source-default startup directory"));
-  write_file(source_default + QStringLiteral("/jwpqt.cfg"),
-             QByteArray("LastFileConfirmExit=false\n"
-                        "SaveSettingsOnExit=false\n"
-                        "Save_Histories=false\n"));
-  jwpqt::qt::ProjectWorkspace default_session;
-  default_session.detect_formats = false;
-  default_session.documents.push_back(
-      {first, std::nullopt, jwpqt::core::kDefaultLegacyCodePage, true});
-  jwpqt::qt::write_jwp_project_file(
-      source_default + QStringLiteral("/last-session.jpr"),
-      jwpqt::qt::encode_project_workspace(default_session, false));
-  run(source_default, {second}, 0);
-  require(session_paths(source_default) ==
-              std::vector<std::u32string>{first.toStdU32String(),
-                                          second.toStdU32String()},
-          QStringLiteral("Fresh settings did not restore the source-default session"));
 
   const QString ordered = prepare_case(QStringLiteral("ordered"));
   const QString output = run(ordered, {project, missing, second}, 0);
