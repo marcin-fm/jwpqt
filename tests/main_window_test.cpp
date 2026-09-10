@@ -206,6 +206,12 @@ class PromptingWindow : public jwpqt::qt::MainWindow {
   int kanji_color_prompt_count = 0;
   int kanji_color_list_prompt_count = 0;
 
+  std::optional<jwpqt::core::JwpParagraphFormat>
+  show_native_paragraph_format(
+      const jwpqt::core::JwpParagraphFormat& initial) {
+    return MainWindow::prompt_for_paragraph_format(initial);
+  }
+
  protected:
   std::optional<jwpqt::core::TextEncoding> prompt_for_encoding(
       const std::vector<jwpqt::core::TextEncoding>& candidates,
@@ -3201,6 +3207,133 @@ void test_jwp_paragraph_formatting(const QString& directory) {
               page_layout->shortcut() ==
                   QKeySequence(QStringLiteral("Alt+L")),
           "JWP paragraph-format controls were not enabled");
+
+  bool first_indent_error = false;
+  bool first_indent_retained = false;
+  QTimer::singleShot(0, [&] {
+    auto* modal = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+    auto* left = modal ? modal->findChild<QSpinBox*>(
+                             QStringLiteral("paragraphLeftIndent"))
+                       : nullptr;
+    auto* first = modal ? modal->findChild<QSpinBox*>(
+                              QStringLiteral("paragraphFirstIndent"))
+                        : nullptr;
+    auto* buttons = modal ? modal->findChild<QDialogButtonBox*>() : nullptr;
+    if (!left || !first || !buttons) {
+      if (modal) modal->reject();
+      return;
+    }
+    left->setValue(2);
+    first->setValue(-3);
+    QTimer::singleShot(0, [&] {
+      auto* warning = qobject_cast<QMessageBox*>(
+          QApplication::activeModalWidget());
+      if (!warning ||
+          warning->objectName() != QStringLiteral("paragraphFormatError")) {
+        if (warning) warning->reject();
+        return;
+      }
+      first_indent_error = warning->text().contains(
+          QStringLiteral("must fit on the page"));
+      auto* format_dialog = qobject_cast<QDialog*>(warning->parentWidget());
+      QObject::connect(
+          warning, &QDialog::finished, format_dialog,
+          [&, format_dialog] {
+            auto* retained_left = format_dialog->findChild<QSpinBox*>(
+                QStringLiteral("paragraphLeftIndent"));
+            auto* retained_first = format_dialog->findChild<QSpinBox*>(
+                QStringLiteral("paragraphFirstIndent"));
+            first_indent_retained =
+                retained_left && retained_first &&
+                retained_left->value() == 2 && retained_first->value() == -3;
+            format_dialog->reject();
+          },
+          Qt::QueuedConnection);
+      warning->accept();
+    });
+    buttons->button(QDialogButtonBox::Ok)->click();
+  });
+  require(!window.show_native_paragraph_format({1, 2, -1, 110}) &&
+              first_indent_error && first_indent_retained &&
+              *window.current_jwp_document() == source,
+          "Invalid first-line indent closed the editor or changed the document");
+
+  auto* jwp_editor = dynamic_cast<jwpqt::qt::JwpEditor*>(editor);
+  const int character_page_width =
+      jwp_editor ? jwp_editor->character_page_width() : 0;
+  require(character_page_width > 2 && character_page_width <= 255,
+          "Paragraph-format test could not obtain a bounded page width");
+  bool page_width_error = false;
+  bool page_width_retained = false;
+  QTimer::singleShot(0, [&] {
+    auto* modal = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+    auto* left = modal ? modal->findChild<QSpinBox*>(
+                             QStringLiteral("paragraphLeftIndent"))
+                       : nullptr;
+    auto* right = modal ? modal->findChild<QSpinBox*>(
+                              QStringLiteral("paragraphRightIndent"))
+                        : nullptr;
+    auto* first = modal ? modal->findChild<QSpinBox*>(
+                              QStringLiteral("paragraphFirstIndent"))
+                        : nullptr;
+    auto* spacing = modal ? modal->findChild<QDoubleSpinBox*>(
+                                QStringLiteral("paragraphLineSpacing"))
+                          : nullptr;
+    auto* buttons = modal ? modal->findChild<QDialogButtonBox*>() : nullptr;
+    if (!left || !right || !first || !spacing || !buttons) {
+      if (modal) modal->reject();
+      return;
+    }
+    left->setValue(character_page_width);
+    right->setValue(0);
+    first->setValue(0);
+    QTimer::singleShot(0, [&] {
+      auto* warning = qobject_cast<QMessageBox*>(
+          QApplication::activeModalWidget());
+      if (!warning ||
+          warning->objectName() != QStringLiteral("paragraphFormatError")) {
+        if (warning) warning->reject();
+        return;
+      }
+      page_width_error = true;
+      auto* format_dialog = qobject_cast<QDialog*>(warning->parentWidget());
+      QObject::connect(
+          warning, &QDialog::finished, format_dialog,
+          [&, format_dialog] {
+            auto* retry_left = format_dialog->findChild<QSpinBox*>(
+                QStringLiteral("paragraphLeftIndent"));
+            auto* retry_right = format_dialog->findChild<QSpinBox*>(
+                QStringLiteral("paragraphRightIndent"));
+            auto* retry_first = format_dialog->findChild<QSpinBox*>(
+                QStringLiteral("paragraphFirstIndent"));
+            auto* retry_spacing = format_dialog->findChild<QDoubleSpinBox*>(
+                QStringLiteral("paragraphLineSpacing"));
+            auto* retry_buttons =
+                format_dialog->findChild<QDialogButtonBox*>();
+            page_width_retained = retry_left && retry_right && retry_first &&
+                                  retry_spacing && retry_buttons &&
+                                  retry_left->value() == character_page_width;
+            if (!page_width_retained) {
+              format_dialog->reject();
+              return;
+            }
+            retry_left->setValue(1);
+            retry_right->setValue(1);
+            retry_first->setValue(0);
+            retry_spacing->setValue(1.5);
+            retry_buttons->button(QDialogButtonBox::Ok)->click();
+          },
+          Qt::QueuedConnection);
+      warning->accept();
+    });
+    buttons->button(QDialogButtonBox::Ok)->click();
+  });
+  const auto native_format =
+      window.show_native_paragraph_format({1, 2, -1, 110});
+  require(page_width_error && page_width_retained && native_format ==
+              jwpqt::core::JwpParagraphFormat{1, 1, 0, 150} &&
+              *window.current_jwp_document() == source,
+          "Invalid page-width indent was not retained for a successful retry");
 
   QTextCursor selection = editor->textCursor();
   selection.setPosition(0);

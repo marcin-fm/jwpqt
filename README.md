@@ -360,7 +360,9 @@ tracks automatic conversion spans, waits for extendable WNN keys, applies
 terminal or longest-prefix candidates, and leaves unmatched suffixes at the
 caret. JWP paragraph indents, proportional spacing, and hard page breaks now
 drive a rich Qt document layout; Format Paragraph edits those values across the
-caret paragraph or selected paragraphs with portable undo, and Ctrl+Enter
+caret paragraph or selected paragraphs with portable undo. Invalid hanging
+indents or page-width combinations are reported without closing the editor, so
+the retained values can be corrected in place. Ctrl+Enter
 inserts structural hard page breaks as one undoable command. Global kanji
 color policy and `colkanji.lst` are loaded strictly from the application configuration
 directory and applied to raw JWP tokens without mutating document formatting;

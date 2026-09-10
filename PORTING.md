@@ -106,6 +106,8 @@ legacy file structures.
     paragraph or inclusive selected paragraphs as one portable undo entry,
     validates margins against the visible dynamic character width, preserves
     selection and hard breaks, and updates rich layout without rewriting text.
+    The modal editor validates before accepting, retains invalid values for an
+    in-place retry, and leaves the document and its history unchanged on error.
 33. Portable hard-page-break insertion reproduces the legacy empty,
     paragraph-start, paragraph-middle, paragraph-end, and existing-break
     structures with copied formatting, exact following-caret placement, and

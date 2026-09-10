@@ -6641,6 +6641,8 @@ FindReplaceResult MainWindow::run_find_replace(const FindReplaceRequest& request
 std::optional<core::JwpParagraphFormat>
 MainWindow::prompt_for_paragraph_format(
     const core::JwpParagraphFormat& initial) {
+  const int page_width =
+      document_ ? document_->editor_->character_page_width() : 0;
   QDialog dialog(this);
   dialog.setWindowTitle(tr("Paragraph Format"));
 
@@ -6675,16 +6677,31 @@ MainWindow::prompt_for_paragraph_format(
 
   auto* buttons = new QDialogButtonBox(
       QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-  connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
   connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
   layout->addWidget(buttons);
 
-  if (dialog.exec() != QDialog::Accepted) {
-    return std::nullopt;
-  }
-  return core::JwpParagraphFormat{
-      left->value(), right->value(), first->value(),
-      static_cast<int>(spacing->value() * 100.0 + 0.5)};
+  std::optional<core::JwpParagraphFormat> accepted_format;
+  connect(buttons, &QDialogButtonBox::accepted, &dialog, [&] {
+    const core::JwpParagraphFormat format{
+        left->value(), right->value(), first->value(),
+        static_cast<int>(spacing->value() * 100.0 + 0.5)};
+    if (format.first_indent < -format.left_indent ||
+        (page_width > 0 &&
+         (format.left_indent + format.right_indent >= page_width ||
+          format.left_indent + format.right_indent + format.first_indent >=
+              page_width))) {
+      QMessageBox warning(QMessageBox::Warning, tr("Formatting Error"),
+                          tr("Indented paragraph must fit on the page."),
+                          QMessageBox::Ok, &dialog);
+      warning.setObjectName(QStringLiteral("paragraphFormatError"));
+      warning.exec();
+      return;
+    }
+    accepted_format = format;
+    dialog.accept();
+  });
+
+  return dialog.exec() == QDialog::Accepted ? accepted_format : std::nullopt;
 }
 
 std::optional<core::JwpDocument> MainWindow::prompt_for_page_layout(
