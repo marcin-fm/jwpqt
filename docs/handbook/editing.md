@@ -15,6 +15,14 @@ applies to document input, Japanese query fields and selected-romaji replay.
 Changing it preserves pending input and takes effect on the next key; each
 workspace retains its own policy. Settings and projects preserve the choice.
 
+## Line Copy And Cut
+
+Ctrl+C and Ctrl+X use the current selection normally. If there is no selection,
+Ctrl+C copies the current wrapped visual line and restores the exact cursor;
+Ctrl+X cuts that visual line as one undoable edit. Native JWP clipboard data keeps
+its original byte/JIS identity. An empty line copies or cuts nothing, and Cut is
+disabled in a read-only document.
+
 WNN conversion requires wnn.dix and wnn.dat. Choose a candidate in the candidate
 bar and accept it as one undo transaction. User conversions and learned choices
 have separate user-data files. Selected printable romaji can be converted to

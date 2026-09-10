@@ -4389,6 +4389,57 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
       return true;
     }
   }
+  if (watched == document_->editor_ &&
+      (event->type() == QEvent::ShortcutOverride ||
+       event->type() == QEvent::KeyPress)) {
+    const auto* key = static_cast<QKeyEvent*>(event);
+    const bool line_copy = key->key() == Qt::Key_C;
+    const bool line_cut = key->key() == Qt::Key_X;
+    if (key->modifiers() == Qt::ControlModifier &&
+        (line_copy || line_cut) &&
+        !document_->editor_->textCursor().hasSelection()) {
+      event->accept();
+      if (event->type() == QEvent::ShortcutOverride) return true;
+
+      JwpEditor* const current_editor = document_->editor_;
+      if (line_cut && current_editor->isReadOnly()) return true;
+      const QPointer<MainWindow> self(this);
+      const QPointer<JwpEditor> editor(current_editor);
+      if (!finish_document_input() || !self || !editor ||
+          document_->editor_ != editor) {
+        return true;
+      }
+
+      QTextCursor original = editor->textCursor();
+      QTextDocument* const original_document = editor->document();
+      const int original_revision = original_document->revision();
+      const int original_position = original.position();
+      const int original_anchor = original.anchor();
+      if (!original.hasSelection()) {
+        QTextCursor line = original;
+        line.movePosition(QTextCursor::StartOfLine);
+        line.movePosition(QTextCursor::EndOfLine, QTextCursor::KeepAnchor);
+        if (!line.hasSelection()) return true;
+        editor->setTextCursor(line);
+      }
+      if (line_cut) {
+        editor->cut();
+      } else {
+        editor->copy();
+        if (self && editor && document_->editor_ == editor &&
+            editor->document() == original_document &&
+            original_document->revision() == original_revision &&
+            original_position <= original_document->characterCount() - 1 &&
+            original_anchor <= original_document->characterCount() - 1) {
+          QTextCursor restored(original_document);
+          restored.setPosition(original_anchor);
+          restored.setPosition(original_position, QTextCursor::KeepAnchor);
+          editor->setTextCursor(restored);
+        }
+      }
+      return true;
+    }
+  }
   if (watched != document_->editor_ || !document_->jwp_document_.has_value() ||
       conversion_active() || document_->editor_->isReadOnly()) {
     return QMainWindow::eventFilter(watched, event);

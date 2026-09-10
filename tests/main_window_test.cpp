@@ -2713,6 +2713,124 @@ void test_jwp_clipboard_changes(const QString& directory) {
           "Clipboard Options did not retain selected source formats");
 }
 
+void test_empty_selection_line_clipboard(const QString& directory) {
+  using namespace jwpqt::core;
+  using namespace jwpqt::qt;
+  const auto shortcut = [](JwpEditor* editor, int key,
+                           Qt::KeyboardModifiers modifiers = Qt::ControlModifier) {
+    QKeyEvent override(QEvent::ShortcutOverride, key, modifiers);
+    QApplication::sendEvent(editor, &override);
+    QKeyEvent press(QEvent::KeyPress, key, modifiers);
+    QApplication::sendEvent(editor, &press);
+    QKeyEvent release(QEvent::KeyRelease, key, Qt::NoModifier);
+    QApplication::sendEvent(editor, &release);
+    QKeyEvent reset(QEvent::KeyPress, Qt::Key_unknown, Qt::NoModifier);
+    QApplication::sendEvent(editor, &reset);
+  };
+
+  JwpDocument source;
+  source.paragraphs = {paragraph(U"first"), JwpParagraph{}};
+  source.paragraphs[1].text = {0x80, 0x3021, 'Z'};
+  const QString native_path = directory + QStringLiteral("/line-clipboard.jwp");
+  write_jwp_file(native_path, source);
+  MainWindow window;
+  require(window.open_jwp_path(native_path, LegacyCodePage::k1251),
+          "Could not open line clipboard fixture");
+  auto* editor = window.active_editor();
+  QTextCursor cursor = editor->textCursor();
+  cursor.setPosition(7);
+  editor->setTextCursor(cursor);
+  shortcut(editor, Qt::Key_C);
+  const QMimeData* copied = QApplication::clipboard()->mimeData();
+  const QByteArray private_bytes =
+      copied->data(QString::fromLatin1(kJwpClipboardMime));
+  const auto fragment = decode_jwp_clipboard_fragment(std::string_view(
+      private_bytes.constData(), static_cast<std::size_t>(private_bytes.size())));
+  require(QApplication::clipboard()->text() == QStringLiteral("\u0402\u4e9cZ") &&
+              fragment.document.paragraphs.size() == 1 &&
+              fragment.document.paragraphs[0].text == JwpText{0x80, 0x3021, 'Z'} &&
+              editor->textCursor().position() == 7 &&
+              editor->textCursor().anchor() == 7 &&
+              *window.current_jwp_document() == source && !window.document_modified(),
+          "Empty-selection native Copy lost the line, raw identity, or cursor");
+
+  cursor.setPosition(1);
+  editor->setTextCursor(cursor);
+  shortcut(editor, Qt::Key_X);
+  require(QApplication::clipboard()->text() == QStringLiteral("first") &&
+              editor->toPlainText() == QStringLiteral("\n\u0402\u4e9cZ") &&
+              window.document_modified(),
+          "Empty-selection native Cut did not remove the current line");
+  find_action(window, "undoAction")->trigger();
+  require(*window.current_jwp_document() == source && !window.document_modified(),
+          "Empty-selection native Cut was not one undo operation");
+
+  cursor = editor->textCursor();
+  cursor.setPosition(1);
+  cursor.setPosition(3, QTextCursor::KeepAnchor);
+  editor->setTextCursor(cursor);
+  shortcut(editor, Qt::Key_C);
+  require(QApplication::clipboard()->text() == QStringLiteral("ir") &&
+              editor->textCursor().selectionStart() == 1 &&
+              editor->textCursor().selectionEnd() == 3,
+          "Selected Copy no longer used the ordinary clipboard path");
+
+  require(window.new_document_tab(false) == 1,
+          "Could not create Unicode line clipboard fixture");
+  editor = window.active_editor();
+  editor->setPlainText(QStringLiteral("abcdefghij\n\U0001f600 unicode"));
+  editor->setLineWrapMode(QTextEdit::FixedColumnWidth);
+  editor->setLineWrapColumnOrWidth(4);
+  window.resize(260, 300);
+  window.show();
+  QApplication::processEvents();
+  cursor = editor->textCursor();
+  cursor.setPosition(7);
+  editor->setTextCursor(cursor);
+  QTextCursor expected_line = cursor;
+  expected_line.movePosition(QTextCursor::StartOfLine);
+  expected_line.movePosition(QTextCursor::EndOfLine, QTextCursor::KeepAnchor);
+  const QString expected_text = expected_line.selectedText();
+  require(!expected_text.isEmpty() && expected_text.size() < 10,
+          "Unicode clipboard fixture did not produce a wrapped visual line");
+  shortcut(editor, Qt::Key_C);
+  require(QApplication::clipboard()->text() == expected_text &&
+              editor->textCursor().position() == 7 &&
+              editor->textCursor().anchor() == 7,
+          "Empty-selection Unicode Copy lost the visual line or cursor");
+  shortcut(editor, Qt::Key_X);
+  const QString cut_text = editor->toPlainText();
+  require(!cut_text.contains(expected_text) && editor->document()->isModified(),
+          "Empty-selection Unicode Cut did not remove the visual line");
+  find_action(window, "undoAction")->trigger();
+  require(editor->toPlainText() == QStringLiteral("abcdefghij\n\U0001f600 unicode") &&
+              editor->toPlainText() != cut_text,
+          "Empty-selection Unicode Cut was not one undo operation");
+
+  editor->setPlainText(QStringLiteral("\nnext"));
+  editor->document()->setModified(false);
+  cursor = editor->textCursor();
+  cursor.setPosition(0);
+  editor->setTextCursor(cursor);
+  QApplication::clipboard()->setText(QStringLiteral("unchanged"));
+  shortcut(editor, Qt::Key_C);
+  shortcut(editor, Qt::Key_X);
+  require(QApplication::clipboard()->text() == QStringLiteral("unchanged") &&
+              editor->toPlainText() == QStringLiteral("\nnext") &&
+              !editor->document()->isModified(),
+          "Empty visual-line Copy/Cut changed the clipboard or document");
+  QApplication::clipboard()->setText(QStringLiteral("modifier"));
+  shortcut(editor, Qt::Key_C,
+           Qt::ControlModifier | Qt::AltModifier);
+  require(QApplication::clipboard()->text() == QStringLiteral("modifier"),
+          "Modified Copy was intercepted as source Ctrl+C");
+  editor->setReadOnly(true);
+  shortcut(editor, Qt::Key_X);
+  require(editor->toPlainText() == QStringLiteral("\nnext") &&
+              !editor->textCursor().hasSelection(),
+          "Read-only empty-selection Cut changed the document");
+}
+
 void test_application_settings_workflow(const QString& directory) {
   using namespace jwpqt::qt;
   MainWindow window;
@@ -7325,6 +7443,7 @@ int main(int argc, char* argv[]) {
     test_jwp_replace_preserves_structure(directory.path());
     test_jwp_open_edit_and_save(directory.path());
     test_jwp_clipboard_changes(directory.path());
+    test_empty_selection_line_clipboard(directory.path());
     test_application_settings_workflow(directory.path());
     test_application_settings_preview(directory.path());
     test_application_settings_exit(directory.path());

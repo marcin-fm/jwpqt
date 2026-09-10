@@ -272,6 +272,10 @@ Japanese glyphs, including the substituted punctuation. Bounded private native
 faces retain original Unicode in PDF extraction, outlines, style and licensing
 metadata without changing horizontal fallback or exposing generated font names.
 Missing `vert` keeps the native fallback; malformed selected data fails explicitly.
+With no selection, the recovered Ctrl+C shortcut copies the current visual line
+and restores the cursor; Ctrl+X cuts that line as one undoable edit. Empty lines
+and read-only Cut are no-ops. Selected Copy/Cut and every clipboard format keep
+their ordinary native paths.
 
 **Options > Fonts > ASCII and legacy extensions** selects an independent
 single-byte font at the Japanese role's height, without changing desktop menus
