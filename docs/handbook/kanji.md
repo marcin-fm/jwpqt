@@ -4,6 +4,10 @@ Character Information opens an independent modeless window for the character
 under the cursor or right-click target, without disturbing the source selection.
 Right-clicking readings or other results can open further independent viewers.
 Insert acts on the currently active document, not necessarily the original tab.
+The document right-click menu also provides every kanji lookup, Dictionary,
+JIS Table, Convert Selection and a three-choice Input Mode submenu. These are
+the same commands and state as the main menus; Character Information still uses
+the exact clicked character rather than moving the selection.
 
 Character Info Setup configures 26 ordered fields, blank spacers, headings and
 compact readings. More Info includes later fields and available references.

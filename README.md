@@ -783,6 +783,13 @@ at the caret/selection. Shift-right-click opens information directly. Each
 request opens an independent modeless window, including requests from the
 readings or **More Info** panes; the original windows remain open.
 
+The document context menu also exposes Dictionary, Radical, Bushu,
+Stroke/Bushu, SKIP, Spahn-Hadamitzky, Four-Corner, Reading and Index lookups,
+the three input modes, Convert Selection and JIS Table. These are the same
+actions as the main menus, so their enabled and checked state stays synchronized.
+Character Information remains tied to the exact right-click target without
+moving the document selection.
+
 The viewer shows a large glyph, character codes, kanji metadata, and separate
 meanings/on-yomi/kun-yomi/nanori sections. Kana shows its supported romaji
 spellings. Basic character codes also work without `kanjinfo.dat`, including

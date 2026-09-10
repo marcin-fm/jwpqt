@@ -7,6 +7,7 @@
 #include <QAbstractTextDocumentLayout>
 #include <QAction>
 #include <QContextMenuEvent>
+#include <QList>
 #include <QMenu>
 #include <QScrollBar>
 #include <QTextBlock>
@@ -75,17 +76,44 @@ void show_character_context_menu(
   }
   std::unique_ptr<QMenu> menu(editor.createStandardContextMenu());
   menu->setObjectName(QStringLiteral("characterContextMenu"));
+  QList<QAction*> standard_actions;
+  QList<QAction*> lookup_actions;
+  QList<QAction*> mode_actions;
+  QList<QAction*> command_actions;
+  QList<QAction*> result_actions;
+  for (auto* action : editor.actions()) {
+    const QString group = action->property("jwpqtEditorContextGroup").toString();
+    if (group == QStringLiteral("standard")) standard_actions.append(action);
+    else if (group == QStringLiteral("lookup")) lookup_actions.append(action);
+    else if (group == QStringLiteral("mode")) mode_actions.append(action);
+    else if (group == QStringLiteral("command")) command_actions.append(action);
+    else if (action->property("jwpqtAuxiliaryFind").toBool() ||
+             action->property("jwpqtResultInsertion").toBool())
+      result_actions.append(action);
+  }
+  if (!standard_actions.isEmpty()) {
+    menu->clear();
+    for (auto* action : standard_actions) {
+      menu->addAction(action);
+      const QString name = action->objectName();
+      if (name == QStringLiteral("redoAction") ||
+          name == QStringLiteral("pasteAction")) menu->addSeparator();
+    }
+  }
   menu->addSeparator();
   QAction* information = menu->addAction(
       QTextEdit::tr("Character &Information"));
   information->setObjectName(QStringLiteral("characterInfoContextAction"));
   information->setEnabled(target.has_value() && static_cast<bool>(show_information));
-  for (auto* action : editor.actions()) {
-    if (action->property("jwpqtAuxiliaryFind").toBool() ||
-        action->property("jwpqtResultInsertion").toBool()) {
-      menu->addAction(action);
-    }
+  for (auto* action : lookup_actions) menu->addAction(action);
+  if (!mode_actions.isEmpty() || !command_actions.isEmpty()) menu->addSeparator();
+  if (!mode_actions.isEmpty()) {
+    auto* input_mode = menu->addMenu(QTextEdit::tr("Input &Mode"));
+    input_mode->setObjectName(QStringLiteral("editorInputModeMenu"));
+    for (auto* action : mode_actions) input_mode->addAction(action);
   }
+  for (auto* action : command_actions) menu->addAction(action);
+  for (auto* action : result_actions) menu->addAction(action);
   const QPoint location = keyboard
       ? editor.viewport()->mapToGlobal(editor.cursorRect().center())
       : event.globalPos();

@@ -535,6 +535,16 @@ jwpqt::qt::KanjiInfoDialog* request_information(QTextEdit& editor, int position,
   return nullptr;
 }
 
+QAction* context_action(QMenu& menu, const QString& object_name) {
+  for (auto* action : menu.actions()) {
+    if (action->objectName() == object_name) return action;
+    if (action->menu()) {
+      if (auto* nested = context_action(*action->menu(), object_name)) return nested;
+    }
+  }
+  return nullptr;
+}
+
 void test_lookup_preferences(const QString& directory) {
   using namespace jwpqt;
   const auto settings = qt::read_application_settings(
@@ -753,6 +763,61 @@ void test_character_context(const QString& directory) {
     return editor->textCursor().position() == 0 && editor->textCursor().anchor() == 1 &&
         pristine();
   };
+  const QStringList popup_actions = {
+      QStringLiteral("undoAction"),
+      QStringLiteral("redoAction"),
+      QStringLiteral("cutAction"),
+      QStringLiteral("copyAction"),
+      QStringLiteral("pasteAction"),
+      QStringLiteral("selectAllAction"),
+      QStringLiteral("edictLookupAction"),
+      QStringLiteral("radicalLookupAction"),
+      QStringLiteral("bushuLookupAction"),
+      QStringLiteral("strokeBushuLookupAction"),
+      QStringLiteral("skipLookupAction"),
+      QStringLiteral("spahnLookupAction"),
+      QStringLiteral("fourCornerLookupAction"),
+      QStringLiteral("kanjiReadingLookupAction"),
+      QStringLiteral("indexLookupAction"),
+      QStringLiteral("kanaInputAction"),
+      QStringLiteral("asciiInputAction"),
+      QStringLiteral("jasciiInputAction"),
+      QStringLiteral("convertSelectionAction"),
+      QStringLiteral("jisTableAction")};
+  const QPoint context_point = editor->cursorRect(selection).center();
+  const QPoint context_global = editor->viewport()->mapToGlobal(context_point);
+  QTimer::singleShot(0, &window, [&] {
+    auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+    require(menu != nullptr, "Editor popup commands did not open a native menu");
+    QMenu* mode_menu = nullptr;
+    for (auto* action : menu->actions()) {
+      if (action->menu() &&
+          action->menu()->objectName() == QStringLiteral("editorInputModeMenu")) {
+        mode_menu = action->menu();
+      }
+    }
+    require(mode_menu != nullptr && mode_menu->actions().size() == 3,
+            "Editor popup lost its three input modes");
+    for (const auto& name : popup_actions) {
+      auto* action = context_action(*menu, name);
+      require(action != nullptr && action == window.findChild<QAction*>(name),
+              "Editor popup did not reuse a canonical command action");
+    }
+    auto* ascii = context_action(*menu, QStringLiteral("asciiInputAction"));
+    require(mode_menu->actions().contains(ascii),
+            "Editor popup placed ASCII outside the Input Mode submenu");
+    ascii->trigger();
+    menu->close();
+  });
+  QContextMenuEvent popup_event(QContextMenuEvent::Mouse, context_point,
+                                context_global);
+  QApplication::sendEvent(editor->viewport(), &popup_event);
+  QApplication::processEvents();
+  require(window.findChild<QAction*>(QStringLiteral("asciiInputAction"))->isChecked() &&
+              unchanged(),
+          "Editor popup mode command changed the document, selection, or history");
+  window.findChild<QAction*>(QStringLiteral("kanaInputAction"))->trigger();
+
   auto* dialog = request_information(*editor, 1);
   require(dialog && dialog->code() == 0x3021 && unchanged(),
           "Editor right-click ignored the pointer or changed selection/document/history");

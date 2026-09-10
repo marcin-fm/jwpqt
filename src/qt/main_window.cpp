@@ -2909,6 +2909,8 @@ void MainWindow::create_actions() {
   // The standard QTextEdit menu would bypass portable JWP history.
   editor_actions_ = {undo_action_, redo_action_, cut_action, copy_action,
                      paste_action, select_all_action};
+  for (auto* action : editor_actions_)
+    action->setProperty("jwpqtEditorContextGroup", QStringLiteral("standard"));
 
   edit_menu->addSeparator();
   QAction* find_action = edit_menu->addAction(tr("&Find..."));
@@ -3388,6 +3390,24 @@ void MainWindow::create_actions() {
   });
   connect(resource_status_button_, &QToolButton::clicked,
           resources, &QAction::trigger);
+
+  const auto add_editor_context_action = [this](QAction* action,
+                                                 const char* group) {
+    action->setProperty("jwpqtEditorContextGroup",
+                        QString::fromLatin1(group));
+    editor_actions_.append(action);
+  };
+  for (auto* action : {edict_lookup_action_, kanji_lookup_action_,
+                       bushu_lookup_action_, stroke_bushu_lookup_action_,
+                       skip_lookup_action_, spahn_lookup_action_,
+                       four_corner_lookup_action_, kanji_reading_lookup_action_,
+                       index_lookup_action_}) {
+    add_editor_context_action(action, "lookup");
+  }
+  for (auto* action : {kana_input_action_, ascii_input, jascii_input})
+    add_editor_context_action(action, "mode");
+  for (auto* action : {convert_action_, jis_table_action_})
+    add_editor_context_action(action, "command");
 
   main_toolbar_ = addToolBar(tr("Main Toolbar"));
   main_toolbar_->setObjectName(QStringLiteral("mainToolBar"));
