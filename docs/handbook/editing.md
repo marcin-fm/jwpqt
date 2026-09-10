@@ -66,6 +66,12 @@ Ctrl+Up/Down conversion cycling and ordinary Ctrl+Up/Down scrolling remain
 independent. In Kanji mode, unmodified Caps Lock flushes ambiguous pending kana
 at the current caret before the operating system changes its lock state.
 
+Return accepts an active WNN candidate and then inserts an ordinary paragraph.
+Ctrl+Return accepts it and inserts a structured hard page break. Shift+Return
+also inserts an ordinary paragraph, matching JWPxp rather than creating a
+Unicode soft-line separator. Conversion acceptance and the following structural
+edit remain separate Undo steps.
+
 The mouse follows the same boundaries: double-click or Ctrl+left-click selects
 a source-style word. Shift+left-click opens Character Information for the
 exact character under the pointer; Alt+left-click opens the editor popup.

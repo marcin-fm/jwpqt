@@ -4890,6 +4890,41 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
       (event->type() == QEvent::ShortcutOverride ||
        event->type() == QEvent::KeyPress)) {
     const auto* key = static_cast<QKeyEvent*>(event);
+    const Qt::KeyboardModifiers modifiers = key->modifiers();
+    const bool return_key = key->key() == Qt::Key_Return ||
+                            key->key() == Qt::Key_Enter;
+    const bool command_modifier =
+        modifiers.testFlag(Qt::AltModifier) ||
+        modifiers.testFlag(Qt::MetaModifier);
+    const bool special_return =
+        return_key && !command_modifier &&
+        (conversion_active() || modifiers.testFlag(Qt::ControlModifier) ||
+         modifiers.testFlag(Qt::ShiftModifier));
+    if (special_return) {
+      event->accept();
+      if (event->type() == QEvent::ShortcutOverride) return true;
+      const QPointer<MainWindow> self(this);
+      const QPointer<JwpEditor> editor(document_->editor_);
+      if (conversion_active() && !accept_conversion()) return true;
+      if (!self || !editor || document_->editor_ != editor) return true;
+      finish_kana_input();
+      if (!self || !editor || document_->editor_ != editor) return true;
+      if (conversion_active() && !accept_conversion()) return true;
+      if (!self || !editor || document_->editor_ != editor) return true;
+      document_->jwp_history_.break_coalescing();
+      clear_automatic_conversion_range();
+      if (modifiers.testFlag(Qt::ControlModifier)) {
+        insert_page_break();
+      } else if (!editor->isReadOnly()) {
+        editor->insertPlainText(QStringLiteral("\n"));
+      }
+      return true;
+    }
+  }
+  if (watched == document_->editor_ &&
+      (event->type() == QEvent::ShortcutOverride ||
+       event->type() == QEvent::KeyPress)) {
+    const auto* key = static_cast<QKeyEvent*>(event);
     if ((key->modifiers() & Qt::ControlModifier) &&
         !(key->modifiers() & (Qt::AltModifier | Qt::MetaModifier)) &&
         (key->key() == Qt::Key_Up || key->key() == Qt::Key_Down)) {

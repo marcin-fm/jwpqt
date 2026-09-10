@@ -3493,6 +3493,27 @@ void test_navigation_input_finalization(const QString& directory) {
               !caps.document_modified(),
           "Modified Caps Lock sequence damaged the undo baseline");
 
+  JwpDocument split;
+  split.paragraphs = {paragraph(U"AB")};
+  const QString split_path = directory + QStringLiteral("/shift-return.jwp");
+  write_jwp_file(split_path, split);
+  MainWindow shifted_return;
+  require(shifted_return.open_jwp_path(split_path),
+          "Could not open Shift+Return fixture");
+  editor = shifted_return.active_editor();
+  set_cursor(editor, 1);
+  key(editor, Qt::Key_Return, Qt::ShiftModifier);
+  const JwpDocument shifted = *shifted_return.current_jwp_document();
+  require(shifted.paragraphs.size() == 2 &&
+              shifted.paragraphs[0].text == JwpText{'A'} &&
+              shifted.paragraphs[1].text == JwpText{'B'} &&
+              editor->toPlainText() == QStringLiteral("A\nB"),
+          "Shift+Return did not insert a source paragraph");
+  find_action(shifted_return, "undoAction")->trigger();
+  require(*shifted_return.current_jwp_document() == split &&
+              !shifted_return.document_modified(),
+          "Shift+Return did not preserve one-step undo");
+
   const QString root = directory + QStringLiteral("/navigation-conversion");
   require(QDir().mkpath(root),
           "Could not isolate navigation-conversion resources");
@@ -3536,6 +3557,43 @@ void test_navigation_input_finalization(const QString& directory) {
   require(*conversion.current_jwp_document() == reading &&
               !conversion.document_modified(),
           "Conversion word navigation damaged undo");
+
+  editor->selectAll();
+  require(conversion.convert_selection() && conversion.conversion_active(),
+          "Could not restart conversion for Return");
+  key(editor, Qt::Key_Return);
+  require(!conversion.conversion_active() && !editor->isReadOnly() &&
+              conversion.current_jwp_document()->paragraphs.size() == 2 &&
+              conversion.current_jwp_document()->paragraphs[0].text ==
+                  JwpText{0x3021} &&
+              conversion.current_jwp_document()->paragraphs[1].text.empty(),
+          "Return did not accept conversion before inserting a paragraph");
+  find_action(conversion, "undoAction")->trigger();
+  require(conversion.current_jwp_document()->paragraphs.size() == 1 &&
+              conversion.current_jwp_document()->paragraphs[0].text ==
+                  JwpText{0x3021},
+          "Return paragraph insertion did not undo independently");
+  find_action(conversion, "undoAction")->trigger();
+  require(*conversion.current_jwp_document() == reading &&
+              !conversion.document_modified(),
+          "Return conversion acceptance did not undo independently");
+
+  editor->selectAll();
+  require(conversion.convert_selection() && conversion.conversion_active(),
+          "Could not restart conversion for Ctrl+Return");
+  key(editor, Qt::Key_Return, Qt::ControlModifier);
+  require(!conversion.conversion_active() && !editor->isReadOnly() &&
+              conversion.current_jwp_document()->paragraphs.size() == 3 &&
+              conversion.current_jwp_document()->paragraphs[0].text ==
+                  JwpText{0x3021} &&
+              conversion.current_jwp_document()->paragraphs[1].page_break &&
+              conversion.current_jwp_document()->paragraphs[2].text.empty(),
+          "Ctrl+Return did not accept conversion before inserting a page break");
+  find_action(conversion, "undoAction")->trigger();
+  find_action(conversion, "undoAction")->trigger();
+  require(*conversion.current_jwp_document() == reading &&
+              !conversion.document_modified(),
+          "Ctrl+Return conversion and page-break undo was damaged");
 
   require(conversion.new_document_tab(false) == 1 &&
               conversion.activate_document(0),

@@ -305,6 +305,9 @@ Home/End and their Ctrl/Shift forms retain visual-line, document and selection
 navigation. Cursor, page and Tab navigation first accepts an active WNN
 candidate, so the read-only preview cannot be moved away from its transaction.
 In Kanji input mode, unmodified Caps Lock flushes ambiguous pending kana.
+Return also accepts WNN before inserting a paragraph; Ctrl+Return inserts the
+structured hard page break after accepting. Shift+Return follows the original
+paragraph command rather than creating a Unicode soft-line separator.
 
 Double-click and Ctrl+left-click use the same source word boundaries.
 Shift+left-click opens Character Information for the exact character, while
