@@ -115,7 +115,8 @@ KanjiCountDialog::KanjiCountDialog(
   outer->addWidget(count_button);
   results_->setObjectName(QStringLiteral("kanjiCountResults"));
   assign_japanese_font(*results_, JapaneseFontRole::kList);
-  new AuxiliaryFind(results_);
+  auto* find = new AuxiliaryFind(results_);
+  find->set_result_insertion(insert_button_);
   results_->setSelectionMode(QAbstractItemView::ExtendedSelection);
   outer->addWidget(results_, 1);
   status_->setObjectName(QStringLiteral("kanjiCountStatus"));

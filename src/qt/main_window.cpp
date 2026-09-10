@@ -888,6 +888,10 @@ bool MainWindow::close_document(int index, OpenMode mode) {
   if (!activate_document(index + 1 < document_count() ? index + 1 : index - 1))
     return false;
   record_recent_document(*documents_[index]);
+  if (last_result_insert_document_ == documents_[index].get())
+    last_result_insert_document_ = nullptr;
+  if (result_insert_document_ == documents_[index].get())
+    result_insert_document_ = nullptr;
   const QSignalBlocker blocker(document_tabs_);
   document_tabs_->removeTab(index);
   auto closed = std::move(documents_[index]);
@@ -4922,12 +4926,14 @@ bool MainWindow::insert_edict_user_entry(const core::EdictUserEntry& entry) {
 }
 
 bool MainWindow::insert_wnn_user_entry(const core::WnnUserEntry& entry) {
-  if (conversion_active() || document_->updating_editor_ ||
+  if ((result_insert_document_ && document_ != result_insert_document_) ||
+      conversion_active() || document_->updating_editor_ ||
       document_->applying_kana_input_ || document_->editor_->isReadOnly()) {
     return false;
   }
   finish_kana_input();
-  if (conversion_active()) {
+  if ((result_insert_document_ && document_ != result_insert_document_) ||
+      conversion_active()) {
     return false;
   }
 
@@ -4942,12 +4948,17 @@ bool MainWindow::insert_wnn_user_entry(const core::WnnUserEntry& entry) {
     const core::JwpPosition caret = core::jwp_plain_text_position(
         *document_->jwp_document_,
         utf32_offset_for_utf16(original_text, original_cursor.position()));
+    const int insertion_offset = original_cursor.position();
     const core::JwpPosition selection_begin = core::jwp_plain_text_position(
         *document_->jwp_document_, utf32_offset_for_utf16(
-                            original_text, original_cursor.selectionStart()));
+                            original_text, replace_result_selection_
+                                               ? original_cursor.selectionStart()
+                                               : insertion_offset));
     const core::JwpPosition selection_end = core::jwp_plain_text_position(
         *document_->jwp_document_, utf32_offset_for_utf16(
-                            original_text, original_cursor.selectionEnd()));
+                            original_text, replace_result_selection_
+                                               ? original_cursor.selectionEnd()
+                                               : insertion_offset));
 
     core::JwpDocumentModel candidate = *document_->jwp_document_;
     core::JwpDocumentHistory history = document_->jwp_history_;
@@ -5151,7 +5162,169 @@ std::u32string MainWindow::edict_query_seed() const {
 }
 
 bool MainWindow::insert_edict_text(std::u32string_view text) {
-  return !text.empty() && replace_editor_selection(text);
+  if (text.empty() ||
+      (result_insert_document_ && document_ != result_insert_document_)) {
+    return false;
+  }
+  const QTextCursor original = document_->editor_->textCursor();
+  if (replace_result_selection_ || !original.hasSelection())
+    return replace_editor_selection(text);
+  const int revision = document_->editor_->document()->revision();
+  QTextCursor insertion = original;
+  insertion.clearSelection();
+  document_->editor_->setTextCursor(insertion);
+  const bool changed = replace_editor_selection(text);
+  if (!changed && document_->editor_->document()->revision() == revision)
+    document_->editor_->setTextCursor(original);
+  return changed;
+}
+
+bool MainWindow::live_document(const DocumentState* document) const noexcept {
+  return document != nullptr &&
+         std::any_of(documents_.begin(), documents_.end(),
+                     [document](const auto& candidate) {
+                       return candidate.get() == document;
+                     });
+}
+
+bool MainWindow::result_insert_destination_available(
+    ResultInsertDestination destination) const {
+  if (conversion_active() || document_->updating_editor_ ||
+      document_->applying_kana_input_) {
+    return false;
+  }
+  switch (destination) {
+    case ResultInsertDestination::kCurrent:
+    case ResultInsertDestination::kAny:
+      return !document_->editor_->isReadOnly();
+    case ResultInsertDestination::kReplaceCurrent:
+      return !document_->editor_->isReadOnly() &&
+             document_->editor_->textCursor().hasSelection();
+    case ResultInsertDestination::kNew:
+      return true;
+    case ResultInsertDestination::kLast:
+      return live_document(last_result_insert_document_) &&
+             !last_result_insert_document_->editor_->isReadOnly();
+  }
+  return false;
+}
+
+QString MainWindow::result_insert_destination_name() const {
+  if (!live_document(last_result_insert_document_)) {
+    return tr("Insert to Last File");
+  }
+  const QString path = last_result_insert_document_->current_path_;
+  return tr("Insert to %1")
+      .arg(path.isEmpty() ? tr("Untitled") : QFileInfo(path).fileName());
+}
+
+bool MainWindow::insert_result_at_destination(
+    ResultInsertDestination destination,
+    const std::function<void()>& insert) {
+  if (!insert || result_insert_document_ ||
+      !result_insert_destination_available(destination)) {
+    return false;
+  }
+  const QPointer<MainWindow> self(this);
+  DocumentState* const source = document_;
+  DocumentState* target = source;
+  bool created = false;
+
+  if (destination == ResultInsertDestination::kNew) {
+    const int index = new_document_tab(true);
+    if (index < 0 || !self) return false;
+    target = document_;
+    created = true;
+  } else if (destination == ResultInsertDestination::kAny) {
+    QStringList files;
+    for (int i = 0; i < document_count(); ++i) {
+      const QString path = documents_[i]->current_path_;
+      files << tr("%1. %2").arg(i + 1).arg(
+          path.isEmpty() ? tr("Untitled") : path);
+    }
+    QInputDialog dialog(this);
+    dialog.setObjectName(QStringLiteral("resultInsertFileDialog"));
+    dialog.setWindowTitle(tr("Insert Result"));
+    dialog.setLabelText(tr("Insert the selected result into:"));
+    dialog.setComboBoxItems(files);
+    dialog.setOption(QInputDialog::UseListViewForComboBoxItems);
+    dialog.setTextValue(files[current_document_index()]);
+    if (dialog.exec() != QDialog::Accepted || !self) return false;
+    const int index = files.indexOf(dialog.textValue());
+    if (index < 0 || !activate_document(index) || !self) return false;
+    target = document_;
+  } else if (destination == ResultInsertDestination::kLast) {
+    if (!live_document(last_result_insert_document_)) return false;
+    target = last_result_insert_document_;
+    const auto found = std::find_if(
+        documents_.begin(), documents_.end(),
+        [target](const auto& candidate) { return candidate.get() == target; });
+    if (found == documents_.end() ||
+        !activate_document(static_cast<int>(found - documents_.begin())) ||
+        !self) {
+      return false;
+    }
+  }
+
+  if (!live_document(target) || target != document_ ||
+      target->editor_->isReadOnly()) {
+    if (self && live_document(source) && source != document_) {
+      const auto found = std::find_if(
+          documents_.begin(), documents_.end(),
+          [source](const auto& candidate) { return candidate.get() == source; });
+      if (found != documents_.end())
+        activate_document(static_cast<int>(found - documents_.begin()));
+    }
+    return false;
+  }
+
+  const int revision = target->editor_->document()->revision();
+  const QTextCursor original_cursor = target->editor_->textCursor();
+  DocumentState* const previous_target = result_insert_document_;
+  const bool previous_replace = replace_result_selection_;
+  result_insert_document_ = target;
+  replace_result_selection_ =
+      destination == ResultInsertDestination::kReplaceCurrent;
+  try {
+    insert();
+  } catch (...) {
+    if (self) {
+      result_insert_document_ = previous_target;
+      replace_result_selection_ = previous_replace;
+    }
+    throw;
+  }
+  if (!self) return false;
+  result_insert_document_ = previous_target;
+  replace_result_selection_ = previous_replace;
+  const bool changed = live_document(target) &&
+                       target->editor_->document()->revision() != revision;
+  if (!changed && live_document(target) &&
+      target->editor_->document()->revision() == revision) {
+    target->editor_->setTextCursor(original_cursor);
+  }
+  if (changed && (destination == ResultInsertDestination::kNew ||
+                  destination == ResultInsertDestination::kAny)) {
+    last_result_insert_document_ = target;
+  }
+
+  if (created && !changed && live_document(target)) {
+    const auto found = std::find_if(
+        documents_.begin(), documents_.end(),
+        [target](const auto& candidate) { return candidate.get() == target; });
+    if (found != documents_.end()) {
+      close_document(static_cast<int>(found - documents_.begin()),
+                     OpenMode::kNonInteractive);
+    }
+  }
+  if (self && live_document(source) && source != document_) {
+    const auto found = std::find_if(
+        documents_.begin(), documents_.end(),
+        [source](const auto& candidate) { return candidate.get() == source; });
+    if (found != documents_.end())
+      activate_document(static_cast<int>(found - documents_.begin()));
+  }
+  return changed;
 }
 
 bool MainWindow::insert_list_text(std::u32string_view text) {
@@ -5183,12 +5356,15 @@ bool MainWindow::insert_list_text(std::u32string_view text) {
 }
 
 bool MainWindow::replace_editor_selection(std::u32string_view text) {
-  if ((text.empty() && !document_->editor_->textCursor().hasSelection()) || conversion_active() || document_->updating_editor_ ||
+  if ((text.empty() && !document_->editor_->textCursor().hasSelection()) ||
+      (result_insert_document_ && document_ != result_insert_document_) ||
+      conversion_active() || document_->updating_editor_ ||
       document_->applying_kana_input_ || document_->editor_->isReadOnly()) {
     return false;
   }
   finish_kana_input();
-  if (conversion_active()) {
+  if ((result_insert_document_ && document_ != result_insert_document_) ||
+      conversion_active()) {
     return false;
   }
 
@@ -5316,7 +5492,7 @@ bool MainWindow::convert_selection(bool previous) {
       const std::u32string text = core::decode_jwp_text(result, document_->jwp_code_page_);
       if (to_qstring(text) == original_cursor.selectedText()) return false;
       // Replay is fully validated before this single, selection-bounded edit.
-      if (!insert_edict_text(text)) return false;
+      if (!replace_editor_selection(text)) return false;
       const QScopedValueRollback<bool> applying(document_->applying_kana_input_, true);
       QTextCursor selected = document_->editor_->textCursor();
       const int end = selected.position();

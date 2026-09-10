@@ -76,7 +76,8 @@ EdictResultsWindow::EdictResultsWindow(QWidget* parent)
   results_->setObjectName(QStringLiteral("edictResultsList"));
   results_->installEventFilter(this);
   assign_japanese_font(*results_, JapaneseFontRole::kList);
-  new AuxiliaryFind(results_);
+  auto* find = new AuxiliaryFind(results_);
+  find->set_result_insertion(insert_button_);
   results_->setSelectionMode(QAbstractItemView::ExtendedSelection);
   status_->setObjectName(QStringLiteral("edictResultsStatus"));
   copy_button_->setObjectName(QStringLiteral("edictResultsCopy"));

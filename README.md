@@ -662,6 +662,17 @@ edit documents or alter canonical insertion ownership. Sorting and refreshed
 results supply fresh entry ranges. Invalid or oversized searches preserve selection;
 newer selections or owner destruction during callbacks are not overwritten.
 
+Result-list context menus also expose the recovered destination commands. **Insert
+to Current File** preserves an existing destination selection and inserts at its
+active endpoint; **Replace in Current File** is the explicit destructive variant.
+**Insert to New File** creates a Japanese document, **Insert to Any File** chooses
+an open document, and **Insert to Last File** repeats the last successful New/Any
+destination while that document remains open. New/Any/Last restore focus to the
+source results. Canonical rows, multi-row formatting and raw byte/JIS identity use
+the same insertion path as the visible Insert button, and each destination change
+is one undoable edit. Cancelling Any, closing Last, read-only documents, conversion
+previews and reentrant tab changes do not redirect or partially apply insertion.
+
 ### Dictionary Result Ordering
 
 Dictionary **Sort** cycles Reading, Length, Entry and Definition order. Hold
@@ -763,8 +774,7 @@ strips, Enter inserts, I/F23 opens information, F2/F3 or period/comma moves
 (Ctrl moves five), C copies the selection, Shift+C copies all without changing
 selection, and F4 closes. Shift-click/Shift-Space on Copy also copies all.
 Query fields keep their local Japanese input controls; Reading/Index remain
-explicit searches. Remaining configuration, dictionary inference/drop and the
-final command audit still need closure.
+explicit searches. The final non-menu workflow audit remains in progress.
 
 ### Character information
 

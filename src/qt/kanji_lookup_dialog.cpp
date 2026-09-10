@@ -306,7 +306,8 @@ KanjiLookupDialog::KanjiLookupDialog(
   update_artwork();
   update_stroke_estimate();
   new KanjiResultKeys(results_, insert_button_, info_button_, copy_button_, this);
-  new AuxiliaryFind(results_, {}, false);
+  auto* find = new AuxiliaryFind(results_, {}, false);
+  find->set_result_insertion(insert_button_);
 }
 
 void KanjiLookupDialog::set_lookup_options(bool automatic, bool rare_last) {

@@ -80,8 +80,12 @@ void show_character_context_menu(
       QTextEdit::tr("Character &Information"));
   information->setObjectName(QStringLiteral("characterInfoContextAction"));
   information->setEnabled(target.has_value() && static_cast<bool>(show_information));
-  for (auto* action : editor.actions())
-    if (action->property("jwpqtAuxiliaryFind").toBool()) menu->addAction(action);
+  for (auto* action : editor.actions()) {
+    if (action->property("jwpqtAuxiliaryFind").toBool() ||
+        action->property("jwpqtResultInsertion").toBool()) {
+      menu->addAction(action);
+    }
+  }
   const QPoint location = keyboard
       ? editor.viewport()->mapToGlobal(editor.cursorRect().center())
       : event.globalPos();

@@ -127,6 +127,14 @@ struct LegacyHistoryOptions {
   core::LegacyCodePage code_page;
 };
 
+enum class ResultInsertDestination {
+  kCurrent,
+  kReplaceCurrent,
+  kNew,
+  kAny,
+  kLast,
+};
+
 class MainWindow : public QMainWindow {
  public:
   explicit MainWindow(QWidget* parent = nullptr);
@@ -398,6 +406,13 @@ class MainWindow : public QMainWindow {
   void show_find_replace(bool replacing, const QString& text, const QString& replacement);
   FindReplaceResult run_find_replace(const FindReplaceRequest& request);
   bool replace_editor_selection(std::u32string_view text);
+  bool result_insert_destination_available(
+      ResultInsertDestination destination) const;
+  QString result_insert_destination_name() const;
+  bool insert_result_at_destination(
+      ResultInsertDestination destination,
+      const std::function<void()>& insert);
+  bool live_document(const DocumentState* document) const noexcept;
   void find_again(core::JwpSearchDirection direction);
   void replace_document();
   void format_document_paragraphs();
@@ -551,6 +566,9 @@ class MainWindow : public QMainWindow {
   // Conversion transactions must be destroyed before the shared dictionaries.
   std::vector<std::unique_ptr<DocumentState>> documents_;
   DocumentState* document_ = nullptr;
+  DocumentState* last_result_insert_document_ = nullptr;
+  DocumentState* result_insert_document_ = nullptr;
+  bool replace_result_selection_ = false;
 };
 
 }  // namespace jwpqt::qt

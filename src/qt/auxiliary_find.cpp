@@ -3,7 +3,9 @@
 #include "main_window.h"
 #include "text_bridge.h"
 #include "jwpqt/core/unicode_search.h"
+#include <array>
 #include <QAction>
+#include <QAbstractButton>
 #include <QContextMenuEvent>
 #include <QKeyEvent>
 #include <QListWidget>
@@ -47,6 +49,69 @@ AuxiliaryFind::AuxiliaryFind(QWidget* target, Ranges ranges, bool repeat_keys)
   }
   target->installEventFilter(this);
   if (auto* list = qobject_cast<QListWidget*>(target)) list->viewport()->installEventFilter(this);
+  if (auto* text = qobject_cast<QTextEdit*>(target)) text->viewport()->installEventFilter(this);
+}
+
+void AuxiliaryFind::set_result_insertion(QAbstractButton* insert_button) {
+  if (!insert_button || !workspace_ || !insert_actions_.empty()) return;
+  insert_button_ = insert_button;
+  struct Definition {
+    ResultInsertDestination destination;
+    const char* name;
+    QString title;
+  };
+  const std::array<Definition, 5> definitions{{
+      {ResultInsertDestination::kCurrent, "resultInsertCurrent",
+       tr("Insert to Current File")},
+      {ResultInsertDestination::kReplaceCurrent, "resultReplaceCurrent",
+       tr("Replace in Current File")},
+      {ResultInsertDestination::kNew, "resultInsertNew",
+       tr("Insert to New File")},
+      {ResultInsertDestination::kAny, "resultInsertAny",
+       tr("Insert to Any File...")},
+      {ResultInsertDestination::kLast, "resultInsertLast",
+       tr("Insert to Last File")},
+  }};
+  for (const auto& definition : definitions) {
+    auto* action = new QAction(definition.title, this);
+    action->setObjectName(QString::fromLatin1(definition.name));
+    action->setProperty("jwpqtResultInsertion", true);
+    target_->addAction(action);
+    connect(action, &QAction::triggered, this,
+            [this, destination = definition.destination] {
+              const QPointer<AuxiliaryFind> self(this);
+              const QPointer<MainWindow> workspace(workspace_);
+              const QPointer<QAbstractButton> button(insert_button_);
+              if (!workspace || !button || !button->isEnabled()) return;
+              workspace->insert_result_at_destination(destination, [button] {
+                if (button && button->isEnabled()) button->click();
+              });
+              if (self) self->update_insert_actions();
+            });
+    insert_actions_.push_back(action);
+  }
+  update_insert_actions();
+}
+
+void AuxiliaryFind::update_insert_actions() {
+  if (insert_actions_.empty()) return;
+  constexpr std::array destinations{
+      ResultInsertDestination::kCurrent,
+      ResultInsertDestination::kReplaceCurrent,
+      ResultInsertDestination::kNew,
+      ResultInsertDestination::kAny,
+      ResultInsertDestination::kLast,
+  };
+  const bool selected = insert_button_ && insert_button_->isEnabled();
+  for (std::size_t i = 0; i < destinations.size(); ++i) {
+    insert_actions_[i]->setEnabled(
+        selected && workspace_ &&
+        workspace_->result_insert_destination_available(destinations[i]));
+  }
+  if (workspace_) {
+    insert_actions_.back()->setText(
+        workspace_->result_insert_destination_name());
+  }
 }
 
 void AuxiliaryFind::open() {
@@ -191,6 +256,7 @@ FindReplaceResult AuxiliaryFind::find(const FindReplaceRequest& request) {
 
 bool AuxiliaryFind::eventFilter(QObject* object, QEvent* event) {
   if (!target_) return false;
+  if (event->type() == QEvent::ContextMenu) update_insert_actions();
   if (object == target_ && (event->type() == QEvent::KeyPress || event->type() == QEvent::ShortcutOverride)) {
     auto* key = static_cast<QKeyEvent*>(event);
     QAction* action = nullptr;
@@ -203,6 +269,11 @@ bool AuxiliaryFind::eventFilter(QObject* object, QEvent* event) {
     auto* context = static_cast<QContextMenuEvent*>(event);
     QPointer<QMenu> menu = new QMenu(target_);
     menu->addActions({open_, next_, previous_});
+    update_insert_actions();
+    if (!insert_actions_.empty()) {
+      menu->addSeparator();
+      for (auto* action : insert_actions_) menu->addAction(action);
+    }
     menu->exec(context->globalPos());
     delete menu.data(); return true;
   }

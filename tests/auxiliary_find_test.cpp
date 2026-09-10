@@ -10,6 +10,7 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
+#include <QInputDialog>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
@@ -35,6 +36,17 @@ FindReplaceRequest request(QString text, bool wrap = true, bool back = false) {
   FindReplaceRequest value; value.text = std::move(text); value.options.wrap = wrap;
   value.options.direction = back ? core::JwpSearchDirection::kBackward : core::JwpSearchDirection::kForward;
   return value;
+}
+QAction* result_action(QWidget* target, const char* name) {
+  auto* action = target->findChild<QAction*>(QString::fromLatin1(name));
+  if (!action) throw std::runtime_error("Missing result insertion action");
+  return action;
+}
+void select_text(JwpEditor* editor, int anchor, int position) {
+  QTextCursor cursor(editor->document());
+  cursor.setPosition(anchor);
+  cursor.setPosition(position, QTextCursor::KeepAnchor);
+  editor->setTextCursor(cursor);
 }
 void test_logical_navigation() {
   QWidget owner; auto* list = new QListWidget(&owner); auto* find = new AuxiliaryFind(list);
@@ -155,6 +167,122 @@ void test_real_result_ownership() {
   disposed->findChild<QPushButton*>("edictResultsInsert")->click();
   require(!disposed, "Found-entry insertion may destroy the owning window");
 }
+void test_result_insert_destinations() {
+  MainWindow window;
+  require(window.insert_edict_text(U"AB"), "Prepare native destination text");
+  select_text(window.active_editor(), 1, 2);
+
+  auto* list = new QListWidget(&window);
+  list->addItem("canonical result");
+  list->setCurrentRow(0);
+  auto* button = new QPushButton("Insert", list);
+  bool allow_insert = true;
+  bool redirect_insert = false;
+  bool redirect_rejected = false;
+  QObject::connect(button, &QPushButton::clicked, list, [&] {
+    if (redirect_insert) {
+      window.activate_document(1);
+      redirect_rejected = !window.insert_edict_text(U"X");
+      return;
+    }
+    if (allow_insert) window.insert_edict_text(U"X");
+  });
+  auto* auxiliary = new AuxiliaryFind(list);
+  auxiliary->set_result_insertion(button);
+  auto* current = result_action(list, "resultInsertCurrent");
+  auto* replace = result_action(list, "resultReplaceCurrent");
+  auto* create = result_action(list, "resultInsertNew");
+  auto* any = result_action(list, "resultInsertAny");
+  auto* last = result_action(list, "resultInsertLast");
+  auto* undo = window.findChild<QAction*>("undoAction");
+  require(current->isEnabled() && replace->isEnabled() && create->isEnabled() &&
+              any->isEnabled() && !last->isEnabled() && undo,
+          "Initial result destination availability");
+
+  replace->trigger();
+  require(window.active_editor()->toPlainText() == "AX",
+          "Replace destination deletes the current selection");
+  undo->trigger();
+  require(window.active_editor()->toPlainText() == "AB",
+          "Replace destination is one undo transaction");
+  select_text(window.active_editor(), 1, 2);
+  current->trigger();
+  require(window.active_editor()->toPlainText() == "ABX" &&
+              window.active_editor()->textCursor().position() == 3,
+          "Standard destination preserves selection text and inserts at its endpoint");
+  undo->trigger();
+  require(window.active_editor()->toPlainText() == "AB",
+          "Standard destination is one undo transaction");
+
+  allow_insert = false;
+  create->trigger();
+  require(window.document_count() == 1 && window.current_document_index() == 0,
+          "Failed insertion removes its unused new destination");
+  allow_insert = true;
+  create->trigger();
+  require(window.document_count() == 2 && window.current_document_index() == 0 &&
+              last->isEnabled() && last->text().contains("Untitled"),
+          "New destination restores the source and becomes Last");
+  require(window.activate_document(1) && window.uses_jwp_format() &&
+              window.active_editor()->toPlainText() == "X",
+          "New destination is an independent Japanese document");
+  require(window.activate_document(0), "Restore source after checking New destination");
+  last->trigger();
+  require(window.current_document_index() == 0 && window.activate_document(1) &&
+              window.active_editor()->toPlainText() == "XX",
+          "Last routes to the remembered live destination and restores the source");
+  require(window.activate_document(0), "Restore source before reentrant routing check");
+  redirect_insert = true;
+  current->trigger();
+  redirect_insert = false;
+  require(redirect_rejected && window.current_document_index() == 0 &&
+              window.active_editor()->toPlainText() == "AB" &&
+              window.activate_document(1) &&
+              window.active_editor()->toPlainText() == "XX",
+          "Reentrant tab changes cannot redirect a result insertion");
+
+  const int unicode = window.new_document_tab(false);
+  require(unicode == 2 && window.insert_edict_text(U"U"),
+          "Prepare unrestricted Unicode destination");
+  require(window.activate_document(0), "Restore source before Any cancellation");
+  QTimer::singleShot(0, [&window] {
+    if (auto* dialog = window.findChild<QInputDialog*>("resultInsertFileDialog"))
+      dialog->reject();
+  });
+  any->trigger();
+  require(window.current_document_index() == 0 && window.activate_document(unicode) &&
+              window.active_editor()->toPlainText() == "U",
+          "Cancelling Any preserves every destination");
+  require(window.activate_document(0), "Restore source before Any insertion");
+  QTimer::singleShot(0, [&window] {
+    if (auto* dialog = window.findChild<QInputDialog*>("resultInsertFileDialog")) {
+      dialog->setTextValue("3. Untitled");
+      dialog->accept();
+    }
+  });
+  any->trigger();
+  require(window.current_document_index() == 0 && window.activate_document(unicode) &&
+              window.active_editor()->toPlainText() == "UX",
+          "Any inserts into an unrestricted Unicode target and restores the source");
+  require(window.activate_document(0), "Restore source before updated Last insertion");
+  last->trigger();
+  require(window.current_document_index() == 0 && window.activate_document(unicode) &&
+              window.active_editor()->toPlainText() == "UXX",
+          "Any updates the remembered Last destination");
+  undo->trigger();
+  undo->trigger();
+  undo->trigger();
+  require(window.active_editor()->toPlainText().isEmpty() &&
+              !window.document_modified() &&
+              window.close_document(unicode, OpenMode::kNonInteractive),
+          "Remembered Unicode destination can close cleanly");
+  require(window.activate_document(0), "Restore source after closing Last destination");
+  last->trigger();
+  require(!last->isEnabled() && window.active_editor()->toPlainText() == "AB",
+          "Last disables safely after its destination closes");
+  require(list->currentRow() == 0 && list->currentItem()->text() == "canonical result",
+          "Destination insertion preserves the source result selection");
+}
 void test_reentrancy_and_bounds() {
   QPointer<QWidget> owner = new QWidget; auto* list = new QListWidget(owner);
   auto* find = new AuxiliaryFind(list); list->addItems({"a", "b"}); list->setCurrentRow(0);
@@ -208,7 +336,8 @@ void test_reentrancy_and_bounds() {
 }
 int main(int argc, char** argv) {
   QApplication app(argc, argv);
-  try { test_logical_navigation(); test_dialog_and_workspace(); test_real_result_ownership(); test_reentrancy_and_bounds();
+  try { test_logical_navigation(); test_dialog_and_workspace(); test_real_result_ownership();
+    test_result_insert_destinations(); test_reentrancy_and_bounds();
     std::cout << "Auxiliary Find tests passed\n"; return 0;
   } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

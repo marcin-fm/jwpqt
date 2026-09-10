@@ -372,12 +372,13 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
   status_->setText(tr("Enter a search term."));
-  new AuxiliaryFind(results_, [this] {
+  auto* find = new AuxiliaryFind(results_, [this] {
     std::vector<std::pair<int, int>> ranges;
     ranges.reserve(display_order_.size());
     for (const auto row : display_order_) ranges.push_back(row_ranges_.at(row));
     return ranges;
   });
+  find->set_result_insertion(insert_button_);
   update_actions();
 }
 

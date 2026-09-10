@@ -146,7 +146,8 @@ WnnUserDictionaryDialog::WnnUserDictionaryDialog(
   auto* content = new QHBoxLayout();
   entries_list_->setObjectName(QStringLiteral("wnnUserEntries"));
   assign_japanese_font(*entries_list_, JapaneseFontRole::kList);
-  new AuxiliaryFind(entries_list_);
+  auto* find = new AuxiliaryFind(entries_list_);
+  find->set_result_insertion(insert_button_);
   entries_list_->setAlternatingRowColors(true);
   content->addWidget(entries_list_, 1);
 

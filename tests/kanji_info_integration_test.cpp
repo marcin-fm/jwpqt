@@ -405,11 +405,11 @@ void test_integration(const QString& directory) {
     require(button != nullptr && button->isEnabled(), "Lookup has no available insert control");
     button->click();
     const QString inserted = button->objectName() == QStringLiteral("kanjiCountInsert")
-                                 ? QString::fromStdU32String(U"\U0001f600\u4e9c\n")
-                                 : QString::fromStdU32String(U"\U0001f600\u4e9c");
+                                 ? QString::fromStdU32String(U"\U0001f600X\u4e9c\n")
+                                 : QString::fromStdU32String(U"\U0001f600X\u4e9c");
     require(!window.is_jwp_document() && unicode->toPlainText() ==
                 inserted,
-            "A modeless lookup inserted into its old document instead of the Unicode selection");
+            "A modeless lookup did not preserve the active Unicode selection");
     undo->trigger();
     require(unicode->toPlainText() == before_lookup && !window.document_modified(),
             "Lookup insertion did not preserve Unicode undo and saved state");
@@ -807,7 +807,7 @@ void test_character_context(const QString& directory) {
   reading_selection.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor, 4);
   readings->setTextCursor(reading_selection);
   dialog->findChild<QPushButton*>(QStringLiteral("kanjiInfoInsert"))->click();
-  require(editor->toPlainText().startsWith(QStringLiteral("tree\u4e9c")) &&
+  require(editor->toPlainText().startsWith(QStringLiteral("treeA\u4e9c")) &&
               undo->isEnabled(), "Character Information insertion did not reach native history");
   undo->trigger();
   require(pristine() && editor->textCursor().position() == 0,

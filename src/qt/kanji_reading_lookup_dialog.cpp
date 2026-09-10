@@ -161,7 +161,8 @@ KanjiReadingLookupDialog::KanjiReadingLookupDialog(
   update_mode();
   update_actions();
   new KanjiResultKeys(results_, insert_button_, info_button_, copy_button_, this);
-  new AuxiliaryFind(results_, {}, false);
+  auto* find = new AuxiliaryFind(results_, {}, false);
+  find->set_result_insertion(insert_button_);
   auto changed = [this] {
     const auto handler = preferences_handler_;
     if (handler) handler(flexible_kun_->isChecked(), partial_words_->isChecked(), preferred_kind_);

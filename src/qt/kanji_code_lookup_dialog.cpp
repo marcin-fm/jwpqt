@@ -485,7 +485,8 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
   update_actions();
   update_artwork();
   new KanjiResultKeys(results_, insert_button_, info_button_, copy_button_, this);
-  new AuxiliaryFind(results_, {}, false);
+  auto* find = new AuxiliaryFind(results_, {}, false);
+  find->set_result_insertion(insert_button_);
 
   auto changed = [this](bool stroke) {
     const bool nelson = (stroke ? stroke_bushu_nelson_ : bushu_nelson_)->isChecked();
