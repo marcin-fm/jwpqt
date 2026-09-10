@@ -195,7 +195,26 @@ QString encoding_filter(core::TextEncoding encoding) {
   throw core::TextFileError("Unknown text encoding");
 }
 
+QString jce_filter() { return MainWindow::tr("Normal JWPce documents (*.jce)"); }
 QString jwp_filter() { return MainWindow::tr("JWP documents (*.jwp)"); }
+
+bool is_jwp_filter(const QString& filter) {
+  return filter == jce_filter() || filter == jwp_filter();
+}
+
+QString jwp_save_filter(const QString& path) {
+  return QFileInfo(path).suffix().compare(QStringLiteral("jwp"),
+                                           Qt::CaseInsensitive) == 0
+             ? jwp_filter()
+             : jce_filter();
+}
+
+QString with_jwp_default_extension(QString path, const QString& filter) {
+  if (!QFileInfo(path).suffix().isEmpty()) return path;
+  if (filter == jce_filter()) return path + QStringLiteral(".jce");
+  if (filter == jwp_filter()) return path + QStringLiteral(".jwp");
+  return path;
+}
 
 QString project_filter() { return MainWindow::tr("JWP projects (*.jpr)"); }
 
@@ -204,7 +223,7 @@ bool project_magic(std::string_view bytes) {
 }
 
 QString file_filters() {
-  QString filters = jwp_filter();
+  QString filters = jce_filter() + QStringLiteral(";;") + jwp_filter();
   for (const core::TextEncoding encoding : kTextEncodings) {
     filters += QStringLiteral(";;") + encoding_filter(encoding);
   }
@@ -5757,7 +5776,7 @@ void MainWindow::open_document() {
     open_project_dialog(path);
     return;
   }
-  if (selected_filter == jwp_filter()) {
+  if (is_jwp_filter(selected_filter)) {
     open_jwp_path(path, default_jwp_code_page(), OpenMode::kInteractive, true);
     return;
   }
@@ -6165,16 +6184,18 @@ bool MainWindow::save_document_as(bool export_copy) {
     statusBar()->showMessage(tr("Finish input or conversion before exporting a copy"), 5000);
     return false;
   }
-  QString selected_filter = document_->jwp_format_ ? jwp_filter() : encoding_filter(document_->encoding_);
-  const QString path = QFileDialog::getSaveFileName(
+  QString selected_filter = document_->jwp_format_ ? jwp_save_filter(document_->current_path_)
+                                                    : encoding_filter(document_->encoding_);
+  QString path = QFileDialog::getSaveFileName(
       this, export_copy ? tr("Export document copy") : tr("Save document"),
       export_copy ? QString() : document_->current_path_, file_filters(),
       &selected_filter);
   if (path.isEmpty()) {
     return false;
   }
+  path = with_jwp_default_extension(path, selected_filter);
   std::optional<core::TextEncoding> encoding;
-  if (selected_filter != jwp_filter()) {
+  if (!is_jwp_filter(selected_filter)) {
     encoding = encoding_from_filter(selected_filter);
     if (!encoding) encoding = choose_encoding();
     if (!encoding || !confirm_text_export()) return false;

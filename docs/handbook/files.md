@@ -47,6 +47,9 @@ Resource-report does not restore tabs, and query-history saving is independent.
 ## Formats
 
 Native JWP preserves paragraph formatting, page breaks, metadata and headers.
+The source's Normal JWPce (`.jce`) and JWP (`.jwp`) choices use the same native
+structured format. New Japanese documents default to `.jce`; existing `.jwp`
+documents retain their extension.
 Text formats include UTF-8, UTF-7, UTF-16LE/BE, JFC, EUC-JP, Shift-JIS and
 New/Old/NEC JIS. JFC reads UTF-8 first and legacy EUC when necessary, and writes
 UTF-8. Byte-order marks and explicit encodings are retained where applicable.

@@ -2,7 +2,9 @@
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
   <mime-type type="application/x-jwp-document">
     <comment>JWP Japanese document</comment>
+    <glob pattern="*.jce"/>
     <glob pattern="*.jwp"/>
+    <magic priority="60"><match type="string" offset="0" value="\147\046\002\102"/></magic>
   </mime-type>
   <mime-type type="application/x-jwp-project">
     <comment>JWP project workspace</comment>

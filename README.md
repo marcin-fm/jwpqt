@@ -293,8 +293,9 @@ without changing the saved format; it asks before clearing Undo/Redo or dropping
 JWP layout/metadata. A switch into Japanese editing rejects unsupported characters
 rather than substituting them.
 
-**Save As** offers JWP and every supported text format regardless of editing
-engine. Text output asks before losing paragraph/page layout, headers, footers,
+**Save As** offers Normal JWPce (`.jce`), JWP (`.jwp`), and every supported
+text format regardless of editing engine. Text output asks before losing
+paragraph/page layout, headers, footers,
 summary metadata, or hard page breaks. Unsupported characters fail before the
 destination is changed. **File > Export Copy** writes another format without
 changing the current path, saved baseline, dirty state, or undo history; finish
@@ -311,7 +312,10 @@ the backup contains the still-current disk version. Backup copying uses bounded
 memory and retains file permissions, not all filesystem-specific metadata.
 
 The native editor opens and atomically saves UTF-8, UTF-7, UTF-16LE/BE, JFC,
-EUC-JP, Shift-JIS, New/Old/NEC JIS, and JWP B1/B2/J1.20 documents. JFC files are plain text:
+EUC-JP, Shift-JIS, New/Old/NEC JIS, and JWP B1/B2/J1.20 documents. The source's
+`.jce` and `.jwp` choices use the same structured JWP codec; `.jce` is the
+default for a new Japanese document, while an existing extension is retained.
+JFC files are plain text:
 opening prefers UTF-8, with a strict fallback for the recovered old-EUC
 extensions, and saving always writes UTF-8 without a BOM. The `.jfc` extension,
 JFC file-dialog filter, or `--encoding jfc` selects that policy.

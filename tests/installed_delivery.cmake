@@ -22,6 +22,13 @@ foreach(path bin/jwpqt share/applications/jwpqt.desktop share/icons/hicolor/48x4
 endforeach()
 run("${DESKTOP_VALIDATE}" "${root}/installed/share/applications/jwpqt.desktop")
 run("${MIME_UPDATE}" "${root}/installed/share/mime")
+file(READ "${root}/installed/share/mime/packages/jwpqt-mime.xml" mime_definition)
+foreach(required "*.jce" "*.jwp" "\\147\\046\\002\\102")
+  string(FIND "${mime_definition}" "${required}" found)
+  if(found EQUAL -1)
+    message(FATAL_ERROR "Installed JWP MIME definition is missing ${required}")
+  endif()
+endforeach()
 run("${CMAKE_COMMAND}" -E env QT_QPA_PLATFORM=offscreen
     "${root}/installed/bin/jwpqt" --resource-report
     --config-dir "${root}/config" --user-data-dir "${root}/data")

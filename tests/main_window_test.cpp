@@ -1580,6 +1580,102 @@ void test_jfc_file_dialogs(const QString& directory) {
           "JFC Save As filter did not preserve the format and write UTF-8");
 }
 
+void test_jce_document_surface(const QString& directory) {
+  const QString jce_filter = QStringLiteral("Normal JWPce documents (*.jce)");
+  const QString jwp_filter = QStringLiteral("JWP documents (*.jwp)");
+  const QString source_jce = directory + QStringLiteral("/source.JCE");
+  const QString source_jwp = directory + QStringLiteral("/source.JWP");
+  const QString disguised = directory + QStringLiteral("/source.bin");
+  const auto source = sample_jwp_document();
+  jwpqt::qt::write_jwp_file(source_jce, source);
+  jwpqt::qt::write_jwp_file(source_jwp, source);
+  jwpqt::qt::write_jwp_file(disguised, source);
+
+  PromptingWindow explicit_open;
+  bool jce_open_filter = false;
+  QTimer::singleShot(0, &explicit_open, [&] {
+    auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+    if (dialog != nullptr) {
+      jce_open_filter = dialog->nameFilters().contains(jce_filter) &&
+                        dialog->nameFilters().contains(jwp_filter);
+      dialog->selectNameFilter(jce_filter);
+      dialog->selectFile(disguised);
+      QMetaObject::invokeMethod(dialog, "accept", Qt::DirectConnection);
+    }
+  });
+  find_encoding_action(explicit_open, QStringLiteral("&Open..."))->trigger();
+  require(jce_open_filter && explicit_open.current_path() == disguised &&
+              explicit_open.uses_jwp_format(),
+          "Normal JWPce Open filter did not select the structured codec");
+
+  PromptingWindow jce;
+  require(jce.open_path_detected(source_jce,
+                                 jwpqt::qt::OpenMode::kNonInteractive) &&
+              jce.uses_jwp_format(),
+          "JCE extension did not open as a structured JWP document");
+  const QString saved_jce = directory + QStringLiteral("/saved.jce");
+  bool jce_save_filter = false;
+  QTimer::singleShot(0, &jce, [&] {
+    auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+    if (dialog != nullptr) {
+      jce_save_filter = dialog->selectedNameFilter() == jce_filter;
+      dialog->selectFile(saved_jce);
+      QMetaObject::invokeMethod(dialog, "accept", Qt::DirectConnection);
+    }
+  });
+  find_encoding_action(jce, QStringLiteral("Save &As..."))->trigger();
+  require(jce_save_filter && jce.current_path() == saved_jce &&
+              read_bytes(saved_jce) == read_bytes(source_jce),
+          "JCE Save As did not retain its extension policy and bytes");
+
+  PromptingWindow jwp;
+  require(jwp.open_path_detected(source_jwp,
+                                 jwpqt::qt::OpenMode::kNonInteractive),
+          "JWP extension fixture did not open");
+  const QString saved_jwp_without_extension =
+      directory + QStringLiteral("/saved-jwp");
+  const QString saved_jwp = saved_jwp_without_extension + QStringLiteral(".jwp");
+  bool jwp_save_filter = false;
+  QTimer::singleShot(0, &jwp, [&] {
+    auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+    if (dialog != nullptr) {
+      jwp_save_filter = dialog->selectedNameFilter() == jwp_filter;
+      dialog->selectFile(saved_jwp_without_extension);
+      QMetaObject::invokeMethod(dialog, "accept", Qt::DirectConnection);
+    }
+  });
+  find_encoding_action(jwp, QStringLiteral("Save &As..."))->trigger();
+  require(jwp_save_filter && jwp.current_path() == saved_jwp &&
+              read_bytes(saved_jwp) == read_bytes(source_jwp),
+          "JWP Save As did not retain its extension policy and bytes");
+
+  PromptingWindow fresh;
+  const QString fresh_without_extension = directory + QStringLiteral("/fresh");
+  const QString fresh_jce = fresh_without_extension + QStringLiteral(".jce");
+  bool fresh_uses_jce = false;
+  QTimer::singleShot(0, &fresh, [&] {
+    auto* dialog = qobject_cast<QFileDialog*>(QApplication::activeModalWidget());
+    if (dialog != nullptr) {
+      fresh_uses_jce = dialog->selectedNameFilter() == jce_filter;
+      dialog->selectFile(fresh_without_extension);
+      QMetaObject::invokeMethod(dialog, "accept", Qt::DirectConnection);
+    }
+  });
+  find_encoding_action(fresh, QStringLiteral("Save &As..."))->trigger();
+  require(fresh_uses_jce && fresh.current_path() == fresh_jce &&
+              fresh.uses_jwp_format() && QFileInfo::exists(fresh_jce),
+          "A new Japanese document did not default to Normal JWPce");
+
+  const QString project_path = directory + QStringLiteral("/jce-workspace.jpr");
+  require(jce.save_project_path(project_path, false),
+          "Could not save a project containing a JCE document");
+  PromptingWindow restored;
+  require(restored.open_project_path(project_path) &&
+              restored.current_path() == saved_jce &&
+              restored.uses_jwp_format(),
+          "Project restoration lost the JCE document path or format");
+}
+
 void test_local_file_lifecycle_actions(const QString& directory) {
   const QString path = directory + QStringLiteral("/lifecycle.txt");
   QFile disk(path);
@@ -6689,6 +6785,7 @@ int main(int argc, char* argv[]) {
     test_document_path_identity(directory.path());
     test_explicit_open_and_encoding_action(directory.path());
     test_jfc_open_save_and_revert(directory.path());
+    test_jce_document_surface(directory.path());
     test_utf16_workflow(directory.path());
     test_document_format_separation(directory.path());
     test_editing_mode_switch(directory.path());
