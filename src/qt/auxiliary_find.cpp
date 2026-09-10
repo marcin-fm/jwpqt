@@ -7,6 +7,7 @@
 #include <QAction>
 #include <QAbstractButton>
 #include <QContextMenuEvent>
+#include <QCoreApplication>
 #include <QKeyEvent>
 #include <QListWidget>
 #include <QMenu>
@@ -265,6 +266,11 @@ bool AuxiliaryFind::eventFilter(QObject* object, QEvent* event) {
   if (object == target_ && (event->type() == QEvent::KeyPress || event->type() == QEvent::ShortcutOverride)) {
     auto* key = static_cast<QKeyEvent*>(event);
     QAction* action = nullptr;
+    const bool close_window = key->key() == Qt::Key_F4 &&
+                              key->modifiers() == Qt::ControlModifier;
+    const bool popup = key->key() == Qt::Key_F23 &&
+                       key->modifiers() == Qt::NoModifier &&
+                       !target_->property("jwpqtF23CharacterInformation").toBool();
     if ((key->key() == Qt::Key_F || key->key() == Qt::Key_S) &&
         key->modifiers() == Qt::ControlModifier) action = open_;
     if (key->key() == Qt::Key_F8 && key->modifiers() == Qt::NoModifier) action = open_;
@@ -274,7 +280,33 @@ bool AuxiliaryFind::eventFilter(QObject* object, QEvent* event) {
         key->modifiers() == Qt::ControlModifier) action = next_;
     if (repeat_keys_ && key->key() == Qt::Key_F9 &&
         key->modifiers() == Qt::NoModifier) action = next_;
-    if (action) { event->accept(); if (event->type() == QEvent::KeyPress) action->trigger(); return true; }
+    if (action || close_window || popup) {
+      event->accept();
+      if (event->type() == QEvent::ShortcutOverride) return true;
+      if (action) {
+        action->trigger();
+      } else if (close_window) {
+        if (const QPointer<QWidget> window = target_->window()) window->close();
+      } else {
+        QWidget* receiver = target_;
+        QPoint point = target_->rect().center();
+        if (auto* list = qobject_cast<QListWidget*>(target_)) {
+          receiver = list->viewport();
+          point = receiver->rect().center();
+          if (auto* item = list->currentItem()) {
+            point = list->visualItemRect(item).center();
+          }
+        } else if (auto* text = qobject_cast<QTextEdit*>(target_)) {
+          receiver = text->viewport();
+          point = text->cursorRect().center();
+        }
+        const QPointer<QWidget> destination(receiver);
+        QContextMenuEvent context(QContextMenuEvent::Keyboard, point,
+                                  receiver->mapToGlobal(point));
+        QCoreApplication::sendEvent(destination, &context);
+      }
+      return true;
+    }
   }
   if (event->type() == QEvent::ContextMenu && qobject_cast<QListWidget*>(target_)) {
     auto* context = static_cast<QContextMenuEvent*>(event);

@@ -312,9 +312,12 @@ void test_title_bar_close() {
                 prompt->defaultButton() == prompt->button(QMessageBox::Yes);
     if (prompt) prompt->button(QMessageBox::No)->click();
   });
-  require(discarded.close() && no_prompt && !discarded.isVisible() &&
+  send_list_key(discarded.findChild<QListWidget*>(
+                    QStringLiteral("wnnUserEntries")),
+                Qt::Key_F4, Qt::ControlModifier);
+  require(no_prompt && !discarded.isVisible() &&
               discarded.isWindowModified() && discarded_saves == 0,
-          "Closing user conversions with No saved or retained the window");
+          "Ctrl+F4 did not use the guarded user-conversion close");
 
   int accepted_saves = 0;
   WnnUserDictionary saved;

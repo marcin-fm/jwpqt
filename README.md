@@ -149,7 +149,8 @@ adds, Space edits, Delete removes, Ctrl+Up/Down reorders, and Ctrl+C or
 Ctrl+Insert copies the current displayed entry without saving the working copy.
 Ctrl+I and the row context menu open independent Character Information for the
 row's first original JIS character; Ctrl+L or F5 seeds Radical Lookup from that
-same character. F23 opens the complete native row menu from the keyboard.
+same character. F23 opens the complete native row menu from the keyboard, and
+Ctrl+F4 closes through the editor's normal save prompt.
 The [handbook](docs/handbook/dictionary.md) describes the complete native workflow.
 
 The clickable **Resources** status and **Help > Runtime Resources** show loaded
@@ -488,6 +489,8 @@ Left and Right transfer focus to the dictionary query and perform the same
 navigation there, including Ctrl and Shift modifiers. `Ctrl+D` or `F6` focuses
 the query without moving it. Result-list Find retains the recovered aliases:
 `Ctrl+F`, `Ctrl+S`, or `F8` opens it, while `Ctrl+N`, `F3`, or `F9` repeats it.
+F23 opens each list's existing pointer context menu at the current row or result,
+and Ctrl+F4 closes the owning result window through its normal close event.
 
 ### Document printing and preview
 

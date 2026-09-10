@@ -84,7 +84,8 @@ character as its starting point, without moving the active document selection.
 The row context menu includes Character Information, and F23 opens that complete
 menu from the keyboard. User Conversions use the first reading character; the
 EDICT editor uses the first headword character, or the reading when no headword
-is present.
+is present. Ctrl+F4 closes either editor through the same save prompt as its
+title-bar close button.
 
 Import in either user-dictionary window accepts multiple files, and local files
 can be dropped directly on the window. Every file is parsed in source order

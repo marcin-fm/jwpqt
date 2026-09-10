@@ -10,11 +10,13 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QClipboard>
+#include <QCloseEvent>
 #include <QInputDialog>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMenu>
 #include <QPushButton>
 #include <QTemporaryDir>
 #include <QTimer>
@@ -25,6 +27,18 @@ using namespace jwpqt;
 using namespace jwpqt::qt;
 namespace {
 void require(bool value, const char* message) { if (!value) throw std::runtime_error(message); }
+class CloseGuard final : public QWidget {
+ public:
+  bool allow = false;
+  int attempts = 0;
+
+ protected:
+  void closeEvent(QCloseEvent* event) override {
+    ++attempts;
+    if (allow) event->accept();
+    else event->ignore();
+  }
+};
 AuxiliaryFind* finder(QWidget* target) {
   for (auto* child : target->children()) if (auto* value = dynamic_cast<AuxiliaryFind*>(child)) return value;
   throw std::runtime_error("Missing auxiliary finder");
@@ -137,6 +151,36 @@ void test_dialog_and_workspace() {
   require(reopened.load_query_history(temp.filePath("history.bin")) && reopened.query_histories().search.find(U"かな"),
           "Auxiliary search history survives restart");
 }
+void test_shared_window_commands() {
+  CloseGuard owner;
+  auto* list = new QListWidget(&owner);
+  new AuxiliaryFind(list);
+  list->addItems({"first", "second"});
+  list->setCurrentRow(1);
+  owner.show(); list->show(); QApplication::processEvents();
+
+  bool list_popup = false;
+  QTimer::singleShot(0, [&] {
+    auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+    if (!menu) return;
+    for (auto* action : menu->actions()) {
+      list_popup |= action && action->objectName() == QStringLiteral("auxiliaryFind");
+    }
+    menu->close();
+  });
+  shortcut_key(list, Qt::Key_F23);
+  require(list_popup, "F23 did not open the shared list popup");
+  require(list->currentRow() == 1, "F23 popup changed the current list entry");
+
+  shortcut_key(list, Qt::Key_F4, Qt::ControlModifier);
+  require(owner.attempts == 1 && owner.isVisible(),
+          "Ctrl+F4 bypassed an ignored close event");
+  owner.allow = true;
+  shortcut_key(list, Qt::Key_F4, Qt::ControlModifier);
+  require(owner.attempts == 2 && !owner.isVisible(),
+          "Ctrl+F4 did not close through the normal window event");
+
+}
 EdictResourceSearchReport report() {
   EdictResourceSearchReport result;
   for (const auto& word : {U"zero", U"cat", U"dog"}) {
@@ -153,6 +197,17 @@ void test_real_result_ownership() {
   dictionary.set_query(U"cat"); require(dictionary.search(), "Dictionary fixture search");
   auto* text = dictionary.findChild<QTextEdit*>("edictResults");
   require(text, "Result text widget");
+  dictionary.show(); text->show(); QApplication::processEvents();
+  bool text_popup = false;
+  QTimer::singleShot(0, [&] {
+    auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+    if (menu) {
+      text_popup = menu->objectName() == QStringLiteral("characterContextMenu");
+      menu->close();
+    }
+  });
+  shortcut_key(text, Qt::Key_F23);
+  require(text_popup, "F23 did not open the text-result popup");
   auto* find = finder(text);
   const auto* original = text->document();
   require(find->find(request("cat")).valid && text->textCursor().selectedText().startsWith("cat [reading]"),
@@ -352,7 +407,8 @@ void test_reentrancy_and_bounds() {
 }
 int main(int argc, char** argv) {
   QApplication app(argc, argv);
-  try { test_logical_navigation(); test_dialog_and_workspace(); test_real_result_ownership();
+  try { test_logical_navigation(); test_dialog_and_workspace(); test_shared_window_commands();
+    test_real_result_ownership();
     test_result_insert_destinations(); test_reentrancy_and_bounds();
     std::cout << "Auxiliary Find tests passed\n"; return 0;
   } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }

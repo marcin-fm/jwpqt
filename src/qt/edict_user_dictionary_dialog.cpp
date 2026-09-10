@@ -13,7 +13,6 @@
 #include <QAction>
 #include <QClipboard>
 #include <QCloseEvent>
-#include <QContextMenuEvent>
 #include <QDialogButtonBox>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -227,7 +226,6 @@ bool EdictUserDictionaryDialog::eventFilter(QObject* watched, QEvent* event) {
   bool copy = false;
   bool information = false;
   bool radical = false;
-  bool popup = false;
   if (key->key() == Qt::Key_Delete) command = delete_button_;
   if (key->key() == Qt::Key_Space) command = edit_button_;
   if (key->key() == Qt::Key_Insert) {
@@ -242,8 +240,7 @@ bool EdictUserDictionaryDialog::eventFilter(QObject* watched, QEvent* event) {
       (!control && modifiers == Qt::NoModifier && key->key() == Qt::Key_F5)) {
     radical = true;
   }
-  if (modifiers == Qt::NoModifier && key->key() == Qt::Key_F23) popup = true;
-  if (!command && !copy && !information && !radical && !popup) {
+  if (!command && !copy && !information && !radical) {
     return QDialog::eventFilter(watched, event);
   }
 
@@ -253,15 +250,6 @@ bool EdictUserDictionaryDialog::eventFilter(QObject* watched, QEvent* event) {
     show_information();
   } else if (radical) {
     show_radical_lookup();
-  } else if (popup) {
-    QPoint point = entries_list_->rect().center();
-    if (const auto* item = entries_list_->currentItem()) {
-      point = entries_list_->viewport()->mapTo(
-          entries_list_, entries_list_->visualItemRect(item).center());
-    }
-    QContextMenuEvent context(QContextMenuEvent::Keyboard, point,
-                              entries_list_->mapToGlobal(point));
-    QGuiApplication::sendEvent(entries_list_, &context);
   } else if (copy) {
     if (const auto* item = entries_list_->currentItem()) {
       QGuiApplication::clipboard()->setText(item->text());

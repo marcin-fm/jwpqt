@@ -25,6 +25,7 @@ class KanjiResultKeys final : public QObject {
                   QPushButton* copy, QDialog* dialog)
       : QObject(list), list_(list), insert_(insert), info_(info), copy_(copy), dialog_(dialog) {
     install_rare_kanji_marks(list);
+    list->setProperty("jwpqtF23CharacterInformation", true);
     list->installEventFilter(this);
     copy->installEventFilter(this);
   }
