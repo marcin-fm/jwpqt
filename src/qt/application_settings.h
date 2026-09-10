@@ -86,7 +86,7 @@ struct ApplicationSettings {
   int auto_scroll_speed = 100;
   DuplicateOpenBehavior duplicate_open = DuplicateOpenBehavior::kPrompt;
   bool startup_dictionary = false;
-  bool reload_previous_files = false;
+  bool reload_previous_files = true;
   bool keep_backup_copy = false;
   bool restore_window = false;
   bool maximize_window = false;

@@ -39,8 +39,9 @@ Placement uses native logical pixels and is clamped to an available screen when
 an old monitor is absent. Dimensions and restore flags travel with settings and
 projects.
 
-**Restore named files from the previous session** separately enables `last-session.jpr`
-in the application configuration directory. Files reopen in their saved formats
+**Restore named files from the previous session** is enabled by default, matching
+JWPxp, and can be turned off explicitly. It uses `last-session.jpr` in the
+application configuration directory. Files reopen in their saved formats
 and tab order before command-line files are opened or activated. Current preferences
 remain authoritative; this archive does not become the current project. Missing or
 invalid files are reported while usable entries open. Existing buffers are retained.
