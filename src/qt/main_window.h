@@ -367,6 +367,7 @@ class MainWindow : public QMainWindow {
   bool paste_jwp_clipboard(const core::JwpClipboardFragment& fragment);
   void refresh_document_view();
   bool finish_document_input();
+  void select_document_word_or_line(bool line);
   enum class DuplicateOpenResolution { kOpenAnother, kHandled, kCancelled };
   DuplicateOpenResolution resolve_duplicate_open(const QString& path, int existing,
                                                   OpenMode mode);

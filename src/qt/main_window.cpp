@@ -4329,6 +4329,68 @@ void MainWindow::show_automatic_conversion_range() {
   document_->editor_->set_transient_extra_selections({selection});
 }
 
+void MainWindow::select_document_word_or_line(bool line) {
+  QPointer<MainWindow> self(this);
+  QPointer<JwpEditor> guarded_editor(document_->editor_);
+  if (!finish_document_input() || !self || !guarded_editor ||
+      document_->editor_ != guarded_editor) {
+    return;
+  }
+
+  QTextCursor cursor = guarded_editor->textCursor();
+  if (line) {
+    cursor.movePosition(QTextCursor::StartOfLine);
+    cursor.movePosition(QTextCursor::EndOfLine, QTextCursor::KeepAnchor);
+    guarded_editor->setTextCursor(cursor);
+    guarded_editor->ensureCursorVisible();
+    return;
+  }
+
+  const bool preceding_selection =
+      cursor.hasSelection() && cursor.position() == cursor.selectionEnd();
+  int begin = 0;
+  int end = 0;
+  try {
+    if (document_->jwp_document_) {
+      const QString current =
+          document_plain_text(*guarded_editor->document());
+      const core::JwpPosition position = core::jwp_plain_text_position(
+          *document_->jwp_document_,
+          utf32_offset_for_utf16(current, cursor.position()));
+      const auto& paragraph =
+          document_->jwp_document_->document().paragraphs.at(position.paragraph);
+      const core::JwpWordRange range = core::select_jwp_word(
+          paragraph.text, position.offset, preceding_selection);
+      const std::size_t paragraph_begin = core::jwp_plain_text_offset(
+          *document_->jwp_document_, {position.paragraph, range.begin});
+      const std::size_t paragraph_end = core::jwp_plain_text_offset(
+          *document_->jwp_document_, {position.paragraph, range.end});
+      begin = utf16_offset_for_utf32(document_->rendered_jwp_text_, paragraph_begin);
+      end = utf16_offset_for_utf32(document_->rendered_jwp_text_, paragraph_end);
+    } else {
+      const QTextBlock block = cursor.block();
+      const QString block_text = block.text();
+      const std::u32string text = from_qstring(block_text);
+      const int local_utf16 =
+          std::clamp(cursor.position() - block.position(), 0,
+                     static_cast<int>(block_text.size()));
+      const std::size_t local = utf32_offset_for_utf16(block_text, local_utf16);
+      const core::JwpWordRange range = core::select_jwp_word(
+          unicode_word_units(text, document_->jwp_code_page_), local,
+          preceding_selection);
+      begin = block.position() + utf16_offset_for_utf32(text, range.begin);
+      end = block.position() + utf16_offset_for_utf32(text, range.end);
+    }
+  } catch (const std::exception& exception) {
+    statusBar()->showMessage(QString::fromUtf8(exception.what()), 5000);
+    return;
+  }
+  cursor.setPosition(begin);
+  cursor.setPosition(end, QTextCursor::KeepAnchor);
+  guarded_editor->setTextCursor(cursor);
+  guarded_editor->ensureCursorVisible();
+}
+
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
   if (watched == main_toolbar_ && event->type() == QEvent::Move && !updating_toolbar_) {
     QTimer::singleShot(0, this, [this] { sync_toolbar_position(); });
@@ -4386,6 +4448,49 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
       return true;
     }
   }
+  if (watched == document_->editor_->viewport() &&
+      event->type() == QEvent::MouseButtonPress) {
+    const auto* mouse = static_cast<QMouseEvent*>(event);
+    if (mouse->button() == Qt::LeftButton) {
+      QPointer<MainWindow> self(this);
+      QPointer<JwpEditor> guarded_editor(document_->editor_);
+      if (!finish_document_input() || !self || !guarded_editor ||
+          document_->editor_ != guarded_editor) {
+        return true;
+      }
+      const QPoint position = mouse->position().toPoint();
+      if (mouse->modifiers().testFlag(Qt::ControlModifier)) {
+        guarded_editor->setTextCursor(guarded_editor->cursorForPosition(position));
+        select_document_word_or_line(false);
+        return true;
+      }
+      if (mouse->modifiers().testFlag(Qt::ShiftModifier)) {
+        if (const auto target = character_target(*guarded_editor, position)) {
+          show_kanji_info_dialog(*target);
+        }
+        return true;
+      }
+      if (mouse->modifiers().testFlag(Qt::AltModifier)) {
+        QContextMenuEvent context(QContextMenuEvent::Mouse, position,
+                                  mouse->globalPosition().toPoint(),
+                                  mouse->modifiers());
+        show_character_context_menu(
+            *guarded_editor, context,
+            [this](CharacterTarget target) { show_kanji_info_dialog(target); });
+        return true;
+      }
+    }
+  }
+  if (watched == document_->editor_->viewport() &&
+      event->type() == QEvent::MouseButtonDblClick) {
+    const auto* mouse = static_cast<QMouseEvent*>(event);
+    if (mouse->button() == Qt::LeftButton) {
+      document_->editor_->setTextCursor(
+          document_->editor_->cursorForPosition(mouse->position().toPoint()));
+      select_document_word_or_line(false);
+      return true;
+    }
+  }
   if (watched == document_->editor_ || watched == document_->editor_->viewport()) {
     if (event->type() == QEvent::ContextMenu) {
       show_character_context_menu(*document_->editor_, *static_cast<QContextMenuEvent*>(event),
@@ -4424,66 +4529,7 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
     if (word || line) {
       event->accept();
       if (event->type() == QEvent::ShortcutOverride) return true;
-      QPointer<MainWindow> self(this);
-      QPointer<JwpEditor> guarded_editor(document_->editor_);
-      if (!finish_document_input() || !self || !guarded_editor ||
-          document_->editor_ != guarded_editor) {
-        return true;
-      }
-
-      QTextCursor cursor = guarded_editor->textCursor();
-      if (line) {
-        cursor.movePosition(QTextCursor::StartOfLine);
-        cursor.movePosition(QTextCursor::EndOfLine, QTextCursor::KeepAnchor);
-        guarded_editor->setTextCursor(cursor);
-        guarded_editor->ensureCursorVisible();
-        return true;
-      }
-
-      const bool preceding_selection =
-          cursor.hasSelection() && cursor.position() == cursor.selectionEnd();
-      int begin = 0;
-      int end = 0;
-      try {
-        if (document_->jwp_document_) {
-          const QString current =
-              document_plain_text(*guarded_editor->document());
-          const core::JwpPosition position = core::jwp_plain_text_position(
-              *document_->jwp_document_,
-              utf32_offset_for_utf16(current, cursor.position()));
-          const auto& paragraph =
-              document_->jwp_document_->document().paragraphs.at(position.paragraph);
-          const core::JwpWordRange range = core::select_jwp_word(
-              paragraph.text, position.offset, preceding_selection);
-          const std::size_t paragraph_begin = core::jwp_plain_text_offset(
-              *document_->jwp_document_, {position.paragraph, range.begin});
-          const std::size_t paragraph_end = core::jwp_plain_text_offset(
-              *document_->jwp_document_, {position.paragraph, range.end});
-          begin = utf16_offset_for_utf32(document_->rendered_jwp_text_, paragraph_begin);
-          end = utf16_offset_for_utf32(document_->rendered_jwp_text_, paragraph_end);
-        } else {
-          const QTextBlock block = cursor.block();
-          const QString block_text = block.text();
-          const std::u32string text = from_qstring(block_text);
-          const int local_utf16 =
-              std::clamp(cursor.position() - block.position(), 0,
-                         static_cast<int>(block_text.size()));
-          const std::size_t local =
-              utf32_offset_for_utf16(block_text, local_utf16);
-          const core::JwpWordRange range = core::select_jwp_word(
-              unicode_word_units(text, document_->jwp_code_page_), local,
-              preceding_selection);
-          begin = block.position() + utf16_offset_for_utf32(text, range.begin);
-          end = block.position() + utf16_offset_for_utf32(text, range.end);
-        }
-      } catch (const std::exception& exception) {
-        statusBar()->showMessage(QString::fromUtf8(exception.what()), 5000);
-        return true;
-      }
-      cursor.setPosition(begin);
-      cursor.setPosition(end, QTextCursor::KeepAnchor);
-      guarded_editor->setTextCursor(cursor);
-      guarded_editor->ensureCursorVisible();
+      select_document_word_or_line(line);
       return true;
     }
   }

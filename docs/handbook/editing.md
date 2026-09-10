@@ -32,6 +32,11 @@ and repetition-mark rules are retained. Ctrl+Shift+W selects the current
 wrapped visual line. Both commands finish pending Japanese input first and do
 not edit the document. Convert Selection uses F2 or Ctrl+>.
 
+The mouse follows the same boundaries: double-click or Ctrl+left-click selects
+a source-style word. Shift+left-click opens Character Information for the
+exact character under the pointer; Alt+left-click opens the editor popup.
+Pending kana is committed at its original caret before a mouse press moves it.
+
 WNN conversion requires wnn.dix and wnn.dat. Choose a candidate in the candidate
 bar and accept it as one undo transaction. User conversions and learned choices
 have separate user-data files. Selected printable romaji can be converted to

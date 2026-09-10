@@ -2896,10 +2896,59 @@ void test_word_and_line_selection(const QString& directory) {
   select(editor, Qt::ControlModifier);
   require_selection(editor, 3, 5,
                     "Ctrl+W did not continue from a preceding selection");
+
+  window.resize(640, 300);
+  window.show();
+  QApplication::processEvents();
+  const auto character_point = [](JwpEditor* target, int position) {
+    QTextCursor cursor(target->document());
+    cursor.setPosition(position);
+    const QRect first = target->cursorRect(cursor);
+    cursor.setPosition(position + 1);
+    return QPoint((first.left() + target->cursorRect(cursor).left()) / 2,
+                  first.center().y());
+  };
+  QTest::mouseDClick(editor->viewport(), Qt::LeftButton, Qt::NoModifier,
+                    character_point(editor, 3));
+  require_selection(editor, 3, 5,
+                    "Double-click did not use source punctuation selection");
+  QTest::mouseClick(editor->viewport(), Qt::LeftButton, Qt::ControlModifier,
+                    character_point(editor, 7));
+  require_selection(editor, 6, 9,
+                    "Ctrl+left-click did not use source kana selection");
+  QTest::mouseClick(editor->viewport(), Qt::LeftButton,
+                    Qt::ControlModifier | Qt::ShiftModifier,
+                    character_point(editor, 3));
+  require_selection(editor, 3, 5,
+                    "Ctrl did not take precedence over Shift for left-click");
+
+  QTest::mouseClick(editor->viewport(), Qt::LeftButton, Qt::ShiftModifier,
+                    character_point(editor, 12));
+  const auto information =
+      window.findChildren<QDialog*>(QStringLiteral("kanjiInfoDialog"));
+  require(information.size() == 1 &&
+              dynamic_cast<jwpqt::qt::KanjiInfoDialog*>(information.front()) !=
+                  nullptr &&
+              dynamic_cast<jwpqt::qt::KanjiInfoDialog*>(information.front())
+                      ->code() == 0x3021,
+          "Shift+left-click did not open exact Character Information");
+
+  bool saw_popup = false;
+  QTimer::singleShot(0, [&saw_popup] {
+    auto* popup = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+    if (popup != nullptr) {
+      saw_popup = popup->findChild<QMenu*>(
+                      QStringLiteral("editorInputModeMenu")) != nullptr;
+      popup->close();
+    }
+  });
+  QTest::mouseClick(editor->viewport(), Qt::LeftButton, Qt::AltModifier,
+                    character_point(editor, 0));
+  require(saw_popup, "Alt+left-click did not open the native editor popup");
   require(*window.current_jwp_document() == source &&
               !window.document_modified() &&
               editor->document()->revision() == original_revision,
-          "Word selection changed native document content or history");
+          "Word mouse/keyboard selection changed native content or history");
 
   require(window.new_document_tab(false) == 1,
           "Could not create Unicode selection fixture");
@@ -2934,13 +2983,26 @@ void test_word_and_line_selection(const QString& directory) {
 
   MainWindow pending;
   JwpEditor* pending_editor = pending.active_editor();
+  pending.show();
+  pending_editor->setFocus();
+  QApplication::processEvents();
+  QTest::keyClick(pending_editor, Qt::Key_F4);
+  send_text_key(pending_editor, Qt::Key_X, QStringLiteral("x"));
+  QTest::keyClick(pending_editor, Qt::Key_F4);
+  send_text_key(pending_editor, Qt::Key_N, QStringLiteral("n"));
+  const QPoint first_character = character_point(pending_editor, 0);
+  QTest::mouseClick(pending_editor->viewport(), Qt::LeftButton,
+                    Qt::NoModifier, first_character);
+  require(document_plain_text(*pending_editor->document()) ==
+              QStringLiteral("x\u3093"),
+          "Mouse press inserted pending kana at the clicked position");
+  pending_editor->selectAll();
+  pending_editor->insertPlainText(QString());
+  pending_editor->document()->setModified(false);
   send_text_key(pending_editor, Qt::Key_N, QStringLiteral("n"));
   select(pending_editor, Qt::ControlModifier);
   require(pending_editor->textCursor().selectedText() == QStringLiteral("\u3093"),
           "Ctrl+W did not finish pending kana before selecting");
-  pending.show();
-  pending_editor->setFocus();
-  QApplication::processEvents();
   QTest::keyClick(pending_editor, Qt::Key_F4);
   pending_editor->moveCursor(QTextCursor::End);
   send_text_key(pending_editor, Qt::Key_K, QStringLiteral("k"));

@@ -281,6 +281,10 @@ Ctrl+W selects the source character-class word at the caret; Ctrl+Shift+W
 selects the current wrapped visual line. Convert Selection uses the recovered
 F2 and Ctrl+> shortcuts instead of occupying Ctrl+W.
 
+Double-click and Ctrl+left-click use the same source word boundaries.
+Shift+left-click opens Character Information for the exact character, while
+Alt+left-click opens the native editor popup.
+
 **Options > Fonts > ASCII and legacy extensions** selects an independent
 single-byte font at the Japanese role's height, without changing desktop menus
 or document formatting. A private character-restricted face prevents a font
