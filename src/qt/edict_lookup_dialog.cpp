@@ -96,6 +96,13 @@ std::u32string render_row(const core::EdictRecord& record) {
   return row;
 }
 
+void set_internal_clipboard_text(const QString& text) {
+  auto* data = new QMimeData();
+  data->setText(text);
+  data->setProperty("jwpqtInternalCopy", true);
+  QApplication::clipboard()->setMimeData(data);
+}
+
 QString pluralized(std::size_t value, const QString& singular,
                    const QString& plural) {
   return QStringLiteral("%1 %2")
@@ -357,6 +364,7 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   copy_action->setObjectName(QStringLiteral("edictCopy"));
   copy_action->setShortcut(QKeySequence::Copy);
   copy_action->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+  copy_action->setProperty("jwpqtResultCommand", true);
   results_->addAction(copy_action);
 
   connect(search_button, &QPushButton::clicked, this,
@@ -366,7 +374,15 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   connect(sort_button_, &QPushButton::clicked, this,
           [this] { sort_results(QApplication::keyboardModifiers()); });
   connect(results_, &QTextEdit::selectionChanged, this,
-          [this] { update_actions(); });
+          [this] {
+            if (!updating_result_selection_ &&
+                !selected_result_rows_.empty() &&
+                results_->textCursor().hasSelection()) {
+              clear_result_row_selection();
+              update_highlights();
+            }
+            update_actions();
+          });
   connect(copy_action, &QAction::triggered, this,
           [this] { copy_selected(); });
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -667,6 +683,7 @@ bool EdictLookupDialog::publish_results(EdictResourceSearchReport candidate,
   rendered_rows_ = std::move(rows);
   row_ranges_ = std::move(ranges);
   display_order_ = std::move(display_order);
+  selected_result_rows_.clear();
   sort_state_ = sort_state;
   sort_reverse_ = reverse;
   query_had_kanji_ = query_had_kanji;
@@ -718,6 +735,18 @@ void EdictLookupDialog::update_highlights() {
       selection.format.setForeground(color);
       selections.push_back(selection);
     }
+  }
+  for (const std::size_t row : selected_result_rows_) {
+    if (row >= row_ranges_.size()) continue;
+    const auto range = row_ranges_[row];
+    QTextEdit::ExtraSelection selection;
+    selection.cursor = QTextCursor(results_->document());
+    selection.cursor.setPosition(range.first);
+    selection.cursor.setPosition(range.second, QTextCursor::KeepAnchor);
+    selection.format.setBackground(results_->palette().highlight());
+    selection.format.setForeground(results_->palette().highlightedText());
+    selection.format.setProperty(QTextFormat::FullWidthSelection, true);
+    selections.push_back(selection);
   }
   results_->setExtraSelections(selections);
 }
@@ -933,7 +962,15 @@ bool EdictLookupDialog::insert_selected() {
 }
 
 void EdictLookupDialog::copy_selected() {
-  results_->copy();
+  if (!selected_result_rows_.empty()) {
+    set_internal_clipboard_text(to_qstring(selected_rows()));
+    return;
+  }
+  if (results_->textCursor().hasSelection()) {
+    results_->copy();
+  } else if (const auto row = current_result_row()) {
+    set_internal_clipboard_text(to_qstring(rendered_rows_.at(*row)));
+  }
 }
 
 const EdictResourceSearchReport& EdictLookupDialog::report() const noexcept {
@@ -942,6 +979,17 @@ const EdictResourceSearchReport& EdictLookupDialog::report() const noexcept {
 
 std::u32string EdictLookupDialog::selected_rows() const {
   std::u32string rows;
+  if (!selected_result_rows_.empty()) {
+    for (const std::size_t row : display_order_) {
+      if (std::find(selected_result_rows_.begin(), selected_result_rows_.end(), row) ==
+          selected_result_rows_.end()) {
+        continue;
+      }
+      if (!rows.empty()) rows.push_back(U'\n');
+      rows.append(rendered_rows_.at(row));
+    }
+    return rows;
+  }
   const QTextCursor cursor = results_->textCursor();
   if (!cursor.hasSelection()) return rows;
   for (std::size_t row : display_order_) {
@@ -961,6 +1009,10 @@ std::optional<std::size_t> EdictLookupDialog::current_result_row() const {
   const QTextCursor cursor = results_->textCursor();
   const int position = cursor.hasSelection() ? cursor.selectionStart()
                                              : cursor.position();
+  return result_row_at(position);
+}
+
+std::optional<std::size_t> EdictLookupDialog::result_row_at(int position) const {
   for (std::size_t row : display_order_) {
     const auto range = row_ranges_.at(row);
     if (position >= range.first &&
@@ -972,17 +1024,41 @@ std::optional<std::size_t> EdictLookupDialog::current_result_row() const {
   return std::nullopt;
 }
 
+void EdictLookupDialog::select_result_row(std::size_t row, bool toggle) {
+  if (row >= row_ranges_.size()) return;
+  const auto selected = std::find(selected_result_rows_.begin(),
+                                  selected_result_rows_.end(), row);
+  if (selected != selected_result_rows_.end()) {
+    if (toggle) selected_result_rows_.erase(selected);
+  } else {
+    selected_result_rows_.push_back(row);
+  }
+
+  const auto range = row_ranges_.at(row);
+  updating_result_selection_ = true;
+  QTextCursor cursor(results_->document());
+  cursor.setPosition(range.first);
+  results_->setTextCursor(cursor);
+  updating_result_selection_ = false;
+  update_highlights();
+  update_actions();
+}
+
+void EdictLookupDialog::clear_result_row_selection() {
+  selected_result_rows_.clear();
+}
+
 void EdictLookupDialog::copy_current_result_field(bool reading) {
   const auto row = current_result_row();
   if (!row) {
-    QApplication::clipboard()->clear();
+    set_internal_clipboard_text({});
     return;
   }
   const core::EdictRecord& record = report_.results.at(*row).result.record;
   const std::u32string& field = reading && !record.readings.empty()
                                     ? record.readings.front()
                                     : record.headword;
-  QApplication::clipboard()->setText(to_qstring(field));
+  set_internal_clipboard_text(to_qstring(field));
 }
 
 void EdictLookupDialog::select_current_result(bool whole_row) {
@@ -1003,8 +1079,12 @@ void EdictLookupDialog::select_current_result(bool whole_row) {
 
 void EdictLookupDialog::update_actions() {
   const auto cursor = results_->textCursor();
-  const bool entry_selected = cursor.hasSelection() && std::any_of(row_ranges_.begin(), row_ranges_.end(),
-      [&cursor](const auto& range) { return cursor.selectionEnd() > range.first && cursor.selectionStart() < range.second; });
+  const bool entry_selected = !selected_result_rows_.empty() ||
+      (cursor.hasSelection() && std::any_of(row_ranges_.begin(), row_ranges_.end(),
+          [&cursor](const auto& range) {
+            return cursor.selectionEnd() > range.first &&
+                   cursor.selectionStart() < range.second;
+          }));
   insert_button_->setEnabled(insert_handler_ && entry_selected);
   sort_button_->setEnabled(!report_.results.empty());
 }
@@ -1031,6 +1111,27 @@ bool EdictLookupDialog::eventFilter(QObject* watched, QEvent* event) {
     }
   }
   if (watched == results_ || watched == results_->viewport()) {
+    if (event->type() == QEvent::MouseButtonPress) {
+      auto* mouse = static_cast<QMouseEvent*>(event);
+      if (mouse->button() == Qt::RightButton) return true;
+      if (mouse->button() == Qt::LeftButton) {
+        const QPoint point = watched == results_->viewport()
+            ? mouse->position().toPoint()
+            : results_->viewport()->mapFrom(results_, mouse->position().toPoint());
+        const auto row = result_row_at(results_->cursorForPosition(point).position());
+        const auto modifiers = mouse->modifiers() & ~Qt::KeypadModifier;
+        if (modifiers == Qt::ControlModifier) {
+          event->accept();
+          if (!query_busy_ && row) select_result_row(*row, true);
+          return true;
+        }
+        if (!selected_result_rows_.empty()) {
+          clear_result_row_selection();
+          update_highlights();
+          update_actions();
+        }
+      }
+    }
     if (event->type() == QEvent::MouseButtonDblClick) {
       auto* mouse = static_cast<QMouseEvent*>(event);
       if (mouse->button() == Qt::LeftButton && mouse->modifiers() == Qt::NoModifier) {
@@ -1065,11 +1166,47 @@ bool EdictLookupDialog::eventFilter(QObject* watched, QEvent* event) {
       const bool select_field = key->key() == Qt::Key_W &&
           (modifiers == Qt::ControlModifier ||
            modifiers == (Qt::ControlModifier | Qt::ShiftModifier));
-      if (copy_field || select_field) {
+      const bool copy_rows = modifiers == Qt::ControlModifier &&
+          (key->key() == Qt::Key_C || key->key() == Qt::Key_Insert);
+      const bool select_row = key->key() == Qt::Key_Space &&
+          (modifiers == Qt::NoModifier || modifiers == Qt::ControlModifier);
+      const bool select_all = modifiers == Qt::ControlModifier &&
+                              key->key() == Qt::Key_A;
+      const bool input_mode = modifiers == Qt::ControlModifier &&
+          (key->key() == Qt::Key_J || key->key() == Qt::Key_K ||
+           key->key() == Qt::Key_6);
+      if (copy_field || copy_rows || select_field || select_row || select_all || input_mode) {
         event->accept();
         if (event->type() == QEvent::KeyPress && !query_busy_) {
           if (copy_field) {
             copy_current_result_field(key->key() == Qt::Key_R);
+          } else if (copy_rows) {
+            copy_selected();
+          } else if (input_mode) {
+            if (key->key() == Qt::Key_J) {
+              query_field_->set_input_mode(InputMode::kJascii);
+            } else if (key->key() == Qt::Key_K) {
+              query_field_->set_input_mode(InputMode::kKanji);
+            } else {
+              query_field_->set_input_mode(
+                  query_field_->input_mode() == InputMode::kKanji
+                      ? InputMode::kAscii : InputMode::kKanji);
+            }
+          } else if (select_all) {
+            if (display_order_.empty()) {
+              query_field_->set_input_mode(InputMode::kAscii);
+            } else {
+              selected_result_rows_ = display_order_;
+              QTextCursor cursor = results_->textCursor();
+              cursor.clearSelection();
+              results_->setTextCursor(cursor);
+              update_highlights();
+              update_actions();
+            }
+          } else if (select_row) {
+            if (const auto row = current_result_row()) {
+              select_result_row(*row, modifiers == Qt::ControlModifier);
+            }
           } else {
             select_current_result(modifiers.testFlag(Qt::ShiftModifier));
           }
@@ -1084,7 +1221,10 @@ bool EdictLookupDialog::eventFilter(QObject* watched, QEvent* event) {
         event->accept();
         if (event->type() == QEvent::ShortcutOverride || query_busy_) return true;
         if (enter) {
-          if (insert_handler_ && results_->textCursor().hasSelection()) insert_selected();
+          if (insert_handler_ &&
+              (results_->textCursor().hasSelection() || !selected_result_rows_.empty())) {
+            insert_selected();
+          }
           else query_edit_->setFocus();
         } else {
           const QPointer<EdictLookupDialog> self(this);
@@ -1097,8 +1237,6 @@ bool EdictLookupDialog::eventFilter(QObject* watched, QEvent* event) {
         return true;
       }
     }
-    if (event->type() == QEvent::MouseButtonPress &&
-        static_cast<QMouseEvent*>(event)->button() == Qt::RightButton) return true;
     if (event->type() == QEvent::ContextMenu) {
       std::function<void(CharacterTarget)> callback;
       if (auto handler = info_handler_) callback = [handler](CharacterTarget target) { handler(target.character); };

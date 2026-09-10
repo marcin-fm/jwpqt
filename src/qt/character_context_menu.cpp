@@ -88,7 +88,8 @@ void show_character_context_menu(
     else if (group == QStringLiteral("mode")) mode_actions.append(action);
     else if (group == QStringLiteral("command")) command_actions.append(action);
     else if (action->property("jwpqtAuxiliaryFind").toBool() ||
-             action->property("jwpqtResultInsertion").toBool())
+             action->property("jwpqtResultInsertion").toBool() ||
+             action->property("jwpqtResultCommand").toBool())
       result_actions.append(action);
   }
   if (!standard_actions.isEmpty()) {

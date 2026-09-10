@@ -79,6 +79,9 @@ class EdictLookupDialog : public QDialog {
 
   std::u32string selected_rows() const;
   std::optional<std::size_t> current_result_row() const;
+  std::optional<std::size_t> result_row_at(int position) const;
+  void select_result_row(std::size_t row, bool toggle);
+  void clear_result_row_selection();
   void copy_current_result_field(bool reading);
   void select_current_result(bool whole_row);
   void history_command(HistoryCommand command);
@@ -136,6 +139,8 @@ class EdictLookupDialog : public QDialog {
   std::vector<std::u32string> rendered_rows_;
   std::vector<std::pair<int, int>> row_ranges_;
   std::vector<std::size_t> display_order_;
+  std::vector<std::size_t> selected_result_rows_;
+  bool updating_result_selection_ = false;
 };
 
 }  // namespace jwpqt::qt

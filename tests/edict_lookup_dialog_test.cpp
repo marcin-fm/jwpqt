@@ -284,6 +284,34 @@ void test_result_keyboard_commands() {
   QTextCursor dog(results->document());
   dog.setPosition(results->toPlainText().indexOf(QStringLiteral("\u72ac")));
   results->setTextCursor(dog);
+  key(Qt::Key_C, Qt::ControlModifier);
+  require(QApplication::clipboard()->text() == QStringLiteral("\u72ac [\u3044\u306c] /dog/") &&
+              !results->textCursor().hasSelection() &&
+              QApplication::clipboard()->mimeData()->property("jwpqtInternalCopy").toBool(),
+          "No-selection Ctrl+C did not copy the current canonical result row");
+  QApplication::clipboard()->setText(QStringLiteral("changed"));
+  key(Qt::Key_Insert, Qt::ControlModifier);
+  require(QApplication::clipboard()->text() == QStringLiteral("\u72ac [\u3044\u306c] /dog/"),
+          "Ctrl+Insert did not copy the current canonical result row");
+  key(Qt::Key_J, Qt::ControlModifier);
+  require(field->input_mode() == qt::InputMode::kJascii,
+          "Ctrl+J did not select local JASCII input mode");
+  key(Qt::Key_K, Qt::ControlModifier);
+  require(field->input_mode() == qt::InputMode::kKanji,
+          "Ctrl+K did not select local Kanji input mode");
+  key(Qt::Key_6, Qt::ControlModifier);
+  require(field->input_mode() == qt::InputMode::kAscii,
+          "Ctrl+6 did not toggle local Kanji/ASCII input mode");
+  key(Qt::Key_K, Qt::ControlModifier);
+  key(Qt::Key_A, Qt::ControlModifier);
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() ==
+              QStringLiteral("cat /feline/\n\u72ac [\u3044\u306c] /dog/"),
+          "Ctrl+A did not select all canonical result rows");
+  QTextCursor clear_rows = dog;
+  clear_rows.movePosition(QTextCursor::NextCharacter, QTextCursor::KeepAnchor);
+  results->setTextCursor(clear_rows);
+  results->setTextCursor(dog);
   QKeyEvent field_override(QEvent::ShortcutOverride, Qt::Key_E,
                            Qt::ControlModifier);
   field_override.ignore();
@@ -293,6 +321,8 @@ void test_result_keyboard_commands() {
   key(Qt::Key_E, Qt::ControlModifier);
   require(QApplication::clipboard()->text() == QStringLiteral("\u72ac"),
           "Ctrl+E did not copy the current headword");
+  require(QApplication::clipboard()->mimeData()->property("jwpqtInternalCopy").toBool(),
+          "Dictionary field Copy was not marked as an internal clipboard change");
   require(!results->textCursor().hasSelection(),
           "Ctrl+E changed the result selection");
   key(Qt::Key_R, Qt::ControlModifier);
@@ -316,10 +346,67 @@ void test_result_keyboard_commands() {
   key(Qt::Key_R, Qt::ControlModifier);
   require(QApplication::clipboard()->text() == QStringLiteral("cat"),
           "Reading Copy did not fall back to a reading-only headword");
+
+  key(Qt::Key_Space, Qt::NoModifier);
+  results->setTextCursor(dog);
+  key(Qt::Key_Space, Qt::ControlModifier);
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() ==
+              QStringLiteral("cat /feline/\n\u72ac [\u3044\u306c] /dog/"),
+          "Disjoint result rows were not copied in display order");
+  require(QApplication::clipboard()->mimeData()->property("jwpqtInternalCopy").toBool(),
+          "Disjoint result Copy was not marked as an internal clipboard change");
+  require(results->extraSelections().size() >= 2,
+          "Disjoint result rows were not visibly selected");
+  const QPointer<QTextDocument> selected_document(results->document());
+  QEvent palette_change(QEvent::PaletteChange);
+  QApplication::sendEvent(results, &palette_change);
+  require(selected_document && results->document() == selected_document &&
+              results->extraSelections().size() >= 2,
+          "Palette refresh discarded the disjoint result selection");
+  key(Qt::Key_Return, Qt::NoModifier);
+  require(inserted == U"cat /feline/\n\u72ac [\u3044\u306c] /dog/",
+          "Disjoint row insertion lost canonical result identity");
+
+  key(Qt::Key_Space, Qt::ControlModifier);
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() == QStringLiteral("cat /feline/"),
+          "Ctrl+Space did not toggle the current result row");
+  const QPoint dog_point = results->cursorRect(dog).center();
+  QMouseEvent dog_click(QEvent::MouseButtonPress, QPointF(dog_point),
+      QPointF(results->viewport()->mapToGlobal(dog_point)), Qt::LeftButton,
+      Qt::LeftButton, Qt::ControlModifier);
+  QApplication::sendEvent(results->viewport(), &dog_click);
+  dialog.copy_selected();
+  require(dog_click.isAccepted() && QApplication::clipboard()->text() ==
+              QStringLiteral("cat /feline/\n\u72ac [\u3044\u306c] /dog/"),
+          "Ctrl+left did not toggle a disjoint result row");
+  key(Qt::Key_W, Qt::ControlModifier);
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() == QStringLiteral("\u72ac"),
+          "Ordinary within-result selection did not clear disjoint rows");
+
   key(Qt::Key_unknown, Qt::NoModifier);
   const auto before = query->text();
   key(Qt::Key_Left, Qt::NoModifier);
   require(query->text() == before && searches == 1, "Result navigation changed or searched the query");
+  auto* insert_button = dialog.findChild<QPushButton*>("edictInsert");
+  QTextCursor row_cursor(results->document());
+  row_cursor.setPosition(results->toPlainText().indexOf(QStringLiteral("cat")));
+  results->setTextCursor(row_cursor);
+  key(Qt::Key_Space, Qt::NoModifier);
+  require(insert_button->isEnabled(), "Row selection did not enable canonical insertion");
+  require(dialog.sort_results(), "Could not sort a row-selected result set");
+  QTextCursor collapsed = results->textCursor();
+  collapsed.clearSelection();
+  results->setTextCursor(collapsed);
+  require(!insert_button->isEnabled(), "Sorting retained stale selected result rows");
+  key(Qt::Key_Space, Qt::NoModifier);
+  require(dialog.search() && searches == 2, "Could not replace row-selected search results");
+  collapsed = results->textCursor();
+  collapsed.clearSelection();
+  results->setTextCursor(collapsed);
+  require(!insert_button->isEnabled(), "A new search retained stale selected result rows");
   QPointer<qt::EdictLookupDialog> disposable;
   disposable = new qt::EdictLookupDialog([](const auto&, const auto&, bool) {
     qt::EdictResourceSearchReport report;
@@ -330,6 +417,19 @@ void test_result_keyboard_commands() {
   QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
   QApplication::sendEvent(disposable->findChild<QTextEdit*>("edictResults"), &enter);
   require(!disposable, "Result insertion callback did not safely delete its owner");
+
+  qt::EdictLookupDialog empty_dialog([](const auto&, const auto&, bool) {
+    return qt::EdictResourceSearchReport{};
+  });
+  auto* empty_results = empty_dialog.findChild<QTextEdit*>("edictResults");
+  auto* empty_query = empty_dialog.findChild<QLineEdit*>("edictQuery");
+  auto* empty_field = empty_query == nullptr ? nullptr
+      : dynamic_cast<qt::KanaInputField*>(empty_query->parentWidget());
+  require(empty_results && empty_field, "Empty result input fixture is incomplete");
+  QKeyEvent ascii_empty(QEvent::KeyPress, Qt::Key_A, Qt::ControlModifier);
+  QApplication::sendEvent(empty_results, &ascii_empty);
+  require(ascii_empty.isAccepted() && empty_field->input_mode() == qt::InputMode::kAscii,
+          "Ctrl+A did not select ASCII input mode for an empty result list");
 }
 
 void test_linked_names() {
@@ -493,6 +593,50 @@ void test_priority_presentation() {
           "A label-only selection inserted an entry");
   dialog.copy_selected();
   require(QApplication::clipboard()->text() == "End of Priority Entries", "Label Copy differs from displayed text");
+  const auto control_click = [&](const QString& target) {
+    const auto found = view->document()->find(target);
+    QTextCursor position(view->document());
+    position.setPosition(found.selectionStart() + 1);
+    view->setTextCursor(position);
+    view->ensureCursorVisible();
+    const QPoint point = view->cursorRect(position).center();
+    QMouseEvent event(QEvent::MouseButtonPress, QPointF(point),
+        QPointF(view->viewport()->mapToGlobal(point)), Qt::LeftButton,
+        Qt::LeftButton, Qt::ControlModifier);
+    QApplication::sendEvent(view->viewport(), &event);
+    require(event.isAccepted(), "Ctrl+left result selection was not handled");
+  };
+  control_click("p1");
+  control_click("a2");
+  control_click("End of Priority Entries");
+  dialog.copy_selected();
+  require(QApplication::clipboard()->text() ==
+              QStringLiteral("p1 /priority/(P)/\na2 /ordinary/"),
+          "Presentation labels entered a disjoint result selection");
+  bool popup_copy = false;
+  QTimer::singleShot(0, [&] {
+    auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+    if (!menu) return;
+    for (QAction* action : menu->actions()) {
+      if (action->objectName() != QStringLiteral("edictCopy")) continue;
+      popup_copy = true;
+      action->trigger();
+      break;
+    }
+    menu->close();
+  });
+  const auto p1 = view->document()->find(QStringLiteral("p1"));
+  QTextCursor popup_cursor(view->document());
+  popup_cursor.setPosition(p1.selectionStart() + 1);
+  const QPoint popup_point = view->cursorRect(popup_cursor).center();
+  QContextMenuEvent popup(QContextMenuEvent::Mouse, popup_point,
+      view->viewport()->mapToGlobal(popup_point));
+  QApplication::sendEvent(view->viewport(), &popup);
+  require(popup_copy && QApplication::clipboard()->text() ==
+              QStringLiteral("p1 /priority/(P)/\na2 /ordinary/"),
+          "Result popup omitted disjoint row Copy");
+  require(dialog.insert_selected() && inserted == U"p1 /priority/(P)/\na2 /ordinary/",
+          "Disjoint presentation selection lost canonical visible order");
   const auto double_click = [&](const QString& target, bool interfere = false) {
     const auto found = view->document()->find(target);
     QTextCursor position(view->document());
