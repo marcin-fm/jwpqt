@@ -24,6 +24,7 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QListWidget>
+#include <QMenu>
 #include <QMimeData>
 #include <QPointer>
 #include <QPushButton>
@@ -41,6 +42,7 @@ using jwpqt::core::EdictUserDictionary;
 using jwpqt::core::EdictUserDictionaryError;
 using jwpqt::core::EdictUserEntry;
 using jwpqt::core::LegacyCodePage;
+using jwpqt::core::JisCode;
 using jwpqt::qt::EdictUserDictionaryDialog;
 
 class PromptTestDialog : public EdictUserDictionaryDialog {
@@ -155,6 +157,90 @@ void test_list_shortcuts() {
   require(dialog.entries() == std::vector<EdictUserEntry>{first, third} &&
               saves == 0,
           "EDICT Delete did not remove the current entry");
+}
+
+void test_list_lookups() {
+  const EdictUserEntry first = entry({0x2422}, U"first", {0x3021});
+  const EdictUserEntry second = entry({0x2424}, U"second");
+  std::vector<JisCode> information;
+  std::vector<JisCode> radicals;
+  EdictUserDictionaryDialog dialog(
+      EdictUserDictionary::from_entries({first, second}),
+      LegacyCodePage::k1252,
+      [](EdictUserDictionary) { return true; });
+  dialog.set_lookup_handlers(
+      [&](JisCode code) { information.push_back(code); },
+      [&](JisCode code) { radicals.push_back(code); });
+
+  auto* list =
+      dialog.findChild<QListWidget*>(QStringLiteral("edictUserEntries"));
+  auto* information_action = dialog.findChild<QAction*>(
+      QStringLiteral("edictUserCharacterInformation"));
+  auto* radical_action =
+      dialog.findChild<QAction*>(QStringLiteral("edictUserRadicalLookup"));
+  require(list && information_action && radical_action,
+          "EDICT lookup controls are missing");
+
+  list->setCurrentRow(0);
+  send_list_key(list, Qt::Key_I, Qt::ControlModifier);
+  send_list_key(list, Qt::Key_L, Qt::ControlModifier);
+  send_list_key(list, Qt::Key_F5);
+  require(information == std::vector<JisCode>{0x3021} &&
+              radicals == std::vector<JisCode>({0x3021, 0x3021}),
+          "EDICT lookup shortcuts did not prefer the original headword");
+
+  bool saw_popup_actions = false;
+  QTimer::singleShot(0, [&] {
+    auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+    if (!menu) return;
+    saw_popup_actions =
+        menu->actions().contains(information_action) &&
+        menu->actions().contains(radical_action);
+    information_action->trigger();
+    menu->close();
+  });
+  send_list_key(list, Qt::Key_F23);
+  require(saw_popup_actions &&
+              information == std::vector<JisCode>({0x3021, 0x3021}),
+          "EDICT F23 popup omitted row lookup commands");
+
+  list->setCurrentRow(1);
+  information_action->trigger();
+  radical_action->trigger();
+  require(information.back() == 0x2424 && radicals.back() == 0x2424,
+          "EDICT lookup did not fall back to the original reading");
+  list->setCurrentRow(-1);
+  require(!information_action->isEnabled() && !radical_action->isEnabled(),
+          "EDICT lookup commands stayed enabled without a row");
+
+  auto* status = dialog.findChild<QLabel*>(QStringLiteral("edictUserStatus"));
+  require(status != nullptr, "EDICT lookup status is missing");
+  list->setCurrentRow(0);
+  dialog.set_lookup_handlers(
+      [](JisCode) { throw std::runtime_error("information failed"); },
+      [](JisCode) { throw 7; });
+  information_action->trigger();
+  require(status->text() == QStringLiteral("information failed"),
+          "EDICT information failure escaped the list command");
+  radical_action->trigger();
+  require(status->text() == QStringLiteral("Could not open Radical Lookup"),
+          "EDICT unknown radical failure escaped the list command");
+
+  auto* doomed = new EdictUserDictionaryDialog(
+      EdictUserDictionary::from_entries({first}),
+      LegacyCodePage::k1252,
+      [](EdictUserDictionary) { return true; });
+  QPointer<EdictUserDictionaryDialog> guard(doomed);
+  doomed->set_lookup_handlers([doomed](JisCode) { delete doomed; }, {});
+  auto* doomed_list =
+      doomed->findChild<QListWidget*>(QStringLiteral("edictUserEntries"));
+  auto* doomed_action = doomed->findChild<QAction*>(
+      QStringLiteral("edictUserCharacterInformation"));
+  require(doomed_list && doomed_action,
+          "Disposable EDICT lookup controls are missing");
+  doomed_list->setCurrentRow(0);
+  doomed_action->trigger();
+  require(!guard, "EDICT lookup touched a deleted owning dialog");
 }
 
 void test_editing_and_save() {
@@ -719,6 +805,7 @@ int main(int argc, char** argv) {
   QApplication application(argc, argv);
   try {
     test_list_shortcuts();
+    test_list_lookups();
     test_editing_and_save();
     test_import_insert_and_failed_save();
     test_title_bar_close();

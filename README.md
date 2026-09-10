@@ -147,6 +147,9 @@ every selected file before appending anything to the working copy.
 Their entry lists also retain the recovered keyboard editing commands: Insert
 adds, Space edits, Delete removes, Ctrl+Up/Down reorders, and Ctrl+C or
 Ctrl+Insert copies the current displayed entry without saving the working copy.
+Ctrl+I and the row context menu open independent Character Information for the
+row's first original JIS character; Ctrl+L or F5 seeds Radical Lookup from that
+same character. F23 opens the complete native row menu from the keyboard.
 The [handbook](docs/handbook/dictionary.md) describes the complete native workflow.
 
 The clickable **Resources** status and **Help > Runtime Resources** show loaded

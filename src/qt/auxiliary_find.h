@@ -20,6 +20,7 @@ class AuxiliaryFind final : public QObject {
  public:
   using Ranges = std::function<std::vector<std::pair<int, int>>() >;
   explicit AuxiliaryFind(QWidget* target, Ranges ranges = {}, bool repeat_keys = true);
+  void add_context_action(QAction* action);
   void set_result_insertion(QAbstractButton* insert_button);
   void open();
   FindReplaceResult find(const FindReplaceRequest& request);
@@ -36,6 +37,7 @@ class AuxiliaryFind final : public QObject {
   bool repeat_keys_;
   QAction *open_, *next_, *previous_;
   QPointer<QAbstractButton> insert_button_;
+  std::vector<QPointer<QAction>> context_actions_;
   std::vector<QAction*> insert_actions_;
   void update_insert_actions();
 };

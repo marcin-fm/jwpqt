@@ -78,6 +78,14 @@ removes it, and Ctrl+Up/Down changes its order. Ctrl+C or Ctrl+Insert copies the
 current displayed row without changing or saving the working copy. Tab, Return
 and Escape keep their normal dialog behavior.
 
+Ctrl+I opens an independent Character Information window for the first original
+JIS character in the selected row. Ctrl+L or F5 opens Radical Lookup with that
+character as its starting point, without moving the active document selection.
+The row context menu includes Character Information, and F23 opens that complete
+menu from the keyboard. User Conversions use the first reading character; the
+EDICT editor uses the first headword character, or the reading when no headword
+is present.
+
 Import in either user-dictionary window accepts multiple files, and local files
 can be dropped directly on the window. Every file is parsed in source order
 before the working copy changes, so a missing, malformed or oversized file does

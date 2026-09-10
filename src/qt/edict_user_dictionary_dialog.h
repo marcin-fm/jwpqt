@@ -27,6 +27,7 @@ class EdictUserDictionaryDialog : public QDialog {
  public:
   using SaveHandler = std::function<bool(core::EdictUserDictionary)>;
   using InsertHandler = std::function<void(const core::EdictUserEntry&)>;
+  using LookupHandler = std::function<void(core::JisCode)>;
 
   explicit EdictUserDictionaryDialog(
       const core::EdictUserDictionary& dictionary,
@@ -44,6 +45,7 @@ class EdictUserDictionaryDialog : public QDialog {
   void append_dictionary(const core::EdictUserDictionary& dictionary);
   bool save_changes();
   bool insert_selected();
+  void set_lookup_handlers(LookupHandler information, LookupHandler radical);
   void set_overwrite_action(QAction* action);
 
  protected:
@@ -74,6 +76,8 @@ class EdictUserDictionaryDialog : public QDialog {
   QPointer<QAction> overwrite_action_;
   SaveHandler save_handler_;
   InsertHandler insert_handler_;
+  LookupHandler information_handler_;
+  LookupHandler radical_handler_;
   QString dictionary_path_;
   QListWidget* entries_list_;
   QLabel* status_label_;
@@ -83,6 +87,12 @@ class EdictUserDictionaryDialog : public QDialog {
   QPushButton* up_button_;
   QPushButton* down_button_;
   QPushButton* insert_button_;
+  QAction* information_action_;
+  QAction* radical_action_;
+
+  std::optional<core::JisCode> selected_character() const;
+  void show_information();
+  void show_radical_lookup();
 };
 
 }  // namespace jwpqt::qt

@@ -6027,6 +6027,22 @@ void test_jwp_wnn_user_dictionary_dialog(const QString& directory) {
   QListWidget* entries = dialog->findChild<QListWidget*>();
   require(entries != nullptr, "User dictionary dialog has no entry list");
   entries->setCurrentRow(0);
+  QAction* information_action = dialog->findChild<QAction*>(
+      QStringLiteral("wnnUserCharacterInformation"));
+  require(information_action != nullptr && information_action->isEnabled(),
+          "User conversion row has no Character Information command");
+  const qsizetype information_before =
+      window.findChildren<QDialog*>(QStringLiteral("kanjiInfoDialog"),
+                                    Qt::FindDirectChildrenOnly)
+          .size();
+  information_action->trigger();
+  information_action->trigger();
+  QApplication::processEvents();
+  require(window.findChildren<QDialog*>(QStringLiteral("kanjiInfoDialog"),
+                                        Qt::FindDirectChildrenOnly)
+                  .size() ==
+              information_before + 2,
+          "User conversion row did not open independent information windows");
   require(dialog->insert_selected(),
           "Dialog could not insert the selected user conversion");
   jwpqt::core::JwpText expected = jwpqt::core::render_wnn_user_entry(entry);

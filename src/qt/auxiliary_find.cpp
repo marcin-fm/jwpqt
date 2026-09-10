@@ -52,6 +52,11 @@ AuxiliaryFind::AuxiliaryFind(QWidget* target, Ranges ranges, bool repeat_keys)
   if (auto* text = qobject_cast<QTextEdit*>(target)) text->viewport()->installEventFilter(this);
 }
 
+void AuxiliaryFind::add_context_action(QAction* action) {
+  if (!action || !target_) return;
+  context_actions_.push_back(action);
+}
+
 void AuxiliaryFind::set_result_insertion(QAbstractButton* insert_button) {
   if (!insert_button || !workspace_ || !insert_actions_.empty()) return;
   insert_button_ = insert_button;
@@ -275,6 +280,13 @@ bool AuxiliaryFind::eventFilter(QObject* object, QEvent* event) {
     auto* context = static_cast<QContextMenuEvent*>(event);
     QPointer<QMenu> menu = new QMenu(target_);
     menu->addActions({open_, next_, previous_});
+    bool added_context_action = false;
+    for (const auto& action : context_actions_) {
+      if (!action) continue;
+      if (!added_context_action) menu->addSeparator();
+      menu->addAction(action);
+      added_context_action = true;
+    }
     update_insert_actions();
     if (!insert_actions_.empty()) {
       menu->addSeparator();

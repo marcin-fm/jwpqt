@@ -356,7 +356,8 @@ class MainWindow : public QMainWindow {
   void show_kanji_count_dialog();
   void show_kanji_code_lookup_dialog(KanjiCodeLookupMode mode);
   void show_kanji_reading_lookup_dialog();
-  void show_kanji_lookup_dialog();
+  void show_kanji_lookup_dialog(
+      std::optional<core::JisCode> seed = std::nullopt);
   std::optional<core::JisCode> jwp_character_target() const;
   std::u32string edict_query_seed() const;
   void new_document();

@@ -24,6 +24,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMenu>
 #include <QMessageBox>
 #include <QMimeData>
 #include <QPointer>
@@ -39,6 +40,7 @@
 namespace {
 
 using jwpqt::core::JwpText;
+using jwpqt::core::JisCode;
 using jwpqt::core::WnnUserDictionary;
 using jwpqt::core::WnnUserDictionaryError;
 using jwpqt::core::WnnUserEntry;
@@ -152,6 +154,86 @@ void test_list_shortcuts() {
   require(dialog.entries() == std::vector<WnnUserEntry>{first, third} &&
               saves == 0,
           "WNN Delete did not remove the current entry");
+}
+
+void test_list_lookups() {
+  const WnnUserEntry first = entry({0x2422}, {0x3022});
+  const WnnUserEntry second = entry({0x2424}, {0x3023});
+  std::vector<JisCode> information;
+  std::vector<JisCode> radicals;
+  WnnUserDictionaryDialog dialog(
+      WnnUserDictionary::from_entries({first, second}),
+      [](WnnUserDictionary) { return true; });
+  dialog.set_lookup_handlers(
+      [&](JisCode code) { information.push_back(code); },
+      [&](JisCode code) { radicals.push_back(code); });
+
+  auto* list = dialog.findChild<QListWidget*>(QStringLiteral("wnnUserEntries"));
+  auto* information_action = dialog.findChild<QAction*>(
+      QStringLiteral("wnnUserCharacterInformation"));
+  auto* radical_action =
+      dialog.findChild<QAction*>(QStringLiteral("wnnUserRadicalLookup"));
+  require(list && information_action && radical_action,
+          "WNN lookup controls are missing");
+
+  list->setCurrentRow(0);
+  send_list_key(list, Qt::Key_I, Qt::ControlModifier);
+  send_list_key(list, Qt::Key_L, Qt::ControlModifier);
+  send_list_key(list, Qt::Key_F5);
+  require(information == std::vector<JisCode>{0x2422} &&
+              radicals == std::vector<JisCode>({0x2422, 0x2422}),
+          "WNN lookup shortcuts lost the original reading code");
+
+  bool saw_popup_actions = false;
+  QTimer::singleShot(0, [&] {
+    auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+    if (!menu) return;
+    saw_popup_actions =
+        menu->actions().contains(information_action) &&
+        menu->actions().contains(radical_action);
+    information_action->trigger();
+    menu->close();
+  });
+  send_list_key(list, Qt::Key_F23);
+  require(saw_popup_actions &&
+              information == std::vector<JisCode>({0x2422, 0x2422}),
+          "WNN F23 popup omitted row lookup commands");
+
+  list->setCurrentRow(1);
+  information_action->trigger();
+  require(information.back() == 0x2424,
+          "WNN popup lookup did not follow the selected row");
+  list->setCurrentRow(-1);
+  require(!information_action->isEnabled() && !radical_action->isEnabled(),
+          "WNN lookup commands stayed enabled without a row");
+
+  auto* status = dialog.findChild<QLabel*>(QStringLiteral("wnnUserStatus"));
+  require(status != nullptr, "WNN lookup status is missing");
+  list->setCurrentRow(0);
+  dialog.set_lookup_handlers(
+      [](JisCode) { throw std::runtime_error("information failed"); },
+      [](JisCode) { throw 7; });
+  information_action->trigger();
+  require(status->text() == QStringLiteral("information failed"),
+          "WNN information failure escaped the list command");
+  radical_action->trigger();
+  require(status->text() == QStringLiteral("Could not open Radical Lookup"),
+          "WNN unknown radical failure escaped the list command");
+
+  auto* doomed = new WnnUserDictionaryDialog(
+      WnnUserDictionary::from_entries({first}),
+      [](WnnUserDictionary) { return true; });
+  QPointer<WnnUserDictionaryDialog> guard(doomed);
+  doomed->set_lookup_handlers([doomed](JisCode) { delete doomed; }, {});
+  auto* doomed_list =
+      doomed->findChild<QListWidget*>(QStringLiteral("wnnUserEntries"));
+  auto* doomed_action = doomed->findChild<QAction*>(
+      QStringLiteral("wnnUserCharacterInformation"));
+  require(doomed_list && doomed_action,
+          "Disposable WNN lookup controls are missing");
+  doomed_list->setCurrentRow(0);
+  doomed_action->trigger();
+  require(!guard, "WNN lookup touched a deleted owning dialog");
 }
 
 void test_editing_and_save() {
@@ -742,6 +824,7 @@ int main(int argc, char** argv) {
   QApplication application(argc, argv);
   try {
     test_list_shortcuts();
+    test_list_lookups();
     test_editing_and_save();
     test_import_insert_and_failed_save();
     test_title_bar_close();

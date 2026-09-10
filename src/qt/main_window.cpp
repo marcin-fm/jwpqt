@@ -5393,6 +5393,9 @@ void MainWindow::show_wnn_user_dictionary_dialog() {
       },
       this, wnn_resources_->user_dictionary_path);
   dialog->set_overwrite_action(overwrite_action_);
+  dialog->set_lookup_handlers(
+      [this](core::JisCode code) { show_kanji_info_code(code); },
+      [this](core::JisCode code) { show_kanji_lookup_dialog(code); });
   dialog->setObjectName(QStringLiteral("userDictionaryDialog"));
   dialog->setAttribute(Qt::WA_DeleteOnClose);
   connect(dialog, &QObject::destroyed, this,
@@ -5431,6 +5434,9 @@ void MainWindow::show_edict_user_dictionary_dialog() {
       },
       this, edict_user_resources_->path);
   dialog->set_overwrite_action(overwrite_action_);
+  dialog->set_lookup_handlers(
+      [this](core::JisCode code) { show_kanji_info_code(code); },
+      [this](core::JisCode code) { show_kanji_lookup_dialog(code); });
   dialog->setObjectName(QStringLiteral("edictUserDictionaryDialog"));
   dialog->setAttribute(Qt::WA_DeleteOnClose);
   connect(dialog, &QObject::destroyed, this,
@@ -5703,7 +5709,8 @@ void MainWindow::show_kanji_reading_lookup_dialog() {
   dialog->show();
 }
 
-void MainWindow::show_kanji_lookup_dialog() {
+void MainWindow::show_kanji_lookup_dialog(
+    std::optional<core::JisCode> requested_seed) {
   if (!has_kanji_lookup() || conversion_active()) {
     statusBar()->showMessage(tr("Radical lookup is not available"), 3000);
     return;
@@ -5712,9 +5719,12 @@ void MainWindow::show_kanji_lookup_dialog() {
     kanji_lookup_dialog_->show();
     kanji_lookup_dialog_->raise();
     kanji_lookup_dialog_->activateWindow();
+    if (requested_seed && *requested_seed >= 0x3000) {
+      (void)kanji_lookup_dialog_->select_kanji(*requested_seed);
+    }
     return;
   }
-  const auto seed = jwp_character_target();
+  const auto seed = requested_seed ? requested_seed : jwp_character_target();
   auto* dialog = new KanjiLookupDialog(
       *radical_lists_, *stroke_lists_, *kanji_info_database_, radical_sheet_,
       [this](const std::vector<core::JisCode>& codes) {

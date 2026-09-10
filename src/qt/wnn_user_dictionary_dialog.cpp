@@ -14,6 +14,7 @@
 #include <QClipboard>
 #include <QComboBox>
 #include <QCloseEvent>
+#include <QContextMenuEvent>
 #include <QDialogButtonBox>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -143,7 +144,9 @@ WnnUserDictionaryDialog::WnnUserDictionaryDialog(
       delete_button_(new QPushButton(tr("&Delete"), this)),
       up_button_(new QPushButton(tr("Move &Up"), this)),
       down_button_(new QPushButton(tr("Move &Down"), this)),
-      insert_button_(new QPushButton(tr("&Insert in Document"), this)) {
+      insert_button_(new QPushButton(tr("&Insert in Document"), this)),
+      information_action_(new QAction(tr("Character &Information..."), this)),
+      radical_action_(new QAction(tr("&Radical Lookup..."), this)) {
   if (dictionary.entries().size() > kMaximumVisibleEntries) {
     throw core::WnnUserDictionaryError(
         "User dictionary is too large for interactive editing");
@@ -163,6 +166,10 @@ WnnUserDictionaryDialog::WnnUserDictionaryDialog(
   assign_japanese_font(*entries_list_, JapaneseFontRole::kList);
   auto* find = new AuxiliaryFind(entries_list_);
   find->set_result_insertion(insert_button_);
+  information_action_->setObjectName(QStringLiteral("wnnUserCharacterInformation"));
+  radical_action_->setObjectName(QStringLiteral("wnnUserRadicalLookup"));
+  find->add_context_action(information_action_);
+  find->add_context_action(radical_action_);
   entries_list_->setAlternatingRowColors(true);
   content->addWidget(entries_list_, 1);
 
@@ -237,6 +244,10 @@ WnnUserDictionaryDialog::WnnUserDictionaryDialog(
           [this] { import_from_prompt(); });
   connect(insert_button_, &QPushButton::clicked, this,
           [this] { insert_selected(); });
+  connect(information_action_, &QAction::triggered, this,
+          [this] { show_information(); });
+  connect(radical_action_, &QAction::triggered, this,
+          [this] { show_radical_lookup(); });
   connect(entries_list_, &QListWidget::itemSelectionChanged, this,
           [this] { update_actions(); });
   connect(entries_list_, &QListWidget::itemDoubleClicked, this,
@@ -268,6 +279,9 @@ bool WnnUserDictionaryDialog::eventFilter(QObject* watched, QEvent* event) {
 
   QPushButton* command = nullptr;
   bool copy = false;
+  bool information = false;
+  bool radical = false;
+  bool popup = false;
   if (key->key() == Qt::Key_Delete) command = delete_button_;
   if (key->key() == Qt::Key_Space) command = edit_button_;
   if (key->key() == Qt::Key_Insert) {
@@ -277,11 +291,32 @@ bool WnnUserDictionaryDialog::eventFilter(QObject* watched, QEvent* event) {
   if (control && key->key() == Qt::Key_C) copy = true;
   if (control && key->key() == Qt::Key_Up) command = up_button_;
   if (control && key->key() == Qt::Key_Down) command = down_button_;
-  if (!command && !copy) return QDialog::eventFilter(watched, event);
+  if (control && key->key() == Qt::Key_I) information = true;
+  if ((control && key->key() == Qt::Key_L) ||
+      (!control && modifiers == Qt::NoModifier && key->key() == Qt::Key_F5)) {
+    radical = true;
+  }
+  if (modifiers == Qt::NoModifier && key->key() == Qt::Key_F23) popup = true;
+  if (!command && !copy && !information && !radical && !popup) {
+    return QDialog::eventFilter(watched, event);
+  }
 
   event->accept();
   if (event->type() == QEvent::ShortcutOverride) return true;
-  if (copy) {
+  if (information) {
+    show_information();
+  } else if (radical) {
+    show_radical_lookup();
+  } else if (popup) {
+    QPoint point = entries_list_->rect().center();
+    if (const auto* item = entries_list_->currentItem()) {
+      point = entries_list_->viewport()->mapTo(
+          entries_list_, entries_list_->visualItemRect(item).center());
+    }
+    QContextMenuEvent context(QContextMenuEvent::Keyboard, point,
+                              entries_list_->mapToGlobal(point));
+    QGuiApplication::sendEvent(entries_list_, &context);
+  } else if (copy) {
     if (const auto* item = entries_list_->currentItem()) {
       QGuiApplication::clipboard()->setText(item->text());
     }
@@ -447,6 +482,13 @@ bool WnnUserDictionaryDialog::insert_selected() {
     show_operation_error(QString::fromUtf8(error.what()));
     return false;
   }
+}
+
+void WnnUserDictionaryDialog::set_lookup_handlers(
+    LookupHandler information, LookupHandler radical) {
+  information_handler_ = std::move(information);
+  radical_handler_ = std::move(radical);
+  update_actions();
 }
 
 void WnnUserDictionaryDialog::set_overwrite_action(QAction* action) {
@@ -679,6 +721,43 @@ void WnnUserDictionaryDialog::show_operation_error(const QString& message) {
   status_label_->setText(message);
 }
 
+std::optional<core::JisCode>
+WnnUserDictionaryDialog::selected_character() const {
+  const auto index = selected_index();
+  if (!index || editor_model_.entries()[*index].reading.empty()) {
+    return std::nullopt;
+  }
+  return editor_model_.entries()[*index].reading.front();
+}
+
+void WnnUserDictionaryDialog::show_information() {
+  const auto code = selected_character();
+  const auto handler = information_handler_;
+  if (!code || !handler) return;
+  const QPointer<WnnUserDictionaryDialog> self(this);
+  try {
+    handler(*code);
+  } catch (const std::exception& error) {
+    if (self) status_label_->setText(QString::fromUtf8(error.what()));
+  } catch (...) {
+    if (self) status_label_->setText(tr("Could not show kanji information"));
+  }
+}
+
+void WnnUserDictionaryDialog::show_radical_lookup() {
+  const auto code = selected_character();
+  const auto handler = radical_handler_;
+  if (!code || !handler) return;
+  const QPointer<WnnUserDictionaryDialog> self(this);
+  try {
+    handler(*code);
+  } catch (const std::exception& error) {
+    if (self) status_label_->setText(QString::fromUtf8(error.what()));
+  } catch (...) {
+    if (self) status_label_->setText(tr("Could not open Radical Lookup"));
+  }
+}
+
 void WnnUserDictionaryDialog::update_actions() {
   const auto index = selected_index();
   const bool selected = index.has_value();
@@ -687,6 +766,8 @@ void WnnUserDictionaryDialog::update_actions() {
   up_button_->setEnabled(selected && *index > 0);
   down_button_->setEnabled(selected && *index + 1 < entries().size());
   insert_button_->setEnabled(selected && static_cast<bool>(insert_handler_));
+  information_action_->setEnabled(selected && static_cast<bool>(information_handler_));
+  radical_action_->setEnabled(selected && static_cast<bool>(radical_handler_));
 }
 
 }  // namespace jwpqt::qt

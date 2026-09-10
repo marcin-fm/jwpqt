@@ -27,6 +27,7 @@ class WnnUserDictionaryDialog : public QDialog {
  public:
   using SaveHandler = std::function<bool(core::WnnUserDictionary)>;
   using InsertHandler = std::function<void(const core::WnnUserEntry&)>;
+  using LookupHandler = std::function<void(core::JisCode)>;
 
   explicit WnnUserDictionaryDialog(
       const core::WnnUserDictionary& dictionary, SaveHandler save_handler,
@@ -43,6 +44,7 @@ class WnnUserDictionaryDialog : public QDialog {
   void append_dictionary(const core::WnnUserDictionary& dictionary);
   bool save_changes();
   bool insert_selected();
+  void set_lookup_handlers(LookupHandler information, LookupHandler radical);
   void set_overwrite_action(QAction* action);
 
  protected:
@@ -70,6 +72,8 @@ class WnnUserDictionaryDialog : public QDialog {
   core::WnnUserDictionaryEditor editor_model_;
   SaveHandler save_handler_;
   InsertHandler insert_handler_;
+  LookupHandler information_handler_;
+  LookupHandler radical_handler_;
   QString dictionary_path_;
   QPointer<QAction> overwrite_action_;
   QListWidget* entries_list_;
@@ -80,6 +84,12 @@ class WnnUserDictionaryDialog : public QDialog {
   QPushButton* up_button_;
   QPushButton* down_button_;
   QPushButton* insert_button_;
+  QAction* information_action_;
+  QAction* radical_action_;
+
+  std::optional<core::JisCode> selected_character() const;
+  void show_information();
+  void show_radical_lookup();
 };
 
 }  // namespace jwpqt::qt
