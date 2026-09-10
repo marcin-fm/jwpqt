@@ -35,7 +35,8 @@ class EdictRegistryDialog : public QDialog {
   void select_entry();
   void update_entry();
   void inspect_entry();
-  bool detect_entry(int row, const QString& filename, bool replace_name);
+  bool detect_entry(int row, const QString& filename, bool replace_name,
+                    bool confirm_name_replacement = false);
   void add_dictionary_files(const QList<QUrl>& urls);
   void defaults();
   core::EdictRegistry registry_;

@@ -98,7 +98,9 @@ local file and runs the original bounded sample inference; Detect applies it to
 the path already entered. You can also drop one or more local files on the
 manager. Inference examines at most 2,048 bytes, proposes the first
 slash-delimited description as the name, and enables a companion `.jdx` when
-present. Review the staged choice because structurally ambiguous byte sequences
+present. Detect asks before replacing an existing description and defaults to
+No; declining retains the description while applying the other inferred fields.
+Review the staged choice because structurally ambiguous byte sequences
 can still require selecting EUC-JP, UTF-8 or mixed explicitly. Inspect validates
 the selected resource and requested index, reporting its record count or error.
 Mixed definitions use the configured default JWP code page captured at reload.

@@ -21,6 +21,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QLockFile>
+#include <QMessageBox>
 #include <QPointer>
 #include <QPushButton>
 #include <QTemporaryDir>
@@ -98,6 +99,22 @@ void sample_import(const QString& root) {
   qt::EdictRegistryDialog detected(value, root, core::LegacyCodePage::k1251);
   auto* list = child<QListWidget>(detected, "registryEntries");
   child<QLineEdit>(detected, "registryPath")->setText(utf8);
+  QTimer::singleShot(0, &detected, [&] {
+    auto* prompt = child<QMessageBox>(detected, "replaceDetectedDictionaryNamePrompt");
+    require(prompt->defaultButton() == prompt->button(QMessageBox::No),
+            "Detect name replacement did not use the safe default");
+    prompt->button(QMessageBox::No)->click();
+  });
+  child<QPushButton>(detected, "registryDetect")->click();
+  require(detected.registry().entries[0].path == utf8.toStdU16String() &&
+              detected.registry().entries[0].encoding == core::EdictRegistryEncoding::kUtf8 &&
+              detected.registry().entries[0].indexed &&
+              detected.registry().entries[0].label == u"First",
+          "Declining Detect name replacement lost inferred fields or the staged name");
+  QTimer::singleShot(0, &detected, [&] {
+    child<QMessageBox>(detected, "replaceDetectedDictionaryNamePrompt")
+        ->button(QMessageBox::Yes)->click();
+  });
   child<QPushButton>(detected, "registryDetect")->click();
   require(detected.registry().entries[0].path == utf8.toStdU16String() &&
               detected.registry().entries[0].encoding == core::EdictRegistryEncoding::kUtf8 &&
@@ -126,6 +143,10 @@ void sample_import(const QString& root) {
 
   list->setCurrentRow(2);
   child<QLineEdit>(detected, "registryPath")->setText(mixed);
+  QTimer::singleShot(0, &detected, [&] {
+    child<QMessageBox>(detected, "replaceDetectedDictionaryNamePrompt")
+        ->button(QMessageBox::Yes)->click();
+  });
   child<QPushButton>(detected, "registryDetect")->click();
   require(detected.registry().entries[2].path == mixed.toStdU16String() &&
               detected.registry().entries[2].encoding == core::EdictRegistryEncoding::kMixed &&
@@ -152,6 +173,22 @@ void sample_import(const QString& root) {
           "Multi-file drop did not retain source order or inferred fields");
   require(child<QLabel>(detected, "registryStatus")->text().contains("2 dictionary"),
           "Multi-file drop did not disclose staged additions");
+
+  auto* deleted = new qt::EdictRegistryDialog(
+      fixture(), root, core::LegacyCodePage::k1251);
+  QPointer<qt::EdictRegistryDialog> deleted_guard(deleted);
+  child<QLineEdit>(*deleted, "registryPath")->setText(utf8);
+  QTimer::singleShot(0, deleted, [deleted_guard] {
+    require(deleted_guard, "Detect dialog disappeared before its confirmation");
+    auto* prompt = child<QMessageBox>(
+        *deleted_guard, "replaceDetectedDictionaryNamePrompt");
+    require(prompt->defaultButton() == prompt->button(QMessageBox::No),
+            "Owner-deletion Detect prompt lost its safe default");
+    delete deleted_guard.data();
+  });
+  child<QPushButton>(*deleted, "registryDetect")->click();
+  require(!deleted_guard,
+          "Deleting the registry during Detect used the stale staged owner");
 
   const auto count = detected.registry().entries.size();
   QMimeData remote;

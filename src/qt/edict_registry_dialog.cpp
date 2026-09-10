@@ -16,6 +16,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QPointer>
 #include <QPushButton>
 #include <QDropEvent>
@@ -181,7 +182,7 @@ EdictRegistryDialog::EdictRegistryDialog(core::EdictRegistry registry, QString d
   connect(inspect, &QPushButton::clicked, this, &EdictRegistryDialog::inspect_entry);
   connect(detect, &QPushButton::clicked, this, [this] {
     const int row = list_->currentRow();
-    if (row >= 0) detect_entry(row, path_->text(), true);
+    if (row >= 0) detect_entry(row, path_->text(), true, true);
   });
   connect(browse, &QPushButton::clicked, this, [this] {
     const QPointer<EdictRegistryDialog> self(this);
@@ -304,7 +305,8 @@ void EdictRegistryDialog::inspect_entry() {
 }
 
 bool EdictRegistryDialog::detect_entry(int row, const QString& filename,
-                                       bool replace_name) {
+                                       bool replace_name,
+                                       bool confirm_name_replacement) {
   if (row < 0 || row >= static_cast<int>(registry_.entries.size())) return false;
   try {
     const QFileInfo source(filename);
@@ -319,6 +321,27 @@ bool EdictRegistryDialog::detect_entry(int row, const QString& filename,
     const auto inferred = core::infer_edict_dictionary_sample(
         std::string_view(bytes.constData(), static_cast<std::size_t>(bytes.size())),
         code_page_);
+    const QString label = inferred.description
+                              ? to_qstring(*inferred.description)
+                              : source.completeBaseName();
+    const auto expected_entry = registry_.entries[static_cast<std::size_t>(row)];
+    if (replace_name && confirm_name_replacement && !expected_entry.label.empty()) {
+      const QPointer<EdictRegistryDialog> self(this);
+      auto* prompt = new QMessageBox(
+          QMessageBox::Warning, tr("Description Already Exists"),
+          tr("Do you want to replace the description with the first dictionary entry?"),
+          QMessageBox::Yes | QMessageBox::No, this);
+      prompt->setObjectName(QStringLiteral("replaceDetectedDictionaryNamePrompt"));
+      prompt->setDefaultButton(QMessageBox::No);
+      prompt->setEscapeButton(QMessageBox::No);
+      prompt->setAttribute(Qt::WA_DeleteOnClose);
+      const int answer = prompt->exec();
+      if (!self || row != list_->currentRow() ||
+          row >= static_cast<int>(registry_.entries.size()) ||
+          !(registry_.entries[static_cast<std::size_t>(row)] == expected_entry) ||
+          path_->text() != filename) return false;
+      replace_name = answer == QMessageBox::Yes;
+    }
     auto& entry = registry_.entries[static_cast<std::size_t>(row)];
     entry.path = filename.toStdU16String();
     if (entry.special != core::EdictRegistrySpecial::kUser) {
@@ -326,9 +349,6 @@ bool EdictRegistryDialog::detect_entry(int row, const QString& filename,
       entry.indexed = QFileInfo(edict_index_path(filename)).isFile();
     }
     if (replace_name) {
-      const QString label = inferred.description
-                                ? to_qstring(*inferred.description)
-                                : source.completeBaseName();
       if (!label.isEmpty()) entry.label = label.toStdU16String();
     }
     refresh(row);
