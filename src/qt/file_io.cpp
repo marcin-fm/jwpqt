@@ -37,6 +37,14 @@ void write_file_bytes(const QString& path, std::string_view bytes, bool keep_bac
     throw std::runtime_error("Document is too large to save");
   }
 
+  const QFileInfo destination(path);
+  // WriteUser reflects effective access and may stay true for a privileged
+  // process even when the file itself has no write bits.
+  const auto writable = QFileDevice::WriteOwner | QFileDevice::WriteGroup |
+                        QFileDevice::WriteOther;
+  if (destination.isFile() && !(destination.permissions() & writable))
+    throw io_error("Could not replace", path, "File is read-only");
+
   QSaveFile output(path);
   if (!output.open(QIODevice::WriteOnly)) {
     throw io_error("Could not open", path, output.errorString());

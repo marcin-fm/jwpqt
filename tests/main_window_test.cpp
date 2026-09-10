@@ -473,6 +473,34 @@ void test_new_document_workflow(const QString& directory) {
   require(window.save_path(path) && !window.document_modified() &&
               jwpqt::qt::read_jwp_file(path) == saved,
           "Fresh Japanese document did not save correctly");
+  const auto saved_bytes = read_bytes(path);
+  require(QFile::setPermissions(path, QFileDevice::ReadOwner |
+                                          QFileDevice::ReadUser |
+                                          QFileDevice::ReadGroup |
+                                          QFileDevice::ReadOther),
+          "Could not make saved document read-only");
+  bool saw_read_only_error = false;
+  QTimer::singleShot(0, [&] {
+    auto* error = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    if (error && error->text().contains(QStringLiteral("Could not save")) &&
+        error->text().contains(QStringLiteral("File is read-only"))) {
+      saw_read_only_error = true;
+      error->accept();
+    }
+  });
+  require(window.insert_edict_text(U"B") && window.document_modified() &&
+              !window.save_path(path) && read_bytes(path) == saved_bytes &&
+              window.document_modified() && saw_read_only_error,
+          "Failed read-only Save changed the file or clean state");
+  require(QFile::setPermissions(path, QFileDevice::ReadOwner |
+                                          QFileDevice::WriteOwner |
+                                          QFileDevice::ReadUser |
+                                          QFileDevice::WriteUser),
+          "Could not restore saved-document permissions");
+  find_action(window, "undoAction")->trigger();
+  require(!window.document_modified() &&
+              *window.current_jwp_document() == saved,
+          "Read-only Save failure changed the native undo baseline");
 
   find_action(window, "newTextDocumentAction")->trigger();
   editor = window.active_editor();

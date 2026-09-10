@@ -244,6 +244,80 @@ void test_jwp_encoding_failure_preserves_file(const QString& directory) {
           "Failed JWP save changed the existing file");
 }
 
+void test_read_only_outputs(const QString& directory) {
+  using namespace jwpqt;
+  const auto fails_read_only = [](auto&& write) {
+    try {
+      write();
+    } catch (const std::exception& error) {
+      return std::string_view(error.what()).find("File is read-only") !=
+             std::string_view::npos;
+    }
+    return false;
+  };
+  const auto make_read_only = [](const QString& path) {
+    require(QFile::setPermissions(path, QFileDevice::ReadOwner |
+                                            QFileDevice::ReadUser |
+                                            QFileDevice::ReadGroup |
+                                            QFileDevice::ReadOther),
+            "Could not make output read-only");
+  };
+  const auto make_writable = [](const QString& path) {
+    require(QFile::setPermissions(path, QFileDevice::ReadOwner |
+                                            QFileDevice::WriteOwner |
+                                            QFileDevice::ReadUser |
+                                            QFileDevice::WriteUser),
+            "Could not restore output permissions");
+  };
+
+  const auto text_path = directory + QStringLiteral("/read-only.txt");
+  qt::write_text_file(
+      text_path, {U"original text", core::TextEncoding::kUtf8, false});
+  const auto text_bytes = read_bytes(text_path);
+  const auto backup_path = text_path + QStringLiteral("_BAK");
+  QFile backup(backup_path);
+  require(backup.open(QIODevice::WriteOnly) && backup.write("old backup", 10) == 10,
+          "Could not seed read-only backup fixture");
+  backup.close();
+  make_read_only(text_path);
+  require(fails_read_only([&] {
+            qt::write_text_file(
+                text_path, {U"replacement", core::TextEncoding::kUtf8, false}, true);
+          }),
+          "Read-only text save was not rejected explicitly");
+  require(read_bytes(text_path) == text_bytes,
+          "Read-only text save changed the document");
+  require(read_bytes(backup_path) == QByteArray("old backup"),
+          "Read-only text save changed the backup");
+  make_writable(text_path);
+
+  const auto jwp_path = directory + QStringLiteral("/read-only.jce");
+  core::JwpDocument document;
+  document.paragraphs.push_back({{'A', 0x2422}});
+  qt::write_jwp_file(jwp_path, document);
+  const auto jwp_bytes = read_bytes(jwp_path);
+  make_read_only(jwp_path);
+  document.paragraphs.front().text.push_back('B');
+  require(fails_read_only([&] { qt::write_jwp_file(jwp_path, document); }) &&
+              read_bytes(jwp_path) == jwp_bytes,
+          "Read-only JWP save changed the document");
+  make_writable(jwp_path);
+
+  const auto project_path = directory + QStringLiteral("/read-only.jpr");
+  const core::JwpProject project{"# settings\n", U"/tmp", {U"document.jce"}};
+  qt::write_jwp_project_file(project_path, project);
+  const auto project_bytes = read_bytes(project_path);
+  make_read_only(project_path);
+  auto changed_project = project;
+  changed_project.paths.push_back(U"second.jce");
+  require(fails_read_only([&] {
+            qt::write_jwp_project_file(project_path, changed_project);
+          }) &&
+              read_bytes(project_path) == project_bytes,
+          "Read-only project save changed the project");
+  make_writable(project_path);
+}
+
 void test_jwp_project_file_round_trip(const QString& directory) {
   const QString path = directory + QStringLiteral("/session.jpr");
   const jwpqt::core::JwpProject expected{
@@ -806,6 +880,7 @@ int main(int argc, char* argv[]) {
     test_jfc_file_io(directory.path());
     test_jwp_file_round_trip(directory.path());
     test_jwp_encoding_failure_preserves_file(directory.path());
+    test_read_only_outputs(directory.path());
     test_jwp_project_file_round_trip(directory.path());
     test_kanji_info_file_loading(directory.path());
     test_kanji_lookup_list_loading(directory.path());
