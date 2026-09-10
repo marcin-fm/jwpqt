@@ -46,6 +46,7 @@ class WnnUserDictionaryDialog : public QDialog {
   void set_overwrite_action(QAction* action);
 
  protected:
+  bool eventFilter(QObject* watched, QEvent* event) override;
   void closeEvent(QCloseEvent* event) override;
   void dragEnterEvent(QDragEnterEvent* event) override;
   void dropEvent(QDropEvent* event) override;
@@ -73,6 +74,7 @@ class WnnUserDictionaryDialog : public QDialog {
   QPointer<QAction> overwrite_action_;
   QListWidget* entries_list_;
   QLabel* status_label_;
+  QPushButton* add_button_;
   QPushButton* edit_button_;
   QPushButton* delete_button_;
   QPushButton* up_button_;

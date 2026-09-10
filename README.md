@@ -144,6 +144,9 @@ The editor's explicit Cancel button remains the intentional discard command.
 User Conversions warns before its additive Import and defaults to No. Both
 editors start Import in the directory of their configured user file, then parse
 every selected file before appending anything to the working copy.
+Their entry lists also retain the recovered keyboard editing commands: Insert
+adds, Space edits, Delete removes, Ctrl+Up/Down reorders, and Ctrl+C or
+Ctrl+Insert copies the current displayed entry without saving the working copy.
 The [handbook](docs/handbook/dictionary.md) describes the complete native workflow.
 
 The clickable **Resources** status and **Help > Runtime Resources** show loaded

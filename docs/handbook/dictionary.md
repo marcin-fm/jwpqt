@@ -72,6 +72,12 @@ with the reading, candidates and inflection intact. Separate multiple candidates
 with `/`. Imported records retain the broader legacy file compatibility rather
 than being silently rewritten by editor validation.
 
+Both editable lists support the recovered keyboard commands in addition to
+their buttons: Insert adds an entry, Space edits the current entry, Delete
+removes it, and Ctrl+Up/Down changes its order. Ctrl+C or Ctrl+Insert copies the
+current displayed row without changing or saving the working copy. Tab, Return
+and Escape keep their normal dialog behavior.
+
 Import in either user-dictionary window accepts multiple files, and local files
 can be dropped directly on the window. Every file is parsed in source order
 before the working copy changes, so a missing, malformed or oversized file does

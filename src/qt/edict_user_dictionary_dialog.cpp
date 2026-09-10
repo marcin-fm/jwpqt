@@ -11,6 +11,7 @@
 #include <utility>
 
 #include <QAction>
+#include <QClipboard>
 #include <QCloseEvent>
 #include <QDialogButtonBox>
 #include <QDragEnterEvent>
@@ -18,7 +19,9 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
+#include <QGuiApplication>
 #include <QHBoxLayout>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -73,6 +76,7 @@ EdictUserDictionaryDialog::EdictUserDictionaryDialog(
       dictionary_path_(std::move(dictionary_path)),
       entries_list_(new QListWidget(this)),
       status_label_(new QLabel(this)),
+      add_button_(new QPushButton(tr("&Add..."), this)),
       edit_button_(new QPushButton(tr("&Edit..."), this)),
       delete_button_(new QPushButton(tr("&Delete"), this)),
       up_button_(new QPushButton(tr("Move &Up"), this)),
@@ -93,6 +97,7 @@ EdictUserDictionaryDialog::EdictUserDictionaryDialog(
   auto* outer = new QVBoxLayout(this);
   auto* content = new QHBoxLayout();
   entries_list_->setObjectName(QStringLiteral("edictUserEntries"));
+  entries_list_->installEventFilter(this);
   assign_japanese_font(*entries_list_, JapaneseFontRole::kList);
   auto* find = new AuxiliaryFind(entries_list_);
   find->set_result_insertion(insert_button_);
@@ -100,8 +105,7 @@ EdictUserDictionaryDialog::EdictUserDictionaryDialog(
   content->addWidget(entries_list_, 1);
 
   auto* actions = new QVBoxLayout();
-  auto* add_button = new QPushButton(tr("&Add..."), this);
-  add_button->setObjectName(QStringLiteral("edictUserAdd"));
+  add_button_->setObjectName(QStringLiteral("edictUserAdd"));
   edit_button_->setObjectName(QStringLiteral("edictUserEdit"));
   delete_button_->setObjectName(QStringLiteral("edictUserDelete"));
   up_button_->setObjectName(QStringLiteral("edictUserMoveUp"));
@@ -111,7 +115,7 @@ EdictUserDictionaryDialog::EdictUserDictionaryDialog(
   auto* import_button = new QPushButton(tr("&Import..."), this);
   import_button->setObjectName(QStringLiteral("edictUserImport"));
   insert_button_->setObjectName(QStringLiteral("edictUserInsert"));
-  for (QPushButton* button : {add_button, edit_button_, delete_button_,
+  for (QPushButton* button : {add_button_, edit_button_, delete_button_,
                               up_button_, down_button_, sort_button,
                               import_button, insert_button_}) {
     actions->addWidget(button);
@@ -129,7 +133,7 @@ EdictUserDictionaryDialog::EdictUserDictionaryDialog(
   buttons->setObjectName(QStringLiteral("edictUserButtons"));
   outer->addWidget(buttons);
 
-  connect(add_button, &QPushButton::clicked, this,
+  connect(add_button_, &QPushButton::clicked, this,
           [this] { add_from_prompt(); });
   connect(edit_button_, &QPushButton::clicked, this,
           [this] { edit_from_prompt(); });
@@ -191,6 +195,46 @@ EdictUserDictionaryDialog::EdictUserDictionaryDialog(
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
 
   refresh();
+}
+
+bool EdictUserDictionaryDialog::eventFilter(QObject* watched, QEvent* event) {
+  if (watched != entries_list_ ||
+      (event->type() != QEvent::ShortcutOverride &&
+       event->type() != QEvent::KeyPress)) {
+    return QDialog::eventFilter(watched, event);
+  }
+
+  const auto* key = static_cast<QKeyEvent*>(event);
+  const auto modifiers = key->modifiers();
+  const bool control = modifiers.testFlag(Qt::ControlModifier);
+  if (modifiers.testFlag(Qt::AltModifier) ||
+      modifiers.testFlag(Qt::MetaModifier)) {
+    return QDialog::eventFilter(watched, event);
+  }
+
+  QPushButton* command = nullptr;
+  bool copy = false;
+  if (key->key() == Qt::Key_Delete) command = delete_button_;
+  if (key->key() == Qt::Key_Space) command = edit_button_;
+  if (key->key() == Qt::Key_Insert) {
+    if (control) copy = true;
+    else command = add_button_;
+  }
+  if (control && key->key() == Qt::Key_C) copy = true;
+  if (control && key->key() == Qt::Key_Up) command = up_button_;
+  if (control && key->key() == Qt::Key_Down) command = down_button_;
+  if (!command && !copy) return QDialog::eventFilter(watched, event);
+
+  event->accept();
+  if (event->type() == QEvent::ShortcutOverride) return true;
+  if (copy) {
+    if (const auto* item = entries_list_->currentItem()) {
+      QGuiApplication::clipboard()->setText(item->text());
+    }
+  } else if (command->isEnabled()) {
+    command->click();
+  }
+  return true;
 }
 
 void EdictUserDictionaryDialog::closeEvent(QCloseEvent* event) {

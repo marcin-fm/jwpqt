@@ -11,6 +11,7 @@
 
 #include <QApplication>
 #include <QAction>
+#include <QClipboard>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDir>
@@ -53,6 +54,22 @@ class PromptTestDialog : public WnnUserDictionaryDialog {
   }
 };
 
+class ShortcutTestDialog : public WnnUserDictionaryDialog {
+ public:
+  using WnnUserDictionaryDialog::WnnUserDictionaryDialog;
+
+  int prompt_count = 0;
+  std::optional<WnnUserEntry> last_initial;
+
+ protected:
+  std::optional<WnnUserEntry> prompt_for_entry(
+      const std::optional<WnnUserEntry>& initial) override {
+    ++prompt_count;
+    last_initial = initial;
+    return std::nullopt;
+  }
+};
+
 void require(bool condition, const char* message) {
   if (!condition) {
     throw std::runtime_error(message);
@@ -68,6 +85,73 @@ void type_key(QLineEdit& edit, int key, const QString& text) {
   QApplication::sendEvent(&edit, &press);
   QKeyEvent release(QEvent::KeyRelease, key, Qt::NoModifier, text);
   QApplication::sendEvent(&edit, &release);
+}
+
+void send_list_key(QListWidget* list, int key,
+                   Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+  QKeyEvent shortcut(QEvent::ShortcutOverride, key, modifiers);
+  QApplication::sendEvent(list, &shortcut);
+  QKeyEvent press(QEvent::KeyPress, key, modifiers);
+  QApplication::sendEvent(list, &press);
+  QKeyEvent release(QEvent::KeyRelease, key, Qt::NoModifier);
+  QApplication::sendEvent(list, &release);
+}
+
+void test_list_shortcuts() {
+  const WnnUserEntry first = entry({0x2422}, {0x3021});
+  const WnnUserEntry second = entry({0x2424}, {0x3022});
+  const WnnUserEntry third = entry({0x2426}, {0x3023});
+  int saves = 0;
+  ShortcutTestDialog dialog(
+      WnnUserDictionary::from_entries({first, second, third}),
+      [&](WnnUserDictionary) {
+        ++saves;
+        return true;
+      });
+  auto* list = dialog.findChild<QListWidget*>(QStringLiteral("wnnUserEntries"));
+  require(list != nullptr, "WNN shortcut list is missing");
+
+  list->setCurrentRow(0);
+  send_list_key(list, Qt::Key_Up, Qt::ControlModifier);
+  require(dialog.entries()[0] == first,
+          "WNN Ctrl+Up changed the first entry");
+  list->setCurrentRow(2);
+  send_list_key(list, Qt::Key_Down, Qt::ControlModifier);
+  require(dialog.entries()[2] == third,
+          "WNN Ctrl+Down changed the last entry");
+
+  list->setCurrentRow(1);
+  send_list_key(list, Qt::Key_Space);
+  require(dialog.prompt_count == 1 && dialog.last_initial == second,
+          "WNN Space did not invoke Edit without changing the model");
+  send_list_key(list, Qt::Key_Insert);
+  require(dialog.prompt_count == 2 && !dialog.last_initial.has_value(),
+          "WNN Insert did not invoke Add without changing the model");
+
+  const QString rendered = list->currentItem()->text();
+  QApplication::clipboard()->clear();
+  send_list_key(list, Qt::Key_C, Qt::ControlModifier);
+  require(QApplication::clipboard()->text() == rendered &&
+              dialog.entries() ==
+                  std::vector<WnnUserEntry>{first, second, third},
+          "WNN Ctrl+C did not copy the rendered current entry safely");
+  QApplication::clipboard()->clear();
+  send_list_key(list, Qt::Key_Insert, Qt::ControlModifier);
+  require(QApplication::clipboard()->text() == rendered,
+          "WNN Ctrl+Insert did not copy the rendered current entry");
+
+  send_list_key(list, Qt::Key_Up, Qt::ControlModifier);
+  require(list->currentRow() == 0 && dialog.entries()[0] == second &&
+              dialog.entries()[1] == first,
+          "WNN Ctrl+Up did not reorder and retain the current entry");
+  send_list_key(list, Qt::Key_Down, Qt::ControlModifier);
+  require(list->currentRow() == 1 && dialog.entries()[0] == first &&
+              dialog.entries()[1] == second,
+          "WNN Ctrl+Down did not restore the current entry order");
+  send_list_key(list, Qt::Key_Delete);
+  require(dialog.entries() == std::vector<WnnUserEntry>{first, third} &&
+              saves == 0,
+          "WNN Delete did not remove the current entry");
 }
 
 void test_editing_and_save() {
@@ -657,6 +741,7 @@ void test_insert_exception_is_contained() {
 int main(int argc, char** argv) {
   QApplication application(argc, argv);
   try {
+    test_list_shortcuts();
     test_editing_and_save();
     test_import_insert_and_failed_save();
     test_title_bar_close();
