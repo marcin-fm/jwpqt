@@ -2919,18 +2919,24 @@ void test_word_and_line_selection(const QString& directory) {
   QTest::mouseClick(editor->viewport(), Qt::LeftButton,
                     Qt::ControlModifier | Qt::ShiftModifier,
                     character_point(editor, 3));
-  require_selection(editor, 3, 5,
-                    "Ctrl did not take precedence over Shift for left-click");
+  auto information =
+      window.findChildren<QDialog*>(QStringLiteral("kanjiInfoDialog"));
+  require(information.size() == 1,
+          "Shift did not take precedence over Ctrl for left-click");
+  require_selection(editor, 6, 9,
+                    "Ctrl+Shift+left-click changed the editor selection");
 
   QTest::mouseClick(editor->viewport(), Qt::LeftButton, Qt::ShiftModifier,
                     character_point(editor, 12));
-  const auto information =
-      window.findChildren<QDialog*>(QStringLiteral("kanjiInfoDialog"));
-  require(information.size() == 1 &&
-              dynamic_cast<jwpqt::qt::KanjiInfoDialog*>(information.front()) !=
-                  nullptr &&
-              dynamic_cast<jwpqt::qt::KanjiInfoDialog*>(information.front())
-                      ->code() == 0x3021,
+  information = window.findChildren<QDialog*>(
+      QStringLiteral("kanjiInfoDialog"));
+  require(information.size() == 2 &&
+              std::any_of(information.cbegin(), information.cend(),
+                          [](QDialog* dialog) {
+                            const auto* info = dynamic_cast<
+                                jwpqt::qt::KanjiInfoDialog*>(dialog);
+                            return info != nullptr && info->code() == 0x3021;
+                          }),
           "Shift+left-click did not open exact Character Information");
 
   bool saw_popup = false;

@@ -4459,15 +4459,15 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
         return true;
       }
       const QPoint position = mouse->position().toPoint();
-      if (mouse->modifiers().testFlag(Qt::ControlModifier)) {
-        guarded_editor->setTextCursor(guarded_editor->cursorForPosition(position));
-        select_document_word_or_line(false);
-        return true;
-      }
       if (mouse->modifiers().testFlag(Qt::ShiftModifier)) {
         if (const auto target = character_target(*guarded_editor, position)) {
           show_kanji_info_dialog(*target);
         }
+        return true;
+      }
+      if (mouse->modifiers().testFlag(Qt::ControlModifier)) {
+        guarded_editor->setTextCursor(guarded_editor->cursorForPosition(position));
+        select_document_word_or_line(false);
         return true;
       }
       if (mouse->modifiers().testFlag(Qt::AltModifier)) {
