@@ -4313,6 +4313,37 @@ void test_jwp_wnn_conversion(const QString& directory) {
   require(window.conversion_active() && editor->hasFocus() &&
               window.current_jwp_document()->paragraphs[0].text == jwpqt::core::JwpText{0x3022},
           "Clicking a conversion candidate lost focus or accepted the conversion");
+  const QPoint second_point =
+      candidates->visualItemRect(candidates->item(1)).center();
+  QContextMenuEvent candidate_information(
+      QContextMenuEvent::Mouse, second_point,
+      candidates->viewport()->mapToGlobal(second_point));
+  QApplication::sendEvent(candidates->viewport(), &candidate_information);
+  auto information = window.findChildren<QDialog*>(
+      QStringLiteral("kanjiInfoDialog"), Qt::FindDirectChildrenOnly);
+  require(candidate_information.isAccepted() && information.size() == 1 &&
+              candidates->currentRow() == 1 && window.conversion_active() &&
+              information.front()
+                      ->findChild<QLabel*>(QStringLiteral("kanjiInfoCharacter"))
+                      ->text() == candidates->item(1)->text().left(1) &&
+              window.current_jwp_document()->paragraphs[0].text ==
+                  jwpqt::core::JwpText{0x3022},
+          "Conversion-bar information did not use the clicked candidate");
+  const QPoint first_point =
+      candidates->visualItemRect(candidates->item(0)).center();
+  QMouseEvent alternate_information(
+      QEvent::MouseButtonPress, QPointF(first_point),
+      QPointF(candidates->viewport()->mapToGlobal(first_point)),
+      Qt::LeftButton, Qt::LeftButton, Qt::AltModifier);
+  QApplication::sendEvent(candidates->viewport(), &alternate_information);
+  information = window.findChildren<QDialog*>(
+      QStringLiteral("kanjiInfoDialog"), Qt::FindDirectChildrenOnly);
+  require(alternate_information.isAccepted() && information.size() == 2 &&
+              candidates->currentRow() == 0 && window.conversion_active() &&
+              window.current_jwp_document()->paragraphs[0].text ==
+                  jwpqt::core::JwpText{0x3021},
+          "Alt-click did not open independent conversion-bar information");
+  click_candidate(1);
   require(convert->isEnabled(), "Convert button is disabled during candidate selection");
   convert->trigger();
   require(candidates->currentRow() == 2 &&

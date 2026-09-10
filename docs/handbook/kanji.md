@@ -3,6 +3,9 @@
 Character Information opens an independent modeless window for the character
 under the cursor or right-click target, without disturbing the source selection.
 Right-clicking readings or other results can open further independent viewers.
+Right-clicking a conversion-bar candidate, or Alt-clicking it, first selects the
+candidate and opens another viewer for its first character without accepting the
+conversion.
 Insert acts on the currently active document, not necessarily the original tab.
 The document right-click menu also provides every kanji lookup, Dictionary,
 JIS Table, Convert Selection and a three-choice Input Mode submenu. These are

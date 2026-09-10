@@ -481,6 +481,7 @@ MainWindow::MainWindow(QWidget* parent)
       conversion_candidates_->fontMetrics().height() + 12 +
       style()->pixelMetric(QStyle::PM_ScrollBarExtent));
   conversion_candidates_->hide();
+  conversion_candidates_->viewport()->installEventFilter(this);
   connect(conversion_candidates_, &QListWidget::currentRowChanged, this,
           [this](int row) {
     if (row < 0 || !conversion_active()) return;
@@ -4316,6 +4317,37 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
             5000);
       }
     });
+  }
+  if (watched == conversion_candidates_->viewport()) {
+    std::optional<QPoint> information_position;
+    if (event->type() == QEvent::ContextMenu) {
+      information_position =
+          static_cast<QContextMenuEvent*>(event)->pos();
+    } else if (event->type() == QEvent::MouseButtonPress) {
+      const auto* mouse = static_cast<QMouseEvent*>(event);
+      if (mouse->button() == Qt::LeftButton &&
+          mouse->modifiers().testFlag(Qt::AltModifier)) {
+        information_position = mouse->position().toPoint();
+      }
+    }
+    if (information_position.has_value()) {
+      if (QListWidgetItem* item =
+              conversion_candidates_->itemAt(*information_position)) {
+        conversion_candidates_->setCurrentItem(item);
+      }
+      const int row = conversion_candidates_->currentRow();
+      if (conversion_active() && row >= 0) {
+        const auto& candidates =
+            document_->jwp_conversion_->result().candidates;
+        if (static_cast<std::size_t>(row) < candidates.size() &&
+            !candidates[static_cast<std::size_t>(row)].text.empty()) {
+          show_kanji_info_code(
+              candidates[static_cast<std::size_t>(row)].text.front());
+        }
+      }
+      event->accept();
+      return true;
+    }
   }
   if (watched == document_->editor_ || watched == document_->editor_->viewport()) {
     if (event->type() == QEvent::ContextMenu) {

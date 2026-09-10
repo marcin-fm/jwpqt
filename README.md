@@ -509,6 +509,9 @@ SKIP uses `Ctrl+Alt+S` and Spahn-Hadamitzky uses `Ctrl+Alt+H`, avoiding native
 Save As and Replace shortcuts. Index Lookup uses `Ctrl+Shift+I`; Count Kanji
 remains `Ctrl+Shift+K`. Japanese editor, candidate and lookup content defaults
 to the recovered 16-logical-pixel size, independently of the desktop UI font.
+Right-clicking a visible conversion candidate, or Alt-clicking it, selects that
+candidate and opens an independent Character Information window for its first
+character without accepting the conversion.
 Non-conflicting recovered aliases are also available, including `F7`/`F8`/`F9`
 for previous/find/next, `Shift+F8` for Replace and the original Alt-letter file
 commands. Conflicting source bindings such as `Ctrl+S` for Find remain remapped
