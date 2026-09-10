@@ -283,6 +283,10 @@ Ctrl+W selects the source character-class word at the caret; Ctrl+Shift+W
 selects the current wrapped visual line. Convert Selection uses the recovered
 F2 and Ctrl+> shortcuts instead of occupying Ctrl+W.
 
+Ctrl+[ and Ctrl+] match nested curly braces when the caret is on or immediately
+after one. Otherwise they snap to the nearest brace on the current wrapped
+visual line, preferring a preceding brace; Shift extends the current selection.
+
 Double-click and Ctrl+left-click use the same source word boundaries.
 Shift+left-click opens Character Information for the exact character, while
 Alt+left-click opens the native editor popup. Holding an unmodified left click

@@ -4401,6 +4401,74 @@ void MainWindow::select_document_word_or_line(bool line) {
   guarded_editor->ensureCursorVisible();
 }
 
+void MainWindow::navigate_document_brace(bool extend_selection) {
+  QPointer<MainWindow> self(this);
+  QPointer<JwpEditor> editor(document_->editor_);
+  if (!finish_document_input() || !self || !editor ||
+      document_->editor_ != editor) {
+    return;
+  }
+
+  QTextCursor cursor = editor->textCursor();
+  const QString text = document_plain_text(*editor->document());
+  const int caret = cursor.position();
+  const auto is_brace = [&text](int position) {
+    return position >= 0 && position < text.size() &&
+           (text.at(position) == QLatin1Char('{') ||
+            text.at(position) == QLatin1Char('}'));
+  };
+
+  int start = -1;
+  if (is_brace(caret)) start = caret;
+  else if (is_brace(caret - 1)) start = caret - 1;
+
+  int target = -1;
+  if (start >= 0) {
+    const bool forward = text.at(start) == QLatin1Char('{');
+    int depth = 1;
+    for (int position = start + (forward ? 1 : -1);
+         position >= 0 && position < text.size();
+         position += forward ? 1 : -1) {
+      if (text.at(position) == QLatin1Char('{')) depth += forward ? 1 : -1;
+      else if (text.at(position) == QLatin1Char('}')) depth += forward ? -1 : 1;
+      if (depth == 0) {
+        target = position;
+        break;
+      }
+    }
+  } else {
+    QTextCursor line(cursor);
+    line.clearSelection();
+    line.movePosition(QTextCursor::StartOfLine);
+    const int line_begin = line.position();
+    line.setPosition(caret);
+    line.movePosition(QTextCursor::EndOfLine);
+    const int line_end = line.position();
+    for (int position = std::min(caret, line_end - 1);
+         position >= line_begin; --position) {
+      if (is_brace(position)) {
+        target = position;
+        break;
+      }
+    }
+    if (target < 0) {
+      for (int position = std::max(caret, line_begin); position < line_end;
+           ++position) {
+        if (is_brace(position)) {
+          target = position;
+          break;
+        }
+      }
+    }
+  }
+  if (target < 0) return;
+
+  cursor.setPosition(target, extend_selection ? QTextCursor::KeepAnchor
+                                               : QTextCursor::MoveAnchor);
+  editor->setTextCursor(cursor);
+  if (self && editor && document_->editor_ == editor) editor->ensureCursorVisible();
+}
+
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
   if (watched == main_toolbar_ && event->type() == QEvent::Move && !updating_toolbar_) {
     QTimer::singleShot(0, this, [this] { sync_toolbar_position(); });
@@ -4532,6 +4600,16 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
        event->type() == QEvent::KeyPress)) {
     const auto* key = static_cast<QKeyEvent*>(event);
     const Qt::KeyboardModifiers modifiers = key->modifiers();
+    const bool brace = (key->key() == Qt::Key_BracketLeft ||
+                        key->key() == Qt::Key_BracketRight) &&
+                       modifiers.testFlag(Qt::ControlModifier) &&
+                       !(modifiers & (Qt::AltModifier | Qt::MetaModifier));
+    if (brace) {
+      event->accept();
+      if (event->type() == QEvent::ShortcutOverride) return true;
+      navigate_document_brace(modifiers.testFlag(Qt::ShiftModifier));
+      return true;
+    }
     const bool word = key->key() == Qt::Key_W &&
                       modifiers == Qt::ControlModifier;
     const bool line = key->key() == Qt::Key_W &&

@@ -3185,6 +3185,125 @@ void test_word_and_line_selection(const QString& directory) {
           "F2 did not invoke selected-romaji conversion");
 }
 
+void test_brace_navigation(const QString& directory) {
+  using namespace jwpqt::core;
+  using namespace jwpqt::qt;
+  const auto set_cursor = [](JwpEditor* editor, int position) {
+    QTextCursor cursor = editor->textCursor();
+    cursor.setPosition(position);
+    editor->setTextCursor(cursor);
+  };
+  const auto navigate = [](JwpEditor* editor, Qt::Key key,
+                           Qt::KeyboardModifiers modifiers) {
+    QKeyEvent override(QEvent::ShortcutOverride, key, modifiers);
+    QApplication::sendEvent(editor, &override);
+    require(override.isAccepted(), "Brace shortcut override was not accepted");
+    QKeyEvent press(QEvent::KeyPress, key, modifiers);
+    QApplication::sendEvent(editor, &press);
+    QKeyEvent release(QEvent::KeyRelease, key, Qt::NoModifier);
+    QApplication::sendEvent(editor, &release);
+    QKeyEvent reset(QEvent::KeyPress, Qt::Key_unknown, Qt::NoModifier);
+    QApplication::sendEvent(editor, &reset);
+  };
+
+  JwpDocument source;
+  JwpParagraph first;
+  first.text = {'p', ' ', '{', 'a', ' ', '{', 'b', '}', ' ', 'c', '}', ' ', 'q'};
+  JwpParagraph second;
+  second.text = {'u', ' ', '{', 'v'};
+  source.paragraphs = {first, second};
+  const QString path = directory + QStringLiteral("/brace-navigation.jwp");
+  write_jwp_file(path, source);
+
+  MainWindow window;
+  require(window.open_jwp_path(path), "Could not open brace-navigation fixture");
+  JwpEditor* editor = window.active_editor();
+  const int revision = editor->document()->revision();
+  set_cursor(editor, 3);
+  navigate(editor, Qt::Key_BracketRight, Qt::ControlModifier);
+  require(editor->textCursor().position() == 10,
+          "Ctrl+] did not match a nested opening brace");
+  set_cursor(editor, 7);
+  navigate(editor, Qt::Key_BracketLeft, Qt::ControlModifier);
+  require(editor->textCursor().position() == 5,
+          "Ctrl+[ did not match a nested closing brace");
+  set_cursor(editor, 9);
+  navigate(editor, Qt::Key_BracketRight, Qt::ControlModifier);
+  require(editor->textCursor().position() == 7,
+          "Brace navigation did not prefer the preceding line brace");
+  set_cursor(editor, 1);
+  navigate(editor, Qt::Key_BracketLeft, Qt::ControlModifier);
+  require(editor->textCursor().position() == 2,
+          "Brace navigation did not fall forward on the current line");
+  set_cursor(editor, 3);
+  navigate(editor, Qt::Key_BracketRight,
+           Qt::ControlModifier | Qt::ShiftModifier);
+  require(editor->textCursor().anchor() == 3 &&
+              editor->textCursor().position() == 10,
+          "Ctrl+Shift+] did not extend the selection to the matching brace");
+  set_cursor(editor, 17);
+  navigate(editor, Qt::Key_BracketRight, Qt::ControlModifier);
+  require(editor->textCursor().position() == 17,
+          "Unmatched opening brace moved the cursor");
+  require(*window.current_jwp_document() == source &&
+              !window.document_modified() &&
+              editor->document()->revision() == revision,
+          "Brace navigation changed native content or history");
+
+  require(window.new_document_tab(false) == 1,
+          "Could not create Unicode brace-navigation fixture");
+  editor = window.active_editor();
+  editor->setPlainText(QStringLiteral("{}abcdefgh"));
+  editor->setLineWrapMode(QTextEdit::FixedColumnWidth);
+  editor->setLineWrapColumnOrWidth(4);
+  window.resize(260, 300);
+  window.show();
+  QApplication::processEvents();
+  set_cursor(editor, 8);
+  navigate(editor, Qt::Key_BracketLeft, Qt::ControlModifier);
+  require(editor->textCursor().position() == 8,
+          "Brace fallback crossed a wrapped visual-line boundary");
+  editor->setPlainText(QStringLiteral("\U0001f600 {x}"));
+  editor->document()->setModified(false);
+  set_cursor(editor, 4);
+  navigate(editor, Qt::Key_BracketRight, Qt::ControlModifier);
+  require(editor->textCursor().position() == 5 &&
+              !editor->document()->isModified(),
+          "Supplementary Unicode skewed brace cursor positions");
+
+  MainWindow pending;
+  JwpDocument pending_source;
+  JwpParagraph pending_paragraph;
+  pending_paragraph.text = {'{', 'x', '}'};
+  pending_source.paragraphs = {pending_paragraph};
+  const QString pending_path = directory + QStringLiteral("/brace-pending.jwp");
+  write_jwp_file(pending_path, pending_source);
+  require(pending.open_jwp_path(pending_path),
+          "Could not open pending brace-navigation fixture");
+  JwpEditor* pending_editor = pending.active_editor();
+  pending.show();
+  pending_editor->setFocus();
+  set_cursor(pending_editor, 3);
+  send_text_key(pending_editor, Qt::Key_N, QStringLiteral("n"));
+  navigate(pending_editor, Qt::Key_BracketLeft, Qt::ControlModifier);
+  require(document_plain_text(*pending_editor->document()) ==
+              QStringLiteral("{x}\u3093") &&
+              pending_editor->textCursor().position() == 2,
+          "Brace navigation did not finish pending kana before moving");
+
+  require(pending.new_document_tab(false) == 1 &&
+              pending.activate_document(0),
+          "Could not prepare reentrant brace-navigation fixture");
+  pending_editor = pending.active_editor();
+  set_cursor(pending_editor, 1);
+  QObject::connect(pending_editor, &QTextEdit::cursorPositionChanged, &pending,
+                   [&pending] { pending.activate_document(1); });
+  navigate(pending_editor, Qt::Key_BracketRight, Qt::ControlModifier);
+  require(pending.current_document_index() == 1 &&
+              pending.active_editor()->toPlainText().isEmpty(),
+          "Brace navigation published state after a reentrant tab switch");
+}
+
 void test_application_settings_workflow(const QString& directory) {
   using namespace jwpqt::qt;
   MainWindow window;
@@ -7805,6 +7924,7 @@ int main(int argc, char* argv[]) {
     test_empty_selection_line_clipboard(directory.path());
     test_shift_line_deletion(directory.path());
     test_word_and_line_selection(directory.path());
+    test_brace_navigation(directory.path());
     test_application_settings_workflow(directory.path());
     test_application_settings_preview(directory.path());
     test_application_settings_exit(directory.path());

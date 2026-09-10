@@ -37,6 +37,12 @@ and repetition-mark rules are retained. Ctrl+Shift+W selects the current
 wrapped visual line. Both commands finish pending Japanese input first and do
 not edit the document. Convert Selection uses F2 or Ctrl+>.
 
+Ctrl+[ and Ctrl+] move between matching nested curly braces when the caret is
+on or immediately after a brace. With no starting brace, the command moves to
+the nearest brace on the current wrapped visual line, preferring one before the
+caret. Add Shift to extend the current selection. An unmatched brace leaves the
+cursor unchanged.
+
 The mouse follows the same boundaries: double-click or Ctrl+left-click selects
 a source-style word. Shift+left-click opens Character Information for the
 exact character under the pointer; Alt+left-click opens the editor popup.

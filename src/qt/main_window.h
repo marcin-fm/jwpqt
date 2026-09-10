@@ -368,6 +368,7 @@ class MainWindow : public QMainWindow {
   void refresh_document_view();
   bool finish_document_input();
   void select_document_word_or_line(bool line);
+  void navigate_document_brace(bool extend_selection);
   enum class DuplicateOpenResolution { kOpenAnother, kHandled, kCancelled };
   DuplicateOpenResolution resolve_duplicate_open(const QString& path, int existing,
                                                   OpenMode mode);
