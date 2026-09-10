@@ -341,7 +341,10 @@ legacy file structures.
 75. The modeless native `user.dct` dialog owns a working copy for Add, Edit,
     Delete, Move, Sort, and Import. Save and Insert cross explicit callback
     boundaries; failures, including non-standard exceptions, remain contained
-    without publishing the working copy or closing the dialog.
+    without publishing the working copy or closing the dialog. Interactive Add
+    and Edit retain invalid fields in place and ask before accepting a non-kana
+    reading, with No as the safe default; imported compatible entries remain
+    governed by the broader portable format boundary.
 76. MainWindow locates the configured user dictionary or synthesizes the
     recovered mixed, unindexed `user.dct` defaults. Configuration and updates
     are candidate-first; canonical bytes are atomically persisted before only

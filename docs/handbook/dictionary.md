@@ -58,7 +58,10 @@ History recalls without searching. User Dictionary opens the shared editable
 working copy, which stays available after lookup closes. Add and Edit fields
 have their own K/A/J mode buttons and use the document window's current
 Insert/Overwrite mode. Pending romaji is completed before the entry is
-validated; the dictionary's existing character-set restrictions still apply.
+validated. A reading must be nonempty and contain no spaces. Non-kana readings
+remain supported for compatible data, but Add and Edit ask for confirmation and
+use No as the safe default. Declining or correcting an invalid entry keeps all
+fields in the editor.
 
 Tools > User Conversions manages WNN readings and candidate lists in the same
 way. Its Add and Edit fields also provide K/A/J input and shared overwrite

@@ -18,6 +18,7 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QListWidget>
 #include <QMimeData>
 #include <QPushButton>
@@ -290,6 +291,168 @@ void test_japanese_entry_fields() {
           "EDICT entry fields did not preserve Japanese and ASCII input modes");
 }
 
+void test_non_kana_reading_confirmation() {
+  PromptTestDialog dialog(EdictUserDictionary::from_entries({}),
+                          LegacyCodePage::k1252,
+                          [](EdictUserDictionary) { return true; });
+  bool declined = false;
+  bool fields_retained = false;
+  bool warning_verified = false;
+  bool reading_retained = false;
+  bool meaning_retained = false;
+  QTimer::singleShot(0, [&] {
+    QWidget* modal = QApplication::activeModalWidget();
+    auto* reading = modal ? modal->findChild<QLineEdit*>(
+                                QStringLiteral("edictUserReading"))
+                          : nullptr;
+    auto* meaning = modal ? modal->findChild<QLineEdit*>(
+                                QStringLiteral("edictUserMeaning"))
+                          : nullptr;
+    auto* buttons = modal ? modal->findChild<QDialogButtonBox*>() : nullptr;
+    if (!reading || !meaning || !buttons) {
+      if (modal) modal->close();
+      return;
+    }
+    reading->setText(QStringLiteral("日本"));
+    meaning->setText(QStringLiteral("Japan"));
+    QTimer::singleShot(0, [&] {
+      auto* warning = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+      if (!warning ||
+          warning->objectName() != QStringLiteral("edictUserNonKanaWarning")) {
+        if (warning) warning->reject();
+        return;
+      }
+      warning_verified =
+          warning->defaultButton() == warning->button(QMessageBox::No) &&
+          warning->text().contains(QStringLiteral("non-kana"));
+      auto* entry_dialog = qobject_cast<QDialog*>(warning->parentWidget());
+      QObject::connect(warning, &QDialog::finished, entry_dialog, [&, entry_dialog] {
+        auto* retry_reading =
+            entry_dialog->findChild<QLineEdit*>(QStringLiteral("edictUserReading"));
+        auto* retry_meaning =
+            entry_dialog->findChild<QLineEdit*>(QStringLiteral("edictUserMeaning"));
+        auto* retry_buttons =
+            entry_dialog->findChild<QDialogButtonBox*>();
+        if (!retry_reading || !retry_meaning || !retry_buttons) {
+          entry_dialog->close();
+          return;
+        }
+        reading_retained = retry_reading->text() == QStringLiteral("日本");
+        meaning_retained = retry_meaning->text() == QStringLiteral("Japan");
+        fields_retained = reading_retained && meaning_retained;
+        QTimer::singleShot(0, [&] {
+          auto* retry_warning =
+              qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+          if (retry_warning &&
+              retry_warning->objectName() ==
+                  QStringLiteral("edictUserNonKanaWarning")) {
+            retry_warning->button(QMessageBox::Yes)->click();
+          } else if (retry_warning) {
+            retry_warning->reject();
+          }
+        });
+        retry_buttons->button(QDialogButtonBox::Ok)->click();
+      }, Qt::QueuedConnection);
+      warning->button(QMessageBox::No)->click();
+      declined = true;
+    });
+    buttons->button(QDialogButtonBox::Ok)->click();
+  });
+
+  const std::optional<EdictUserEntry> accepted = dialog.prompt(std::nullopt);
+  require(declined && fields_retained && warning_verified &&
+              accepted.has_value() &&
+              accepted->reading ==
+                  jwpqt::core::encode_jwp_text(U"日本") &&
+              accepted->meaning == U"Japan",
+          "Non-kana reading confirmation lost fields or ignored its safe default");
+}
+
+void test_invalid_entry_stays_open() {
+  PromptTestDialog dialog(EdictUserDictionary::from_entries({}),
+                          LegacyCodePage::k1252,
+                          [](EdictUserDictionary) { return true; });
+  bool error_verified = false;
+  bool meaning_error_verified = false;
+  bool fields_retained = false;
+  QTimer::singleShot(0, [&] {
+    QWidget* modal = QApplication::activeModalWidget();
+    auto* reading = modal ? modal->findChild<QLineEdit*>(
+                                QStringLiteral("edictUserReading"))
+                          : nullptr;
+    auto* meaning = modal ? modal->findChild<QLineEdit*>(
+                                QStringLiteral("edictUserMeaning"))
+                          : nullptr;
+    auto* buttons = modal ? modal->findChild<QDialogButtonBox*>() : nullptr;
+    if (!reading || !meaning || !buttons) {
+      if (modal) modal->close();
+      return;
+    }
+    reading->setText(QStringLiteral("か き"));
+    meaning->setText(QStringLiteral("oyster"));
+    QTimer::singleShot(0, [&] {
+      auto* error = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+      if (!error ||
+          error->objectName() != QStringLiteral("edictUserEntryError")) {
+        if (error) error->reject();
+        return;
+      }
+      error_verified = error->text().contains(QStringLiteral("space"));
+      auto* entry_dialog = qobject_cast<QDialog*>(error->parentWidget());
+      QObject::connect(error, &QDialog::finished, entry_dialog, [&, entry_dialog] {
+        auto* retry_reading =
+            entry_dialog->findChild<QLineEdit*>(QStringLiteral("edictUserReading"));
+        auto* retry_meaning =
+            entry_dialog->findChild<QLineEdit*>(QStringLiteral("edictUserMeaning"));
+        auto* retry_buttons =
+            entry_dialog->findChild<QDialogButtonBox*>();
+        fields_retained = retry_reading && retry_meaning && retry_buttons &&
+                          retry_reading->text() == QStringLiteral("か き") &&
+                          retry_meaning->text() == QStringLiteral("oyster");
+        if (!fields_retained) {
+          if (auto* dialog = qobject_cast<QDialog*>(entry_dialog)) {
+            dialog->reject();
+          }
+          return;
+        }
+        retry_reading->setText(QStringLiteral("かき"));
+        retry_meaning->clear();
+        QTimer::singleShot(0, [&] {
+          auto* meaning_error =
+              qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+          if (!meaning_error ||
+              meaning_error->objectName() !=
+                  QStringLiteral("edictUserEntryError")) {
+            if (meaning_error) meaning_error->reject();
+            return;
+          }
+          meaning_error_verified =
+              meaning_error->text().contains(QStringLiteral("Meaning"));
+          auto* retained_dialog =
+              qobject_cast<QDialog*>(meaning_error->parentWidget());
+          QObject::connect(meaning_error, &QDialog::finished, retained_dialog,
+                           [&, retained_dialog] {
+            auto* retained_meaning =
+                retained_dialog->findChild<QLineEdit*>(
+                    QStringLiteral("edictUserMeaning"));
+            meaning_error_verified =
+                meaning_error_verified && retained_meaning &&
+                retained_meaning->text().isEmpty();
+            retained_dialog->reject();
+          }, Qt::QueuedConnection);
+          meaning_error->button(QMessageBox::Ok)->click();
+        });
+        retry_buttons->button(QDialogButtonBox::Ok)->click();
+      }, Qt::QueuedConnection);
+      error->button(QMessageBox::Ok)->click();
+    });
+    buttons->button(QDialogButtonBox::Ok)->click();
+  });
+  require(!dialog.prompt(std::nullopt).has_value() && error_verified &&
+              meaning_error_verified && fields_retained,
+          "Invalid user entry closed its editor or lost typed fields");
+}
+
 void test_callback_exceptions_are_contained() {
   const EdictUserEntry first = entry({0x2422}, U"first");
   EdictUserDictionaryDialog dialog(
@@ -320,6 +483,8 @@ int main(int argc, char** argv) {
     test_invalid_edit_is_atomic();
     test_imported_empty_meaning_round_trip();
     test_japanese_entry_fields();
+    test_non_kana_reading_confirmation();
+    test_invalid_entry_stays_open();
     test_callback_exceptions_are_contained();
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {

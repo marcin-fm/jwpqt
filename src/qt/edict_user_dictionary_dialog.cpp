@@ -21,8 +21,10 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QMimeData>
 #include <QPushButton>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include "file_io.h"
@@ -46,6 +48,14 @@ void validate_entry_encoding(const core::EdictUserEntry& entry,
   const core::EdictUserDictionary dictionary =
       core::EdictUserDictionary::from_entries({entry});
   (void)dictionary.serialize(code_page);
+}
+
+bool reading_contains_non_kana(const core::JwpText& reading) noexcept {
+  return std::any_of(reading.begin(), reading.end(), [](core::JisCode code) {
+    const std::uint16_t row = code & 0x7f00U;
+    return row != 0x2400U && row != 0x2500U && code != 0x213cU &&
+           code != 0x2141U;
+  });
 }
 
 }  // namespace
@@ -365,26 +375,82 @@ EdictUserDictionaryDialog::prompt_for_entry(
   layout->addLayout(form);
   auto* buttons = new QDialogButtonBox(
       QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-  connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
   connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
   layout->addWidget(buttons);
-  if (dialog.exec() != QDialog::Accepted) {
-    return std::nullopt;
-  }
-  headword->finish_input();
-  reading->finish_input();
-  meaning->finish_input();
+  std::optional<core::EdictUserEntry> accepted_entry;
+  connect(buttons, &QDialogButtonBox::accepted, &dialog, [&] {
+    headword->finish_input();
+    reading->finish_input();
+    meaning->finish_input();
 
-  core::EdictUserEntry entry{
-      core::encode_jwp_text(from_qstring(headword->edit()->text()), code_page_),
-      core::encode_jwp_text(from_qstring(reading->edit()->text()), code_page_),
-      from_qstring(meaning->edit()->text())};
-  if (initial.has_value() && entry == *initial) {
-    return initial;
-  }
-  return core::make_edict_user_entry(std::move(entry.reading),
-                                     std::move(entry.headword),
-                                     std::move(entry.meaning));
+    core::EdictUserEntry entry;
+    try {
+      entry = {
+          core::encode_jwp_text(from_qstring(headword->edit()->text()),
+                                code_page_),
+          core::encode_jwp_text(from_qstring(reading->edit()->text()),
+                                code_page_),
+          from_qstring(meaning->edit()->text())};
+      if (initial.has_value() && entry == *initial && entry.meaning.empty()) {
+        accepted_entry = initial;
+        dialog.accept();
+        return;
+      }
+      if (entry.reading.empty()) {
+        throw core::EdictUserDictionaryError("reading is empty");
+      }
+      if (std::find(entry.reading.begin(), entry.reading.end(), ' ') !=
+          entry.reading.end()) {
+        throw core::EdictUserDictionaryError("reading contains a space");
+      }
+      if (entry.meaning.empty()) {
+        QMessageBox message(QMessageBox::Warning, tr("Invalid Entry"),
+                            tr("Meaning is empty"), QMessageBox::Ok, &dialog);
+        message.setObjectName(QStringLiteral("edictUserEntryError"));
+        message.exec();
+        meaning->edit()->setFocus();
+        QTimer::singleShot(10, meaning->edit(),
+                           [edit = meaning->edit()] { edit->setFocus(); });
+        return;
+      }
+      entry = core::make_edict_user_entry(
+          std::move(entry.reading), std::move(entry.headword),
+          std::move(entry.meaning));
+      validate_entry_encoding(entry, code_page_);
+    } catch (const std::exception& error) {
+      QMessageBox message(QMessageBox::Warning, tr("Invalid Entry"),
+                          QString::fromUtf8(error.what()), QMessageBox::Ok,
+                          &dialog);
+      message.setObjectName(QStringLiteral("edictUserEntryError"));
+      message.exec();
+      reading->edit()->setFocus();
+      QTimer::singleShot(10, reading->edit(),
+                         [edit = reading->edit()] { edit->setFocus(); });
+      return;
+    }
+
+    if (reading_contains_non_kana(entry.reading)) {
+      QMessageBox message(
+          QMessageBox::Warning, tr("Non-kana Reading"),
+          tr("The reading contains non-kana characters. Keep this entry?"),
+          QMessageBox::Yes | QMessageBox::No, &dialog);
+      message.setObjectName(QStringLiteral("edictUserNonKanaWarning"));
+      message.setDefaultButton(QMessageBox::No);
+      if (message.exec() != QMessageBox::Yes) {
+        reading->edit()->setFocus();
+        QTimer::singleShot(10, reading->edit(),
+                           [edit = reading->edit()] { edit->setFocus(); });
+        return;
+      }
+    }
+
+    accepted_entry = initial.has_value() && entry == *initial
+                         ? initial
+                         : std::optional<core::EdictUserEntry>{std::move(entry)};
+    dialog.accept();
+  });
+  return dialog.exec() == QDialog::Accepted ? std::move(accepted_entry)
+                                             : std::nullopt;
 }
 
 std::optional<core::EdictUserDictionary>
