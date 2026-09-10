@@ -52,6 +52,9 @@ class EdictLookupDialog : public QDialog {
   std::u32string query() const;
   void set_overwrite_action(QAction* action);
   void set_management_actions(QAction* options, QAction* user_dictionary, QAction* registry = nullptr);
+  void set_radical_handler(InfoHandler handler) {
+    radical_handler_ = std::move(handler);
+  }
   void set_options(const EdictLookupOptions& options);
   void reset_history_navigation() noexcept {
     history_index_ = -1;
@@ -85,6 +88,9 @@ class EdictLookupDialog : public QDialog {
   void move_result_row_selection(std::size_t row, bool extend, bool preserve);
   void navigate_result_rows(int key, Qt::KeyboardModifiers modifiers);
   void copy_current_result_field(bool reading);
+  std::optional<char32_t> current_result_character() const;
+  void show_current_information();
+  void show_current_radical_lookup();
   void select_current_result(bool whole_row);
   void history_command(HistoryCommand command);
   bool recall_history(std::u32string_view text, int index, bool changed);
@@ -101,6 +107,7 @@ class EdictLookupDialog : public QDialog {
   SearchHandler search_handler_;
   InsertHandler insert_handler_;
   InfoHandler info_handler_;
+  InfoHandler radical_handler_;
   OptionsHandler options_changed_handler_;
   std::shared_ptr<EdictLookupOptions> options_;
   std::shared_ptr<core::QueryHistory> history_;

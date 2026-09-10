@@ -1156,6 +1156,44 @@ void EdictLookupDialog::copy_current_result_field(bool reading) {
   set_internal_clipboard_text(to_qstring(field));
 }
 
+std::optional<char32_t> EdictLookupDialog::current_result_character() const {
+  const auto row = current_result_row();
+  if (!row || *row >= report_.results.size()) return {};
+  const auto& record = report_.results[*row].result.record;
+  if (!record.headword.empty()) return record.headword.front();
+  if (!record.readings.empty() && !record.readings.front().empty())
+    return record.readings.front().front();
+  return {};
+}
+
+void EdictLookupDialog::show_current_information() {
+  const auto character = current_result_character();
+  const auto handler = info_handler_;
+  if (!character || !handler) return;
+  const QPointer<EdictLookupDialog> self(this);
+  try {
+    handler(*character);
+  } catch (const std::exception& error) {
+    if (self) status_->setText(QString::fromLocal8Bit(error.what()));
+  } catch (...) {
+    if (self) status_->setText(tr("Could not show kanji information"));
+  }
+}
+
+void EdictLookupDialog::show_current_radical_lookup() {
+  const auto character = current_result_character();
+  const auto handler = radical_handler_;
+  if (!character || !handler) return;
+  const QPointer<EdictLookupDialog> self(this);
+  try {
+    handler(*character);
+  } catch (const std::exception& error) {
+    if (self) status_->setText(QString::fromLocal8Bit(error.what()));
+  } catch (...) {
+    if (self) status_->setText(tr("Could not open Radical Lookup"));
+  }
+}
+
 void EdictLookupDialog::select_current_result(bool whole_row) {
   const auto row = current_result_row();
   if (!row) return;
@@ -1280,6 +1318,13 @@ bool EdictLookupDialog::eventFilter(QObject* watched, QEvent* event) {
       const bool input_mode = modifiers == Qt::ControlModifier &&
           (key->key() == Qt::Key_J || key->key() == Qt::Key_K ||
             key->key() == Qt::Key_6);
+      const bool toggle_input_mode = key->key() == Qt::Key_F4 &&
+                                     modifiers == Qt::NoModifier;
+      const bool information = key->key() == Qt::Key_I &&
+                               modifiers == Qt::ControlModifier;
+      const bool radical_lookup =
+          (key->key() == Qt::Key_F5 && modifiers == Qt::NoModifier) ||
+          (key->key() == Qt::Key_L && modifiers == Qt::ControlModifier);
       const bool navigate_rows =
           (key->key() == Qt::Key_Up || key->key() == Qt::Key_Down ||
            key->key() == Qt::Key_Home || key->key() == Qt::Key_End ||
@@ -1292,6 +1337,7 @@ bool EdictLookupDialog::eventFilter(QObject* watched, QEvent* event) {
           (key->key() == Qt::Key_F6 && modifiers == Qt::NoModifier) ||
           (key->key() == Qt::Key_D && modifiers == Qt::ControlModifier);
       if (copy_field || copy_rows || select_field || select_row || select_all || input_mode ||
+          toggle_input_mode || information || radical_lookup ||
           navigate_rows || handoff_query || focus_query) {
         event->accept();
         if (event->type() == QEvent::KeyPress && !query_busy_) {
@@ -1323,6 +1369,14 @@ bool EdictLookupDialog::eventFilter(QObject* watched, QEvent* event) {
             copy_current_result_field(key->key() == Qt::Key_R);
           } else if (copy_rows) {
             copy_selected();
+          } else if (toggle_input_mode) {
+            query_field_->set_input_mode(
+                query_field_->input_mode() == InputMode::kKanji
+                    ? InputMode::kAscii : InputMode::kKanji);
+          } else if (information) {
+            show_current_information();
+          } else if (radical_lookup) {
+            show_current_radical_lookup();
           } else if (input_mode) {
             if (key->key() == Qt::Key_J) {
               query_field_->set_input_mode(InputMode::kJascii);

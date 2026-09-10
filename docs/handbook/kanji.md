@@ -82,7 +82,11 @@ preserves existing selections. Plain Space adds the current row. Copy and Insert
 use selected rows in visible order, excluding section labels; Ctrl+A selects all
 result rows. With no selection, Ctrl+C and Ctrl+Insert copy the current canonical
 entry without changing the selection. Ctrl+K, Ctrl+J and Ctrl+6 control the
-query's local input mode; Ctrl+A selects ASCII mode when the result list is empty.
+query's local input mode, and F4 toggles Kanji/ASCII while results retain focus.
+Ctrl+I opens independent Character Information for the current entry's first
+headword character, or its first reading character when no headword is present.
+Ctrl+L or F5 sends the same character to Radical Lookup when it has a JIS X 0208
+mapping. Ctrl+A selects ASCII mode when the result list is empty.
 An ordinary within-result text selection, a new search or Sort clears the row set.
 Left and Right hand focus and the original modifiers to the dictionary query.
 Ctrl+D or F6 only focuses that field. Ctrl+F, Ctrl+S or F8 opens result-list

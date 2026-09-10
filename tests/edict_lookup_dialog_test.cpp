@@ -211,6 +211,8 @@ void test_result_keyboard_commands() {
   int searches = 0, inserts = 0;
   bool reject_insert = false;
   std::u32string inserted;
+  std::vector<char32_t> information;
+  std::vector<char32_t> radicals;
   qt::EdictLookupDialog dialog([&](const auto&, const auto&, bool) {
     ++searches;
     qt::EdictResourceSearchReport report;
@@ -221,7 +223,9 @@ void test_result_keyboard_commands() {
     return report;
   }, [&](const std::u32string& text) {
     ++inserts; inserted = text; return !reject_insert;
-  });
+  }, nullptr, [&](char32_t character) { information.push_back(character); });
+  dialog.set_radical_handler(
+      [&](char32_t character) { radicals.push_back(character); });
   dialog.set_query(U"cat");
   dialog.show();
   require(dialog.search(), "Could not prepare result keyboard commands");
@@ -284,6 +288,12 @@ void test_result_keyboard_commands() {
   QTextCursor dog(results->document());
   dog.setPosition(results->toPlainText().indexOf(QStringLiteral("\u72ac")));
   results->setTextCursor(dog);
+  key(Qt::Key_I, Qt::ControlModifier);
+  key(Qt::Key_L, Qt::ControlModifier);
+  key(Qt::Key_F5, Qt::NoModifier);
+  require(information == std::vector<char32_t>{U'\u72ac'} &&
+              radicals == std::vector<char32_t>({U'\u72ac', U'\u72ac'}),
+          "Result lookup commands did not use the current canonical headword");
   key(Qt::Key_C, Qt::ControlModifier);
   require(QApplication::clipboard()->text() == QStringLiteral("\u72ac [\u3044\u306c] /dog/") &&
               !results->textCursor().hasSelection() &&
@@ -301,7 +311,13 @@ void test_result_keyboard_commands() {
           "Ctrl+K did not select local Kanji input mode");
   key(Qt::Key_6, Qt::ControlModifier);
   require(field->input_mode() == qt::InputMode::kAscii,
-          "Ctrl+6 did not toggle local Kanji/ASCII input mode");
+           "Ctrl+6 did not toggle local Kanji/ASCII input mode");
+  key(Qt::Key_F4, Qt::NoModifier);
+  require(field->input_mode() == qt::InputMode::kKanji,
+          "Result F4 did not toggle the local query input mode");
+  key(Qt::Key_F4, Qt::NoModifier);
+  require(field->input_mode() == qt::InputMode::kAscii,
+          "Repeated result F4 did not return to ASCII input mode");
   key(Qt::Key_K, Qt::ControlModifier);
   key(Qt::Key_A, Qt::ControlModifier);
   dialog.copy_selected();
@@ -417,6 +433,51 @@ void test_result_keyboard_commands() {
   QKeyEvent enter(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
   QApplication::sendEvent(disposable->findChild<QTextEdit*>("edictResults"), &enter);
   require(!disposable, "Result insertion callback did not safely delete its owner");
+
+  std::vector<char32_t> fallback_information;
+  qt::EdictLookupDialog fallback([&](const auto&, const auto&, bool) {
+    qt::EdictResourceSearchReport report;
+    report.results = {result(0, {}, {}, {U"cat"}, {U"feline"})};
+    return report;
+  }, {}, {}, [&](char32_t character) { fallback_information.push_back(character); });
+  fallback.set_query(U"cat");
+  require(fallback.search(), "Could not prepare reading-only lookup result");
+  QKeyEvent fallback_key(QEvent::KeyPress, Qt::Key_I, Qt::ControlModifier);
+  QApplication::sendEvent(fallback.findChild<QTextEdit*>("edictResults"), &fallback_key);
+  require(fallback_information == std::vector<char32_t>{U'c'},
+          "Result information did not fall back to the first reading");
+
+  qt::EdictLookupDialog throwing([](const auto&, const auto&, bool) {
+    qt::EdictResourceSearchReport report;
+    report.results = {result(0, {}, U"cat", {}, {U"feline"})};
+    return report;
+  }, {}, {}, [](char32_t) { throw std::runtime_error("information failure"); });
+  throwing.set_radical_handler([](char32_t) { throw 7; });
+  throwing.set_query(U"cat");
+  require(throwing.search(), "Could not prepare throwing lookup callbacks");
+  auto* throwing_results = throwing.findChild<QTextEdit*>("edictResults");
+  auto* throwing_status = throwing.findChild<QLabel*>("edictStatus");
+  require(throwing_results && throwing_status, "Throwing lookup fixture is incomplete");
+  QKeyEvent information_key(QEvent::KeyPress, Qt::Key_I, Qt::ControlModifier);
+  QApplication::sendEvent(throwing_results, &information_key);
+  require(throwing_status->text() == QStringLiteral("information failure"),
+          "Result information exception was not contained");
+  QKeyEvent radical_key(QEvent::KeyPress, Qt::Key_F5, Qt::NoModifier);
+  QApplication::sendEvent(throwing_results, &radical_key);
+  require(throwing_status->text() == QStringLiteral("Could not open Radical Lookup"),
+          "Result radical exception was not contained");
+
+  QPointer<qt::EdictLookupDialog> lookup_disposable;
+  lookup_disposable = new qt::EdictLookupDialog([](const auto&, const auto&, bool) {
+    qt::EdictResourceSearchReport report;
+    report.results = {result(0, {}, U"cat", {}, {U"feline"})};
+    return report;
+  }, {}, {}, [&](char32_t) { delete lookup_disposable.data(); });
+  lookup_disposable->set_query(U"cat");
+  require(lookup_disposable->search(), "Could not prepare deleting lookup callback");
+  QApplication::sendEvent(lookup_disposable->findChild<QTextEdit*>("edictResults"),
+                          &information_key);
+  require(!lookup_disposable, "Result lookup callback did not safely delete its owner");
 
   qt::EdictLookupDialog empty_dialog([](const auto&, const auto&, bool) {
     return qt::EdictResourceSearchReport{};

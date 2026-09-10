@@ -6194,6 +6194,17 @@ void test_edict_lookup_integration(const QString& directory) {
       dialog->findChild<QTextEdit*>(QStringLiteral("edictResults"));
   require(results != nullptr && results->toPlainText() == QStringLiteral("cat\nfeline"),
           "Native EDICT lookup did not expose the configured result");
+  QTextCursor result_cursor(results->document());
+  result_cursor.setPosition(0);
+  results->setTextCursor(result_cursor);
+  QKeyEvent result_information(QEvent::KeyPress, Qt::Key_I, Qt::ControlModifier);
+  QApplication::sendEvent(results, &result_information);
+  QKeyEvent result_radical(QEvent::KeyPress, Qt::Key_F5, Qt::NoModifier);
+  QApplication::sendEvent(results, &result_radical);
+  require(window.findChildren<QDialog*>(QStringLiteral("kanjiInfoDialog")).size() == 1 &&
+              window.statusBar()->currentMessage() ==
+                  QStringLiteral("Radical lookup is not available for this character"),
+          "Dictionary keyboard lookup commands did not use the current result character");
   auto* accumulated =
       dynamic_cast<jwpqt::qt::EdictResultsWindow*>(window.findChild<QWidget*>(
           QStringLiteral("edictResultsWindow")));
@@ -6214,9 +6225,10 @@ void test_edict_lookup_integration(const QString& directory) {
     QApplication::sendEvent(results->viewport(), &context);
   }
   const auto information = window.findChildren<QDialog*>(QStringLiteral("kanjiInfoDialog"));
-  require(information.size() == 2 &&
+  require(information.size() == 3 &&
               dynamic_cast<jwpqt::qt::KanjiInfoDialog*>(information[0])->code() == 'c' &&
-              dynamic_cast<jwpqt::qt::KanjiInfoDialog*>(information[1])->code() == 'f' &&
+              dynamic_cast<jwpqt::qt::KanjiInfoDialog*>(information[1])->code() == 'c' &&
+              dynamic_cast<jwpqt::qt::KanjiInfoDialog*>(information[2])->code() == 'f' &&
               *window.current_jwp_document() == source &&
               editor->textCursor().position() == saved_selection.position() &&
               editor->textCursor().anchor() == saved_selection.anchor(),

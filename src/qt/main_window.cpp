@@ -5957,6 +5957,15 @@ void MainWindow::show_edict_lookup_dialog() {
       this, [this](char32_t character) {
         show_kanji_info_dialog(CharacterTarget{character, -1});
       }, edict_lookup_options_, edict_query_history_);
+  dialog->set_radical_handler([this](char32_t character) {
+    const auto code = core::unicode_to_jis_x0208(character);
+    if (!code) {
+      statusBar()->showMessage(
+          tr("Radical lookup is not available for this character"), 3000);
+      return;
+    }
+    show_kanji_lookup_dialog(*code);
+  });
   dialog->set_options_changed_handler([this](const EdictLookupOptions& options) {
     application_settings_.dictionary = options;
   });

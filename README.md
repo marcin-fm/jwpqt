@@ -483,8 +483,12 @@ and `Ctrl+A` selects every result. Copy and Insert process selected entries in
 visible order and never include presentation labels. With no selection, `Ctrl+C`
 or `Ctrl+Insert` copies the current canonical entry without changing the visible
 selection. `Ctrl+K`, `Ctrl+J`, and Ctrl+6 select or toggle the lookup's local
-input mode. A new search, Sort, or ordinary within-result text selection clears
-the row set. On an empty result list, `Ctrl+A` selects ASCII mode.
+input mode, and F4 toggles Kanji/ASCII while results retain focus. `Ctrl+I`
+opens independent Character Information for the current entry's first headword
+character, falling back to its reading; `Ctrl+L` or F5 sends that character to
+Radical Lookup when it has a JIS X 0208 mapping. A new search, Sort, or ordinary
+within-result text selection clears the row set. On an empty result list,
+`Ctrl+A` selects ASCII mode.
 Left and Right transfer focus to the dictionary query and perform the same
 navigation there, including Ctrl and Shift modifiers. `Ctrl+D` or `F6` focuses
 the query without moving it. Result-list Find retains the recovered aliases:
