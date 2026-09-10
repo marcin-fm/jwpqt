@@ -139,6 +139,66 @@ bool same_jwp_word_class(JisCode first, JisCode second) noexcept {
   return false;
 }
 
+std::size_t previous_jwp_word_position(const JwpText& text,
+                                       std::size_t cursor,
+                                       std::size_t visual_line_begin) {
+  if (cursor > text.size() || visual_line_begin > cursor) {
+    throw std::out_of_range("JWP word-navigation position is out of range");
+  }
+
+  const bool began_at_line_start = cursor == visual_line_begin;
+  std::size_t position = cursor;
+  while (position != 0) {
+    --position;
+    if ((!began_at_line_start && position == visual_line_begin) ||
+        !same_jwp_word_class(text[position], static_cast<JisCode>(' '))) {
+      break;
+    }
+  }
+  if ((!began_at_line_start && position == visual_line_begin) || position == 0) {
+    return position;
+  }
+
+  JisCode previous = text[position];
+  JisCode reference = previous;
+  JisCode current = previous;
+  while (position != 0) {
+    --position;
+    current = text[position];
+    if (reference == kLongVowel) reference = current;
+    if (!same_jwp_word_class(previous, current) ||
+        !same_jwp_word_class(reference, current)) {
+      return position + 1;
+    }
+    previous = current;
+  }
+  return same_jwp_word_class(current, static_cast<JisCode>(' ')) ? 1U : 0U;
+}
+
+std::size_t next_jwp_word_position(const JwpText& text,
+                                   std::size_t cursor) {
+  if (cursor > text.size()) {
+    throw std::out_of_range("JWP word-navigation position is out of range");
+  }
+  if (cursor == text.size()) return cursor;
+
+  JisCode previous = text[cursor];
+  JisCode reference = previous;
+  std::size_t position = cursor;
+  while (position != text.size()) {
+    ++position;
+    const JisCode current = position == text.size() ? 0 : text[position];
+    if (reference == kLongVowel) reference = current;
+    if ((!same_jwp_word_class(previous, current) ||
+         !same_jwp_word_class(reference, current)) &&
+        !same_jwp_word_class(current, static_cast<JisCode>(' '))) {
+      break;
+    }
+    previous = current;
+  }
+  return position;
+}
+
 JwpWordRange select_jwp_word(const JwpText& text, std::size_t cursor,
                              bool preceding_selection) {
   if (cursor > text.size()) {

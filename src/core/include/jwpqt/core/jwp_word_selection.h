@@ -28,6 +28,13 @@ struct JwpWordRange {
 JwpWordClass jwp_word_class(JisCode code) noexcept;
 bool same_jwp_word_class(JisCode first, JisCode second) noexcept;
 
+std::size_t previous_jwp_word_position(const JwpText& text,
+                                       std::size_t cursor,
+                                       std::size_t visual_line_begin);
+
+std::size_t next_jwp_word_position(const JwpText& text,
+                                   std::size_t cursor);
+
 // Returns the source Ctrl+W range within one paragraph. When an existing
 // selection ends at cursor, selection starts there instead of moving left.
 JwpWordRange select_jwp_word(const JwpText& text, std::size_t cursor,

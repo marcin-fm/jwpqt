@@ -3304,6 +3304,111 @@ void test_brace_navigation(const QString& directory) {
           "Brace navigation published state after a reentrant tab switch");
 }
 
+void test_word_navigation(const QString& directory) {
+  using namespace jwpqt::core;
+  using namespace jwpqt::qt;
+  const auto set_cursor = [](JwpEditor* editor, int position) {
+    QTextCursor cursor = editor->textCursor();
+    cursor.clearSelection();
+    cursor.setPosition(position);
+    editor->setTextCursor(cursor);
+  };
+  const auto navigate = [](JwpEditor* editor, Qt::Key key,
+                           Qt::KeyboardModifiers modifiers) {
+    QKeyEvent override(QEvent::ShortcutOverride, key, modifiers);
+    QApplication::sendEvent(editor, &override);
+    require(override.isAccepted(), "Word-navigation override was not accepted");
+    QKeyEvent press(QEvent::KeyPress, key, modifiers);
+    QApplication::sendEvent(editor, &press);
+    QKeyEvent release(QEvent::KeyRelease, key, Qt::NoModifier);
+    QApplication::sendEvent(editor, &release);
+    QKeyEvent reset(QEvent::KeyPress, Qt::Key_unknown, Qt::NoModifier);
+    QApplication::sendEvent(editor, &reset);
+  };
+
+  JwpDocument source;
+  JwpParagraph first;
+  first.text = {'a', 'b', ' ', ' ', '!', '?', 0x2522, 0x213c, 0x2523};
+  JwpParagraph second;
+  second.text = {0x3021, 0x3022};
+  source.paragraphs = {first, second};
+  const QString path = directory + QStringLiteral("/word-navigation.jwp");
+  write_jwp_file(path, source);
+
+  MainWindow window;
+  require(window.open_jwp_path(path), "Could not open word-navigation fixture");
+  JwpEditor* editor = window.active_editor();
+  const int revision = editor->document()->revision();
+  set_cursor(editor, 0);
+  navigate(editor, Qt::Key_Right, Qt::ControlModifier);
+  require(editor->textCursor().position() == 4,
+          "Ctrl+Right did not skip an ASCII word and spaces");
+  navigate(editor, Qt::Key_Right,
+           Qt::ControlModifier | Qt::ShiftModifier);
+  require(editor->textCursor().anchor() == 4 &&
+              editor->textCursor().position() == 6,
+          "Ctrl+Shift+Right did not extend over punctuation");
+  navigate(editor, Qt::Key_Right, Qt::ControlModifier);
+  require(editor->textCursor().position() == 10 &&
+              !editor->textCursor().hasSelection(),
+          "Ctrl+Right did not cross a paragraph boundary to kanji");
+  navigate(editor, Qt::Key_Left, Qt::ControlModifier);
+  require(editor->textCursor().position() == 6,
+          "Ctrl+Left from a paragraph start did not cross the boundary");
+  navigate(editor, Qt::Key_Left, Qt::ControlModifier);
+  require(editor->textCursor().position() == 4,
+          "Ctrl+Left did not apply the source punctuation boundary");
+  require(*window.current_jwp_document() == source &&
+              !window.document_modified() &&
+              editor->document()->revision() == revision,
+          "Word navigation changed native content or history");
+
+  require(window.new_document_tab(false) == 1,
+          "Could not create Unicode word-navigation fixture");
+  editor = window.active_editor();
+  editor->setPlainText(QStringLiteral("\U0001f600ab  !!\n\u65e5\u672c"));
+  editor->document()->setModified(false);
+  set_cursor(editor, 2);
+  navigate(editor, Qt::Key_Right, Qt::ControlModifier);
+  require(editor->textCursor().position() == 6,
+          "Supplementary Unicode skewed the first word boundary");
+  navigate(editor, Qt::Key_Right, Qt::ControlModifier);
+  require(editor->textCursor().position() == 9,
+          "Unicode word navigation did not cross a paragraph boundary");
+  require(!editor->document()->isModified(),
+          "Unicode word navigation modified the document");
+
+  MainWindow pending;
+  require(pending.open_jwp_path(path),
+          "Could not open pending word-navigation fixture");
+  JwpEditor* pending_editor = pending.active_editor();
+  pending.show();
+  pending_editor->setFocus();
+  set_cursor(pending_editor, 2);
+  send_text_key(pending_editor, Qt::Key_N, QStringLiteral("n"));
+  navigate(pending_editor, Qt::Key_Right, Qt::ControlModifier);
+  require(document_plain_text(*pending_editor->document()).startsWith(
+              QStringLiteral("ab\u3093")) &&
+              pending_editor->textCursor().position() == 5,
+          "Word navigation did not finish pending kana before moving");
+  find_action(pending, "undoAction")->trigger();
+  require(*pending.current_jwp_document() == source &&
+              !pending.document_modified(),
+          "Pending word navigation did not restore its native undo baseline");
+
+  require(pending.new_document_tab(false) == 1 &&
+              pending.activate_document(0),
+          "Could not prepare reentrant word-navigation fixture");
+  pending_editor = pending.active_editor();
+  set_cursor(pending_editor, 0);
+  QObject::connect(pending_editor, &QTextEdit::cursorPositionChanged, &pending,
+                   [&pending] { pending.activate_document(1); });
+  navigate(pending_editor, Qt::Key_Right, Qt::ControlModifier);
+  require(pending.current_document_index() == 1 &&
+              pending.active_editor()->toPlainText().isEmpty(),
+          "Word navigation published state after a reentrant tab switch");
+}
+
 void test_application_settings_workflow(const QString& directory) {
   using namespace jwpqt::qt;
   MainWindow window;
@@ -7925,6 +8030,7 @@ int main(int argc, char* argv[]) {
     test_shift_line_deletion(directory.path());
     test_word_and_line_selection(directory.path());
     test_brace_navigation(directory.path());
+    test_word_navigation(directory.path());
     test_application_settings_workflow(directory.path());
     test_application_settings_preview(directory.path());
     test_application_settings_exit(directory.path());

@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <exception>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -175,6 +176,17 @@ core::JwpText unicode_word_units(std::u32string_view text,
     } else {
       units.push_back(0x2122);
     }
+  }
+  return units;
+}
+
+core::JwpText document_word_units(const core::JwpDocumentModel& model) {
+  core::JwpText units;
+  for (std::size_t paragraph = 0; paragraph < model.paragraph_count();
+       ++paragraph) {
+    if (paragraph != 0) units.push_back(0);
+    const core::JwpText& text = model.paragraph(paragraph).text;
+    units.insert(units.end(), text.begin(), text.end());
   }
   return units;
 }
@@ -4469,6 +4481,46 @@ void MainWindow::navigate_document_brace(bool extend_selection) {
   if (self && editor && document_->editor_ == editor) editor->ensureCursorVisible();
 }
 
+void MainWindow::navigate_document_word(bool forward, bool extend_selection) {
+  JwpEditor* const current_editor = document_->editor_;
+  const QPointer<MainWindow> self(this);
+  const QPointer<JwpEditor> editor(current_editor);
+  if (!finish_document_input() || !self || !editor ||
+      document_->editor_ != editor) {
+    return;
+  }
+
+  const QString current = document_plain_text(*editor->document());
+  const std::u32string text = current.toStdU32String();
+  QTextCursor cursor = editor->textCursor();
+  const std::size_t position = utf32_offset_for_utf16(current, cursor.position());
+  QTextCursor line(cursor);
+  line.clearSelection();
+  line.movePosition(QTextCursor::StartOfLine);
+  const std::size_t line_begin = utf32_offset_for_utf16(current, line.position());
+
+  std::size_t target = position;
+  try {
+    core::JwpText units = document_->jwp_document_
+                              ? document_word_units(*document_->jwp_document_)
+                              : unicode_word_units(text, document_->jwp_code_page_);
+    if (units.size() != text.size()) {
+      throw std::runtime_error("JWP word-navigation text is inconsistent");
+    }
+    target = forward
+                 ? core::next_jwp_word_position(units, position)
+                 : core::previous_jwp_word_position(units, position, line_begin);
+  } catch (const std::exception& exception) {
+    statusBar()->showMessage(QString::fromUtf8(exception.what()), 5000);
+    return;
+  }
+  cursor.setPosition(utf16_offset_for_utf32(text, target),
+                     extend_selection ? QTextCursor::KeepAnchor
+                                      : QTextCursor::MoveAnchor);
+  editor->setTextCursor(cursor);
+  if (self && editor && document_->editor_ == editor) editor->ensureCursorVisible();
+}
+
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
   if (watched == main_toolbar_ && event->type() == QEvent::Move && !updating_toolbar_) {
     QTimer::singleShot(0, this, [this] { sync_toolbar_position(); });
@@ -4608,6 +4660,17 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
       event->accept();
       if (event->type() == QEvent::ShortcutOverride) return true;
       navigate_document_brace(modifiers.testFlag(Qt::ShiftModifier));
+      return true;
+    }
+    const bool word_navigation =
+        (key->key() == Qt::Key_Left || key->key() == Qt::Key_Right) &&
+        modifiers.testFlag(Qt::ControlModifier) &&
+        !(modifiers & (Qt::AltModifier | Qt::MetaModifier));
+    if (word_navigation) {
+      event->accept();
+      if (event->type() == QEvent::ShortcutOverride) return true;
+      navigate_document_word(key->key() == Qt::Key_Right,
+                             modifiers.testFlag(Qt::ShiftModifier));
       return true;
     }
     const bool word = key->key() == Qt::Key_W &&

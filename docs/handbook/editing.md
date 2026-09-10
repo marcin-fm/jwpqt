@@ -43,6 +43,12 @@ the nearest brace on the current wrapped visual line, preferring one before the
 caret. Add Shift to extend the current selection. An unmatched brace leaves the
 cursor unchanged.
 
+Ctrl+Left and Ctrl+Right move through the same recovered source classes instead
+of Qt's locale word boundaries. They skip source whitespace and retain the
+katakana long-vowel rules. Ctrl+Left first stops at the beginning of the current
+wrapped visual line; invoke it there to cross into the preceding line or
+paragraph. Add Shift to extend the existing selection.
+
 The mouse follows the same boundaries: double-click or Ctrl+left-click selects
 a source-style word. Shift+left-click opens Character Information for the
 exact character under the pointer; Alt+left-click opens the editor popup.

@@ -287,6 +287,11 @@ Ctrl+[ and Ctrl+] match nested curly braces when the caret is on or immediately
 after one. Otherwise they snap to the nearest brace on the current wrapped
 visual line, preferring a preceding brace; Shift extends the current selection.
 
+Ctrl+Left and Ctrl+Right use the recovered JWP word classes rather than Qt's
+locale word boundaries. They skip source whitespace and retain kana long-vowel
+rules; Ctrl+Left stops at the current wrapped visual-line start before crossing
+it. Add Shift to extend the existing selection.
+
 Double-click and Ctrl+left-click use the same source word boundaries.
 Shift+left-click opens Character Information for the exact character, while
 Alt+left-click opens the native editor popup. Holding an unmodified left click
@@ -523,7 +528,8 @@ field limits, validators and read-only targets cannot erase text before rejectio
 The remaining Japanese-input forms and native/external clipboard representations
 use the same validated composition, overwrite and one-step undo boundaries.
 
-`Ctrl+A` remains Select All. Close uses `Ctrl+F4`, leaving `Ctrl+W` for conversion.
+`Ctrl+A` remains Select All. Close uses `Ctrl+F4`, leaving `Ctrl+W` for source-word
+selection; Convert Selection uses `F2` or `Ctrl+>`.
 SKIP uses `Ctrl+Alt+S` and Spahn-Hadamitzky uses `Ctrl+Alt+H`, avoiding native
 Save As and Replace shortcuts. Index Lookup uses `Ctrl+Shift+I`; Count Kanji
 remains `Ctrl+Shift+K`. Japanese editor, candidate and lookup content defaults
