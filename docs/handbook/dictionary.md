@@ -78,6 +78,12 @@ before the working copy changes, so a missing, malformed or oversized file does
 not leave a partially imported dictionary. Saving remains a separate explicit
 operation.
 
+Application exit checks both user-dictionary working copies before documents
+or settings. Save publishes through the same atomic file boundary as the
+window's Save button. Discard applies only to the current close attempt; if a
+later document or settings prompt cancels the exit, the dictionary remains
+modified and asks again. Cancel and failed saves keep the application open.
+
 ## Manage Dictionaries
 
 Tools > Manage Dictionaries, or Dictionaries in lookup, opens a staged editor

@@ -122,6 +122,9 @@ searched resources require explicit acceptance, and a stale disk snapshot cannot
 be overwritten. Lookup queries/results/history remain intact; close the user
 dictionary editor first to protect its working copy. ANSI registry migration
 asks for the original code page and writes Unicode only on successful Save.
+Quitting with unsaved WNN or EDICT user-dictionary edits offers Save, Discard
+or Cancel before document and settings checks. Discard applies only to that
+close attempt, so a later cancellation leaves the working copy dirty.
 The [handbook](docs/handbook/dictionary.md) describes the complete native workflow.
 
 The clickable **Resources** status and **Help > Runtime Resources** show loaded
