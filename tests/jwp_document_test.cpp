@@ -237,6 +237,9 @@ void test_decoded_text_budget() {
   expect_error(
       [&] { jwpqt::core::decode_jwp_document(over_limit); },
       "aggregate metadata and paragraph text above safety limit");
+  expect_error(
+      [&] { jwpqt::core::decode_jwp_document_recovering(over_limit); },
+      "recovery above aggregate text safety limit");
 }
 
 void test_invalid_documents() {
@@ -305,6 +308,110 @@ void test_invalid_documents() {
                "trailing bytes");
 }
 
+void test_damaged_document_recovery() {
+  JwpDocument source;
+  source.summary[0] = {static_cast<JisCode>('T')};
+  source.headers[0][0] = {static_cast<JisCode>('H')};
+  JwpParagraph first;
+  first.text = {static_cast<JisCode>('A'), 0x2422, 0x80};
+  first.first_indent = -2;
+  source.paragraphs.push_back(first);
+  JwpParagraph second;
+  second.text = {static_cast<JisCode>('B'), 0x2424,
+                 static_cast<JisCode>('C')};
+  second.page_break = true;
+  source.paragraphs.push_back(second);
+
+  const std::string valid = jwpqt::core::encode_jwp_document(source);
+  const auto unchanged =
+      jwpqt::core::decode_jwp_document_recovering(valid);
+  expect(!unchanged.recovered() && unchanged.document == source &&
+             unchanged.declared_paragraphs == 2 &&
+             unchanged.complete_paragraphs == 2 &&
+             !unchanged.partial_paragraph &&
+             unchanged.ignored_trailing_bytes == 0,
+         "valid document changed during recovery decode");
+
+  const std::string truncated = valid.substr(0, valid.size() - 2U);
+  expect_error([&] { jwpqt::core::decode_jwp_document(truncated); },
+               "strict truncated paragraph");
+  const auto recovered =
+      jwpqt::core::decode_jwp_document_recovering(truncated);
+  expect(recovered.recovered() && recovered.declared_paragraphs == 2 &&
+             recovered.complete_paragraphs == 1 &&
+             recovered.partial_paragraph &&
+             recovered.document.summary == source.summary &&
+             recovered.document.headers == source.headers &&
+             recovered.document.paragraphs.size() == 2 &&
+             recovered.document.paragraphs[0] == first &&
+             recovered.document.paragraphs[1].text ==
+                 jwpqt::core::JwpText({static_cast<JisCode>('B'), 0x2424}) &&
+             recovered.document.paragraphs[1].page_break,
+         "truncated paragraph prefix was not recovered");
+
+  std::string invalid_pair = valid;
+  invalid_pair[invalid_pair.size() - 4U] = static_cast<char>(0xa4U);
+  invalid_pair[invalid_pair.size() - 3U] = static_cast<char>(0x20U);
+  const auto pair_recovery =
+      jwpqt::core::decode_jwp_document_recovering(invalid_pair);
+  expect(pair_recovery.complete_paragraphs == 1 &&
+             pair_recovery.partial_paragraph &&
+             pair_recovery.document.paragraphs.size() == 2 &&
+             pair_recovery.document.paragraphs[1].text ==
+                 jwpqt::core::JwpText({static_cast<JisCode>('B')}),
+         "malformed pair was reinterpreted during recovery");
+
+  const auto trailing =
+      jwpqt::core::decode_jwp_document_recovering(valid + "tail");
+  expect(trailing.recovered() && trailing.complete_paragraphs == 2 &&
+             !trailing.partial_paragraph &&
+             trailing.ignored_trailing_bytes == 4 &&
+             trailing.document == source,
+         "trailing bytes were not reported without changing content");
+
+  ByteWriter missing_header;
+  write_header(missing_header, "J1.20", 1);
+  const auto header_recovery =
+      jwpqt::core::decode_jwp_document_recovering(missing_header.bytes());
+  expect(header_recovery.recovered() &&
+             header_recovery.declared_paragraphs == 1 &&
+             header_recovery.document.paragraphs.empty() &&
+             !header_recovery.partial_paragraph,
+         "missing paragraph header did not preserve the valid document prefix");
+
+  ByteWriter old;
+  write_header(old, "B1", 1);
+  old.write_i16_le(4);
+  old.write_i16_le(-3);
+  old.write_i16_le(2);
+  old.write_i16_le(4);
+  old.write_u8('X');
+  const auto old_recovery =
+      jwpqt::core::decode_jwp_document_recovering(old.bytes());
+  expect(old_recovery.document.source_version == JwpVersion::kB1 &&
+             old_recovery.partial_paragraph &&
+             old_recovery.document.paragraphs.size() == 1 &&
+             old_recovery.document.paragraphs[0].text ==
+                 jwpqt::core::JwpText({static_cast<JisCode>('X')}) &&
+             old_recovery.document.paragraphs[0].first_indent == -3 &&
+             old_recovery.document.paragraphs[0].left_indent == 2 &&
+             old_recovery.document.paragraphs[0].right_indent == 4,
+         "old-version paragraph prefix was not recovered");
+
+  ByteWriter fatal;
+  write_header(fatal, "NOPE", 1);
+  expect_error(
+      [&] { jwpqt::core::decode_jwp_document_recovering(fatal.bytes()); },
+      "recovery with invalid version");
+  ByteWriter embedded_undo;
+  write_header(embedded_undo, "J1.20", 1, 0, 1);
+  expect_error(
+      [&] {
+        jwpqt::core::decode_jwp_document_recovering(embedded_undo.bytes());
+      },
+      "recovery across native undo data");
+}
+
 void test_invalid_models() {
   JwpDocument bad_character;
   JwpParagraph paragraph;
@@ -352,6 +459,7 @@ int main() {
   test_reserved_bytes_are_canonicalized();
   test_decoded_text_budget();
   test_invalid_documents();
+  test_damaged_document_recovery();
   test_invalid_models();
   return 0;
 }

@@ -315,6 +315,12 @@ The native editor opens and atomically saves UTF-8, UTF-7, UTF-16LE/BE, JFC,
 EUC-JP, Shift-JIS, New/Old/NEC JIS, and JWP B1/B2/J1.20 documents. The source's
 `.jce` and `.jwp` choices use the same structured JWP codec; `.jce` is the
 default for a new Japanese document, while an existing extension is retained.
+Interactive Open can recover the readable paragraph prefix of a damaged JWP
+document after its header and metadata have validated. The warning defaults to
+No and reports what was retained; an accepted recovery is marked modified, and
+the damaged source is not rewritten until an explicit save. Automated opens,
+project staging and Revert remain strict, as do malformed headers, metadata,
+embedded native-ABI undo data and safety-limit failures.
 JFC files are plain text:
 opening prefers UTF-8, with a strict fallback for the recovered old-EUC
 extensions, and saving always writes UTF-8 without a BOM. The `.jfc` extension,

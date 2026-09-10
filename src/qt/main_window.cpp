@@ -5905,8 +5905,10 @@ bool MainWindow::revert_current_document(OpenMode mode) {
     return false;
   }
   const QString path = document_->current_path_;
-  return document_->jwp_format_ ? open_jwp_path(path, document_->jwp_code_page_, mode)
-                     : open_path(path, document_->encoding_, mode);
+  return document_->jwp_format_ ? open_jwp_path_impl(
+                                     path, document_->jwp_code_page_, mode,
+                                     false, false)
+                      : open_path(path, document_->encoding_, mode);
 }
 
 bool MainWindow::delete_current_document(OpenMode mode) {
@@ -5938,6 +5940,13 @@ bool MainWindow::delete_current_document(OpenMode mode) {
 bool MainWindow::open_jwp_path(const QString& path,
                                core::LegacyCodePage code_page,
                                OpenMode mode, bool new_tab) {
+  return open_jwp_path_impl(path, code_page, mode, new_tab, true);
+}
+
+bool MainWindow::open_jwp_path_impl(const QString& path,
+                                    core::LegacyCodePage code_page,
+                                    OpenMode mode, bool new_tab,
+                                    bool allow_recovery) {
   const int existing = find_document_path(path);
   if (existing >= 0 && (new_tab || existing != current_document_index())) {
     const auto resolution = resolve_duplicate_open(
@@ -5949,10 +5958,23 @@ bool MainWindow::open_jwp_path(const QString& path,
     return false;
   }
   try {
-    load_jwp_document(path, read_jwp_file(path), code_page, new_tab);
-    statusBar()->showMessage(
-        tr("Opened %1 as JWP (%2)").arg(path, code_page_name(code_page)),
-        3000);
+    bool recovered = false;
+    auto decoded = decode_jwp_for_open(read_file_bytes(path), path, mode,
+                                       allow_recovery, recovered);
+    if (!decoded) return false;
+    load_jwp_document(path, std::move(*decoded), code_page, new_tab);
+    if (recovered) {
+      document_->saved_jwp_document_.reset();
+      document_->pristine_jwp_document_.reset();
+      document_->editor_->document()->setModified(true);
+      update_title();
+      statusBar()->showMessage(
+          tr("Recovered readable content from damaged document"), 7000);
+    } else {
+      statusBar()->showMessage(
+          tr("Opened %1 as JWP (%2)").arg(path, code_page_name(code_page)),
+          3000);
+    }
     record_recent_document(*document_);
     return true;
   } catch (const std::exception& error) {
@@ -5961,6 +5983,48 @@ bool MainWindow::open_jwp_path(const QString& path,
     }
     return false;
   }
+}
+
+std::optional<core::JwpDocument> MainWindow::decode_jwp_for_open(
+    std::string_view bytes, const QString& path, OpenMode mode,
+    bool allow_recovery, bool& recovered) {
+  recovered = false;
+  try {
+    return core::decode_jwp_document(bytes);
+  } catch (const core::JwpFormatError&) {
+    if (mode != OpenMode::kInteractive || !allow_recovery) throw;
+  }
+
+  core::JwpDocumentRecovery report =
+      core::decode_jwp_document_recovering(bytes);
+  QString details = tr("Declared paragraphs: %1\nComplete paragraphs: %2")
+                        .arg(report.declared_paragraphs)
+                        .arg(report.complete_paragraphs);
+  if (report.partial_paragraph) {
+    details += tr("\nA readable prefix of the next paragraph was recovered.");
+  }
+  if (report.ignored_trailing_bytes != 0) {
+    details += tr("\nIgnored trailing bytes: %1")
+                   .arg(report.ignored_trailing_bytes);
+  }
+  details += tr("\n\nDamage: %1").arg(QString::fromUtf8(report.damage));
+
+  QPointer<MainWindow> owner(this);
+  auto* prompt = new QMessageBox(
+      QMessageBox::Warning, tr("Damaged JWP document"),
+      tr("Not all of %1 could be read. Open the readable content?\n\n"
+         "The recovered document will be marked as modified.")
+          .arg(QDir::toNativeSeparators(path)),
+      QMessageBox::Yes | QMessageBox::No, this);
+  prompt->setObjectName(QStringLiteral("recoverJwpDocumentPrompt"));
+  prompt->setDefaultButton(QMessageBox::No);
+  prompt->setDetailedText(details);
+  prompt->setAttribute(Qt::WA_DeleteOnClose);
+  const int answer = prompt->exec();
+  if (!owner || answer != QMessageBox::Yes) return std::nullopt;
+
+  recovered = true;
+  return std::move(report.document);
 }
 
 bool MainWindow::open_path_detected(const QString& path, OpenMode mode, bool new_tab) {
@@ -5986,12 +6050,24 @@ bool MainWindow::open_path_detected(const QString& path, OpenMode mode, bool new
     const std::string bytes = read_file_bytes(path);
     if (project_magic(bytes)) return open_project();
     if (core::has_jwp_document_magic(bytes)) {
-      load_jwp_document(path, core::decode_jwp_document(bytes),
-                        default_jwp_code_page(), new_tab);
-      statusBar()->showMessage(
-          tr("Opened %1 as JWP (%2)")
-              .arg(path, code_page_name(document_->jwp_code_page_)),
-          3000);
+      bool recovered = false;
+      auto decoded = decode_jwp_for_open(bytes, path, mode, true, recovered);
+      if (!decoded) return false;
+      load_jwp_document(path, std::move(*decoded), default_jwp_code_page(),
+                        new_tab);
+      if (recovered) {
+        document_->saved_jwp_document_.reset();
+        document_->pristine_jwp_document_.reset();
+        document_->editor_->document()->setModified(true);
+        update_title();
+        statusBar()->showMessage(
+            tr("Recovered readable content from damaged document"), 7000);
+      } else {
+        statusBar()->showMessage(
+            tr("Opened %1 as JWP (%2)")
+                .arg(path, code_page_name(document_->jwp_code_page_)),
+            3000);
+      }
       record_recent_document(*document_);
       return true;
     }

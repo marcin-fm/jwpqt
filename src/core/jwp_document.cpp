@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <optional>
 #include <string>
 
 namespace jwpqt::core {
@@ -162,6 +163,140 @@ JwpParagraph read_paragraph(ByteReader& reader, JwpVersion version,
   return paragraph;
 }
 
+struct DocumentPrefix {
+  JwpDocument document;
+  std::int16_t paragraph_count = 0;
+  std::size_t decoded_units = 0;
+};
+
+DocumentPrefix read_document_prefix(ByteReader& reader) {
+  DocumentPrefix prefix;
+  if (reader.read_u32_le() != kJwpMagic) {
+    throw format_error("bad magic");
+  }
+  prefix.document.source_version = read_version(reader);
+
+  prefix.paragraph_count = reader.read_i16_le();
+  if (prefix.paragraph_count < 0) {
+    throw format_error("negative paragraph count");
+  }
+  for (float& margin : prefix.document.margins) {
+    margin = reader.read_f32_le();
+  }
+
+  const std::uint8_t flags = reader.read_u8();
+  prefix.document.landscape = (flags & kLandscape) != 0;
+  const bool has_summary = (flags & kSummary) != 0;
+  const bool has_headers = (flags & kHeaders) != 0;
+  prefix.document.separate_left_right_headers =
+      (flags & kSeparateHeaders) != 0;
+  prefix.document.suppress_first_page_headers =
+      (flags & kNoFirstPage) != 0;
+  prefix.document.vertical = (flags & kVertical) != 0;
+
+  const std::int16_t undo_count = reader.read_i16_le();
+  if (undo_count < 0) {
+    throw format_error("negative undo count");
+  }
+  if (undo_count != 0) {
+    throw format_error("embedded native-ABI undo data is unsupported");
+  }
+  static_cast<void>(reader.read_bytes(97));
+
+  if (has_summary) {
+    for (JwpText& text : prefix.document.summary) {
+      text = read_kstring(reader, prefix.decoded_units);
+    }
+  }
+  if (has_headers) {
+    for (auto& header : prefix.document.headers) {
+      for (JwpText& text : header) {
+        text = read_kstring(reader, prefix.decoded_units);
+      }
+    }
+  }
+  return prefix;
+}
+
+struct RecoveredParagraph {
+  std::optional<JwpParagraph> paragraph;
+  bool complete = false;
+};
+
+RecoveredParagraph recover_paragraph(ByteReader& reader, JwpVersion version,
+                                     std::size_t& decoded_units) {
+  JwpParagraph paragraph;
+  std::int16_t text_size = 0;
+  try {
+    if (version == JwpVersion::kB1) {
+      text_size = reader.read_i16_le();
+      paragraph.first_indent =
+          byte_to_i8(static_cast<std::uint8_t>(reader.read_i16_le()));
+      paragraph.left_indent =
+          static_cast<std::uint8_t>(reader.read_i16_le());
+      paragraph.right_indent =
+          static_cast<std::uint8_t>(reader.read_i16_le());
+    } else {
+      text_size = reader.read_i16_le();
+      paragraph.line_spacing = reader.read_i16_le();
+      paragraph.first_indent = byte_to_i8(reader.read_u8());
+      paragraph.left_indent = reader.read_u8();
+      paragraph.right_indent = reader.read_u8();
+      static_cast<void>(reader.read_u8());
+      paragraph.page_break = (reader.read_u8() & 0x01U) != 0;
+      static_cast<void>(reader.read_bytes(7));
+    }
+  } catch (const BinaryError&) {
+    return {};
+  }
+
+  if (text_size <= 0) {
+    return {};
+  }
+  add_decoded_units(static_cast<std::size_t>(text_size - 1), decoded_units);
+  paragraph.text.reserve(static_cast<std::size_t>(text_size - 1));
+
+  for (std::int16_t index = 0; index < text_size; ++index) {
+    if (reader.empty()) {
+      return {std::move(paragraph), false};
+    }
+    const std::uint8_t lead = reader.read_u8();
+    JisCode code = 0;
+    if ((lead & 0x80U) != 0) {
+      if (reader.empty()) {
+        return {std::move(paragraph), false};
+      }
+      const std::uint8_t trail = reader.read_u8();
+      if ((trail & 0x80U) == 0) {
+        return {std::move(paragraph), false};
+      }
+      code = static_cast<JisCode>(
+          (static_cast<JisCode>(lead & 0x7fU) << 8U) |
+          static_cast<JisCode>(trail & 0x7fU));
+      if (!is_jis_x0208_pair(code)) {
+        return {std::move(paragraph), false};
+      }
+    } else if (lead == 0) {
+      if (reader.empty()) {
+        return {std::move(paragraph), false};
+      }
+      const std::uint8_t escaped = reader.read_u8();
+      if ((escaped & 0x80U) != 0) {
+        return {std::move(paragraph), false};
+      }
+      code = static_cast<JisCode>(escaped | 0x80U);
+    } else {
+      code = lead;
+    }
+
+    if (code == static_cast<JisCode>('\n')) {
+      return {std::move(paragraph), index == text_size - 1};
+    }
+    paragraph.text.push_back(code);
+  }
+  return {std::move(paragraph), false};
+}
+
 void write_paragraph(ByteWriter& writer, const JwpParagraph& paragraph) {
   if (paragraph.text.size() >=
       static_cast<std::size_t>(std::numeric_limits<std::int16_t>::max())) {
@@ -197,64 +332,18 @@ void write_paragraph(ByteWriter& writer, const JwpParagraph& paragraph) {
 
 JwpDocument decode_impl(std::string_view bytes) {
   ByteReader reader(bytes);
-  JwpDocument document;
-
-  if (reader.read_u32_le() != kJwpMagic) {
-    throw format_error("bad magic");
-  }
-  document.source_version = read_version(reader);
-
-  const std::int16_t paragraph_count = reader.read_i16_le();
-  if (paragraph_count < 0) {
-    throw format_error("negative paragraph count");
-  }
-  for (float& margin : document.margins) {
-    margin = reader.read_f32_le();
-  }
-
-  const std::uint8_t flags = reader.read_u8();
-  document.landscape = (flags & kLandscape) != 0;
-  const bool has_summary = (flags & kSummary) != 0;
-  const bool has_headers = (flags & kHeaders) != 0;
-  document.separate_left_right_headers = (flags & kSeparateHeaders) != 0;
-  document.suppress_first_page_headers = (flags & kNoFirstPage) != 0;
-  document.vertical = (flags & kVertical) != 0;
-
-  const std::int16_t undo_count = reader.read_i16_le();
-  if (undo_count < 0) {
-    throw format_error("negative undo count");
-  }
-  if (undo_count != 0) {
-    throw format_error("embedded native-ABI undo data is unsupported");
-  }
-
-  static_cast<void>(reader.read_bytes(97));
-
-  std::size_t decoded_units = 0;
-
-  if (has_summary) {
-    for (JwpText& text : document.summary) {
-      text = read_kstring(reader, decoded_units);
-    }
-  }
-  if (has_headers) {
-    for (auto& header : document.headers) {
-      for (JwpText& text : header) {
-        text = read_kstring(reader, decoded_units);
-      }
-    }
-  }
-
-  document.paragraphs.reserve(static_cast<std::size_t>(paragraph_count));
-  for (std::int16_t index = 0; index < paragraph_count; ++index) {
-    document.paragraphs.push_back(
-        read_paragraph(reader, document.source_version, decoded_units));
+  DocumentPrefix prefix = read_document_prefix(reader);
+  prefix.document.paragraphs.reserve(
+      static_cast<std::size_t>(prefix.paragraph_count));
+  for (std::int16_t index = 0; index < prefix.paragraph_count; ++index) {
+    prefix.document.paragraphs.push_back(read_paragraph(
+        reader, prefix.document.source_version, prefix.decoded_units));
   }
 
   if (!reader.empty()) {
     throw format_error("trailing bytes");
   }
-  return document;
+  return std::move(prefix.document);
 }
 
 }  // namespace
@@ -272,6 +361,47 @@ JwpDocument decode_jwp_document(std::string_view bytes) {
     return decode_impl(bytes);
   } catch (const BinaryError& error) {
     throw format_error(error.what());
+  }
+}
+
+JwpDocumentRecovery decode_jwp_document_recovering(std::string_view bytes) {
+  try {
+    JwpDocument document = decode_jwp_document(bytes);
+    const std::size_t paragraphs = document.paragraphs.size();
+    return {std::move(document), paragraphs, paragraphs, false, 0, {}};
+  } catch (const JwpFormatError& strict_error) {
+    try {
+      ByteReader reader(bytes);
+      DocumentPrefix prefix = read_document_prefix(reader);
+      JwpDocumentRecovery recovery;
+      recovery.document = std::move(prefix.document);
+      recovery.declared_paragraphs =
+          static_cast<std::size_t>(prefix.paragraph_count);
+      recovery.damage = strict_error.what();
+      recovery.document.paragraphs.reserve(recovery.declared_paragraphs);
+
+      for (std::int16_t index = 0; index < prefix.paragraph_count; ++index) {
+        RecoveredParagraph recovered = recover_paragraph(
+            reader, recovery.document.source_version, prefix.decoded_units);
+        if (!recovered.paragraph) {
+          break;
+        }
+        recovery.document.paragraphs.push_back(
+            std::move(*recovered.paragraph));
+        if (!recovered.complete) {
+          recovery.partial_paragraph = true;
+          break;
+        }
+        ++recovery.complete_paragraphs;
+      }
+
+      if (recovery.complete_paragraphs == recovery.declared_paragraphs) {
+        recovery.ignored_trailing_bytes = reader.remaining();
+      }
+      return recovery;
+    } catch (const BinaryError& error) {
+      throw format_error(error.what());
+    }
   }
 }
 

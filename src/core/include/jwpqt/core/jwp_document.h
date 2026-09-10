@@ -74,6 +74,17 @@ struct JwpDocument {
   }
 };
 
+struct JwpDocumentRecovery {
+  JwpDocument document;
+  std::size_t declared_paragraphs = 0;
+  std::size_t complete_paragraphs = 0;
+  bool partial_paragraph = false;
+  std::size_t ignored_trailing_bytes = 0;
+  std::string damage;
+
+  bool recovered() const noexcept { return !damage.empty(); }
+};
+
 class JwpFormatError : public std::runtime_error {
  public:
   using std::runtime_error::runtime_error;
@@ -81,6 +92,7 @@ class JwpFormatError : public std::runtime_error {
 
 bool has_jwp_document_magic(std::string_view bytes) noexcept;
 JwpDocument decode_jwp_document(std::string_view bytes);
+JwpDocumentRecovery decode_jwp_document_recovering(std::string_view bytes);
 std::string encode_jwp_document(const JwpDocument& document);
 
 }  // namespace jwpqt::core

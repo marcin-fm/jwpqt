@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -391,6 +392,12 @@ class MainWindow : public QMainWindow {
                      bool japanese_editing = true, bool new_tab = false);
   bool native_document_modified() const;
   bool confirm_text_export();
+  bool open_jwp_path_impl(const QString& path,
+                          core::LegacyCodePage code_page, OpenMode mode,
+                          bool new_tab, bool allow_recovery);
+  std::optional<core::JwpDocument> decode_jwp_for_open(
+      std::string_view bytes, const QString& path, OpenMode mode,
+      bool allow_recovery, bool& recovered);
   void load_jwp_document(const QString& path, core::JwpDocument document,
                          core::LegacyCodePage code_page, bool new_tab = false);
   void set_text_encoding(core::TextEncoding encoding, bool mark_modified);

@@ -55,6 +55,14 @@ New/Old/NEC JIS. JFC reads UTF-8 first and legacy EUC when necessary, and writes
 UTF-8. Byte-order marks and explicit encodings are retained where applicable.
 Unmarked ambiguous files require an encoding choice rather than a silent guess.
 
+Interactive Open offers a best-effort recovery when a structured JWP document
+has a valid header and metadata but a damaged paragraph stream. The warning
+defaults to No and reports complete paragraphs, any retained partial paragraph
+and ignored trailing bytes. Accepted content opens as modified; use Save As to
+preserve the damaged source while writing a strict recovered document. Invalid
+headers, metadata, embedded native-ABI undo data and safety-limit violations are
+fatal. Automated opens, project restoration and Revert never recover implicitly.
+
 Save As can transfer between formats after validation and any required loss
 confirmation. Export Copy leaves the live file, history and saved baseline
 unchanged. Neither command may overwrite another open document. Revert reloads

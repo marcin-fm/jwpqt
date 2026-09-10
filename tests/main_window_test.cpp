@@ -1676,6 +1676,155 @@ void test_jce_document_surface(const QString& directory) {
           "Project restoration lost the JCE document path or format");
 }
 
+void test_damaged_jwp_recovery(const QString& directory) {
+  const QString damaged_path = directory + QStringLiteral("/damaged.jce");
+  std::string damaged_bytes =
+      jwpqt::core::encode_jwp_document(sample_jwp_document());
+  damaged_bytes.resize(damaged_bytes.size() - 2);
+  const auto expected =
+      jwpqt::core::decode_jwp_document_recovering(damaged_bytes);
+  require(expected.recovered() && expected.partial_paragraph &&
+              expected.complete_paragraphs == 1,
+          "Damaged JWP fixture is not recoverable");
+  write_bytes(damaged_path,
+              QByteArray(damaged_bytes.data(),
+                         static_cast<qsizetype>(damaged_bytes.size())));
+  const QByteArray original_bytes = read_bytes(damaged_path);
+
+  PromptingWindow strict;
+  require(!strict.open_jwp_path(damaged_path,
+                                jwpqt::core::LegacyCodePage::k1252,
+                                jwpqt::qt::OpenMode::kNonInteractive, true) &&
+              strict.current_path().isEmpty() &&
+              strict.document_count() == 1 &&
+              strict.recent_documents().empty(),
+          "Noninteractive Open recovered a damaged JWP document");
+
+  const QString project_path = directory + QStringLiteral("/damaged.jpr");
+  jwpqt::core::JwpProject project;
+  project.current_directory = directory.toStdU32String();
+  project.paths.push_back(U"damaged.jce");
+  jwpqt::qt::write_jwp_project_file(project_path, project);
+  PromptingWindow project_window;
+  project_window.active_editor()->insertPlainText(QStringLiteral("keep"));
+  require(!project_window.open_project_path(
+              project_path, {}, jwpqt::qt::OpenMode::kNonInteractive) &&
+              project_window.active_editor()->toPlainText() ==
+                  QStringLiteral("keep") &&
+              project_window.document_modified(),
+          "Project staging recovered damage or changed the live workspace");
+
+  PromptingWindow declined;
+  bool decline_prompt = false;
+  bool decline_defaulted_to_no = false;
+  QTimer::singleShot(0, &declined, [&] {
+    auto* prompt =
+        qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    if (prompt != nullptr &&
+        prompt->objectName() == QStringLiteral("recoverJwpDocumentPrompt")) {
+      decline_prompt = prompt->detailedText().contains(
+                           QStringLiteral("Declared paragraphs: 2")) &&
+                       prompt->detailedText().contains(
+                           QStringLiteral("Complete paragraphs: 1")) &&
+                       prompt->detailedText().contains(
+                           QStringLiteral("A readable prefix of the next "
+                                          "paragraph was recovered."));
+      decline_defaulted_to_no =
+          prompt->defaultButton() == prompt->button(QMessageBox::No);
+      prompt->button(QMessageBox::No)->click();
+    }
+  });
+  require(!declined.open_jwp_path(damaged_path,
+                                  jwpqt::core::LegacyCodePage::k1252,
+                                  jwpqt::qt::OpenMode::kInteractive, true),
+          "Declining damaged JWP recovery reported success");
+  require(decline_prompt && decline_defaulted_to_no,
+          "Damaged JWP recovery prompt omitted its safe default or report");
+  require(declined.current_path().isEmpty() &&
+              declined.document_count() == 1 &&
+              declined.recent_documents().empty(),
+          "Declining damaged JWP recovery changed the workspace");
+  require(read_bytes(damaged_path) == original_bytes,
+          "Declining damaged JWP recovery changed the source file");
+
+  QPointer<PromptingWindow> deleted_owner = new PromptingWindow;
+  PromptingWindow* deleted_owner_raw = deleted_owner.data();
+  bool deletion_prompt = false;
+  QTimer::singleShot(0, qApp, [&] {
+    auto* prompt =
+        qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    if (prompt != nullptr &&
+        prompt->objectName() == QStringLiteral("recoverJwpDocumentPrompt")) {
+      deletion_prompt = true;
+      delete deleted_owner.data();
+    }
+  });
+  require(!deleted_owner_raw->open_jwp_path(
+              damaged_path, jwpqt::core::LegacyCodePage::k1252,
+              jwpqt::qt::OpenMode::kInteractive, true) &&
+              deletion_prompt && deleted_owner.isNull(),
+          "Damaged JWP prompt outlived or used its deleted owner");
+
+  PromptingWindow accepted;
+  bool accept_prompt = false;
+  QTimer::singleShot(0, &accepted, [&] {
+    auto* prompt =
+        qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    if (prompt != nullptr &&
+        prompt->objectName() == QStringLiteral("recoverJwpDocumentPrompt")) {
+      accept_prompt = true;
+      prompt->button(QMessageBox::Yes)->click();
+    }
+  });
+  require(accepted.open_jwp_path(damaged_path,
+                                 jwpqt::core::LegacyCodePage::k1252,
+                                 jwpqt::qt::OpenMode::kInteractive, true) &&
+              accept_prompt && accepted.current_path() == damaged_path &&
+              accepted.uses_jwp_format() &&
+              accepted.active_editor()->document()->isModified() &&
+              accepted.current_jwp_document() != nullptr &&
+              accepted.current_jwp_document()->paragraphs.size() ==
+                  expected.document.paragraphs.size() &&
+              accepted.current_jwp_document()->paragraphs[0].text ==
+                  expected.document.paragraphs[0].text &&
+              accepted.current_jwp_document()->paragraphs[1].text ==
+                  expected.document.paragraphs[1].text &&
+              !accepted.recent_documents().empty() &&
+              accepted.recent_documents().front().path == damaged_path &&
+              read_bytes(damaged_path) == original_bytes,
+          "Accepted damaged JWP recovery did not publish a modified prefix");
+
+  const QString recovered_path =
+      directory + QStringLiteral("/recovered-copy.jce");
+  require(!accepted.revert_current_document(
+              jwpqt::qt::OpenMode::kNonInteractive) &&
+              accepted.current_path() == damaged_path &&
+              accepted.active_editor()->document()->isModified() &&
+              accepted.save_path(recovered_path) &&
+              !accepted.active_editor()->document()->isModified() &&
+              read_bytes(damaged_path) == original_bytes,
+          "Strict Revert or recovered Save changed the damaged source");
+  const auto saved = jwpqt::qt::read_jwp_file(recovered_path);
+  require(saved.paragraphs.size() == expected.document.paragraphs.size() &&
+              saved.paragraphs[0].text == expected.document.paragraphs[0].text &&
+              saved.paragraphs[1].text == expected.document.paragraphs[1].text,
+          "Recovered JWP copy is not a strict document with the retained prefix");
+
+  PromptingWindow detected;
+  QTimer::singleShot(0, &detected, [&] {
+    auto* prompt =
+        qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    if (prompt != nullptr &&
+        prompt->objectName() == QStringLiteral("recoverJwpDocumentPrompt"))
+      prompt->button(QMessageBox::Yes)->click();
+  });
+  require(detected.open_path_detected(
+              damaged_path, jwpqt::qt::OpenMode::kInteractive) &&
+              detected.current_path() == damaged_path &&
+              detected.active_editor()->document()->isModified(),
+          "Detected JWP Open did not offer the recovery workflow");
+}
+
 void test_local_file_lifecycle_actions(const QString& directory) {
   const QString path = directory + QStringLiteral("/lifecycle.txt");
   QFile disk(path);
@@ -6786,6 +6935,7 @@ int main(int argc, char* argv[]) {
     test_explicit_open_and_encoding_action(directory.path());
     test_jfc_open_save_and_revert(directory.path());
     test_jce_document_surface(directory.path());
+    test_damaged_jwp_recovery(directory.path());
     test_utf16_workflow(directory.path());
     test_document_format_separation(directory.path());
     test_editing_mode_switch(directory.path());
