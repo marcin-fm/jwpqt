@@ -3185,6 +3185,75 @@ void test_word_and_line_selection(const QString& directory) {
           "F2 did not invoke selected-romaji conversion");
 }
 
+void test_keyboard_popup_and_ime_exclusion(const QString& directory) {
+  using namespace jwpqt::core;
+  using namespace jwpqt::qt;
+  JwpDocument source;
+  source.paragraphs = {JwpParagraph{encode_jwp_text(U"abc")}};
+  const QString path = directory + QStringLiteral("/keyboard-popup.jwp");
+  write_jwp_file(path, source);
+
+  MainWindow window;
+  require(window.open_jwp_path(path),
+          "Could not open keyboard-popup fixture");
+  JwpEditor* editor = window.active_editor();
+  QTextCursor cursor = editor->textCursor();
+  cursor.setPosition(1);
+  editor->setTextCursor(cursor);
+  window.resize(640, 300);
+  window.show();
+  editor->setFocus();
+  QApplication::processEvents();
+
+  const auto open_popup = [&](Qt::Key key, Qt::KeyboardModifiers modifiers) {
+    bool saw_popup = false;
+    QTimer::singleShot(0, [&saw_popup] {
+      auto* popup = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+      if (popup == nullptr) return;
+      saw_popup = popup->findChild<QMenu*>(
+                      QStringLiteral("editorInputModeMenu")) != nullptr;
+      popup->close();
+    });
+    QKeyEvent press(QEvent::KeyPress, key, modifiers);
+    QApplication::sendEvent(editor, &press);
+    return saw_popup;
+  };
+  require(open_popup(Qt::Key_F10, Qt::ShiftModifier),
+          "Shift+F10 did not open the canonical editor popup");
+  require(open_popup(Qt::Key_Menu, Qt::NoModifier),
+          "Menu key did not open the canonical editor popup");
+  require(*window.current_jwp_document() == source &&
+              !window.document_modified(),
+          "Keyboard popup changed native content or history");
+
+  editor->selectAll();
+  editor->insertPlainText(QString());
+  editor->document()->setModified(false);
+  send_text_key(editor, Qt::Key_N, QStringLiteral("n"));
+  QKeyEvent ime_toggle(QEvent::KeyPress, Qt::Key_M, Qt::ControlModifier);
+  QApplication::sendEvent(editor, &ime_toggle);
+  require(ime_toggle.isAccepted() && editor->toPlainText().isEmpty() &&
+              window.statusBar()->currentMessage().contains(
+                  QStringLiteral("controlled by the desktop")),
+          "Ctrl+M did not consume pending native input with a Linux notice");
+  send_text_key(editor, Qt::Key_A, QStringLiteral("a"));
+  require(editor->toPlainText() == QStringLiteral("\u3042"),
+          "Ctrl+M retained pending romaji after the platform exclusion");
+  window.statusBar()->clearMessage();
+  QApplication::sendEvent(editor, &ime_toggle);
+  require(window.statusBar()->currentMessage().isEmpty(),
+          "Ctrl+M repeated its platform notice");
+
+  MainWindow unicode;
+  require(unicode.new_document_tab(false) == 1,
+          "Could not create Unicode Ctrl+M fixture");
+  unicode.statusBar()->clearMessage();
+  QKeyEvent unicode_toggle(QEvent::KeyPress, Qt::Key_M, Qt::ControlModifier);
+  QApplication::sendEvent(unicode.active_editor(), &unicode_toggle);
+  require(unicode.statusBar()->currentMessage().isEmpty(),
+          "Unicode Ctrl+M was intercepted as the native IMM exclusion");
+}
+
 void test_brace_navigation(const QString& directory) {
   using namespace jwpqt::core;
   using namespace jwpqt::qt;
@@ -8628,6 +8697,7 @@ int main(int argc, char* argv[]) {
     test_empty_selection_line_clipboard(directory.path());
     test_shift_line_deletion(directory.path());
     test_word_and_line_selection(directory.path());
+    test_keyboard_popup_and_ime_exclusion(directory.path());
     test_brace_navigation(directory.path());
     test_word_navigation(directory.path());
     test_navigation_input_finalization(directory.path());

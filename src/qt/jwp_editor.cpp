@@ -16,6 +16,7 @@
 #include <QAbstractSlider>
 #include <QApplication>
 #include <QColor>
+#include <QContextMenuEvent>
 #include <QCoreApplication>
 #include <QFontMetricsF>
 #include <QImage>
@@ -499,6 +500,19 @@ void JwpEditor::inputMethodEvent(QInputMethodEvent* event) {
 }
 
 void JwpEditor::keyPressEvent(QKeyEvent* event) {
+  const bool keyboard_context_menu =
+      event->key() == Qt::Key_Menu ||
+      (event->key() == Qt::Key_F10 &&
+       event->modifiers() == Qt::ShiftModifier);
+  if (keyboard_context_menu && !event->isAutoRepeat()) {
+    const QPoint position = cursorRect().center();
+    QContextMenuEvent context(QContextMenuEvent::Keyboard, position,
+                              viewport()->mapToGlobal(position),
+                              event->modifiers());
+    QCoreApplication::sendEvent(viewport(), &context);
+    event->setAccepted(context.isAccepted());
+    return;
+  }
   const QString text = event->text();
   const bool tab = event->key() == Qt::Key_Tab && event->modifiers() == Qt::NoModifier;
   if (!overwriteMode() || isReadOnly() || text.isEmpty() ||

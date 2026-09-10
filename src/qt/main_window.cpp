@@ -4847,6 +4847,28 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
         static_cast<QMouseEvent*>(event)->button() == Qt::RightButton)
       return true;
   }
+  if (watched == document_->editor_ &&
+      (event->type() == QEvent::ShortcutOverride ||
+       event->type() == QEvent::KeyPress)) {
+    auto* key = static_cast<QKeyEvent*>(event);
+    const bool native_ime_toggle =
+        document_->jwp_document_.has_value() && key->key() == Qt::Key_M &&
+        key->modifiers() == Qt::ControlModifier;
+    if (native_ime_toggle) {
+      event->accept();
+      if (event->type() == QEvent::KeyPress && !key->isAutoRepeat()) {
+        const bool had_pending_input = document_->kana_input_.pending();
+        document_->kana_input_.discard();
+        if (had_pending_input) update_conversion_actions();
+        if (!ime_shortcut_notice_shown_) {
+          ime_shortcut_notice_shown_ = true;
+          statusBar()->showMessage(
+              tr("Input method conversion is controlled by the desktop on Linux."));
+        }
+      }
+      return true;
+    }
+  }
   if (watched == document_->editor_ && document_->jwp_document_ &&
       application_settings_.ctrl_up_down_convert && !document_->updating_editor_ &&
       !document_->applying_kana_input_ &&

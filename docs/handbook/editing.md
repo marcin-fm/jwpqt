@@ -83,6 +83,10 @@ exact character under the pointer; Alt+left-click opens the editor popup.
 Holding an unmodified left click without dragging also opens the popup after
 the platform double-click delay. Release or drag cancels the hold. Pending kana
 is committed at its original caret before a mouse press moves it.
+The Menu key and Shift+F10 open the same popup at the caret. Ctrl+M used the
+Windows IMM conversion switch in JWPxp. On Linux it discards pending native
+romaji and reports once that conversion mode is controlled by the desktop;
+ordinary Unicode editors retain their normal toolkit handling.
 
 WNN conversion requires wnn.dix and wnn.dat. Choose a candidate in the candidate
 bar and accept it as one undo transaction. User conversions and learned choices

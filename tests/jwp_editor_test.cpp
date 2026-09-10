@@ -12,6 +12,7 @@
 
 #include <QApplication>
 #include <QAbstractTextDocumentLayout>
+#include <QContextMenuEvent>
 #include <QEventLoop>
 #include <QImage>
 #include <QMouseEvent>
@@ -645,6 +646,61 @@ void test_mouse_hold_popup() {
   require(calls == 1, "Dragged left press invoked the hold popup");
 }
 
+void test_keyboard_context_menu() {
+  class ContextMenuProbe final : public QObject {
+   public:
+    int calls = 0;
+    QPoint position;
+    QPoint global_position;
+    Qt::KeyboardModifiers modifiers;
+
+   protected:
+    bool eventFilter(QObject*, QEvent* event) override {
+      if (event->type() != QEvent::ContextMenu) return false;
+      const auto* context = static_cast<QContextMenuEvent*>(event);
+      ++calls;
+      position = context->pos();
+      global_position = context->globalPos();
+      modifiers = context->modifiers();
+      event->accept();
+      return true;
+    }
+  } probe;
+
+  jwpqt::qt::JwpEditor editor;
+  editor.resize(240, 120);
+  editor.setPlainText(QStringLiteral("keyboard popup"));
+  QTextCursor cursor = editor.textCursor();
+  cursor.setPosition(4);
+  editor.setTextCursor(cursor);
+  editor.show();
+  QApplication::processEvents();
+  editor.viewport()->installEventFilter(&probe);
+
+  const QPoint expected = editor.cursorRect().center();
+  const QPoint expected_global = editor.viewport()->mapToGlobal(expected);
+  QKeyEvent shift_f10(QEvent::KeyPress, Qt::Key_F10, Qt::ShiftModifier);
+  QApplication::sendEvent(&editor, &shift_f10);
+  require(shift_f10.isAccepted() && probe.calls == 1 &&
+              probe.position == expected && probe.global_position == expected_global &&
+              probe.modifiers == Qt::ShiftModifier,
+          "Shift+F10 did not emit a keyboard context-menu event at the caret");
+
+  QKeyEvent repeated(QEvent::KeyPress, Qt::Key_F10, Qt::ShiftModifier,
+                     QString(), true, 2);
+  QApplication::sendEvent(&editor, &repeated);
+  require(probe.calls == 1,
+          "Auto-repeated Shift+F10 emitted duplicate context menus");
+
+  QKeyEvent menu(QEvent::KeyPress, Qt::Key_Menu, Qt::NoModifier);
+  QApplication::sendEvent(&editor, &menu);
+  require(menu.isAccepted() && probe.calls == 2 &&
+              probe.modifiers == Qt::NoModifier &&
+              editor.toPlainText() == QStringLiteral("keyboard popup") &&
+              editor.textCursor().position() == 4,
+          "Menu key changed the editor or missed the keyboard popup");
+}
+
 void test_control_line_scroll() {
   using namespace jwpqt::qt;
   JwpEditor editor;
@@ -823,6 +879,7 @@ int main(int argc, char** argv) {
     test_composed_overwrite();
     test_selection_autoscroll();
     test_mouse_hold_popup();
+    test_keyboard_context_menu();
     test_control_line_scroll();
     test_character_line_width();
     test_margin_relaxation();

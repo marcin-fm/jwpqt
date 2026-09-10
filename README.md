@@ -316,6 +316,9 @@ Double-click and Ctrl+left-click use the same source word boundaries.
 Shift+left-click opens Character Information for the exact character, while
 Alt+left-click opens the native editor popup. Holding an unmodified left click
 without dragging opens that same popup after the platform double-click delay.
+The Menu key and Shift+F10 open it at the caret. JWPxp's Ctrl+M command controlled
+the Windows IMM conversion mode; on Linux native documents discard pending romaji
+and show a one-time notice because input-method conversion belongs to the desktop.
 
 **Options > Fonts > ASCII and legacy extensions** selects an independent
 single-byte font at the Japanese role's height, without changing desktop menus
