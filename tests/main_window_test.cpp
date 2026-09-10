@@ -5480,7 +5480,184 @@ void test_edict_user_dictionary_integration(const QString& directory) {
                   jwpqt::qt::OpenMode::kNonInteractive) &&
               disabled.edict_resources()->resources.empty() &&
               !find_action(disabled, "edictLookupAction")->isEnabled(),
-          "Saving a disabled user dictionary made it searchable");
+           "Saving a disabled user dictionary made it searchable");
+}
+
+void test_unsaved_user_dictionary_exit(const QString& directory) {
+  const WnnFixture fixture = write_wnn_fixture(directory);
+  const QString wnn_path = directory + QStringLiteral("/exit-user.cnv");
+  const auto wnn_entry = jwpqt::core::make_wnn_user_entry(
+      {0x2422}, {jwpqt::core::JwpText{0x3023}});
+
+  jwpqt::qt::MainWindow wnn;
+  require(wnn.load_wnn_resources(
+              fixture.index_path, fixture.data_path, fixture.preferences_path,
+              wnn_path, jwpqt::qt::OpenMode::kNonInteractive),
+          "Could not prepare unsaved WNN dictionary fixture");
+  find_action(wnn, "userDictionaryAction")->trigger();
+  QApplication::processEvents();
+  auto* wnn_dialog = dynamic_cast<jwpqt::qt::WnnUserDictionaryDialog*>(
+      wnn.findChild<QDialog*>(QStringLiteral("userDictionaryDialog")));
+  require(wnn_dialog != nullptr, "WNN dictionary editor did not open");
+  wnn_dialog->add_entry(wnn_entry);
+  wnn.show();
+
+  bool saw_cancel = false;
+  QTimer::singleShot(0, [&] {
+    auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    require(prompt != nullptr &&
+                prompt->objectName() ==
+                    QStringLiteral("saveWnnUserDictionaryPrompt") &&
+                prompt->defaultButton() == prompt->button(QMessageBox::Save),
+            "WNN exit did not offer a safe save prompt");
+    saw_cancel = true;
+    prompt->button(QMessageBox::Cancel)->click();
+  });
+  require(!wnn.close_application() && saw_cancel && wnn.isVisible() &&
+              wnn_dialog->isWindowModified() && !QFileInfo::exists(wnn_path),
+          "Cancelling WNN dictionary exit lost or persisted its working copy");
+
+  wnn.active_editor()->insertPlainText(QStringLiteral("keep"));
+  bool saw_discard = false;
+  bool saw_document_cancel = false;
+  QTimer::singleShot(0, [&] {
+    auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    require(prompt != nullptr &&
+                prompt->objectName() ==
+                    QStringLiteral("saveWnnUserDictionaryPrompt"),
+            "WNN discard retry did not ask about its working copy");
+    saw_discard = true;
+    QTimer::singleShot(0, [&] {
+      auto* document_prompt =
+          qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+      require(document_prompt != nullptr &&
+                  document_prompt->windowTitle() ==
+                      QStringLiteral("Unsaved changes"),
+              "Document close did not follow WNN discard consent");
+      saw_document_cancel = true;
+      document_prompt->button(QMessageBox::Cancel)->click();
+    });
+    prompt->button(QMessageBox::Discard)->click();
+  });
+  require(!wnn.close_application() && saw_discard && saw_document_cancel &&
+              wnn_dialog->isWindowModified() &&
+              wnn.active_editor()->toPlainText() == QStringLiteral("keep") &&
+              !QFileInfo::exists(wnn_path),
+          "A later document cancellation consumed WNN discard consent");
+
+  bool saw_save = false;
+  QTimer::singleShot(0, [&] {
+    auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    require(prompt != nullptr &&
+                prompt->objectName() ==
+                    QStringLiteral("saveWnnUserDictionaryPrompt"),
+            "WNN exit retry did not offer to save its working copy");
+    saw_save = true;
+    QTimer::singleShot(0, [&] {
+      auto* document_prompt =
+          qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+      require(document_prompt != nullptr &&
+                  document_prompt->windowTitle() ==
+                      QStringLiteral("Unsaved changes"),
+              "Document close did not follow WNN save");
+      document_prompt->button(QMessageBox::Discard)->click();
+    });
+    prompt->button(QMessageBox::Save)->click();
+  });
+  require(wnn.close_application() && saw_save && !wnn.isVisible(),
+          "Saving WNN dictionary changes did not permit application exit");
+  const auto saved_wnn =
+      jwpqt::qt::read_wnn_user_dictionary_file(wnn_path);
+  require(saved_wnn.has_value() &&
+              saved_wnn->entries() ==
+                  std::vector<jwpqt::core::WnnUserEntry>{wnn_entry},
+          "Application exit did not persist WNN dictionary changes");
+
+  const QString edict_directory =
+      directory + QStringLiteral("/edict-exit");
+  const QString registry_path =
+      edict_directory + QStringLiteral("/dict.cfg");
+  const QString edict_path = edict_directory + QStringLiteral("/user.dct");
+  require(QDir().mkpath(edict_directory),
+          "Could not create EDICT exit fixture directory");
+  const auto edict_entry = jwpqt::core::make_edict_user_entry(
+      jwpqt::core::encode_jwp_text(U"\u3044\u306c"),
+      jwpqt::core::encode_jwp_text(U"\u72ac"), U"dog");
+
+  jwpqt::qt::MainWindow edict;
+  require(edict.load_edict_configuration(
+              registry_path, jwpqt::qt::OpenMode::kNonInteractive),
+          "Could not prepare unsaved EDICT dictionary fixture");
+  find_action(edict, "edictUserDictionaryAction")->trigger();
+  QApplication::processEvents();
+  auto* edict_dialog = dynamic_cast<jwpqt::qt::EdictUserDictionaryDialog*>(
+      edict.findChild<QDialog*>(QStringLiteral("edictUserDictionaryDialog")));
+  require(edict_dialog != nullptr, "EDICT dictionary editor did not open");
+  edict_dialog->add_entry(edict_entry);
+  edict.show();
+
+  bool saw_edict_cancel = false;
+  QTimer::singleShot(0, [&] {
+    auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    require(prompt != nullptr &&
+                prompt->objectName() ==
+                    QStringLiteral("saveEdictUserDictionaryPrompt"),
+            "EDICT exit did not identify its unsaved working copy");
+    saw_edict_cancel = true;
+    prompt->button(QMessageBox::Cancel)->click();
+  });
+  require(!edict.close_application() && saw_edict_cancel &&
+              edict.isVisible() && edict_dialog->isWindowModified() &&
+              !QFileInfo::exists(edict_path),
+          "Cancelling EDICT dictionary exit lost or persisted its working copy");
+
+  bool saw_edict_save = false;
+  QTimer::singleShot(0, [&] {
+    auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    require(prompt != nullptr &&
+                prompt->objectName() ==
+                    QStringLiteral("saveEdictUserDictionaryPrompt") &&
+                prompt->defaultButton() == prompt->button(QMessageBox::Save),
+            "EDICT exit did not offer a safe save default");
+    saw_edict_save = true;
+    prompt->button(QMessageBox::Save)->click();
+  });
+  require(edict.close_application() && saw_edict_save && !edict.isVisible(),
+          "Saving EDICT dictionary changes did not permit application exit");
+  const auto saved_edict = jwpqt::qt::read_edict_user_dictionary_file(
+      edict_path, jwpqt::core::LegacyCodePage::k1252);
+  require(saved_edict.has_value() &&
+              saved_edict->entries() ==
+                  std::vector<jwpqt::core::EdictUserEntry>{edict_entry},
+          "Application exit did not persist EDICT dictionary changes");
+
+  QPointer<jwpqt::qt::MainWindow> doomed = new jwpqt::qt::MainWindow;
+  const QString doomed_path =
+      directory + QStringLiteral("/doomed-exit-user.cnv");
+  require(doomed->load_wnn_resources(
+              fixture.index_path, fixture.data_path, fixture.preferences_path,
+              doomed_path, jwpqt::qt::OpenMode::kNonInteractive),
+          "Could not prepare dictionary exit owner-deletion fixture");
+  find_action(*doomed, "userDictionaryAction")->trigger();
+  auto* doomed_dialog = dynamic_cast<jwpqt::qt::WnnUserDictionaryDialog*>(
+      doomed->findChild<QDialog*>(QStringLiteral("userDictionaryDialog")));
+  require(doomed_dialog != nullptr,
+          "Owner-deletion fixture did not open WNN dictionary editor");
+  doomed_dialog->add_entry(wnn_entry);
+  doomed->show();
+  bool owner_deleted = false;
+  QTimer::singleShot(0, [&] {
+    auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
+    require(prompt != nullptr &&
+                prompt->objectName() ==
+                    QStringLiteral("saveWnnUserDictionaryPrompt"),
+            "Owner-deletion fixture did not reach dictionary save prompt");
+    owner_deleted = true;
+    delete doomed.data();
+  });
+  (void)doomed->close_application();
+  require(owner_deleted && !doomed && !QFileInfo::exists(doomed_path),
+          "Deleting the owner during dictionary exit published stale data");
 }
 
 void test_jwp_wnn_preference_write_failure(const QString& directory) {
@@ -7144,6 +7321,7 @@ int main(int argc, char* argv[]) {
     test_edict_automatic_search(directory.path());
     test_unicode_lookup_insertion(directory.path());
     test_edict_user_dictionary_integration(directory.path());
+    test_unsaved_user_dictionary_exit(directory.path());
     test_jwp_wnn_preference_write_failure(directory.path());
     test_jwp_kana_input_mode(directory.path());
     test_input_mode_workflow(directory.path());

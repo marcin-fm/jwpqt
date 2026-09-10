@@ -385,6 +385,7 @@ class MainWindow : public QMainWindow {
   bool save_document();
   bool save_document_as(bool export_copy = false);
   bool maybe_save();
+  bool approve_user_dictionary_close();
   bool approve_close_all(OpenMode mode);
   bool close_document_command(int index);
   std::optional<core::TextEncoding> choose_encoding();

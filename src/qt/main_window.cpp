@@ -7954,6 +7954,37 @@ void MainWindow::show_error(const QString& action,
                             QString::fromUtf8(error.what()));
 }
 
+bool MainWindow::approve_user_dictionary_close() {
+  const auto approve = [this](auto*& dialog, const QString& name,
+                              const QString& object_name) {
+    if (dialog == nullptr || !dialog->isWindowModified()) return true;
+
+    const QPointer<MainWindow> self(this);
+    const QPointer<QDialog> original(dialog);
+    QPointer<QMessageBox> question = new QMessageBox(
+        QMessageBox::Warning, tr("Unsaved User Dictionary"),
+        tr("The %1 user dictionary has unsaved changes.\n\n"
+           "Save them before exiting?")
+            .arg(name),
+        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, this);
+    question->setObjectName(object_name);
+    question->setDefaultButton(QMessageBox::Save);
+    question->setEscapeButton(QMessageBox::Cancel);
+    const auto result = static_cast<QMessageBox::StandardButton>(question->exec());
+    if (question) delete question.data();
+
+    if (!self || !original || dialog != original.data()) return false;
+    if (result == QMessageBox::Discard) return true;
+    if (result != QMessageBox::Save) return false;
+    return dialog->save_changes();
+  };
+
+  return approve(wnn_user_dictionary_dialog_, tr("WNN conversion"),
+                 QStringLiteral("saveWnnUserDictionaryPrompt")) &&
+         approve(edict_user_dictionary_dialog_, tr("EDICT"),
+                 QStringLiteral("saveEdictUserDictionaryPrompt"));
+}
+
 void MainWindow::closeEvent(QCloseEvent* event) {
   if (query_history_busy_ || search_busy_ || print_busy_) {
     event->ignore();
@@ -7967,7 +7998,8 @@ void MainWindow::closeEvent(QCloseEvent* event) {
     return;
   }
   auto* original_document = document_;
-  if (approve_close_all(OpenMode::kInteractive)) {
+  if (approve_user_dictionary_close() &&
+      approve_close_all(OpenMode::kInteractive)) {
     for (int i = 0; i < document_count(); ++i)
       if (documents_[i].get() == original_document) { activate_document(i); break; }
     if (application_settings_.save_settings_on_exit && application_settings_persistence_enabled_ &&
