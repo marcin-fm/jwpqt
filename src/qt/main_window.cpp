@@ -4561,6 +4561,55 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
       (event->type() == QEvent::ShortcutOverride ||
        event->type() == QEvent::KeyPress)) {
     const auto* key = static_cast<QKeyEvent*>(event);
+    const Qt::KeyboardModifiers modifiers = key->modifiers();
+    const bool shift_delete =
+        key->key() == Qt::Key_Backspace || key->key() == Qt::Key_Delete;
+    if (shift_delete && modifiers.testFlag(Qt::ShiftModifier) &&
+        !(modifiers & (Qt::AltModifier | Qt::MetaModifier))) {
+      event->accept();
+      if (event->type() == QEvent::ShortcutOverride) return true;
+      if (document_->kana_input_.pending()) {
+        document_->kana_input_.discard();
+        statusBar()->showMessage(tr("Discarded pending kana input"), 1500);
+        update_conversion_actions();
+        return true;
+      }
+
+      JwpEditor* const current_editor = document_->editor_;
+      if (current_editor->isReadOnly()) return true;
+      const QPointer<MainWindow> self(this);
+      const QPointer<JwpEditor> editor(current_editor);
+      if (!finish_document_input() || !self || !editor ||
+          document_->editor_ != editor) {
+        return true;
+      }
+
+      QTextCursor range = editor->textCursor();
+      if (range.hasSelection()) {
+        editor->cut();
+        return true;
+      }
+      range.movePosition(key->key() == Qt::Key_Backspace
+                             ? QTextCursor::StartOfLine
+                             : QTextCursor::EndOfLine,
+                         QTextCursor::KeepAnchor);
+      if (!range.hasSelection()) return true;
+      QTextDocument* const target_document = editor->document();
+      range.beginEditBlock();
+      range.removeSelectedText();
+      range.endEditBlock();
+      if (!self || !editor || document_->editor_ != editor ||
+          editor->document() != target_document) {
+        return true;
+      }
+      editor->setTextCursor(range);
+      return true;
+    }
+  }
+  if (watched == document_->editor_ &&
+      (event->type() == QEvent::ShortcutOverride ||
+       event->type() == QEvent::KeyPress)) {
+    const auto* key = static_cast<QKeyEvent*>(event);
     const bool line_copy = key->key() == Qt::Key_C;
     const bool line_cut = key->key() == Qt::Key_X;
     if (key->modifiers() == Qt::ControlModifier &&

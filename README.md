@@ -275,7 +275,9 @@ Missing `vert` keeps the native fallback; malformed selected data fails explicit
 With no selection, the recovered Ctrl+C shortcut copies the current visual line
 and restores the cursor; Ctrl+X cuts that line as one undoable edit. Empty lines
 and read-only Cut are no-ops. Selected Copy/Cut and every clipboard format keep
-their ordinary native paths.
+their ordinary native paths. Shift+Backspace/Delete cut an existing selection;
+without one, they delete to the beginning/end of the current visual line without
+changing the clipboard. Each deletion is one undoable edit.
 
 Ctrl+W selects the source character-class word at the caret; Ctrl+Shift+W
 selects the current wrapped visual line. Convert Selection uses the recovered

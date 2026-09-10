@@ -2831,6 +2831,148 @@ void test_empty_selection_line_clipboard(const QString& directory) {
           "Read-only empty-selection Cut changed the document");
 }
 
+void test_shift_line_deletion(const QString& directory) {
+  using namespace jwpqt::core;
+  using namespace jwpqt::qt;
+  const auto shift_delete = [](JwpEditor* editor, int key) {
+    QKeyEvent override(QEvent::ShortcutOverride, key, Qt::ShiftModifier);
+    QApplication::sendEvent(editor, &override);
+    require(override.isAccepted(),
+            "Shift line-deletion shortcut override was not accepted");
+    QKeyEvent press(QEvent::KeyPress, key, Qt::ShiftModifier);
+    QApplication::sendEvent(editor, &press);
+    QKeyEvent release(QEvent::KeyRelease, key, Qt::NoModifier);
+    QApplication::sendEvent(editor, &release);
+    QKeyEvent reset(QEvent::KeyPress, Qt::Key_unknown, Qt::NoModifier);
+    QApplication::sendEvent(editor, &reset);
+  };
+  const auto set_cursor = [](JwpEditor* editor, int position) {
+    QTextCursor cursor = editor->textCursor();
+    cursor.clearSelection();
+    cursor.setPosition(position);
+    editor->setTextCursor(cursor);
+  };
+
+  JwpDocument source;
+  source.paragraphs = {paragraph(U"abcdef"), paragraph(U"\u65e5\u672c")};
+  const QString path = directory + QStringLiteral("/shift-delete.jwp");
+  write_jwp_file(path, source);
+  MainWindow window;
+  require(window.open_jwp_path(path),
+          "Could not open Shift line-deletion fixture");
+  JwpEditor* editor = window.active_editor();
+  QApplication::clipboard()->setText(QStringLiteral("unchanged"));
+
+  set_cursor(editor, 4);
+  shift_delete(editor, Qt::Key_Backspace);
+  require(editor->toPlainText() == QStringLiteral("ef\n\u65e5\u672c") &&
+              QApplication::clipboard()->text() == QStringLiteral("unchanged") &&
+              window.current_jwp_document()->paragraphs[1] == source.paragraphs[1],
+          "Shift+Backspace did not delete to the line start without copying");
+  find_action(window, "undoAction")->trigger();
+  require(*window.current_jwp_document() == source && !window.document_modified(),
+          "Shift+Backspace was not one native undo operation");
+
+  set_cursor(editor, 2);
+  shift_delete(editor, Qt::Key_Delete);
+  require(editor->toPlainText() == QStringLiteral("ab\n\u65e5\u672c") &&
+              QApplication::clipboard()->text() == QStringLiteral("unchanged"),
+          "Shift+Delete did not delete to the line end without copying");
+  find_action(window, "undoAction")->trigger();
+  require(*window.current_jwp_document() == source && !window.document_modified(),
+          "Shift+Delete was not one native undo operation");
+
+  QTextCursor selection = editor->textCursor();
+  selection.setPosition(1);
+  selection.setPosition(4, QTextCursor::KeepAnchor);
+  editor->setTextCursor(selection);
+  shift_delete(editor, Qt::Key_Delete);
+  require(editor->toPlainText() == QStringLiteral("aef\n\u65e5\u672c") &&
+              QApplication::clipboard()->text() == QStringLiteral("bcd"),
+          "Shift+Delete did not cut an existing selection");
+  find_action(window, "undoAction")->trigger();
+  require(*window.current_jwp_document() == source,
+          "Selected Shift+Delete was not one native undo operation");
+
+  set_cursor(editor, 0);
+  QApplication::clipboard()->setText(QStringLiteral("boundary"));
+  shift_delete(editor, Qt::Key_Backspace);
+  set_cursor(editor, 6);
+  shift_delete(editor, Qt::Key_Delete);
+  require(*window.current_jwp_document() == source &&
+              QApplication::clipboard()->text() == QStringLiteral("boundary") &&
+              !window.document_modified(),
+          "Shift line deletion changed a document at a line boundary");
+
+  editor->setReadOnly(true);
+  set_cursor(editor, 3);
+  shift_delete(editor, Qt::Key_Backspace);
+  require(*window.current_jwp_document() == source &&
+              QApplication::clipboard()->text() == QStringLiteral("boundary") &&
+              !window.document_modified(),
+          "Read-only Shift line deletion changed the document or clipboard");
+  editor->setReadOnly(false);
+
+  find_action(window, "kanaInputAction")->trigger();
+  set_cursor(editor, 6);
+  send_text_key(editor, Qt::Key_K, QStringLiteral("k"));
+  require(*window.current_jwp_document() == source && !window.document_modified(),
+          "Pending Shift-delete fixture unexpectedly changed the document");
+  shift_delete(editor, Qt::Key_Backspace);
+  send_text_key(editor, Qt::Key_A, QStringLiteral("a"));
+  require(editor->toPlainText() == QStringLiteral("abcdef\u3042\n\u65e5\u672c"),
+          "Shift+Backspace did not discard pending kana before line deletion");
+  find_action(window, "undoAction")->trigger();
+  require(*window.current_jwp_document() == source && !window.document_modified(),
+          "Pending-kana Shift+Backspace changed the native undo baseline");
+
+  require(window.new_document_tab(false) == 1,
+          "Could not create Unicode Shift-delete fixture");
+  editor = window.active_editor();
+  editor->setPlainText(QStringLiteral("abcdefghij"));
+  editor->setLineWrapMode(QTextEdit::FixedColumnWidth);
+  editor->setLineWrapColumnOrWidth(4);
+  window.resize(260, 300);
+  window.show();
+  QApplication::processEvents();
+  set_cursor(editor, 6);
+  QTextCursor expected_range = editor->textCursor();
+  expected_range.movePosition(QTextCursor::StartOfLine,
+                              QTextCursor::KeepAnchor);
+  require(expected_range.hasSelection() &&
+              expected_range.selectionStart() > 0,
+          "Shift-delete fixture did not produce a wrapped visual line");
+  QString expected = editor->toPlainText();
+  expected.remove(expected_range.selectionStart(),
+                  expected_range.selectionEnd() -
+                      expected_range.selectionStart());
+  QApplication::clipboard()->setText(QStringLiteral("wrapped"));
+  shift_delete(editor, Qt::Key_Backspace);
+  require(editor->toPlainText() == expected &&
+              QApplication::clipboard()->text() == QStringLiteral("wrapped"),
+          "Shift+Backspace ignored the wrapped visual-line boundary");
+  find_action(window, "undoAction")->trigger();
+  require(editor->toPlainText() == QStringLiteral("abcdefghij"),
+          "Wrapped Shift+Backspace was not one Unicode undo operation");
+
+  MainWindow reentrant;
+  require(reentrant.open_jwp_path(path),
+          "Could not open Shift-delete reentrant fixture");
+  require(reentrant.new_document_tab(false) == 1 &&
+              reentrant.activate_document(0),
+          "Could not prepare Shift-delete reentrant destination");
+  JwpEditor* const source_editor = reentrant.active_editor();
+  set_cursor(source_editor, 3);
+  QObject::connect(source_editor->document(), &QTextDocument::contentsChanged,
+                   &reentrant, [&reentrant] { reentrant.activate_document(1); });
+  QKeyEvent tab_switch(QEvent::KeyPress, Qt::Key_Backspace,
+                       Qt::ShiftModifier);
+  QApplication::sendEvent(source_editor, &tab_switch);
+  require(reentrant.current_document_index() == 1 &&
+              reentrant.active_editor()->toPlainText().isEmpty(),
+          "Shift line deletion published the old cursor after a tab switch");
+}
+
 void test_word_and_line_selection(const QString& directory) {
   using namespace jwpqt::core;
   using namespace jwpqt::qt;
@@ -7661,6 +7803,7 @@ int main(int argc, char* argv[]) {
     test_jwp_open_edit_and_save(directory.path());
     test_jwp_clipboard_changes(directory.path());
     test_empty_selection_line_clipboard(directory.path());
+    test_shift_line_deletion(directory.path());
     test_word_and_line_selection(directory.path());
     test_application_settings_workflow(directory.path());
     test_application_settings_preview(directory.path());

@@ -23,6 +23,11 @@ Ctrl+X cuts that visual line as one undoable edit. Native JWP clipboard data kee
 its original byte/JIS identity. An empty line copies or cuts nothing, and Cut is
 disabled in a read-only document.
 
+Shift+Backspace and Shift+Delete cut an existing selection. With no selection,
+they delete from the caret to the beginning or end of the current wrapped visual
+line without replacing the clipboard. A line-edge no-op does not dirty the file,
+and each actual deletion is one undoable edit.
+
 ## Word And Line Selection
 
 Ctrl+W selects a source-style word using separate ASCII, punctuation, JASCII,
