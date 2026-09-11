@@ -1,10 +1,12 @@
 # Vector interface artwork
 
 These standard SVG files are the native JWPqt interface artwork. The toolbar
-and lookup diagrams use transparent, palette-neutral black shapes. At runtime
-Qt renders them at the requested logical size and applies the active or disabled
-text color, so the same source remains legible in light and dark themes. The
-application icon intentionally keeps its own blue and white colors.
+and lookup diagrams use transparent, palette-neutral black shapes. Toolbar icons
+are materialized at their supported icon sizes. The SKIP and Four Corner widgets
+instead paint their SVG paths directly into the current layout and device scale,
+without a fixed intermediate pixmap. Runtime palette colors keep both forms
+legible in light and dark themes. The application icon intentionally keeps its
+own blue and white colors.
 
 The toolbar has one named icon for every command in the 36-command customization
 catalog. `skip-diagram.svg` and `four-corner-diagram.svg` preserve the category

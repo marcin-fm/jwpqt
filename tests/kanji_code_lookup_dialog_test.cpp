@@ -13,10 +13,11 @@
 #include <QEventLoop>
 #include <QFontMetrics>
 #include <QImage>
-#include <QLabel>
 #include <QListWidget>
 #include <QMouseEvent>
+#include <QPainter>
 #include <QPushButton>
+#include <QRegion>
 #include <QScrollBar>
 #include <QSpinBox>
 #include <QTabWidget>
@@ -26,6 +27,7 @@
 #include "kanji_code_lookup_dialog.h"
 #include "kanji_reading_lookup_dialog.h"
 #include "text_bridge.h"
+#include "vector_artwork.h"
 #include "jwpqt/core/jwp_text_codec.h"
 
 namespace {
@@ -60,6 +62,33 @@ bool contains_opaque_color(const QImage& image, const QColor& color) {
           image.pixelColor(x, y).rgb() == color.rgb())
         return true;
   return false;
+}
+
+QImage render_artwork(jwpqt::qt::SvgArtworkWidget& widget,
+                      QSize logical_size) {
+  const QSize previous = widget.size();
+  widget.resize(logical_size);
+  QImage image(logical_size, QImage::Format_ARGB32_Premultiplied);
+  image.fill(Qt::transparent);
+  QPainter painter(&image);
+  widget.render(&painter, QPoint(), QRegion(), QWidget::DrawChildren);
+  painter.end();
+  widget.resize(previous);
+  return image;
+}
+
+QRect artwork_region(QRectF source_region, QSizeF source_size,
+                     const QImage& image) {
+  QSizeF target = source_size;
+  target.scale(image.size(), Qt::KeepAspectRatio);
+  const QPointF origin((image.width() - target.width()) / 2.0,
+                       (image.height() - target.height()) / 2.0);
+  const qreal scale = target.width() / source_size.width();
+  return QRectF(origin.x() + source_region.x() * scale,
+                origin.y() + source_region.y() * scale,
+                source_region.width() * scale,
+                source_region.height() * scale)
+      .toAlignedRect();
 }
 
 void append_u16(std::string& bytes, std::uint16_t value) {
@@ -289,10 +318,21 @@ void test_graphical_controls_and_automatic_search() {
   }
   require(dialog.findChild<QSpinBox*>(QStringLiteral("bushuRadical"))->value() == -1,
           "Clicking a stroke header changed the radical query");
-  for (const char* name : {"skipLegend", "fourCornerLegend"}) {
-    const auto* legend = dialog.findChild<QLabel*>(QLatin1String(name));
-    require(legend && !legend->pixmap().isNull(), "Lookup reference diagram is not embedded");
-  }
+  auto* skip_legend = dynamic_cast<jwpqt::qt::SvgArtworkWidget*>(
+      dialog.findChild<QWidget*>(QStringLiteral("skipLegend")));
+  auto* corner_legend = dynamic_cast<jwpqt::qt::SvgArtworkWidget*>(
+      dialog.findChild<QWidget*>(QStringLiteral("fourCornerLegend")));
+  require(skip_legend && corner_legend,
+          "Responsive lookup reference diagrams are not embedded");
+  require(skip_legend->minimumSizeHint() == QSize(118, 48) &&
+              skip_legend->sizeHint() == QSize(236, 96) &&
+              skip_legend->hasHeightForWidth() &&
+              skip_legend->heightForWidth(472) == 192 &&
+              corner_legend->minimumSizeHint() == QSize(160, 60) &&
+              corner_legend->sizeHint() == QSize(320, 120) &&
+              corner_legend->hasHeightForWidth() &&
+              corner_legend->heightForWidth(640) == 240,
+          "Lookup reference diagrams do not expose responsive vector geometry");
   variants->setChecked(false);
   require(spahn->count() == 79, "Spahn variants did not reduce to canonical choices");
   dialog.select_spahn_mode();
@@ -452,6 +492,23 @@ void test_artwork_palette_changes() {
   auto* stroke = dialog.findChild<QListWidget*>(QStringLiteral("strokeBushuRadicals"));
   auto* spahn = dialog.findChild<QListWidget*>(QStringLiteral("spahnRadicals"));
   auto* timer = dialog.findChild<QTimer*>(QStringLiteral("kanjiCodeSearchTimer"));
+  auto* skip_legend = dynamic_cast<jwpqt::qt::SvgArtworkWidget*>(
+      dialog.findChild<QWidget*>(QStringLiteral("skipLegend")));
+  auto* corner_legend = dynamic_cast<jwpqt::qt::SvgArtworkWidget*>(
+      dialog.findChild<QWidget*>(QStringLiteral("fourCornerLegend")));
+  require(skip_legend && corner_legend,
+          "Responsive lookup artwork is missing from the palette fixture");
+  dialog.select_skip_mode();
+  dialog.show();
+  QApplication::processEvents();
+  require(skip_legend->size().width() >= skip_legend->sizeHint().width() &&
+              skip_legend->size().height() >= skip_legend->sizeHint().height(),
+          "The SKIP diagram did not expand into its interface page");
+  dialog.select_four_corner_mode();
+  QApplication::processEvents();
+  require(corner_legend->size().width() >= corner_legend->sizeHint().width() &&
+              corner_legend->size().height() >= corner_legend->sizeHint().height(),
+          "The Four Corner diagram did not expand into its interface page");
   auto* bushu_item = bushu->item(1);
   auto* stroke_item = stroke->item(1);
   auto* spahn_item = spahn->item(0);
@@ -484,6 +541,9 @@ void test_artwork_palette_changes() {
     QApplication::processEvents();
     require(bushu->palette().color(QPalette::Base) == palette.color(QPalette::Base),
             "Bushu grid background retained the previous palette");
+    require(skip_legend->palette().color(QPalette::Text) == text &&
+                corner_legend->palette().color(QPalette::Text) == text,
+            "Embedded vector diagrams retained the previous palette");
     for (const auto* item : {bushu_item, stroke_item}) {
       const QImage icon = item->icon().pixmap(QSize(16, 16), 1.0).toImage();
       require(icon.pixelColor(0, 0) == (dark ? palette.color(QPalette::Window) : QColor(Qt::white)) &&
@@ -491,22 +551,45 @@ void test_artwork_palette_changes() {
               "Bushu bitmap does not follow the live light/dark palette");
     }
     const QImage spahn_image = spahn_item->icon().pixmap(QSize(16, 16), 1.0).toImage();
-    const QImage skip = dialog.findChild<QLabel*>(QStringLiteral("skipLegend"))->pixmap().toImage();
-    const QImage corner = dialog.findChild<QLabel*>(QStringLiteral("fourCornerLegend"))->pixmap().toImage();
-    require(skip.size() == QSize(236, 96) && corner.size() == QSize(320, 120),
-            "Vector lookup artwork has the wrong logical size");
+    jwpqt::qt::SvgArtworkWidget skip_probe(
+        QStringLiteral(":/jwpqt/assets/icons/skip-diagram.svg"),
+        QSize(236, 96));
+    jwpqt::qt::SvgArtworkWidget corner_probe(
+        QStringLiteral(":/jwpqt/assets/icons/four-corner-diagram.svg"),
+        QSize(320, 120));
+    skip_probe.setPalette(palette);
+    corner_probe.setPalette(palette);
+    const QImage skip_small = render_artwork(skip_probe, QSize(118, 48));
+    const QImage corner_small = render_artwork(corner_probe, QSize(160, 60));
+    const QImage skip = render_artwork(skip_probe, QSize(708, 288));
+    const QImage corner = render_artwork(corner_probe, QSize(800, 300));
+    require(skip_small.size() == QSize(118, 48) &&
+                corner_small.size() == QSize(160, 60) &&
+                skip.size() == QSize(708, 288) &&
+                corner.size() == QSize(800, 300),
+            "Responsive vector lookup artwork ignored logical or device scale");
     require(transparent_pixels(skip) > 100 && transparent_pixels(corner) > 100,
             "Vector lookup artwork painted an opaque paper background");
-    const QColor artwork_ink = dark ? palette.color(QPalette::Text) : QColor(Qt::black);
-    require(contains_opaque_color(skip, artwork_ink) &&
+    const QColor artwork_ink = palette.color(QPalette::Text);
+    require(contains_opaque_color(skip_small, artwork_ink) &&
+                contains_opaque_color(corner_small, artwork_ink) &&
+                contains_opaque_color(skip, artwork_ink) &&
                 contains_opaque_color(corner, artwork_ink),
             "Vector lookup artwork did not use the live light/dark text color");
     for (int row = 0; row < 2; ++row)
       for (int column = 0; column < 2; ++column)
-        require(opaque_pixels(skip, QRect(column * 118, row * 48, 118, 48)) > 40,
+        require(opaque_pixels(skip, artwork_region(
+                    QRectF(column * 59, row * 24, 59, 24), QSizeF(118, 48),
+                    skip)) > 80,
                 "A SKIP vector diagram quadrant is empty");
-    for (int cell = 0; cell < 10; ++cell)
-      require(opaque_pixels(corner, QRect(cell * 32, 0, 32, 120)) > 30,
+    for (const QRectF region : {
+             QRectF(0, 0, 40, 20), QRectF(40, 0, 40, 20),
+             QRectF(80, 0, 40, 20), QRectF(120, 0, 40, 20),
+             QRectF(0, 20, 40, 20), QRectF(40, 20, 40, 20),
+             QRectF(80, 20, 40, 20), QRectF(0, 40, 40, 20),
+             QRectF(40, 40, 40, 20), QRectF(80, 40, 40, 20)})
+      require(opaque_pixels(corner, artwork_region(
+                  region, QSizeF(160, 60), corner)) > 50,
               "A Four Corner vector diagram cell is empty");
     if (light_spahn.isNull()) {
       dialog.select_skip_mode();

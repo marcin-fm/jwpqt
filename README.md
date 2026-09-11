@@ -893,15 +893,17 @@ enable the option only when that is wanted.
 Character Table places its code fields beside the full character grid. Lookup
 results use horizontal character strips with Information, Insert and Copy
 actions. Bushu, Stroke/Bushu, SKIP, Spahn-Hadamitzky, Four Corner and Index Lookup
-share a tabbed window. Graphical radical selectors and scalable SKIP/Four Corner
+share a tabbed window. Graphical radical selectors and responsive SKIP/Four Corner
 legends, Clear and debounced Auto Search are available where applicable. Index
 Lookup supports the 21 recovered dictionary/reference types, limited by the
 loaded metadata; its volume field is enabled only for the relevant indexes.
 The vector legends are redrawn from the recovered lookup semantics and require
-no new provisioning. In dark palettes, their strokes and radical strokes use
-light ink on dark paper and stroke-count
-headings stay readable. Switching back restores the original light artwork
-without changing queries, selections or results.
+no new provisioning. They are interface widgets, not fixed-size pixmaps: Qt
+paints their embedded SVG paths directly into the current layout at the current
+device scale while preserving the source aspect ratio. In dark palettes, their
+strokes and radical strokes use light ink on dark paper and stroke-count headings
+stay readable. Switching back restores the original light artwork without
+changing queries, selections or results.
 
 Radical Lookup links the recovered variant groups, seeds the current JIS kanji
 and extracts radicals from the first clipboard character. A quick stroke count

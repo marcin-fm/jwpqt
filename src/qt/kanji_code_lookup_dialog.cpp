@@ -161,10 +161,11 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
   skip_misclassifications_->setEnabled((information_.flags() & 0x0020U) != 0);
   if (!skip_misclassifications_->isEnabled())
     skip_misclassifications_->setToolTip(tr("This metadata file has no SKIP cross-references. The saved preference is retained."));
-  auto* skip_legend = new QLabel(skip_page);
+  auto* skip_legend = new SvgArtworkWidget(
+      QStringLiteral(":/jwpqt/assets/icons/skip-diagram.svg"),
+      QSize(236, 96), skip_page);
   skip_legend->setObjectName(QStringLiteral("skipLegend"));
-  skip_legend->setPixmap(render_svg_artwork(
-      QStringLiteral(":/jwpqt/assets/icons/skip-diagram.svg"), QSize(236, 96)));
+  skip_legend->setAccessibleName(tr("SKIP type diagrams"));
   skip_layout->addRow(skip_legend);
   tabs_->addTab(skip_page, tr("SKIP"));
 
@@ -178,10 +179,11 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
     corner_digits_.push_back(spin);
     corner_layout->addRow(corner_names[static_cast<qsizetype>(index)], spin);
   }
-  auto* corner_legend = new QLabel(corner_page);
+  auto* corner_legend = new SvgArtworkWidget(
+      QStringLiteral(":/jwpqt/assets/icons/four-corner-diagram.svg"),
+      QSize(320, 120), corner_page);
   corner_legend->setObjectName(QStringLiteral("fourCornerLegend"));
-  corner_legend->setPixmap(render_svg_artwork(
-      QStringLiteral(":/jwpqt/assets/icons/four-corner-diagram.svg"), QSize(320, 120)));
+  corner_legend->setAccessibleName(tr("Four Corner diagrams"));
   corner_layout->addRow(corner_legend);
   tabs_->addTab(corner_page, tr("Four corner"));
 
@@ -606,14 +608,6 @@ void KanjiCodeLookupDialog::update_artwork() {
     refresh_icons(stroke_bushu_radicals_, radical_sheet_, Qt::UserRole + 1);
   }
   refresh_icons(spahn_radicals_, QPixmap(QStringLiteral(":/jwpqt/hsradicals.bmp")), Qt::UserRole + 2);
-  if (auto* legend = findChild<QLabel*>(QStringLiteral("skipLegend")))
-    legend->setPixmap(themed_lookup_artwork(
-        render_svg_artwork(QStringLiteral(":/jwpqt/assets/icons/skip-diagram.svg"),
-                           QSize(236, 96)), palette()));
-  if (auto* legend = findChild<QLabel*>(QStringLiteral("fourCornerLegend")))
-    legend->setPixmap(themed_lookup_artwork(
-        render_svg_artwork(QStringLiteral(":/jwpqt/assets/icons/four-corner-diagram.svg"),
-                           QSize(320, 120)), palette()));
 }
 
 bool KanjiCodeLookupDialog::search_current() {
