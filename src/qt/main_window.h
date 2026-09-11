@@ -64,6 +64,7 @@ class QToolButton;
 
 namespace jwpqt::qt {
 
+class ApplicationSettingsDialog;
 class EdictLookupDialog;
 class FindReplaceDialog;
 struct FindReplaceRequest;
@@ -486,6 +487,7 @@ class MainWindow : public QMainWindow {
   QString recent_file_warning_;
   bool recent_file_persistence_enabled_ = true;
   ApplicationSettings application_settings_;
+  QPointer<ApplicationSettingsDialog> application_settings_dialog_;
   QString application_settings_path_;
   WindowGeometry* window_geometry_ = nullptr;
   QString application_settings_warning_;

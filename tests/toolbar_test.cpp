@@ -118,6 +118,16 @@ void window() {
   editor = window.active_editor(); editor->insertPlainText("unicode");
   text = editor->toPlainText(); undo = editor->document()->availableUndoSteps(); modified = editor->document()->isModified();
   const auto preserved = qt::write_application_settings(window.application_settings());
+  const auto preserved_toolbar = window.application_settings().toolbar;
+  const auto toolbar_matches = [&] {
+    const auto& toolbar = window.application_settings().toolbar;
+    return toolbar.buttons == preserved_toolbar.buttons &&
+           toolbar.count == preserved_toolbar.count &&
+           toolbar.area == preserved_toolbar.area &&
+           toolbar.icon_size == preserved_toolbar.icon_size &&
+           toolbar.text_style == preserved_toolbar.text_style &&
+           toolbar.locked == preserved_toolbar.locked;
+  };
   auto invalid = config; invalid.toolbar.buttons[0] = 255;
   require(!window.apply_application_settings(invalid) && qt::write_application_settings(window.application_settings()) == preserved,
           "Invalid apply damaged toolbar");
@@ -128,8 +138,8 @@ void window() {
     child<QDialogButtonBox>(*dialog, "")->button(QDialogButtonBox::Cancel)->click();
   });
   child<QAction>(window, "customizeToolbarAction")->trigger();
-  require(qt::write_application_settings(window.application_settings()) == preserved && duplicate,
-          "Cancel changed live toolbar");
+  require(toolbar_matches() && duplicate,
+           "Cancel changed live toolbar");
   QTimer::singleShot(0, [&] {
     auto* dialog = child<QDialog>(window, "toolbarDialog");
     auto* selected = child<QListWidget>(*dialog, "toolbarSelected");

@@ -583,7 +583,8 @@ Overwrite replaces complete Unicode scalars without consuming a paragraph break.
 Typing over a selection replaces only the selection, deliberately avoiding the
 legacy behavior that also overwrote following text. Clipboard and lookup insertion
 remain insert operations: `Ctrl+Insert` copies, while `Shift+Insert` and
-`Ctrl+Shift+Insert` paste.
+`Ctrl+Shift+Insert` paste the ordinary clipboard. On X11 these commands do not
+substitute the primary selection for the clipboard.
 
 Dictionary and Reading Lookup query fields share the window's insert/overwrite
 mode while retaining their own K/A/J input modes. `Insert` in a query updates the
@@ -868,8 +869,10 @@ future external changes only while lookup is visible and available, never old
 clipboard content merely on opening/enabling. Searches coalesce; editing,
 pending kana, selection, hiding and disabling invalidate queued work. Invalid
 or oversized input preserves the query/results, and application-owned copies
-do not feed back into monitoring. Successful clipboard queries may enter saved
-history; enable the option only when that is wanted.
+do not feed back into monitoring. Visible lookup windows also poll for external
+X11 ownership changes because Qt may not publish their contents with the
+ownership signal alone. Successful clipboard queries may enter saved history;
+enable the option only when that is wanted.
 
 Character Table places its code fields beside the full character grid. Lookup
 results use horizontal character strips with Information, Insert and Copy

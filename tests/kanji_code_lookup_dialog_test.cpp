@@ -231,6 +231,8 @@ void test_graphical_controls_and_automatic_search() {
   compact.show();
   QApplication::processEvents();
   auto* compact_grid = compact.findChild<QListWidget*>(QStringLiteral("bushuRadicals"));
+  compact_grid->doItemsLayout();
+  QApplication::processEvents();
   require(compact_grid->verticalScrollBar()->maximum() == 0 &&
               compact_grid->horizontalScrollBar()->maximum() == 0,
           "The default Bushu glyph grid unnecessarily hides later stroke groups");

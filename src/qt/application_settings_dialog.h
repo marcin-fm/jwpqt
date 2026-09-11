@@ -14,7 +14,8 @@ class ApplicationSettingsDialog : public QDialog {
  public:
   explicit ApplicationSettingsDialog(const ApplicationSettings& settings, QWidget* parent = nullptr,
                                      bool dictionary_page = false,
-                                     QAction* overwrite_action = nullptr);
+                                     QAction* overwrite_action = nullptr,
+                                     QWidget* help_owner = nullptr);
   const ApplicationSettings& settings() const noexcept { return settings_; }
 
  private:

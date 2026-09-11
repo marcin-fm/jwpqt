@@ -141,6 +141,7 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
       contingent_(new QCheckBox(tr("Contingent"), this)),
       no_names_(new NoNamesCheckBox(tr("No Names"), this)),
       clipboard_timer_(new QTimer(this)),
+      clipboard_poll_timer_(new QTimer(this)),
       results_(new ResultTextEdit(this)),
       status_(new QLabel(this)),
       insert_button_(new QPushButton(tr("&Insert in Document"), this)),
@@ -160,9 +161,19 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   query_edit_->installEventFilter(this);
   connect(query_edit_, &QLineEdit::textChanged, this, [this] {
     clipboard_timer_->stop();
+    if (options_->monitor_clipboard && isVisible()) {
+      clipboard_text_ = QApplication::clipboard()->text().left(201);
+      clipboard_pending_text_ = clipboard_text_;
+    }
     if (!history_loading_) history_changed_ = true;
   });
-  connect(query_edit_, &QLineEdit::selectionChanged, clipboard_timer_, &QTimer::stop);
+  connect(query_edit_, &QLineEdit::selectionChanged, this, [this] {
+    clipboard_timer_->stop();
+    if (options_->monitor_clipboard && isVisible()) {
+      clipboard_text_ = QApplication::clipboard()->text().left(201);
+      clipboard_pending_text_ = clipboard_text_;
+    }
+  });
   auto* history_button = new QPushButton(tr("&History"), this);
   history_button->setObjectName(QStringLiteral("edictHistory"));
   history_button->setToolTip(tr("Recall a query without searching. Up/Down navigate query history."));
@@ -264,24 +275,48 @@ EdictLookupDialog::EdictLookupDialog(SearchHandler search_handler,
   connect(from_clipboard, &QPushButton::clicked, this, [this] { search_clipboard(); });
   clipboard_timer_->setSingleShot(true);
   clipboard_timer_->setInterval(150);
-  connect(this, &QDialog::finished, clipboard_timer_, &QTimer::stop);
+  clipboard_poll_timer_->setInterval(50);
+  connect(this, &QDialog::finished, this, [this] {
+    clipboard_timer_->stop();
+    clipboard_poll_timer_->stop();
+  });
   connect(QApplication::clipboard(), &QClipboard::dataChanged, this, [this] {
     clipboard_timer_->stop();
     if (!options_->monitor_clipboard || !isVisible() || query_busy_ ||
         QApplication::activeModalWidget() || QApplication::clipboard()->ownsClipboard()) return;
-    const auto* mime = QApplication::clipboard()->mimeData();
-    if (mime && mime->property("jwpqtInternalCopy").toBool()) return;
-    const QPointer<EdictLookupDialog> self(this);
-    const QString text = QApplication::clipboard()->text().left(201);
-    if (self && options_->monitor_clipboard && isVisible() && !query_busy_) {
+    clipboard_timer_->start();
+  });
+  connect(clipboard_poll_timer_, &QTimer::timeout, this, [this] {
+    if (!options_->monitor_clipboard || !isVisible()) return;
+    auto* clipboard = QApplication::clipboard();
+    const QString text = clipboard->text().left(201);
+    const auto* mime = clipboard->mimeData();
+    if (query_busy_ || QApplication::activeModalWidget() || clipboard->ownsClipboard() ||
+        (mime && mime->property("jwpqtInternalCopy").toBool())) {
+      clipboard_timer_->stop();
       clipboard_text_ = text;
-      clipboard_timer_->start();
+      clipboard_pending_text_ = text;
+      return;
     }
+    if (text == clipboard_text_ || text == clipboard_pending_text_) return;
+    clipboard_pending_text_ = text;
+    clipboard_timer_->start();
   });
   connect(clipboard_timer_, &QTimer::timeout, this, [this] {
     if (!options_->monitor_clipboard || !isVisible() || query_busy_ ||
         QApplication::activeModalWidget() || QApplication::clipboard()->ownsClipboard()) return;
-    search_clipboard_text(clipboard_text_);
+    auto* clipboard = QApplication::clipboard();
+    const auto* mime = clipboard->mimeData();
+    if (mime && mime->property("jwpqtInternalCopy").toBool()) return;
+    const QString text = clipboard->text().left(201);
+    if (text != clipboard_pending_text_) {
+      clipboard_pending_text_ = text;
+      clipboard_timer_->start();
+      return;
+    }
+    if (text == clipboard_text_) return;
+    clipboard_text_ = text;
+    search_clipboard_text(text);
   });
 
   option_bindings_ = {
@@ -435,7 +470,14 @@ void EdictLookupDialog::set_options(const EdictLookupOptions& options) {
     no_names_->setCheckState(options_->personal_names != options_->place_names
         ? Qt::PartiallyChecked : options_->personal_names ? Qt::Unchecked : Qt::Checked);
   }
-  if (!options_->monitor_clipboard) clipboard_timer_->stop();
+  if (!options_->monitor_clipboard) {
+    clipboard_timer_->stop();
+    clipboard_poll_timer_->stop();
+  } else if (isVisible()) {
+    clipboard_text_ = QApplication::clipboard()->text().left(201);
+    clipboard_pending_text_ = clipboard_text_;
+    clipboard_poll_timer_->start();
+  }
   always_->parentWidget()->setEnabled(options_->advanced);
 }
 
@@ -1224,13 +1266,28 @@ void EdictLookupDialog::update_actions() {
 
 void EdictLookupDialog::hideEvent(QHideEvent* event) {
   clipboard_timer_->stop();
+  clipboard_poll_timer_->stop();
   QDialog::hideEvent(event);
+}
+
+void EdictLookupDialog::showEvent(QShowEvent* event) {
+  QDialog::showEvent(event);
+  if (!options_->monitor_clipboard) return;
+  clipboard_text_ = QApplication::clipboard()->text().left(201);
+  clipboard_pending_text_ = clipboard_text_;
+  clipboard_poll_timer_->start();
 }
 
 bool EdictLookupDialog::eventFilter(QObject* watched, QEvent* event) {
   if (watched == results_ && event->type() == QEvent::PaletteChange) update_highlights();
-  if (watched == query_edit_ && (event->type() == QEvent::KeyPress || event->type() == QEvent::InputMethod))
+  if (watched == query_edit_ &&
+      (event->type() == QEvent::KeyPress || event->type() == QEvent::InputMethod)) {
     clipboard_timer_->stop();
+    if (options_->monitor_clipboard && isVisible()) {
+      clipboard_text_ = QApplication::clipboard()->text().left(201);
+      clipboard_pending_text_ = clipboard_text_;
+    }
+  }
   if (watched == query_edit_ && (event->type() == QEvent::ShortcutOverride ||
                                 event->type() == QEvent::KeyPress)) {
     auto* key = static_cast<QKeyEvent*>(event);

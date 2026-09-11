@@ -9,6 +9,7 @@
 #include <QComboBox>
 #include <QClipboard>
 #include <QDialogButtonBox>
+#include <QEventLoop>
 #include <QFontDatabase>
 #include <QFontMetricsF>
 #include <QImage>
@@ -18,6 +19,7 @@
 #include <QTemporaryDir>
 #include <QTextCursor>
 #include <QTextDocument>
+#include <QTimer>
 
 #include "application_settings.h"
 #include "application_settings_dialog.h"
@@ -30,6 +32,11 @@
 
 namespace qt = jwpqt::qt;
 void require(bool value, const char* message) { if (!value) throw std::runtime_error(message); }
+void wait_for_window_layout() {
+  QEventLoop loop;
+  QTimer::singleShot(100, &loop, &QEventLoop::quit);
+  loop.exec();
+}
 
 void test_fallback_and_big() {
   qt::ApplicationSettings settings;
@@ -53,16 +60,16 @@ void test_fallback_and_big() {
   auto* information = new qt::KanjiInfoDialog(nullptr, {}, &owner);
   require(information->set_character(U'\u611b'), "Big character fixture failed");
   auto* character = information->findChild<QLabel*>(QStringLiteral("kanjiInfoCharacter"));
-  information->show(); QApplication::processEvents();
+  information->show(); wait_for_window_layout();
   const auto check = [&] {
     const auto bounds = QFontMetricsF(character->font()).boundingRect(character->text());
     require(bounds.width() <= character->contentsRect().width() &&
             bounds.height() <= character->contentsRect().height(), "Big glyph is clipped");
   };
   check(); const int small = character->font().pixelSize();
-  information->resize(1250, 900); QApplication::processEvents(); check();
+  information->resize(1250, 900); wait_for_window_layout(); check();
   require(character->font().pixelSize() > small, "Big glyph did not grow with its pane");
-  information->resize(800, 420); QApplication::processEvents(); check();
+  information->resize(800, 420); wait_for_window_layout(); check();
   for (char32_t value : {U'W', U'\u0394', U'\U0001f600'}) {
     require(information->set_character(value), "Big Unicode character rejected"); check();
   }

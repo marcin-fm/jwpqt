@@ -25,6 +25,7 @@
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QPointer>
+#include <QProcess>
 #include <QPushButton>
 #include <QTextDocument>
 #include <QTextEdit>
@@ -114,37 +115,64 @@ void test_names_and_clipboard() {
   require(calls == 2 && dialog.query() == U"dog", "Enabling monitoring consumed the existing clipboard");
   QApplication::clipboard()->setText(QStringLiteral("first"));
   QApplication::clipboard()->setText(QStringLiteral("latest"));
+  const bool owns_clipboard = QApplication::clipboard()->ownsClipboard();
   wait();
-  require(calls == 3 && dialog.query() == U"latest", "Clipboard changes did not coalesce to the latest query");
+  int monitored_calls = 3;
+  std::u32string monitored_query = U"latest";
+  if (owns_clipboard) {
+    require(calls == 2 && dialog.query() == U"dog",
+            "Clipboard monitoring consumed the application's own copy");
+    QProcess owner;
+    owner.start(QCoreApplication::applicationFilePath(),
+                {QStringLiteral("--clipboard-owner"), QStringLiteral("outside")});
+    require(owner.waitForStarted() && owner.waitForReadyRead(),
+            "External clipboard owner did not start");
+    wait();
+    if (calls != 3 || dialog.query() != U"outside") {
+      throw std::runtime_error(
+          "External X11 clipboard ownership did not trigger monitoring: calls=" +
+          std::to_string(calls) + ", clipboard=" +
+          QApplication::clipboard()->text().toStdString() + ", owns=" +
+          std::to_string(QApplication::clipboard()->ownsClipboard()));
+    }
+    owner.terminate();
+    owner.waitForFinished();
+    monitored_query = U"outside";
+  } else {
+    require(calls == monitored_calls && dialog.query() == monitored_query,
+            "Clipboard changes did not coalesce to the latest query");
+  }
   dialog.copy_selected(); wait();
-  require(calls == 3 && dialog.query() == U"latest", "Lookup's own Copy triggered clipboard monitoring");
+  require(calls == monitored_calls && dialog.query() == monitored_query,
+          "Lookup's own Copy triggered clipboard monitoring");
   auto* query = dialog.findChild<QLineEdit*>("edictQuery");
   query->setCursorPosition(query->text().size());
   QApplication::clipboard()->setText(QStringLiteral("before typing"));
   QKeyEvent pending(QEvent::KeyPress, Qt::Key_K, Qt::NoModifier, QStringLiteral("k"));
   QApplication::sendEvent(query, &pending); wait();
-  require(calls == 3 && dialog.query() == U"latest", "Clipboard monitoring discarded pending kana input");
+  require(calls == monitored_calls && dialog.query() == monitored_query,
+          "Clipboard monitoring discarded pending kana input");
   QKeyEvent finish(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier, QStringLiteral("a"));
   QApplication::sendEvent(query, &finish);
-  require(dialog.query() == U"latest\u304b", "Cancelling clipboard search lost the kana composer");
+  require(dialog.query() == monitored_query + U"\u304b", "Cancelling clipboard search lost the kana composer");
   QApplication::clipboard()->setText(QStringLiteral("obsolete"));
   dialog.set_query(U"edited"); wait();
-  require(calls == 3 && dialog.query() == U"edited", "Queued clipboard replaced a newer user edit");
+  require(calls == monitored_calls && dialog.query() == U"edited", "Queued clipboard replaced a newer user edit");
   QApplication::clipboard()->setText(QStringLiteral("disabled"));
   monitor->click(); wait();
-  require(calls == 3 && dialog.query() == U"edited", "Disabling monitor failed to cancel its queued search");
+  require(calls == monitored_calls && dialog.query() == U"edited", "Disabling monitor failed to cancel its queued search");
   monitor->click();
   QApplication::clipboard()->setText(QStringLiteral("hidden"));
   dialog.hide(); wait();
-  require(calls == 3, "Hidden lookup searched queued clipboard content");
+  require(calls == monitored_calls, "Hidden lookup searched queued clipboard content");
   dialog.show(); wait();
-  require(calls == 3, "Reopening lookup consumed old clipboard content");
+  require(calls == monitored_calls, "Reopening lookup consumed old clipboard content");
   QApplication::clipboard()->setText(QStringLiteral("hide and reopen"));
   dialog.hide(); dialog.show(); wait();
-  require(calls == 3, "Briefly hiding lookup retained a stale clipboard request");
+  require(calls == monitored_calls, "Briefly hiding lookup retained a stale clipboard request");
   QDialog modal(&dialog); modal.setModal(true); modal.show(); QApplication::processEvents();
   QApplication::clipboard()->setText(QStringLiteral("modal")); wait(); modal.hide();
-  require(calls == 3, "Clipboard monitoring interrupted modal interaction");
+  require(calls == monitored_calls, "Clipboard monitoring interrupted modal interaction");
   dialog.close();
 
   QPointer<qt::EdictLookupDialog> doomed;
@@ -517,6 +545,7 @@ void test_result_row_navigation() {
     QKeyEvent event(QEvent::KeyPress, code, modifiers);
     QApplication::sendEvent(results, &event);
     require(event.isAccepted(), "Result row navigation did not own its key");
+    QApplication::processEvents();
   };
 
   key(Qt::Key_Down, Qt::ControlModifier);
@@ -1879,6 +1908,12 @@ void test_result_character_navigation() {
 
 int main(int argc, char** argv) {
   QApplication application(argc, argv);
+  if (argc == 3 && std::string_view(argv[1]) == "--clipboard-owner") {
+    QApplication::clipboard()->setText(QString::fromUtf8(argv[2]));
+    std::cout << "ready\n" << std::flush;
+    QTimer::singleShot(5000, &application, &QCoreApplication::quit);
+    return application.exec();
+  }
   try {
     test_names_and_clipboard();
     test_management_commands();

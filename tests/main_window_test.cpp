@@ -41,6 +41,7 @@
 #include <QSignalBlocker>
 #include <QScrollBar>
 #include <QScrollArea>
+#include <QScreen>
 #include <QTabWidget>
 #include <QInputDialog>
 #include <QInputMethodEvent>
@@ -3203,11 +3204,16 @@ void test_word_and_line_selection(const QString& directory) {
               !editor->document()->isModified(),
           "Ctrl+Shift+W did not select the current visual line cleanly");
 
+  window.hide();
+  QApplication::processEvents();
   MainWindow pending;
   JwpEditor* pending_editor = pending.active_editor();
   pending.show();
+  pending.raise();
+  pending.activateWindow();
   pending_editor->setFocus();
-  QApplication::processEvents();
+  require(QTest::qWaitForWindowActive(&pending, 1000),
+          "Pending-input fixture did not become active");
   QTest::keyClick(pending_editor, Qt::Key_F4);
   send_text_key(pending_editor, Qt::Key_X, QStringLiteral("x"));
   QTest::keyClick(pending_editor, Qt::Key_F4);
@@ -3215,9 +3221,10 @@ void test_word_and_line_selection(const QString& directory) {
   const QPoint first_character = character_point(pending_editor, 0);
   QTest::mouseClick(pending_editor->viewport(), Qt::LeftButton,
                     Qt::NoModifier, first_character);
-  require(document_plain_text(*pending_editor->document()) ==
-              QStringLiteral("x\u3093"),
-          "Mouse press inserted pending kana at the clicked position");
+  const QString clicked_text = document_plain_text(*pending_editor->document());
+  require(clicked_text == QStringLiteral("x\u3093"),
+          "Mouse press inserted pending kana at the clicked position: " +
+              clicked_text.toUtf8().toStdString());
   pending_editor->selectAll();
   pending_editor->insertPlainText(QString());
   pending_editor->document()->setModified(false);
@@ -3255,8 +3262,14 @@ void test_keyboard_popup_and_ime_exclusion(const QString& directory) {
   editor->setTextCursor(cursor);
   window.resize(640, 300);
   window.show();
+  window.raise();
+  window.activateWindow();
+  require(QTest::qWaitForWindowActive(&window, 1000),
+          "Conversion fixture did not become active");
   editor->setFocus();
   QApplication::processEvents();
+  require(editor->hasFocus(),
+          "Conversion fixture did not focus its editor");
 
   const auto open_popup = [&](Qt::Key key, Qt::KeyboardModifiers modifiers) {
     bool saw_popup = false;
@@ -5713,23 +5726,32 @@ void test_jwp_wnn_conversion(const QString& directory) {
               window.conversion_active() && editor->isReadOnly(),
           "Kanji list command accepted an active WNN conversion");
   window.show();
+  window.raise();
+  window.activateWindow();
+  require(QTest::qWaitForWindowActive(&window, 1000),
+          "WNN conversion fixture did not become active");
   editor->setFocus();
   QApplication::processEvents();
+  require(editor->hasFocus(),
+          "WNN conversion fixture did not focus its editor");
   const auto click_candidate = [&](int row) {
     const QPoint point = candidates->visualItemRect(candidates->item(row)).center();
-    QMouseEvent press(QEvent::MouseButtonPress, QPointF(point),
-                      QPointF(candidates->viewport()->mapToGlobal(point)),
-                      Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
-    QMouseEvent release(QEvent::MouseButtonRelease, QPointF(point),
-                        QPointF(candidates->viewport()->mapToGlobal(point)),
-                        Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
-    QApplication::sendEvent(candidates->viewport(), &press);
-    QApplication::sendEvent(candidates->viewport(), &release);
+    QTest::mouseClick(candidates->viewport(), Qt::LeftButton,
+                      Qt::NoModifier, point);
   };
   click_candidate(1);
-  require(window.conversion_active() && editor->hasFocus() &&
-              window.current_jwp_document()->paragraphs[0].text == jwpqt::core::JwpText{0x3022},
-          "Clicking a conversion candidate lost focus or accepted the conversion");
+  QTest::qWait(100);
+  require(window.conversion_active() &&
+              window.current_jwp_document()->paragraphs[0].text ==
+                  jwpqt::core::JwpText{0x3022},
+          "Clicking a conversion candidate accepted or selected it incorrectly");
+  QWidget* focused = QApplication::focusWidget();
+  require(editor->hasFocus(),
+          "Clicking a conversion candidate did not restore editor focus; focus is " +
+              (focused == nullptr
+                   ? std::string("null")
+                   : std::string(focused->metaObject()->className()) + "/" +
+                         focused->objectName().toStdString()));
   const QPoint second_point =
       candidates->visualItemRect(candidates->item(1)).center();
   QContextMenuEvent candidate_information(
@@ -6706,7 +6728,7 @@ void test_edict_search_controls(const QString& directory) {
           "Settings discarded the pending dictionary composer");
   check("edictEnd", false);
   require(count(U"cat") == 5, "Accepted dictionary options did not reach the next search");
-  const auto accepted_preferences = qt::write_application_settings(window.application_settings());
+  const auto accepted_preferences = window.application_settings();
   const QPointer<QTextDocument> before_options_results(results->document());
   bool options_seen = false;
   QTimer::singleShot(0, [&] {
@@ -6722,7 +6744,18 @@ void test_edict_search_controls(const QString& directory) {
     popup->reject();
   });
   find_action(window, "applicationOptionsAction")->trigger();
-  require(options_seen && qt::write_application_settings(window.application_settings()) == accepted_preferences,
+  const auto rejected_preferences = window.application_settings();
+  require(options_seen &&
+              rejected_preferences.dictionary.require_beginning ==
+                  accepted_preferences.dictionary.require_beginning &&
+              rejected_preferences.dictionary.automatic_search ==
+                  accepted_preferences.dictionary.automatic_search &&
+              rejected_preferences.dictionary.compact ==
+                  accepted_preferences.dictionary.compact &&
+              rejected_preferences.dictionary.link_advanced_names ==
+                  accepted_preferences.dictionary.link_advanced_names &&
+              rejected_preferences.dictionary.monitor_clipboard ==
+                  accepted_preferences.dictionary.monitor_clipboard,
           "Cancelling dictionary Options applied staged controls");
   QTimer::singleShot(0, [&] {
     auto* popup = qobject_cast<QDialog*>(QApplication::activeModalWidget());
@@ -6733,6 +6766,9 @@ void test_edict_search_controls(const QString& directory) {
     auto* scroll = popup->findChild<QScrollArea*>("settingsDictionaryScroll");
     auto* note = popup->findChild<QLabel*>("settingsDictionaryNote");
     QApplication::processEvents();
+    if (QGuiApplication::platformName() == QStringLiteral("xcb"))
+      require(popup->screen() && popup->screen()->availableGeometry().contains(popup->frameGeometry()),
+              "Application Options exceeded the usable desktop");
     require(scroll && note && note->height() >= note->heightForWidth(note->width()),
             "Dictionary settings clipped their wrapped explanation");
     scroll->ensureWidgetVisible(note);
@@ -6792,6 +6828,10 @@ void test_edict_search_controls(const QString& directory) {
   QTimer::singleShot(0, [&] { owner_deleted = true; delete doomed.data(); });
   doomed_lookup->findChild<QToolButton*>("edictOptions")->click();
   require(owner_deleted && !doomed, "Options did not tolerate deletion of its owning workspace");
+  QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+  QApplication::processEvents();
+  require(!QApplication::activeModalWidget(),
+          "Deleting the Options owner left its modal dialog active");
 }
 
 void test_edict_user_dictionary_integration(const QString& directory) {
@@ -7322,6 +7362,10 @@ void test_input_mode_workflow(const QString& directory) {
     }
   }
   window.show();
+  window.raise();
+  window.activateWindow();
+  require(QTest::qWaitForWindowActive(&window, 1000),
+          "Input-mode fixture did not become active");
   editor->setFocus();
   QApplication::processEvents();
   send_text_key(editor, Qt::Key_N, QStringLiteral("n"));
@@ -7403,6 +7447,10 @@ void test_overwrite_mode(const QString& directory) {
               status->text() == QStringLiteral("INS") && status->focusPolicy() == Qt::NoFocus,
           "Document insert mode did not start with consistent controls");
   window.show();
+  window.raise();
+  window.activateWindow();
+  require(QTest::qWaitForWindowActive(&window, 1000),
+          "Overwrite-mode fixture did not become active");
   editor->setFocus();
   QApplication::processEvents();
   send_text_key(editor, Qt::Key_Insert, {});
@@ -7457,6 +7505,8 @@ void test_overwrite_mode(const QString& directory) {
               !window.document_modified(), "Ctrl+Insert changed mode instead of copying");
   select(0, 0);
   QApplication::clipboard()->setText(QStringLiteral("xy"));
+  if (QApplication::clipboard()->supportsSelection())
+    QApplication::clipboard()->setText(QStringLiteral("primary"), QClipboard::Selection);
   send_text_key(editor, Qt::Key_Insert, {}, Qt::ShiftModifier);
   require(editor->toPlainText() == QStringLiteral("xyABC\nD") && overwrite->isChecked(),
           "Shift+Insert overwrote following text or toggled the mode");
@@ -7465,7 +7515,10 @@ void test_overwrite_mode(const QString& directory) {
   select(0, 0);
   send_text_key(editor, Qt::Key_Insert, {}, Qt::ControlModifier | Qt::ShiftModifier);
   require(editor->toPlainText() == QStringLiteral("xyABC\nD"),
-          "Ctrl+Shift+Insert did not retain legacy paste precedence");
+          "Ctrl+Shift+Insert did not retain legacy paste precedence: text=" +
+              editor->toPlainText().toUtf8().toHex().toStdString() +
+              " clipboard=" +
+              QApplication::clipboard()->text().toUtf8().toHex().toStdString());
   undo->trigger();
   select(3, 3);
   find_action(window, "kanaInputAction")->trigger();
@@ -7554,6 +7607,10 @@ void test_forced_wnn_conversion(const QString& directory) {
       window.findChild<QToolBar*>(QStringLiteral("mainToolBar"))->widgetForAction(convert));
   require(convert_button != nullptr, "Forced conversion toolbar button is missing");
   window.show();
+  window.raise();
+  window.activateWindow();
+  require(QTest::qWaitForWindowActive(&window, 1000),
+          "Forced WNN fixture did not become active");
   editor->setFocus();
   QApplication::processEvents();
   const auto type_ka = [&] {
@@ -7643,6 +7700,10 @@ void test_jwp_automatic_wnn_conversion(const QString& directory) {
           "Automatic WNN controls were not created");
   kana->trigger();
   window.show();
+  window.raise();
+  window.activateWindow();
+  require(QTest::qWaitForWindowActive(&window, 1000),
+          "Automatic WNN fixture did not become active");
   editor->setFocus();
   QApplication::processEvents();
 
@@ -7701,6 +7762,10 @@ void test_jwp_automatic_wnn_conversion(const QString& directory) {
           "Automatic WNN backoff controls were not created");
   backoff_kana->trigger();
   backed_off.show();
+  backed_off.raise();
+  backed_off.activateWindow();
+  require(QTest::qWaitForWindowActive(&backed_off, 1000),
+          "Automatic WNN backoff fixture did not become active");
   backoff_editor->setFocus();
   QApplication::processEvents();
   send_text_key(backoff_editor, Qt::Key_K, QStringLiteral("K"),

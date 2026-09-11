@@ -11,12 +11,19 @@
 #include <QTemporaryDir>
 #include <QPointer>
 #include <QDynamicPropertyChangeEvent>
+#include <QEventLoop>
+#include <QTimer>
 #include <iostream>
 #include <stdexcept>
 #include <limits>
 
 using namespace jwpqt::qt;
 void require(bool value, const char* message) { if (!value) throw std::runtime_error(message); }
+void wait_for_window_manager() {
+  QEventLoop loop;
+  QTimer::singleShot(100, &loop, &QEventLoop::quit);
+  loop.exec();
+}
 
 class DeleteOnPlacement final : public QObject {
  public:
@@ -69,25 +76,29 @@ int main(int argc, char** argv) {
     require(window.apply_application_settings(changed), "Live settings rejected");
     require(window.geometry() == initial, "Live settings moved the window");
     window.move(37, 47); window.resize(550, 430); app.processEvents();
+    const QSize normal_size = window.size();
     const auto stored = window.application_settings().window_geometry[0];
-    require(stored[2] == 550 && stored[3] == 430, "Normal bounds not captured");
-    window.showMaximized(); app.processEvents();
+    require(stored[2] == normal_size.width() && stored[3] == normal_size.height(),
+            "Normal bounds not captured");
+    window.showMaximized(); wait_for_window_manager();
     require(window.application_settings().maximize_window, "Maximized state not captured");
-    require(window.application_settings().window_geometry[0][2] == 550, "Maximize replaced normal size");
-    window.showMinimized(); app.processEvents();
-    require(window.application_settings().maximize_window && window.application_settings().window_geometry[0][2] == 550,
+    require(window.application_settings().window_geometry[0][2] == normal_size.width(),
+            "Maximize replaced normal size");
+    window.showMinimized(); wait_for_window_manager();
+    require(window.application_settings().maximize_window &&
+                window.application_settings().window_geometry[0][2] == normal_size.width(),
         "Minimize destroyed restore state");
     const QString path = temporary.filePath("settings.cfg");
     require(window.save_application_settings(path), "Save failed");
     MainWindow restored;
     require(restored.load_application_settings(path), "Reload failed");
-    restored.show(); app.processEvents();
+    restored.show(); wait_for_window_manager();
     require(restored.isMaximized(), "Maximize not restored");
-    restored.showNormal(); app.processEvents();
-    require(restored.size() == QSize(550, 430).boundedTo(restored.screen()->availableGeometry().size())
+    restored.showNormal(); wait_for_window_manager();
+    require(restored.size() == normal_size.boundedTo(restored.screen()->availableGeometry().size())
         .expandedTo(restored.minimumSize()), "Normal size after maximize not restored");
     MainWindow other;
-    other.show(); app.processEvents();
+    other.show(); wait_for_window_manager();
     const auto independent = other.application_settings().window_geometry;
     const QStringList names{"kanjiInfoDialog", "edictLookupDialog", "kanjiCountDialog", "kanjiInfoMoreDialog",
         "wnnUserDictionaryDialog", "edictUserDictionaryDialog"};

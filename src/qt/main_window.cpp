@@ -91,6 +91,7 @@
 #include <QToolBar>
 #include <QUrl>
 #include <QVBoxLayout>
+#include <QWindow>
 
 #include "application_settings_dialog.h"
 #include "clipboard_mime.h"
@@ -553,7 +554,12 @@ MainWindow::MainWindow(QWidget* parent)
     try {
       document_->jwp_conversion_->select(static_cast<std::size_t>(row));
       restore_jwp_conversion_state();
-      document_->editor_->setFocus();
+      QPointer<JwpEditor> editor(document_->editor_);
+      editor->setFocus();
+      QTimer::singleShot(10, this, [this, editor] {
+        if (editor && document_->editor_ == editor && conversion_active())
+          editor->setFocus();
+      });
     } catch (const std::exception& error) {
       rollback_conversion_noexcept();
       statusBar()->showMessage(tr("Could not change candidate: %1")
@@ -1722,6 +1728,11 @@ bool MainWindow::save_application_settings(const QString& path, OpenMode mode) {
 }
 
 void MainWindow::configure_application_settings(bool dictionary_page) {
+  if (application_settings_dialog_) {
+    application_settings_dialog_->raise();
+    application_settings_dialog_->activateWindow();
+    return;
+  }
   const QPointer<MainWindow> self(this);
   auto displayed = application_settings_;
   if (!displayed.color_kanji_mode) displayed.color_kanji_mode = static_cast<int>(kanji_color_policy_.list_mode);
@@ -1731,12 +1742,27 @@ void MainWindow::configure_application_settings(bool dictionary_page) {
     displayed.color_refs[i] = std::uint32_t(color.red) | (std::uint32_t(color.green) << 8) | (std::uint32_t(color.blue) << 16);
   }
   QPointer<ApplicationSettingsDialog> dialog = new ApplicationSettingsDialog(
-      displayed, this, dictionary_page, overwrite_action_);
+      displayed, nullptr, dictionary_page, overwrite_action_, this);
+  dialog->setWindowModality(Qt::WindowModal);
+  dialog->winId();
+  if (dialog->windowHandle() && windowHandle())
+    dialog->windowHandle()->setTransientParent(windowHandle());
+  application_settings_dialog_ = dialog;
+  connect(this, &QObject::destroyed, dialog, [dialog] {
+    QTimer::singleShot(0, dialog, [dialog] {
+      if (dialog) dialog->reject();
+    });
+  });
   const int result = dialog->exec();
-  if (!self || !dialog) return;
+  if (self) self->application_settings_dialog_.clear();
+  if (!dialog) return;
+  if (!self) {
+    delete dialog.data();
+    return;
+  }
   const auto settings = dialog->settings();
   delete dialog.data();
-  if (self && result == QDialog::Accepted)
+  if (result == QDialog::Accepted)
     apply_application_settings(settings, OpenMode::kInteractive);
 }
 
@@ -4998,6 +5024,18 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
        event->type() == QEvent::KeyPress)) {
     const auto* key = static_cast<QKeyEvent*>(event);
     const Qt::KeyboardModifiers modifiers = key->modifiers();
+    const bool legacy_paste = key->key() == Qt::Key_Insert &&
+                              modifiers.testFlag(Qt::ShiftModifier) &&
+                              !(modifiers & (Qt::AltModifier | Qt::MetaModifier));
+    if (legacy_paste) {
+      event->accept();
+      if (event->type() == QEvent::ShortcutOverride) return true;
+      const QPointer<MainWindow> self(this);
+      const QPointer<JwpEditor> editor(document_->editor_);
+      finish_kana_input();
+      if (self && editor && document_->editor_ == editor) editor->paste();
+      return true;
+    }
     const bool return_key = key->key() == Qt::Key_Return ||
                             key->key() == Qt::Key_Enter;
     const bool command_modifier =

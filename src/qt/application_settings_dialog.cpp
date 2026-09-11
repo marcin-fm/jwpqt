@@ -47,7 +47,8 @@ constexpr double kCentimetersPerInch = 2.54;
 
 ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& settings, QWidget* parent,
                                                      bool dictionary_page,
-                                                     QAction* overwrite_action)
+                                                     QAction* overwrite_action,
+                                                     QWidget* help_owner)
     : QDialog(parent), settings_(settings) {
   setObjectName(QStringLiteral("applicationSettingsDialog"));
   setWindowTitle(tr("Options"));
@@ -56,6 +57,12 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   auto* tabs = new QTabWidget(this);
   tabs->setObjectName(QStringLiteral("applicationSettingsTabs"));
   outer->addWidget(tabs);
+  const auto add_scroll_tab = [tabs](QWidget* page, const QString& label) {
+    auto* scroll = new QScrollArea(tabs);
+    scroll->setWidgetResizable(true);
+    scroll->setWidget(page);
+    tabs->addTab(scroll, label);
+  };
   auto* display = new QWidget(tabs);
   auto* form = new QFormLayout(display);
   struct BooleanControl { QCheckBox* widget; bool ApplicationSettings::*member; };
@@ -143,7 +150,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
     if (dialog.exec() == QDialog::Accepted) settings_.kanji_info = dialog.options();
   });
   form->addRow(information);
-  tabs->addTab(display, tr("Display And Files"));
+  add_scroll_tab(display, tr("Display And Files"));
 
   auto* colors = new QWidget(tabs);
   auto* color_form = new QFormLayout(colors);
@@ -311,7 +318,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   booleans.push_back({color_bitmap, &ApplicationSettings::color_clipboard_bitmap});
   grid->addWidget(color_bitmap, last_font_row + 3, 0, 1, 4);
   grid->setRowStretch(last_font_row + 4, 1);
-  tabs->addTab(fonts, tr("Fonts"));
+  add_scroll_tab(fonts, tr("Fonts"));
   auto* dictionary = new QWidget(tabs);
   auto* dictionary_form = new QFormLayout(dictionary);
   dictionary_form->setSizeConstraint(QLayout::SetMinimumSize);
@@ -419,7 +426,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
       "own independent history controls."), history);
   history_note->setWordWrap(true);
   history_form->addRow(history_note);
-  tabs->addTab(history, tr("History"));
+  add_scroll_tab(history, tr("History"));
   auto* defaults_page = new QWidget(tabs);
   auto* defaults_form = new QFormLayout(defaults_page);
   auto* metric_units = new QCheckBox(tr("Display measurements in centimeters"), defaults_page);
@@ -500,7 +507,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   defaults_form->addRow(default_landscape); defaults_form->addRow(default_vertical);
   auto* defaults_note = new QLabel(tr("Defaults apply to new Japanese documents. Existing documents keep their layout. Page Layout can copy defaults into the current document or stage its margins as new defaults."), defaults_page);
   defaults_note->setWordWrap(true); defaults_form->addRow(defaults_note);
-  tabs->addTab(defaults_page, tr("Default Page"));
+  add_scroll_tab(defaults_page, tr("Default Page"));
   auto* printing = new QWidget(tabs);
   auto* print_form = new QFormLayout(printing);
   auto* print_family = new QComboBox(printing);
@@ -617,13 +624,13 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
       "Reading and Index lookup remain explicit searches."), lookup);
   lookup_note->setWordWrap(true);
   lookup_form->addRow(lookup_note);
-  tabs->addTab(lookup, tr("Kanji Lookup"));
-  tabs->addTab(colors, tr("Colors"));
+  add_scroll_tab(lookup, tr("Kanji Lookup"));
+  add_scroll_tab(colors, tr("Colors"));
   if (!settings_.unapplied.isEmpty()) {
     auto* retained = new QPlainTextEdit(tabs);
     retained->setReadOnly(true);
     retained->setPlainText(tr("These imported settings are retained, but not yet applied:\n\n") + settings_.unapplied.join(QLatin1Char('\n')));
-    tabs->addTab(retained, tr("Retained Settings"));
+    add_scroll_tab(retained, tr("Retained Settings"));
   }
   auto* buttons = new QDialogButtonBox(
       QDialogButtonBox::Ok | QDialogButtonBox::Cancel | QDialogButtonBox::Help,
@@ -631,8 +638,10 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   auto* help = buttons->button(QDialogButtonBox::Help);
   help->setObjectName(QStringLiteral("applicationSettingsHelp"));
   outer->addWidget(buttons);
-  connect(help, &QPushButton::clicked, this, [this] {
-    HelpWindow::open_owner_topic(this, QStringLiteral("settings.md"));
+  const QPointer<QWidget> guarded_help_owner(help_owner);
+  connect(help, &QPushButton::clicked, this, [this, guarded_help_owner] {
+    HelpWindow::open_owner_topic(guarded_help_owner ? guarded_help_owner.data() : this,
+                                 QStringLiteral("settings.md"));
   });
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
   connect(buttons, &QDialogButtonBox::accepted, this,

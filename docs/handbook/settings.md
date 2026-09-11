@@ -7,6 +7,9 @@ values followed by valid overrides. Unsupported source lines remain preserved
 and are disclosed rather than silently applied.
 The Options and Page Layout Help buttons open the corresponding topic in the
 workspace's embedded handbook without accepting or cancelling the dialog.
+Every Options page scrolls within the window, so controls remain reachable on
+small or high-DPI desktops. Closing the owning workspace also closes an active
+Options dialog without applying its staged values.
 
 Settings are stored in jwpqt.cfg. Japanese System/Edit/List/KanjiBar/File/Big/Table
 and Bitmap fonts are not desktop menu fonts. Missing families inherit the parent

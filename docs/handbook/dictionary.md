@@ -35,7 +35,9 @@ lookup is visible. Opening/enabling does not consume existing clipboard data.
 Copies may enter persisted query history: enable monitoring only when wanted.
 Queued searches coalesce and are cancelled by editing, selection changes,
 disabling or closing; modal interactions and application-owned copies are
-ignored. Unsupported, malformed or oversized queries preserve the previous
+ignored. Visible lookup windows poll for external X11 ownership changes because
+Qt may not expose their contents with the ownership signal alone. Unsupported,
+malformed or oversized queries preserve the previous
 query and results. Valid searches that fail retain their previous results and
 show a nonmodal diagnostic. The limit is 100 characters, without truncation.
 

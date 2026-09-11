@@ -27,6 +27,7 @@ class QPushButton;
 class QTextEdit;
 class QToolButton;
 class QTimer;
+class QShowEvent;
 
 namespace jwpqt::qt {
 
@@ -75,6 +76,7 @@ class EdictLookupDialog : public QDialog {
  protected:
   bool eventFilter(QObject* watched, QEvent* event) override;
   void hideEvent(QHideEvent* event) override;
+  void showEvent(QShowEvent* event) override;
 
  private:
   static constexpr std::size_t kMaximumVisibleResults = 100'000;
@@ -135,7 +137,9 @@ class EdictLookupDialog : public QDialog {
   QCheckBox* contingent_;
   QCheckBox* no_names_;
   QTimer* clipboard_timer_;
+  QTimer* clipboard_poll_timer_;
   QString clipboard_text_;
+  QString clipboard_pending_text_;
   std::vector<std::pair<QCheckBox*, bool EdictLookupOptions::*>> option_bindings_;
   QTextEdit* results_;
   QLabel* status_;
