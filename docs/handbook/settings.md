@@ -17,6 +17,13 @@ role, including its size; the stored unavailable name and a diagnostic remain.
 Large characters fit their pane on resize. Table remains 16 logical pixels.
 Print has a separate physical font role.
 
+Ctrl+MouseWheel over the active document changes the File font by one logical
+pixel per notch, from 1 through 1024 pixels. The first adjustment makes an
+inherited File font explicit without changing its current rendered size. The
+new size applies to every open document and persists through settings and
+projects. Query/list fonts, ordinary scrolling, document text, selection,
+history and modified state are not changed.
+
 Show all installed families starts disabled. Japanese and printer font selectors
 normally list only families that advertise Japanese support; enabling it exposes
 all public system families. The ASCII selector always remains complete. Changing

@@ -55,6 +55,7 @@
 #include <QToolBar>
 #include <QToolButton>
 #include <QUrl>
+#include <QWheelEvent>
 
 #include "file_io.h"
 #include "edict_lookup_dialog.h"
@@ -4405,6 +4406,119 @@ void test_application_settings_exit(const QString& directory) {
           configured.is_jwp_document() && configured.jwp_code_page() == jwpqt::core::LegacyCodePage::k1251 &&
           configured.active_editor()->toPlainText() == QStringLiteral("\u0402"),
           "A fresh imported text file ignored the configured translation code page");
+}
+
+void test_document_font_wheel(const QString& directory) {
+  using namespace jwpqt::qt;
+  const auto role = [](JapaneseFontRole value) {
+    return static_cast<std::size_t>(value);
+  };
+  const auto wheel = [](JwpEditor& editor, int angle, int pixel,
+                        Qt::KeyboardModifiers modifiers) {
+    const QPointF local(10.0, 10.0);
+    QWheelEvent event(local, editor.viewport()->mapToGlobal(local.toPoint()),
+                      QPoint(0, pixel), QPoint(0, angle), Qt::NoButton,
+                      modifiers, Qt::NoScrollPhase, false);
+    QCoreApplication::sendEvent(editor.viewport(), &event);
+  };
+
+  MainWindow window;
+  ApplicationSettings settings = window.application_settings();
+  settings.fonts[role(JapaneseFontRole::kSystem)].size = 18;
+  settings.fonts[role(JapaneseFontRole::kFile)] = {{}, 99, true};
+  require(window.apply_application_settings(settings) &&
+              window.active_editor()->font().pixelSize() == 18,
+          "Could not prepare inherited document font");
+  const int original_edit_size = window.application_settings().fonts[
+      role(JapaneseFontRole::kEdit)].size;
+
+  require(window.insert_edict_text(U"日本"),
+          "Could not prepare native zoom document");
+  const auto native = *window.current_jwp_document();
+  const bool native_modified = window.document_modified();
+  require(window.new_document_tab(false) >= 0,
+          "Could not prepare Unicode zoom document");
+  JwpEditor* editor = window.active_editor();
+  QString text;
+  for (int i = 0; i < 80; ++i) {
+    text += QStringLiteral("plain %1 😀\n").arg(i);
+  }
+  editor->setPlainText(text);
+  editor->moveCursor(QTextCursor::End);
+  editor->insertPlainText(QStringLiteral("tail"));
+  window.resize(420, 240);
+  window.show();
+  QApplication::processEvents();
+  editor->verticalScrollBar()->setValue(
+      editor->verticalScrollBar()->maximum() / 2);
+  QTextCursor selected(editor->document());
+  selected.setPosition(9);
+  selected.setPosition(21, QTextCursor::KeepAnchor);
+  editor->setTextCursor(selected);
+  const QString original_text = editor->toPlainText();
+  const int original_position = selected.position();
+  const int original_anchor = selected.anchor();
+  const int original_scroll = editor->verticalScrollBar()->value();
+  const bool original_modified = window.document_modified();
+  const bool original_undo = editor->document()->isUndoAvailable();
+
+  wheel(*editor, 120, 0, Qt::ControlModifier);
+  const auto explicit_font = window.application_settings().fonts[
+      role(JapaneseFontRole::kFile)];
+  require(editor->font().pixelSize() == 19 && explicit_font.size == 19 &&
+               !explicit_font.automatic &&
+               window.application_settings().fonts[
+                   role(JapaneseFontRole::kEdit)].size == original_edit_size,
+           "Control-wheel did not make the document font explicit");
+  require(editor->toPlainText() == original_text &&
+              editor->textCursor().position() == original_position &&
+              editor->textCursor().anchor() == original_anchor &&
+              editor->verticalScrollBar()->value() == original_scroll &&
+              window.document_modified() == original_modified &&
+              editor->document()->isUndoAvailable() == original_undo,
+          "Control-wheel changed Unicode document state");
+  require(window.activate_document(0) &&
+              window.active_editor()->font().pixelSize() == 19 &&
+              *window.current_jwp_document() == native &&
+              window.document_modified() == native_modified,
+          "Control-wheel did not update the inactive native document safely");
+
+  require(window.activate_document(1),
+          "Could not restore the active zoom document");
+  editor = window.active_editor();
+  wheel(*editor, 240, 0, Qt::ControlModifier);
+  require(editor->font().pixelSize() == 21,
+          "Multiple wheel notches did not adjust multiple pixels");
+  wheel(*editor, 0, -1, Qt::ControlModifier);
+  require(editor->font().pixelSize() == 20,
+          "High-resolution wheel delta did not adjust one pixel");
+  wheel(*editor, 120, 0, Qt::ControlModifier | Qt::ShiftModifier);
+  wheel(*editor, -120, 0, Qt::NoModifier);
+  wheel(*editor, 0, 0, Qt::ControlModifier);
+  require(editor->font().pixelSize() == 20,
+          "Ordinary or modified wheel unexpectedly changed the font");
+
+  const QString root = directory + QStringLiteral("/font-wheel");
+  require(QDir().mkpath(root) &&
+              window.save_application_settings(root + QStringLiteral("/settings.cfg")),
+          "Could not save wheel font preference");
+  MainWindow restored;
+  require(restored.load_application_settings(
+              root + QStringLiteral("/settings.cfg")) &&
+              restored.application_settings().fonts[
+                  role(JapaneseFontRole::kFile)].size == 20 &&
+              !restored.application_settings().fonts[
+                  role(JapaneseFontRole::kFile)].automatic &&
+              restored.active_editor()->font().pixelSize() == 20 &&
+              restored.save_project_path(root + QStringLiteral("/zoom.jpr"),
+                                         false),
+          "Wheel font preference did not survive restart");
+  MainWindow project;
+  require(project.open_project_path(root + QStringLiteral("/zoom.jpr")) &&
+              project.application_settings().fonts[
+                  role(JapaneseFontRole::kFile)].size == 20 &&
+              project.active_editor()->font().pixelSize() == 20,
+          "Wheel font preference did not survive project restore");
 }
 
 void test_jwp_code_page_switch(const QString& directory) {
@@ -8870,6 +8984,7 @@ int main(int argc, char* argv[]) {
     test_application_settings_workflow(directory.path());
     test_application_settings_preview(directory.path());
     test_application_settings_exit(directory.path());
+    test_document_font_wheel(directory.path());
     test_jwp_code_page_switch(directory.path());
     test_jwp_code_page_can_be_selected_before_open(directory.path());
     test_zero_paragraph_jwp_save_is_not_normalized(directory.path());

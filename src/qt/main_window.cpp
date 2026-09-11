@@ -91,6 +91,7 @@
 #include <QToolBar>
 #include <QUrl>
 #include <QVBoxLayout>
+#include <QWheelEvent>
 #include <QWindow>
 
 #include "application_settings_dialog.h"
@@ -3872,6 +3873,36 @@ void MainWindow::apply_document_margin_relaxation(DocumentState& state) {
       state.jwp_format_ && application_settings_.relax_margin_small_kana);
 }
 
+bool MainWindow::adjust_document_font_size(int steps) {
+  if (!document_ || steps == 0) return false;
+
+  const int current_size = document_->editor_->font().pixelSize();
+  if (current_size < 1) return false;
+  const int next_size = std::clamp(current_size + steps, 1, 1024);
+  if (next_size == current_size) return true;
+
+  ApplicationSettings settings = application_settings_;
+  auto& file_font =
+      settings.fonts[static_cast<std::size_t>(JapaneseFontRole::kFile)];
+  if (file_font.automatic) {
+    file_font.family =
+        settings.fonts[static_cast<std::size_t>(JapaneseFontRole::kSystem)]
+            .family;
+    file_font.automatic = false;
+  }
+  file_font.size = next_size;
+
+  QPointer<MainWindow> owner(this);
+  if (!apply_application_settings(settings, OpenMode::kNonInteractive)) {
+    return false;
+  }
+  if (owner) {
+    owner->statusBar()->showMessage(
+        tr("Document font: %1 px").arg(next_size), 2000);
+  }
+  return true;
+}
+
 void MainWindow::clear_jwp_presentation() {
   document_->editor_->set_character_line_width(std::nullopt);
   document_->editor_->clear_jwp_layout();
@@ -4706,6 +4737,21 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
             5000);
       }
     });
+  }
+  if (watched == document_->editor_->viewport() &&
+      event->type() == QEvent::Wheel) {
+    auto* wheel = static_cast<QWheelEvent*>(event);
+    if (wheel->modifiers() == Qt::ControlModifier) {
+      int delta = wheel->angleDelta().y();
+      if (delta == 0) delta = wheel->pixelDelta().y();
+      if (delta != 0) {
+        int steps = delta / 120;
+        if (steps == 0) steps = delta > 0 ? 1 : -1;
+        wheel->accept();
+        adjust_document_font_size(std::clamp(steps, -32, 32));
+        return true;
+      }
+    }
   }
   if (watched == conversion_candidates_->viewport()) {
     std::optional<QPoint> information_position;

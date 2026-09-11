@@ -426,6 +426,7 @@ class MainWindow : public QMainWindow {
                                          const core::JwpDocument& document) const;
   void apply_document_line_width(DocumentState& state);
   void apply_document_margin_relaxation(DocumentState& state);
+  bool adjust_document_font_size(int steps);
   void clear_jwp_presentation();
   void find_document();
   void show_find_replace(bool replacing, const QString& text, const QString& replacement);

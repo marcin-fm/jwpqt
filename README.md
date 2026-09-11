@@ -265,6 +265,11 @@ Save and the optional save-on-exit use atomic replacement. Invalid settings are
 not applied, corrupt startup files are not automatically overwritten, and saving
 cannot overwrite an open document. Font changes preserve every tab's text,
 history and selection, including an active conversion preview.
+Hold Ctrl while scrolling the mouse wheel over the active document to change the
+File font by one logical pixel per notch. The first adjustment makes an inherited
+File font explicit at its current rendered size; high-resolution wheel deltas use
+one-pixel steps. Every open document updates, while query/list fonts, ordinary
+wheel scrolling, text, selection, history and modified state remain unchanged.
 
 Fresh settings follow JWPxp's final clipboard defaults: public text import uses
 Unicode, the separately encoded export is Shift-JIS, standard Unicode remains
