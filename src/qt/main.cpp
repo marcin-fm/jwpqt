@@ -208,26 +208,31 @@ int main(int argc, char* argv[]) {
     return 1;
   }
   const QDir wnn_directory(parser.isSet(wnn_data_directory_option)
-                               ? parser.value(wnn_data_directory_option)
-                               : config_directory);
+                                ? parser.value(wnn_data_directory_option)
+                                : config_directory);
   const QFileInfo wnn_index(wnn_directory.filePath(QStringLiteral("wnn.dix")));
   const QFileInfo wnn_data(wnn_directory.filePath(QStringLiteral("wnn.dat")));
-  if (parser.isSet(wnn_data_directory_option) || wnn_index.exists() ||
-      wnn_index.isSymLink() || wnn_data.exists() || wnn_data.isSymLink()) {
-    if (user_data_directory.isEmpty() ||
-        !QDir().mkpath(user_data_directory)) {
-      QTextStream(stderr)
-          << "Could not create the jwpqt user data directory.\n";
-      return 1;
-    }
-    if (!window.load_wnn_resources(
-            wnn_index.absoluteFilePath(), wnn_data.absoluteFilePath(),
-            QDir(user_data_directory).filePath(QStringLiteral("user.sel")),
-            QDir(user_data_directory).filePath(QStringLiteral("user.cnv")),
-            interaction_mode)) {
-      QTextStream(stderr) << "Could not load WNN conversion resources.\n";
-      return 1;
-    }
+  const bool use_external_wnn = parser.isSet(wnn_data_directory_option) ||
+                                wnn_index.exists() || wnn_index.isSymLink() ||
+                                wnn_data.exists() || wnn_data.isSymLink();
+  if (user_data_directory.isEmpty() || !QDir().mkpath(user_data_directory)) {
+    QTextStream(stderr) << "Could not create the jwpqt user data directory.\n";
+    return 1;
+  }
+  const QString wnn_index_path =
+      use_external_wnn
+          ? wnn_index.absoluteFilePath()
+          : QStringLiteral(":/jwpqt/assets/data/wnn.dix");
+  const QString wnn_data_path =
+      use_external_wnn ? wnn_data.absoluteFilePath()
+                       : QStringLiteral(":/jwpqt/assets/data/wnn.dat");
+  if (!window.load_wnn_resources(
+          wnn_index_path, wnn_data_path,
+          QDir(user_data_directory).filePath(QStringLiteral("user.sel")),
+          QDir(user_data_directory).filePath(QStringLiteral("user.cnv")),
+          interaction_mode)) {
+    QTextStream(stderr) << "Could not load WNN conversion resources.\n";
+    return 1;
   }
   window.load_previous_session(config.filePath(QStringLiteral("last-session.jpr")), !parser.isSet(resource_report_option));
   if (!window.session_warning().isEmpty()) QTextStream(stderr) << window.session_warning() << '\n';

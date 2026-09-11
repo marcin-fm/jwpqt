@@ -107,12 +107,14 @@ void test_runtime_paths(const QString& executable, const QString& root) {
 
   const QString missing = run(options, 0);
   require(missing.contains(QStringLiteral("Configuration directory: ") + config) &&
-              missing.contains(QStringLiteral("WNN conversion: unavailable")) &&
+              missing.contains(QStringLiteral("WNN conversion: loaded (25496 records)")) &&
+              missing.contains(personal + QStringLiteral("/user.sel")) &&
+              missing.contains(personal + QStringLiteral("/user.cnv")) &&
               missing.contains(QStringLiteral("Kanji information: unavailable")) &&
               missing.contains(QStringLiteral("Native resource bounds: 32 MiB kanji information, 256 MiB dictionary data, 128 MiB dictionary indexes")) &&
               missing.contains(QStringLiteral("ParagraphMemory_BlockSize, DictionaryBuffer_Size, Cache_KanjiInfoFile")) &&
               missing.contains(QStringLiteral("Qt platform/style: offscreen")),
-          QStringLiteral("Missing-resource report was not actionable: ") + missing);
+          QStringLiteral("Bundled-resource report was not actionable: ") + missing);
   const QString queries = config + QStringLiteral("/query-history.bin");
   require(!QFile::exists(queries), QStringLiteral("Resource report created a missing query-history archive"));
   write_file(config + QStringLiteral("/JWPxp.his"), QByteArray("never auto-import this"));

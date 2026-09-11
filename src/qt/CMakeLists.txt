@@ -188,6 +188,8 @@ qt_add_resources(jwpqt_qt_ui toolbar_assets
         "${PROJECT_SOURCE_DIR}/assets/icons/four-corner-diagram.svg"
         "${PROJECT_SOURCE_DIR}/assets/icons/jwpqt.svg"
         "${PROJECT_SOURCE_DIR}/assets/data/spahn-radicals.bmp"
+        "${PROJECT_SOURCE_DIR}/assets/data/wnn.dat"
+        "${PROJECT_SOURCE_DIR}/assets/data/wnn.dix"
 )
 
 if(EMSCRIPTEN)

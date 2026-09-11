@@ -106,9 +106,10 @@ The Linux archive is dynamically linked, not an AppImage or a universal binary.
 It requires a compatible architecture, system Qt 6 Widgets/PrintSupport/Svg,
 standard C++ libraries and Japanese fonts. Supply matching source and retained
 notices when redistributing binaries under the GPL. Source archives omit Git and
-local assistant metadata. Neither package adds optional dictionary corpora;
-their separate acquisition and license conditions still apply. The installed
-handbook explains paths, provisioning and uninstallation.
+local assistant metadata. Every build embeds the redistributable WNN system
+dictionary; optional EDICT/kanji-information corpora retain their separate
+acquisition and license conditions. The installed handbook explains paths,
+provisioning and uninstallation.
 
 ## Runtime data
 
@@ -126,8 +127,9 @@ resource failures remain visible in Runtime Resources.
 
 Place `dict.cfg`, its configured dictionaries/indexes, `kanjinfo.dat`,
 `radical.dat`, `stroke.dat`, and `radicals.bmp` in the configuration directory.
-WNN is automatically loaded when `wnn.dix` or `wnn.dat` is present there; both
-are required. `--wnn-data-dir` can select a different WNN directory.
+The built-in WNN dictionary is used when neither `wnn.dix` nor `wnn.dat` is
+present there. If either external WNN file is present, both are required;
+`--wnn-data-dir` can select and require a different WNN directory.
 
 The following Bash example reuses the separately acquired research data on this
 development machine. It does not download data, execute Windows programs, or
@@ -141,7 +143,7 @@ replace an existing registry or user dictionary. Run it from the repository:
   config="$profile/config/jwpqt/jwpqt"
   install -d "$config" "$profile/personal"
   install -m 644 \
-    "$data"/{wnn.dat,wnn.dix,edict,edict.jdx,classical} \
+    "$data"/{edict,edict.jdx,classical} \
     "$data"/{kanjinfo.dat,radical.dat,stroke.dat,_cpright.txt} \
     "$data"/jwpce-1.50/{enamdict,enamdict.jdx} \
     "$config/"
