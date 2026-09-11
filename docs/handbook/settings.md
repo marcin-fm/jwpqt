@@ -149,7 +149,10 @@ pixels) and icon/text presentation. Floating is disabled. The menu actions remai
 authoritative, including enabled and checked state; duplicate buttons do not add
 duplicate shortcuts. Docking and customization save with normal preferences and
 projects. Imported legacy toolbar IDs and inactive configuration bytes are
-preserved. Toolbar changes do not edit document contents or clear Undo.
+preserved. Every command uses bundled scalable SVG artwork. Transparent symbols
+follow enabled and disabled palette text colors in both light and dark themes,
+without depending on an installed icon theme. Toolbar changes do not edit
+document contents or clear Undo.
 
 ## Persistent Histories
 

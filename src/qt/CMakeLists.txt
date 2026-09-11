@@ -1,4 +1,4 @@
-find_package(Qt6 REQUIRED COMPONENTS PrintSupport Widgets)
+find_package(Qt6 REQUIRED COMPONENTS PrintSupport Svg Widgets)
 
 add_library(jwpqt_qt_support STATIC
   application_settings.cpp
@@ -96,6 +96,8 @@ add_library(jwpqt_qt_ui STATIC
   toolbar_settings.h
   toolbar_dialog.cpp
   toolbar_dialog.h
+  vector_artwork.cpp
+  vector_artwork.h
   page_layout_dialog.cpp
   page_layout_dialog.h
   print_document.cpp
@@ -129,17 +131,53 @@ qt_add_resources(jwpqt_qt_ui notice_assets PREFIX "/jwpqt/help"
 qt_add_resources(jwpqt_qt_ui toolbar_assets
   PREFIX "/jwpqt"
   BASE "${PROJECT_SOURCE_DIR}"
-  FILES "${PROJECT_SOURCE_DIR}/toolbar.bmp"
-        "${PROJECT_SOURCE_DIR}/mainicon.ico"
+  FILES "${PROJECT_SOURCE_DIR}/assets/icons/new.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/open.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/save.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/delete.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/print.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/cut.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/copy.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/paste.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/undo.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/redo.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/find.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/find-next.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/find-previous.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/replace.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/options.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/info.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/jis-table.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/count.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/kana.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/ascii.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/jascii.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/convert.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/dictionary.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/color-list.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/file-format.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/paragraph-format.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/page-layout.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/user-dictionary.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/kanji-lookup.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/bushu.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/stroke-bushu.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/skip.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/spahn.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/four-corner.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/reading.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/index.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/skip-diagram.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/four-corner-diagram.svg"
+        "${PROJECT_SOURCE_DIR}/assets/icons/jwpqt.svg"
         "${PROJECT_SOURCE_DIR}/hsradicals.bmp"
-        "${PROJECT_SOURCE_DIR}/skiptype.bmp"
-        "${PROJECT_SOURCE_DIR}/fourcorners.bmp"
 )
 
 target_link_libraries(jwpqt_qt_ui
   PUBLIC
     jwpqt_qt_support
     Qt6::PrintSupport
+    Qt6::Svg
     Qt6::Widgets
 )
 

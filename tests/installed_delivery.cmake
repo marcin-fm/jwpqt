@@ -13,13 +13,17 @@ function(run)
   endif()
 endfunction()
 run("${CMAKE_COMMAND}" --install "${BUILD}" --prefix "${root}/installed")
-foreach(path bin/jwpqt share/applications/jwpqt.desktop share/icons/hicolor/48x48/apps/jwpqt.png
+foreach(path bin/jwpqt share/applications/jwpqt.desktop share/icons/hicolor/scalable/apps/jwpqt.svg
              share/mime/packages/jwpqt-mime.xml share/doc/jwpqt/handbook/start.md
              share/doc/jwpqt/handbook/gnugpl.txt share/doc/jwpqt/handbook/_cpright.txt)
   if(NOT EXISTS "${root}/installed/${path}")
     message(FATAL_ERROR "Missing installed file: ${path}")
   endif()
 endforeach()
+file(READ "${root}/installed/share/icons/hicolor/scalable/apps/jwpqt.svg" icon_contents)
+if(NOT icon_contents MATCHES "<svg[^>]*viewBox=\"0 0 64 64\"")
+  message(FATAL_ERROR "Installed application icon is not the scalable SVG artwork")
+endif()
 run("${DESKTOP_VALIDATE}" "${root}/installed/share/applications/jwpqt.desktop")
 run("${MIME_UPDATE}" "${root}/installed/share/mime")
 file(READ "${root}/installed/share/mime/packages/jwpqt-mime.xml" mime_definition)

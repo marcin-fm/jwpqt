@@ -7,6 +7,7 @@
 #include <new>
 #include <QStringView>
 #include "toolbar_dialog.h"
+#include "vector_artwork.h"
 #include <QTimer>
 #include "help_window.h"
 #include <QApplication>
@@ -49,7 +50,6 @@
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QIcon>
-#include <QImage>
 #include <QInputDialog>
 #include <QKeyEvent>
 #include <QKeySequence>
@@ -2189,92 +2189,8 @@ void MainWindow::update_command_bar_palette() {
     toolbar_palette.setColor(group, QPalette::WindowText, foreground);
   }
   main_toolbar_->setPalette(toolbar_palette);
-  for (const auto& [action, original] : toolbar_standard_icons_) {
-    if (original.isNull()) continue;
-    QIcon icon;
-    for (const auto mode : {QIcon::Normal, QIcon::Active, QIcon::Selected, QIcon::Disabled}) {
-      const auto group = mode == QIcon::Disabled ? QPalette::Disabled : QPalette::Active;
-      for (const auto state : {QIcon::Off, QIcon::On}) {
-        for (const int size : {16, 32, 64}) {
-          QImage image = original.pixmap(QSize(size, size), 1.0, mode, state)
-                             .toImage().convertToFormat(QImage::Format_ARGB32);
-          int opaque = 0;
-          int visible = 0;
-          bool grayscale = true;
-          const QImage normal = original.pixmap(QSize(size, size), 1.0, QIcon::Normal, state).toImage();
-          for (int y = 0; y < normal.height(); ++y) {
-            for (int x = 0; x < normal.width(); ++x) {
-              const QColor pixel = normal.pixelColor(x, y);
-              if (pixel.alpha() >= 128) {
-                grayscale = grayscale &&
-                    std::max({pixel.red(), pixel.green(), pixel.blue()}) -
-                        std::min({pixel.red(), pixel.green(), pixel.blue()}) <= 24;
-              }
-            }
-          }
-          for (int y = 0; y < image.height(); ++y) {
-            for (int x = 0; x < image.width(); ++x) {
-              const QColor pixel = image.pixelColor(x, y);
-              if (pixel.alpha() < 128) continue;
-              ++opaque;
-              const double alpha = pixel.alphaF();
-              const QColor blended = QColor::fromRgbF(
-                  pixel.redF() * alpha + background.redF() * (1 - alpha),
-                  pixel.greenF() * alpha + background.greenF() * (1 - alpha),
-                  pixel.blueF() * alpha + background.blueF() * (1 - alpha));
-              const double front = luminance(blended), back = luminance(background);
-              if ((std::max(front, back) + 0.05) / (std::min(front, back) + 0.05) >= 3.0) {
-                ++visible;
-              }
-            }
-          }
-          // Repair unreadable monochrome themes without flattening colorful artwork.
-          if (grayscale && opaque != 0 && visible * 8 < opaque) {
-            const QColor foreground = toolbar_palette.color(group, QPalette::ButtonText);
-            for (int y = 0; y < image.height(); ++y) {
-              for (int x = 0; x < image.width(); ++x) {
-                QColor color = foreground;
-                color.setAlpha(image.pixelColor(x, y).alpha());
-                image.setPixelColor(x, y, color);
-              }
-            }
-          }
-          icon.addPixmap(QPixmap::fromImage(image), mode, state);
-        }
-      }
-    }
-    action->setIcon(icon);
-  }
-  static const QImage artwork(QStringLiteral(":/jwpqt/toolbar.bmp"));
-  if (artwork.size() != QSize(23 * 16, 16)) {
-    throw std::runtime_error("Embedded toolbar artwork is invalid");
-  }
-  for (const auto& [action, index] : toolbar_icons_) {
-    QIcon icon;
-    for (const auto mode : {QIcon::Normal, QIcon::Disabled}) {
-      const auto group = mode == QIcon::Disabled ? QPalette::Disabled
-                                                : QPalette::Active;
-      QImage image = artwork.copy(index * 16, 0, 16, 16)
-                        .convertToFormat(QImage::Format_ARGB32);
-      for (int y = 0; y < image.height(); ++y) {
-        for (int x = 0; x < image.width(); ++x) {
-          const QColor pixel = image.pixelColor(x, y);
-          // Replace the Win32 mask and monochrome ink, retaining colored marks.
-          if (pixel == QColor(192, 192, 192)) {
-            image.setPixelColor(x, y, Qt::transparent);
-          } else if (pixel == QColor(Qt::black)) {
-            image.setPixelColor(x, y,
-                toolbar_palette.color(group, QPalette::ButtonText));
-          } else if (pixel == QColor(Qt::white)) {
-            image.setPixelColor(x, y, background);
-          }
-        }
-      }
-      icon.addPixmap(QPixmap::fromImage(image), mode);
-      icon.addPixmap(QPixmap::fromImage(image.scaled(32, 32)), mode);
-    }
-    action->setIcon(icon);
-  }
+  for (const auto& [action, resource] : toolbar_icons_)
+    action->setIcon(themed_svg_icon(resource, toolbar_palette));
 }
 
 bool MainWindow::load_kanji_info(const QString& path, OpenMode mode) {
@@ -3551,57 +3467,50 @@ void MainWindow::create_actions() {
   main_toolbar_->setToolButtonStyle(Qt::ToolButtonIconOnly);
   main_toolbar_->setAllowedAreas(Qt::TopToolBarArea | Qt::BottomToolBarArea);
   main_toolbar_->setFloatable(false);
-  const auto add_standard = [&](QAction* action, const char* theme,
-                                const QString& label, QIcon fallback = {}) {
-    action->setIcon(QIcon::fromTheme(QString::fromLatin1(theme), fallback));
-    toolbar_standard_icons_.emplace_back(action, action->icon());
-    action->setIconText(label);
+  const auto add_icon = [&](QAction* action, const char* name, const QString& label = {}) {
+    const QString resource = QStringLiteral(":/jwpqt/assets/icons/") +
+                             QString::fromLatin1(name) + QStringLiteral(".svg");
+    action->setIcon(themed_svg_icon(resource, main_toolbar_->palette()));
+    toolbar_icons_.emplace_back(action, resource);
+    if (!label.isEmpty()) action->setIconText(label);
   };
-  const auto add_legacy = [&](QAction* action, int index) {
-    toolbar_icons_.emplace_back(action, index);
-  };
-  // Default groups and custom bitmap indices: jwp_stat.cpp:235-325.
-  add_standard(new_action, "document-new", tr("New"),
-               style()->standardIcon(QStyle::SP_FileIcon));
-  add_standard(open_action, "document-open", tr("Open"),
-               style()->standardIcon(QStyle::SP_DialogOpenButton));
-  add_standard(save_action, "document-save", tr("Save"),
-               style()->standardIcon(QStyle::SP_DialogSaveButton));
-  add_standard(print_action_, "document-print", tr("Print"));
-  add_standard(cut_action, "edit-cut", tr("Cut"));
-  add_standard(copy_action, "edit-copy", tr("Copy"));
-  add_standard(paste_action, "edit-paste", tr("Paste"));
-  add_standard(undo_action_, "edit-undo", tr("Undo"));
-  add_standard(redo_action_, "edit-redo", tr("Redo"));
-  add_standard(find_action, "edit-find", tr("Find"));
-  add_standard(replace_action, "edit-find-replace", tr("Replace"));
-  add_legacy(find_next_action, 21);
-  add_legacy(kana_input_action_, 0);
-  add_legacy(ascii_input, 1);
-  add_legacy(jascii_input, 2);
-  add_legacy(convert_action_, 3);
-  add_legacy(kanji_info_action_, 4);
-  add_legacy(jis_table_action_, 13);
-  add_legacy(edict_lookup_action_, 19);
-  add_legacy(kanji_count_action_, 14);
-  add_legacy(kanji_lookup_action_, 5);
-  add_legacy(bushu_lookup_action_, 6);
-  add_legacy(stroke_bushu_lookup_action_, 7);
-  add_legacy(skip_lookup_action_, 8);
-  add_legacy(spahn_lookup_action_, 9);
-  add_legacy(four_corner_lookup_action_, 10);
-  add_legacy(kanji_reading_lookup_action_, 11);
-  add_legacy(index_lookup_action_, 12);
-  add_legacy(page_layout_action_, 18);
-
-  // Optional source commands receive the same theme-aware icons as the default set.
-  add_standard(delete_action_, "edit-delete", tr("Delete"), style()->standardIcon(QStyle::SP_TrashIcon));
-  add_legacy(find_previous_action, 22);
-  add_legacy(make_kanji_color_list_action_, 15);
-  add_legacy(format_file_action_, 16);
-  add_legacy(format_paragraph_action_, 17);
-  add_legacy(user_dictionary_action_, 20);
-  add_standard(options_action, "preferences-system", tr("Options"), style()->standardIcon(QStyle::SP_FileDialogDetailedView));
+  // Every toolbar command uses bundled vector art; the source bitmap survives only as provenance.
+  add_icon(new_action, "new", tr("New"));
+  add_icon(open_action, "open", tr("Open"));
+  add_icon(save_action, "save", tr("Save"));
+  add_icon(print_action_, "print", tr("Print"));
+  add_icon(cut_action, "cut", tr("Cut"));
+  add_icon(copy_action, "copy", tr("Copy"));
+  add_icon(paste_action, "paste", tr("Paste"));
+  add_icon(undo_action_, "undo", tr("Undo"));
+  add_icon(redo_action_, "redo", tr("Redo"));
+  add_icon(find_action, "find", tr("Find"));
+  add_icon(replace_action, "replace", tr("Replace"));
+  add_icon(find_next_action, "find-next");
+  add_icon(kana_input_action_, "kana");
+  add_icon(ascii_input, "ascii");
+  add_icon(jascii_input, "jascii");
+  add_icon(convert_action_, "convert");
+  add_icon(kanji_info_action_, "info");
+  add_icon(jis_table_action_, "jis-table");
+  add_icon(edict_lookup_action_, "dictionary");
+  add_icon(kanji_count_action_, "count");
+  add_icon(kanji_lookup_action_, "kanji-lookup");
+  add_icon(bushu_lookup_action_, "bushu");
+  add_icon(stroke_bushu_lookup_action_, "stroke-bushu");
+  add_icon(skip_lookup_action_, "skip");
+  add_icon(spahn_lookup_action_, "spahn");
+  add_icon(four_corner_lookup_action_, "four-corner");
+  add_icon(kanji_reading_lookup_action_, "reading");
+  add_icon(index_lookup_action_, "index");
+  add_icon(page_layout_action_, "page-layout");
+  add_icon(delete_action_, "delete", tr("Delete"));
+  add_icon(find_previous_action, "find-previous");
+  add_icon(make_kanji_color_list_action_, "color-list");
+  add_icon(format_file_action_, "file-format");
+  add_icon(format_paragraph_action_, "paragraph-format");
+  add_icon(user_dictionary_action_, "user-dictionary");
+  add_icon(options_action, "options", tr("Options"));
   toolbar_catalog_.push_back(nullptr);
   for (std::size_t id = 1; id < kToolbarCommands.size(); ++id) {
     auto* command = findChild<QAction*>(QString::fromLatin1(kToolbarCommands[id]));

@@ -2,8 +2,8 @@
 
 The Linux package contains the native executable, offline handbook, desktop
 entry, icons, MIME definitions and original license notices. It does not bundle
-Qt libraries or optional dictionary datasets. Install system Qt 6 Widgets and
-PrintSupport plus a Japanese font such as Noto Sans CJK JP. A binary archive is
+Qt libraries or optional dictionary datasets. Install system Qt 6 Widgets,
+PrintSupport and Svg plus a Japanese font such as Noto Sans CJK JP. A binary archive is
 for a compatible Linux architecture and library ABI, not a universal AppImage.
 
 ## Paths

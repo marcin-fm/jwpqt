@@ -37,6 +37,23 @@ void require(bool condition, const char* message) {
   }
 }
 
+int opaque_pixels(const QImage& image, const QRect& region) {
+  int count = 0;
+  for (int y = region.top(); y <= region.bottom(); ++y)
+    for (int x = region.left(); x <= region.right(); ++x)
+      if (image.pixelColor(x, y).alpha() >= 192) ++count;
+  return count;
+}
+
+bool contains_opaque_color(const QImage& image, const QColor& color) {
+  for (int y = 0; y < image.height(); ++y)
+    for (int x = 0; x < image.width(); ++x)
+      if (image.pixelColor(x, y).alpha() >= 192 &&
+          image.pixelColor(x, y).rgb() == color.rgb())
+        return true;
+  return false;
+}
+
 void append_u16(std::string& bytes, std::uint16_t value) {
   bytes.push_back(static_cast<char>(value & 0xffU));
   bytes.push_back(static_cast<char>((value >> 8U) & 0xffU));
@@ -438,11 +455,23 @@ void test_artwork_palette_changes() {
   dialog.select_bushu_mode();
   dialog.show();
   QImage light_spahn, light_skip, light_corner;
+  bool saved_dark = false;
   for (bool dark : {false, true, false, true}) {
     QPalette palette = dialog.palette();
-    palette.setColor(QPalette::Window, dark ? QColor(32, 35, 37) : QColor(240, 240, 240));
-    palette.setColor(QPalette::Text, dark ? QColor(240, 240, 240) : QColor(16, 16, 16));
-    palette.setColor(QPalette::Base, dark ? QColor(21, 22, 23) : QColor(Qt::white));
+    const QColor window = dark ? QColor(32, 35, 37) : QColor(240, 240, 240);
+    const QColor base = dark ? QColor(21, 22, 23) : QColor(Qt::white);
+    const QColor text = dark ? QColor(240, 240, 240) : QColor(16, 16, 16);
+    for (const auto role : {QPalette::WindowText, QPalette::Text,
+                            QPalette::ButtonText})
+      palette.setColor(QPalette::All, role, text);
+    palette.setColor(QPalette::All, QPalette::Window, window);
+    palette.setColor(QPalette::All, QPalette::Button, window);
+    palette.setColor(QPalette::All, QPalette::Base, base);
+    palette.setColor(QPalette::All, QPalette::AlternateBase,
+                     dark ? QColor(42, 45, 47) : QColor(248, 248, 248));
+    palette.setColor(QPalette::All, QPalette::Highlight,
+                     dark ? QColor(52, 103, 145) : QColor(48, 140, 198));
+    palette.setColor(QPalette::All, QPalette::HighlightedText, Qt::white);
     dialog.setPalette(palette);
     QApplication::processEvents();
     require(bushu->palette().color(QPalette::Base) == palette.color(QPalette::Base),
@@ -456,7 +485,44 @@ void test_artwork_palette_changes() {
     const QImage spahn_image = spahn_item->icon().pixmap(QSize(16, 16), 1.0).toImage();
     const QImage skip = dialog.findChild<QLabel*>(QStringLiteral("skipLegend"))->pixmap().toImage();
     const QImage corner = dialog.findChild<QLabel*>(QStringLiteral("fourCornerLegend"))->pixmap().toImage();
-    if (light_spahn.isNull()) { light_spahn = spahn_image; light_skip = skip; light_corner = corner; }
+    require(skip.size() == QSize(236, 96) && corner.size() == QSize(320, 120),
+            "Vector lookup artwork has the wrong logical size");
+    require(skip.pixelColor(0, 0).alpha() == 0 && corner.pixelColor(0, 0).alpha() == 0,
+            "Vector lookup artwork painted an opaque paper background");
+    const QColor artwork_ink = dark ? palette.color(QPalette::Text) : QColor(Qt::black);
+    require(contains_opaque_color(skip, artwork_ink) &&
+                contains_opaque_color(corner, artwork_ink),
+            "Vector lookup artwork did not use the live light/dark text color");
+    for (int row = 0; row < 2; ++row)
+      for (int column = 0; column < 2; ++column)
+        require(opaque_pixels(skip, QRect(column * 118, row * 48, 118, 48)) > 40,
+                "A SKIP vector diagram quadrant is empty");
+    for (int cell = 0; cell < 10; ++cell)
+      require(opaque_pixels(corner, QRect(cell * 32, 0, 32, 120)) > 30,
+              "A Four Corner vector diagram cell is empty");
+    if (light_spahn.isNull()) {
+      dialog.select_skip_mode();
+      require(dialog.grab().save(QStringLiteral("lookup-skip-vector-light.png")),
+              "Could not save the light SKIP vector diagram");
+      dialog.select_four_corner_mode();
+      require(dialog.grab().save(QStringLiteral("lookup-four-corner-vector-light.png")),
+              "Could not save the light Four Corner vector diagram");
+      dialog.select_bushu_mode();
+      require(dialog.grab().save(QStringLiteral("lookup-vector-artwork-light.png")),
+              "Could not save the light lookup artwork acceptance image");
+      light_spahn = spahn_image; light_skip = skip; light_corner = corner;
+    } else if (dark && !saved_dark) {
+      dialog.select_skip_mode();
+      require(dialog.grab().save(QStringLiteral("lookup-skip-vector-dark.png")),
+              "Could not save the dark SKIP vector diagram");
+      dialog.select_four_corner_mode();
+      require(dialog.grab().save(QStringLiteral("lookup-four-corner-vector-dark.png")),
+              "Could not save the dark Four Corner vector diagram");
+      dialog.select_bushu_mode();
+      require(dialog.grab().save(QStringLiteral("lookup-vector-artwork-dark.png")),
+              "Could not save the dark lookup artwork acceptance image");
+      saved_dark = true;
+    }
     require((spahn_image == light_spahn) != dark && (skip == light_skip) != dark &&
                 (corner == light_corner) != dark,
             "Embedded lookup artwork did not switch and restore with the palette");

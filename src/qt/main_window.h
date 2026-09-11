@@ -13,7 +13,6 @@
 #include <utility>
 #include <vector>
 
-#include <QIcon>
 #include <QList>
 #include <QMainWindow>
 #include <QPointer>
@@ -553,8 +552,7 @@ class MainWindow : public QMainWindow {
   void apply_toolbar();
   void sync_toolbar_position();
   void customize_toolbar();
-  std::vector<std::pair<QAction*, int>> toolbar_icons_;
-  std::vector<std::pair<QAction*, QIcon>> toolbar_standard_icons_;
+  std::vector<std::pair<QAction*, QString>> toolbar_icons_;
   QActionGroup* input_mode_actions_;
   QActionGroup* encoding_actions_;
   QMenu* jwp_code_page_menu_;

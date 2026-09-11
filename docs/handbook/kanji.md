@@ -24,6 +24,9 @@ Native tools include graphical Radical, Bushu, Stroke/Bushu and Spahn selectors;
 SKIP and Four Corner helpers; reading/meaning lookup; code and Index Lookup;
 and the JIS character table. Installed data determines which indexes are
 available. Clear and automatic search retain sensible pending-query boundaries.
+The SKIP and Four Corner legends use scalable transparent SVG geometry and switch
+from dark ink in light themes to light ink on dark surfaces. Radical and Spahn
+glyph sheets remain the original raster resources for now.
 
 Radical Lookup links the recovered equivalent radical variants. Opening it
 seeds the current JIS kanji, or use From Clipboard to extract the first kanji's

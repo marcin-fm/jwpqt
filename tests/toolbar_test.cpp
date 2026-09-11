@@ -5,12 +5,18 @@
 #include "jwp_editor.h"
 #include <algorithm>
 #include <array>
+#include <cstdint>
+#include <set>
 #include <QApplication>
 #include <QAction>
 #include <QCheckBox>
+#include <QColor>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDir>
+#include <QFile>
+#include <QIcon>
+#include <QImage>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPalette>
@@ -35,6 +41,20 @@ template<class F> void reject(F function) {
   bool failed = false;
   try { function(); } catch (const std::exception&) { failed = true; }
   require(failed, "Invalid toolbar settings were accepted");
+}
+int icon_ink(const QIcon& icon, QIcon::Mode mode) {
+  const QImage image = icon.pixmap(QSize(32, 32), 1.0, mode).toImage();
+  require(!image.isNull() && image.pixelColor(0, 0).alpha() == 0,
+          "Toolbar SVG did not render on a transparent background");
+  std::uint64_t weighted = 0;
+  std::uint64_t alpha = 0;
+  for (int y = 0; y < image.height(); ++y) for (int x = 0; x < image.width(); ++x) {
+    const QColor pixel = image.pixelColor(x, y);
+    weighted += static_cast<std::uint64_t>(qGray(pixel.rgb())) * pixel.alpha();
+    alpha += pixel.alpha();
+  }
+  require(alpha > 255 * 12, "Toolbar SVG has no visible artwork");
+  return static_cast<int>(weighted / alpha);
 }
 void settings() {
   qt::ApplicationSettings config;
@@ -82,8 +102,18 @@ void settings() {
   }
 }
 void window() {
+  const QPalette original_palette = QApplication::palette();
+  QPalette light = original_palette;
+  light.setColor(QPalette::Window, QColor(246, 246, 246));
+  light.setColor(QPalette::Base, Qt::white);
+  light.setColor(QPalette::Button, QColor(246, 246, 246));
+  light.setColor(QPalette::Text, QColor(16, 18, 20));
+  light.setColor(QPalette::ButtonText, QColor(16, 18, 20));
+  light.setColor(QPalette::WindowText, QColor(16, 18, 20));
+  light.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(126, 128, 130));
+  QApplication::setPalette(light);
   QTemporaryDir directory(QDir::currentPath() + "/toolbar-XXXXXX"); require(directory.isValid(), "Temporary directory");
-  qt::MainWindow window; window.show(); QApplication::processEvents();
+  qt::MainWindow window; window.resize(1500, 700); window.show(); QApplication::processEvents();
   auto* bar = child<QToolBar>(window, "mainToolBar");
   const auto initial = bar->actions();
   require(initial.size() == 39 && initial.front()->isSeparator() &&
@@ -101,6 +131,44 @@ void window() {
   require(window.apply_application_settings(config), "Full catalog apply failed");
   for (int id = 1; id <= 36; ++id)
     require(bar->actions()[id - 1] == child<QAction>(window, qt::kToolbarCommands[id]), "Toolbar did not reuse menu command");
+  require(QFile::exists(QStringLiteral(":/jwpqt/assets/icons/new.svg")) &&
+              QFile::exists(QStringLiteral(":/jwpqt/assets/icons/jwpqt.svg")) &&
+              !QFile::exists(QStringLiteral(":/jwpqt/toolbar.bmp")) &&
+              !QFile::exists(QStringLiteral(":/jwpqt/mainicon.ico")),
+          "Toolbar retained a raster runtime resource");
+  std::set<qint64> light_keys;
+  for (int id = 1; id <= 36; ++id) {
+    const QIcon icon = bar->actions()[id - 1]->icon();
+    require(!icon.isNull() && icon_ink(icon, QIcon::Normal) < 64 &&
+                icon_ink(icon, QIcon::Disabled) > 96,
+            "Toolbar SVG did not use the light palette roles");
+    light_keys.insert(icon.cacheKey());
+  }
+  require(light_keys.size() == 36, "Toolbar command SVGs are not independently addressable");
+  require(window.grab().save(QStringLiteral("toolbar-vector-light.png")),
+          "Could not save the light toolbar acceptance image");
+  QPalette dark = light;
+  dark.setColor(QPalette::Window, QColor(32, 35, 37));
+  dark.setColor(QPalette::Base, QColor(24, 26, 28));
+  dark.setColor(QPalette::Button, QColor(32, 35, 37));
+  dark.setColor(QPalette::Text, QColor(240, 242, 244));
+  dark.setColor(QPalette::ButtonText, QColor(240, 242, 244));
+  dark.setColor(QPalette::WindowText, QColor(240, 242, 244));
+  dark.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(140, 142, 144));
+  QApplication::setPalette(dark);
+  QApplication::processEvents();
+  for (int id = 1; id <= 36; ++id) {
+    const QIcon icon = bar->actions()[id - 1]->icon();
+    require(light_keys.count(icon.cacheKey()) == 0 &&
+                icon_ink(icon, QIcon::Normal) > 200 &&
+                icon_ink(icon, QIcon::Disabled) > 120 &&
+                icon_ink(icon, QIcon::Disabled) < 170,
+            "Toolbar SVG did not use the dark palette roles");
+  }
+  require(window.grab().save(QStringLiteral("toolbar-vector-dark.png")),
+          "Could not save the dark toolbar acceptance image");
+  QApplication::setPalette(light);
+  QApplication::processEvents();
   config.toolbar.count = 4; config.toolbar.buttons[0] = 9; config.toolbar.buttons[1] = 0;
   config.toolbar.buttons[2] = 9; config.toolbar.buttons[3] = 4;
   config.toolbar.area = 2; config.toolbar.icon_size = 32; config.toolbar.text_style = 1; config.toolbar.locked = true;
@@ -237,6 +305,7 @@ void window() {
   QTimer::singleShot(0, [&] { delete doomed.data(); });
   child<QAction>(*doomed, "customizeToolbarAction")->trigger();
   require(!doomed, "Modal owner deletion failed");
+  QApplication::setPalette(original_palette);
 }
 int main(int argc, char** argv) {
   QApplication::setAttribute(Qt::AA_DontUseNativeDialogs);

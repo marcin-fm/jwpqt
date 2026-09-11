@@ -2,7 +2,6 @@
 
 #include <QApplication>
 #include <QAction>
-#include <QIcon>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QCoreApplication>
@@ -14,6 +13,7 @@
 
 #include "jwpqt/core/text_file.h"
 #include "main_window.h"
+#include "vector_artwork.h"
 
 int main(int argc, char* argv[]) {
   QApplication application(argc, argv);
@@ -21,7 +21,8 @@ int main(int argc, char* argv[]) {
   QCoreApplication::setApplicationVersion(QStringLiteral(JWPQT_VERSION));
   QCoreApplication::setOrganizationName(QStringLiteral("jwpqt"));
   QApplication::setDesktopFileName(QStringLiteral("jwpqt"));
-  application.setWindowIcon(QIcon(QStringLiteral(":/jwpqt/mainicon.ico")));
+  application.setWindowIcon(
+      jwpqt::qt::svg_icon(QStringLiteral(":/jwpqt/assets/icons/jwpqt.svg")));
 
   QCommandLineParser parser;
   parser.setApplicationDescription(

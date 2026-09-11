@@ -21,7 +21,8 @@ install(FILES README.md PORTING.md DESTINATION "${CMAKE_INSTALL_DOCDIR}")
 install(FILES gnugpl.txt _cpright.txt DESTINATION "${CMAKE_INSTALL_DOCDIR}/handbook")
 install(FILES packaging/jwpqt.desktop DESTINATION "${CMAKE_INSTALL_DATADIR}/applications")
 install(FILES packaging/jwpqt-mime.xml DESTINATION "${CMAKE_INSTALL_DATADIR}/mime/packages")
-install(FILES packaging/jwpqt.png DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/48x48/apps")
+install(FILES assets/icons/jwpqt.svg
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps")
 
 set(CPACK_PACKAGE_NAME "jwpqt")
 set(CPACK_PACKAGE_VENDOR "jwpqt contributors")

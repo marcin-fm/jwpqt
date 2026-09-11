@@ -23,7 +23,7 @@ directly at normal and double scale.
 On Fedora, install the native build dependencies:
 
 ```sh
-sudo dnf install gcc-c++ cmake ninja-build qt6-qtbase-devel poppler-utils desktop-file-utils shared-mime-info
+sudo dnf install gcc-c++ cmake ninja-build qt6-qtbase-devel qt6-qtsvg-devel poppler-utils desktop-file-utils shared-mime-info
 ```
 
 Configure, build, and test out of tree:
@@ -72,7 +72,7 @@ nice cpack --config /srv/tmp/jwpqt-build/release/CPackSourceConfig.cmake -B /srv
 ```
 
 The binary TGZ contains `bin/jwpqt`, the handbook, retained licenses, a desktop
-entry, application icon and JWP/JPR MIME definitions. Extract it into a private
+entry, scalable SVG application icon and JWP/JPR MIME definitions. Extract it into a private
 prefix and run its executable from any working directory. CMake also supports
 `cmake --install BUILD --prefix PREFIX` and DESTDIR staging. Desktop registration
 does not force a default application; put the executable on PATH and refresh
@@ -80,7 +80,7 @@ desktop/MIME caches using the distribution's normal tools. Removing a private
 prefix must not remove separate user configuration or documents.
 
 This is a dynamically linked Linux package, not an AppImage or a universal
-binary. It requires a compatible architecture, system Qt 6 Widgets/PrintSupport,
+binary. It requires a compatible architecture, system Qt 6 Widgets/PrintSupport/Svg,
 standard C++ libraries and Japanese fonts. Supply matching source and retained
 notices when redistributing binaries under the GPL. Source archives omit Git and
 local assistant metadata. Neither package adds optional dictionary corpora;
@@ -629,11 +629,11 @@ and page layout. **View > Toolbar** hides or restores it; narrow windows expose
 the remaining actions through the toolbar's extension button. Mode checks and
 disabled actions track the editor and loaded resources.
 
-Menu text and the embedded legacy Japanese toolbar artwork adapt to light/dark
-palettes, including mismatched desktop text colors. Low-contrast monochrome
-standard icons also adapt, while colored artwork is retained. The 30 toolbar
-actions include Index Lookup; short text or native icon fallbacks remain when
-no icon theme is installed. **View or Tools > Customize Toolbar** provides the
+Every command uses bundled, scalable SVG artwork rather than host-theme or
+legacy toolbar bitmaps. Transparent monochrome symbols follow active and disabled
+palette text colors in both light and dark modes; the colored application icon
+retains its identity. The 30 toolbar actions include Index Lookup. **View or
+Tools > Customize Toolbar** provides the
 complete 36-command legacy catalog: add/remove/reorder buttons, insert separators,
 repeat commands, or reset the native default layout. Changes are staged until OK;
 Cancel preserves the live toolbar and editor state. Repeated commands mirror the
@@ -888,12 +888,13 @@ enable the option only when that is wanted.
 Character Table places its code fields beside the full character grid. Lookup
 results use horizontal character strips with Information, Insert and Copy
 actions. Bushu, Stroke/Bushu, SKIP, Spahn-Hadamitzky, Four Corner and Index Lookup
-share a tabbed window. Graphical radical selectors, recovered SKIP/Four Corner
+share a tabbed window. Graphical radical selectors and scalable SKIP/Four Corner
 legends, Clear and debounced Auto Search are available where applicable. Index
 Lookup supports the 21 recovered dictionary/reference types, limited by the
 loaded metadata; its volume field is enabled only for the relevant indexes.
-Additional selector/legend artwork is embedded, requiring no new provisioning.
-In dark palettes, radical strokes use light ink on dark paper and stroke-count
+The vector legends are redrawn from the recovered lookup semantics and require
+no new provisioning. In dark palettes, their strokes and radical strokes use
+light ink on dark paper and stroke-count
 headings stay readable. Switching back restores the original light artwork
 without changing queries, selections or results.
 

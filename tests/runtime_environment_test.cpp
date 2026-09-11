@@ -548,23 +548,51 @@ void test_toolbar_icon_theme(const QString& root) {
     for (const bool dark : {true, false, true}) {
       QApplication::setPalette(menu_palette(dark));
       QApplication::processEvents();
+      const QColor expected_active = toolbar->palette().color(QPalette::ButtonText);
       for (const auto mode : {QIcon::Normal, QIcon::Active, QIcon::Selected}) {
         for (const auto state : {QIcon::Off, QIcon::On}) {
           const QImage icon = cut->icon().pixmap(16, 16, mode, state).toImage();
-          const QColor ink = icon.pixelColor(8, 8);
-          require(dark ? ink.lightness() > 180 : ink.lightness() < 80,
-                  QStringLiteral("Standard toolbar icon is invisible: dark=%1 mode=%2 state=%3 ink=%4")
-                      .arg(dark).arg(mode).arg(state).arg(ink.name()));
+          int expected_pixels = 0;
+          for (int y = 0; y < icon.height(); ++y) {
+            for (int x = 0; x < icon.width(); ++x) {
+              const QColor pixel = icon.pixelColor(x, y);
+              if (pixel.alpha() != 0 && pixel.rgb() == expected_active.rgb()) {
+                ++expected_pixels;
+              }
+            }
+          }
+          require(expected_pixels > 10,
+                  QStringLiteral("Standard toolbar icon is invisible: dark=%1 mode=%2 state=%3")
+                      .arg(dark).arg(mode).arg(state));
           require(icon.pixelColor(0, 0).alpha() == 0,
                   QStringLiteral("Toolbar icon adaptation lost transparency"));
         }
       }
-      const QImage color = copy->icon().pixmap(16, 16).toImage();
-      require(color.pixelColor(4, 8) == QColor(Qt::cyan) &&
-                  color.pixelColor(12, 8) == QColor(Qt::yellow),
-              QStringLiteral("Healthy multicolor toolbar artwork was recolored"));
-      const QColor disabled = cut->icon().pixmap(16, 16, QIcon::Disabled).toImage().pixelColor(8, 8);
-      require(std::abs(disabled.lightness() - toolbar->palette().color(QPalette::Window).lightness()) > 60,
+      const QImage bundled = copy->icon().pixmap(16, 16).toImage();
+      int expected_pixels = 0;
+      for (int y = 0; y < bundled.height(); ++y) {
+        for (int x = 0; x < bundled.width(); ++x) {
+          const QColor pixel = bundled.pixelColor(x, y);
+          if (pixel.alpha() != 0 && pixel.rgb() == expected_active.rgb()) {
+            ++expected_pixels;
+          }
+        }
+      }
+      require(expected_pixels > 10,
+              QStringLiteral("Bundled toolbar icon did not ignore the host icon theme"));
+      const QImage disabled = cut->icon().pixmap(16, 16, QIcon::Disabled).toImage();
+      const QColor expected_disabled =
+          toolbar->palette().color(QPalette::Disabled, QPalette::ButtonText);
+      int disabled_pixels = 0;
+      for (int y = 0; y < disabled.height(); ++y) {
+        for (int x = 0; x < disabled.width(); ++x) {
+          const QColor pixel = disabled.pixelColor(x, y);
+          if (pixel.alpha() != 0 && pixel.rgb() == expected_disabled.rgb()) {
+            ++disabled_pixels;
+          }
+        }
+      }
+      require(disabled_pixels > 10,
               QStringLiteral("Disabled standard toolbar icon has no visible contrast"));
       require(toolbar->grab().save(QDir(QCoreApplication::applicationDirPath()).filePath(
                   dark ? QStringLiteral("toolbar-themed-dark.png")
@@ -635,13 +663,13 @@ void test_toolbar(const QString& root) {
     require(result != nullptr, QStringLiteral("Missing toolbar button: ") + name);
     return result;
   };
-  require(button("undoAction")->icon().isNull() &&
-              button("undoAction")->text() == QStringLiteral("Undo") &&
+  require(!button("undoAction")->icon().isNull() &&
+               button("undoAction")->text() == QStringLiteral("Undo") &&
               !button("undoAction")->isEnabled() &&
               !button("edictLookupAction")->isEnabled() &&
               !button("radicalLookupAction")->isEnabled() &&
               button("kanaInputAction")->isChecked(),
-          QStringLiteral("Iconless toolbar fallback or initial action state is wrong"));
+          QStringLiteral("Bundled toolbar icon or initial action state is wrong"));
   button("asciiInputAction")->click();
   require(button("asciiInputAction")->isChecked() &&
               !button("kanaInputAction")->isChecked() &&
