@@ -89,7 +89,8 @@ void run(const QString& directory) {
     const auto edit_options = [&](bool accept) {
       bool visited = false;
       QTimer::singleShot(0, &window, [&] {
-        auto* dialog = window.findChild<QDialog*>("applicationSettingsDialog");
+        auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+        if (dialog && dialog->objectName() != QStringLiteral("applicationSettingsDialog")) dialog = nullptr;
         auto* list = dialog ? dialog->findChild<QListWidget*>("settingsDictionaryCategories") : nullptr;
         if (!list || list->count() != 21) { if (dialog) dialog->reject(); return; }
         for (int row = 0; row < list->count(); ++row) {
