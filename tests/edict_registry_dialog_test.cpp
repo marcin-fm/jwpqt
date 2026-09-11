@@ -362,7 +362,7 @@ void integration(const QString& root) {
   qt::MainWindow restarted;
   require(restarted.load_edict_configuration(path, Mode::kNonInteractive) &&
       restarted.edict_resources()->registry.entries[0].label == u"Renamed", "Restart lost configuration");
-  child<QAction>(window, "newTextDocumentAction")->trigger();
+  require(window.new_document_tab(false) >= 0, "Could not create unrestricted Unicode registry fixture");
   const auto unicode = QStringLiteral("Unicode \U0001f642 text");
   window.active_editor()->insertPlainText(unicode);
   const auto undo_steps = window.active_editor()->document()->availableUndoSteps();

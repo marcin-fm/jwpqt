@@ -114,7 +114,8 @@ void window() {
   duplicate->trigger();
   require(ascii->isChecked() && duplicate->isChecked(), "Repeated exclusive command lost its checked state");
   require(bar->actions()[3] == child<QAction>(window, "deleteDocumentAction"), "Optional delete command missing");
-  child<QAction>(window, "newTextDocumentAction")->trigger();
+  require(window.new_document_tab(false) >= 0,
+          "Could not create unrestricted Unicode toolbar fixture");
   editor = window.active_editor(); editor->insertPlainText("unicode");
   text = editor->toPlainText(); undo = editor->document()->availableUndoSteps(); modified = editor->document()->isModified();
   const auto preserved = qt::write_application_settings(window.application_settings());

@@ -15,8 +15,10 @@ full-width JASCII, and Insert or Overwrite. A selected range is replaced without
 consuming the following text.
 
 Save chooses the document format. A file's storage encoding is independent of
-its editing mode. New Text supports unrestricted Unicode, including characters
-outside the original JWP repertoire. Lossy conversions require confirmation.
+its editing mode. New Plain-Text Document starts as UTF-8 text with Japanese input
+available. Turn off Input > Japanese Editing when unrestricted Unicode outside
+the original JWP repertoire is required; the storage format remains plain text.
+Lossy conversions require confirmation.
 
 ## Topics
 

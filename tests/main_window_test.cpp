@@ -511,23 +511,36 @@ void test_new_document_workflow(const QString& directory) {
 
   find_action(window, "newTextDocumentAction")->trigger();
   editor = window.active_editor();
-  require(!window.is_jwp_document() && !window.document_modified() &&
+  require(window.is_jwp_document() && !window.uses_jwp_format() &&
+              window.text_encoding() == jwpqt::core::TextEncoding::kUtf8 &&
+              !window.document_modified() &&
               window.document_count() == 2 &&
               window.current_path().isEmpty() &&
-              !find_action(window, "kanaInputAction")->isEnabled(),
-          "Explicit New Text did not create an independent Unicode document");
-  const QString unicode = QString::fromUtf8("\xf0\x9f\x98\x80");
-  editor->insertPlainText(unicode);
+              find_action(window, "kanaInputAction")->isEnabled(),
+           "Explicit New Text did not create Japanese-editable UTF-8 text");
+  send_text_key(editor, Qt::Key_K, QStringLiteral("k"));
+  send_text_key(editor, Qt::Key_A, QStringLiteral("a"));
+  const std::string new_text_input = editor->toPlainText().toUtf8().toStdString();
+  require(editor->toPlainText() == QStringLiteral("\u304b"),
+          "Explicit New Text did not support Japanese input: " + new_text_input);
   const QString text_path = directory + QStringLiteral("/new-text.txt");
+  require(window.save_path(text_path) &&
+              read_bytes(text_path) == QStringLiteral("\u304b").toUtf8(),
+          "Explicit New Text did not retain its plain-text format");
+  require(window.set_japanese_editing(false, true),
+          "Could not switch New Text to unrestricted Unicode");
+  const QString unicode = QStringLiteral("\u304b") +
+                          QString::fromUtf8("\xf0\x9f\x98\x80");
+  editor->insertPlainText(QString::fromUtf8("\xf0\x9f\x98\x80"));
   require(window.save_path(text_path) && read_bytes(text_path) == unicode.toUtf8(),
-          "Explicit New Text lost supplementary Unicode");
+          "Explicit New Text lost supplementary Unicode after mode switch");
   editor->insertPlainText(QStringLiteral("unsaved"));
   const auto* unicode_editor = editor;
   find_action(window, "newDocumentAction")->trigger();
   require(window.document_count() == 3 && window.is_jwp_document() &&
               window.active_editor()->toPlainText().isEmpty() &&
               unicode_editor->toPlainText() == unicode + QStringLiteral("unsaved"),
-          "New tab discarded another document's unsaved Unicode");
+           "New tab discarded another plain-text document's unsaved Unicode");
   require(window.activate_document(1), "Could not reactivate Unicode tab");
   QTimer::singleShot(0, [] {
     auto* prompt = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
@@ -5117,7 +5130,8 @@ void test_control_arrow_conversion(const QString& directory) {
   require(restored.load_application_settings(root + "/settings.cfg") && restored.application_settings().ctrl_up_down_convert &&
               restored.open_project_path(root + "/project.jpr") && restored.application_settings().ctrl_up_down_convert,
           "Control conversion policy did not survive restart/project");
-  find_action(window, "newTextDocumentAction")->trigger();
+  require(window.new_document_tab(false) >= 0,
+          "Could not create unrestricted Unicode control-scroll fixture");
   editor = window.active_editor(); editor->insertPlainText("a"); editor->selectAll(); key(Qt::Key_Down);
   require(!window.conversion_active() && document_plain_text(*editor->document()) == "a",
           "Control policy changed an unrestricted Unicode document");
@@ -5190,7 +5204,9 @@ void test_undo_depth_policy(const QString& directory) {
               document_plain_text(*window.active_editor()->document()) == "AAA", "Inactive history was not resized");
   find_action(window, "newDocumentAction")->trigger(); fill(U'C');
   require(undo_count() == 3 && document_plain_text(*window.active_editor()->document()) == "CCC", "New history ignored configured limit");
-  find_action(window, "newTextDocumentAction")->trigger(); fill(U'D');
+  require(window.new_document_tab(false) >= 0,
+          "Could not create unrestricted Unicode undo fixture");
+  fill(U'D');
   auto larger = window.application_settings(); larger.maximum_undo_levels = 8;
   require(window.apply_application_settings(larger) && undo_count() == 6 && window.active_editor()->document()->isEmpty(),
           "Native history setting damaged unrestricted Unicode history or text");
@@ -5548,7 +5564,8 @@ void test_selected_romaji(const QString& directory) {
                                  QStringLiteral("ka\nki"), QStringLiteral("ka\u3042"),
                                  QStringLiteral("a\0b"), QString(65536, QLatin1Char('a'))}) {
     MainWindow rejected;
-    find_action(rejected, "newTextDocumentAction")->trigger();
+    require(rejected.new_document_tab(false) >= 0,
+            "Could not create unrestricted Unicode replay fixture");
     rejected.active_editor()->insertPlainText(invalid);
     rejected.active_editor()->selectAll();
     const int position = rejected.active_editor()->textCursor().position();
@@ -8689,7 +8706,8 @@ void test_document_format_separation(const QString& directory) {
               editor->toPlainText() == unicode && window.current_path() == text_path &&
               !window.document_modified() && window.text_encoding() == TextEncoding::kUtf8,
           "Unrepresentable Save As mutated live format or existing disk content");
-  find_action(window, "newTextDocumentAction")->trigger();
+  require(window.new_document_tab(false) >= 0,
+          "Could not create unrestricted Unicode signature fixture");
   editor = window.active_editor();
   const std::u32string signature_text = U"\ufeff\U0001f600";
   const QString signature = QString(QChar(0xfeff)) +

@@ -682,7 +682,8 @@ void test_toolbar(const QString& root) {
               reopened.findChild<QTextEdit*>()->toPlainText() == QStringLiteral("abcx"),
           QStringLiteral("Toolbar save did not persist the edited document"));
   button("newDocumentAction")->click();
-  window.findChild<QAction*>(QStringLiteral("newTextDocumentAction"))->trigger();
+  require(window.new_document_tab(false) >= 0,
+          QStringLiteral("Could not create unrestricted Unicode toolbar fixture"));
   require(!button("kanaInputAction")->isEnabled() &&
               button("jisTableAction")->isEnabled() &&
               !button("pageLayoutAction")->isEnabled(),

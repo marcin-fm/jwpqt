@@ -914,7 +914,8 @@ void test_character_context(const QString& directory) {
           "Basic character navigation stopped after unloading kanji metadata");
   dialog->close();
   QApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-  window.findChild<QAction*>(QStringLiteral("newTextDocumentAction"))->trigger();
+  require(window.new_document_tab(false) >= 0,
+          "Could not create unrestricted Unicode context fixture");
   editor = window.active_editor();
   editor->insertPlainText(QStringLiteral("x\U0001f600\u3042"));
   selection = editor->textCursor();

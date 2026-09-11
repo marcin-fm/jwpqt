@@ -377,12 +377,13 @@ original licensing still applies, and generated faces restrict font embedding.
 
 Startup and **File > New Japanese Document** create a native JWP document with
 Japanese editing, conversion, formatting, and lookup insertion available without
-opening an existing file first. **File > New Text Document** creates unrestricted
-Unicode plain text instead; JWP paragraph formatting and WNN conversion are
-unavailable in that mode, but dictionary and character lookup/insertion work. Imported
-text files use Japanese editing when all their characters are representable in
-JWP, but keep their text encoding and file format. Other Unicode stays intact in
-unrestricted editing. **Edit > Input Mode > Japanese Editing** switches engines
+opening an existing file first. **File > New Plain-Text Document** creates UTF-8
+plain text with Japanese input and WNN conversion available, while keeping JWP
+paragraph formatting out of the saved format. Imported text files likewise use
+Japanese editing when all their characters are representable in JWP, but keep
+their text encoding and file format. To enter unrestricted Unicode outside the
+JWP repertoire, turn off **Edit > Input Mode > Japanese Editing**; the text file
+format stays unchanged. That command switches engines
 without changing the saved format; it asks before clearing Undo/Redo or dropping
 JWP layout/metadata. A switch into Japanese editing rejects unsupported characters
 rather than substituting them.

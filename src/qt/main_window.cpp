@@ -2868,12 +2868,16 @@ void MainWindow::create_actions() {
   connect(new_action, &QAction::triggered, this,
           [this] { new_document_tab(); });
 
-  QAction* new_text_action = file_menu->addAction(tr("New &Text Document"));
+  QAction* new_text_action = file_menu->addAction(tr("New &Plain-Text Document"));
   new_text_action->setObjectName(QStringLiteral("newTextDocumentAction"));
   new_text_action->setStatusTip(
-      tr("Create unrestricted Unicode text without JWP formatting"));
+      tr("Create UTF-8 plain text with Japanese input; disable Japanese Editing for unrestricted Unicode"));
   connect(new_text_action, &QAction::triggered, this, [this] {
-    new_document_tab(false);
+    if (new_document_tab(false) >= 0) {
+      if (set_japanese_editing(true, false, OpenMode::kNonInteractive)) {
+        set_input_mode(InputMode::kKanji);
+      }
+    }
   });
 
   QAction* open_action = file_menu->addAction(tr("&Open..."));
