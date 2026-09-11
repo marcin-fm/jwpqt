@@ -5,7 +5,7 @@
 #include "jwpqt/core/jwp_configuration.h"
 
 namespace jwpqt::qt {
-// Wire IDs from jwp_stat.h:74-113. Zero is a separator.
+// Wire IDs from jwpxp-1.67:jwp_stat.h:74-113. Zero is a separator.
 inline constexpr std::array<const char*, 37> kToolbarCommands{{
     "", "newDocumentAction", "openDocumentAction", "saveDocumentAction", "deleteDocumentAction",
     "printAction", "undoAction", "redoAction", "kanaInputAction", "asciiInputAction", "jasciiInputAction",

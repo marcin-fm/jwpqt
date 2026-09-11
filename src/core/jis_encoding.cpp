@@ -3,7 +3,7 @@
 #include "jwpqt/core/jis_encoding.h"
 
 // Shift-JIS pair formulas derive from Ken R. Lunde's jconv.c 3.0
-// (1993-07-01), as attributed and preserved in legacy jwp_jisc.cpp.
+// (1993-07-01), as attributed in jwpxp-1.67:jwp_jisc.cpp.
 
 namespace jwpqt::core {
 namespace {

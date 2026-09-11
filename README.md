@@ -6,10 +6,11 @@ Win32 application layer with portable core code and a Qt application layer.
 
 The native port covers the recovered JWPxp 1.67 desktop command, dialog,
 accelerator, document-format, settings, printing, help and installation
-inventory. The historical sources remain at the repository root as the behavior
-and format reference. Portable code lives under `src/core`; Qt-specific
-application code lives under `src/qt`. See [`PORTING.md`](PORTING.md) for the
-extraction boundaries and implementation history.
+inventory. The complete historical tree is preserved by the `jwpxp-1.67` tag,
+not duplicated in the native working tree. Portable code lives under `src/core`;
+Qt-specific application code lives under `src/qt`. See
+[`PORTING.md`](PORTING.md) for the extraction boundaries, retrieval commands and
+implementation history.
 
 Platform-specific source behavior is replaced or excluded explicitly rather
 than emulated: CMake/CPack replaces Windows registry setup, the host desktop owns
@@ -143,7 +144,8 @@ replace an existing registry or user dictionary. Run it from the repository:
     "$data"/{wnn.dat,wnn.dix,edict,edict.jdx,classical} \
     "$data"/{kanjinfo.dat,radical.dat,stroke.dat,_cpright.txt} \
     "$data"/jwpce-1.50/{enamdict,enamdict.jdx} \
-    radicals.bmp "$config/"
+    "$config/"
+  install -m 644 assets/data/kanji-radicals.bmp "$config/radicals.bmp"
   if [[ ! -e "$config/dict.cfg" ]]; then
     install -m 644 "$data/JWPxp.dic" "$config/dict.cfg"
   fi
@@ -991,5 +993,4 @@ legacy field array is preserved, including the unused tail; Setup defaults reset
 only the visible choices and flags. `CharInfo_SingleDialog` is retained but not
 applied: native information windows remain independent.
 
-JWPce/JWPxp copyright and licensing notices remain in `_cpright.txt`,
-`_readme.txt`, and `gnugpl.txt`.
+Program licensing and original JWPce/JWPxp notices remain under `docs/legal/`.

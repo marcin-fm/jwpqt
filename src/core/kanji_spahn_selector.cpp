@@ -9,7 +9,7 @@
 namespace jwpqt::core {
 namespace {
 
-// Recovered hs_data, hs_radlist and hs_radvalue from jwp_lkup.cpp.
+// Recovered hs_data, hs_radlist and hs_radvalue from jwpxp-1.67:jwp_lkup.cpp.
 constexpr std::uint16_t kStarts[]{0, 0, 0, 30, 57, 79, 89, 96, 102, 112, 113, 114, 116};
 constexpr std::uint8_t kBases[]{0, 0, 0, 19, 37, 50, 59, 65, 70, 75, 76, 77};
 constexpr std::uint8_t kCanonical[]{

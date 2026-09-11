@@ -16,7 +16,7 @@ application icon restores the original `愛` identity. Their glyph outlines were
 generated from Noto Sans CJK JP 2.004, released under the SIL Open Font License
 1.1, then embedded as font-independent SVG paths.
 
-The recovered legacy BMP and ICO files remain at the repository root as source
-provenance, but the native runtime does not load `toolbar.bmp`, `skiptype.bmp`,
-`fourcorners.bmp` or `mainicon.ico`. `hsradicals.bmp` and externally provisioned
-radical artwork remain raster resources until the radical glyph set is ported.
+Obsolete legacy BMP and ICO files are available from the `jwpxp-1.67` tag, not
+the native working tree. The two radical sheets still consumed by native lookup
+live under `assets/data/`; externally provisioned radical metadata remains
+raster data until that glyph set is ported.

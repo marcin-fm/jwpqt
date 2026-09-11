@@ -31,7 +31,7 @@ QPixmap themed_lookup_artwork(const QPixmap& source, const QPalette& palette) {
 }
 
 bool is_rare_radical(unsigned radical) noexcept {
-  // Source fillrare(), with one-based positions in radicals.bmp; 76 is intentionally not rare.
+  // Source fillrare() in jwpxp-1.67, with one-based radical positions; 76 is intentionally not rare.
   switch (radical) {
     case 67: case 81: case 87: case 90: case 147: case 165: case 187: case 194:
     case 204: case 215: case 216: case 217: case 218: case 223: case 225: case 229:

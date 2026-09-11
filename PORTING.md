@@ -9,14 +9,21 @@ begins after `jwpxp-1.67` and now targets Linux, Windows, macOS, and WebAssembly
 
 - `src/core` is portable C++ with no Qt, Win32, or operating-system APIs.
 - `src/qt` owns the Qt application, filesystem integration, and widgets.
-- The historical root sources remain the behavioral and format reference while
-  individual responsibilities move behind tested portable interfaces.
+- The `jwpxp-1.67` tag preserves the complete historical behavioral and format
+  reference; obsolete Win32 files are not duplicated in the native tree.
 - The native application does not depend on Wine, Winelib, or PE execution.
 
 The legacy program stores Japanese characters as 16-bit JIS row/cell values.
 That representation remains explicit at compatibility boundaries. Unicode is
 used for the native UI, not as an untested replacement for dictionary keys or
 legacy file structures.
+
+To inspect the original source without changing the current checkout:
+
+```sh
+git show jwpxp-1.67:jwpce.cpp
+git archive --format=tar.gz --output=/srv/tmp/jwpxp-1.67.tar.gz jwpxp-1.67
+```
 
 ## Implementation history
 

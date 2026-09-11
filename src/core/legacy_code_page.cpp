@@ -6,7 +6,7 @@
 #include <cstddef>
 
 // These tables and their undefined-value marker are retained from Glenn
-// Rosenthal's JWPxp jwp_jisc.cpp and jwp_cp125*.dat files.
+// Rosenthal's JWPxp tables preserved by the jwpxp-1.67 tag.
 
 namespace jwpqt::core {
 namespace {
@@ -14,31 +14,31 @@ namespace {
 constexpr char32_t kUndefined = 0xc23b;
 
 constexpr std::array<char32_t, 128> kCodePage1250 = {{
-#include "jwp_cp1250.dat"
+#include "data/code-page-1250.inc"
 }};
 constexpr std::array<char32_t, 128> kCodePage1251 = {{
-#include "jwp_cp1251.dat"
+#include "data/code-page-1251.inc"
 }};
 constexpr std::array<char32_t, 128> kCodePage1252 = {{
-#include "jwp_cp1252.dat"
+#include "data/code-page-1252.inc"
 }};
 constexpr std::array<char32_t, 128> kCodePage1253 = {{
-#include "jwp_cp1253.dat"
+#include "data/code-page-1253.inc"
 }};
 constexpr std::array<char32_t, 128> kCodePage1254 = {{
-#include "jwp_cp1254.dat"
+#include "data/code-page-1254.inc"
 }};
 constexpr std::array<char32_t, 128> kCodePage1255 = {{
-#include "jwp_cp1255.dat"
+#include "data/code-page-1255.inc"
 }};
 constexpr std::array<char32_t, 128> kCodePage1256 = {{
-#include "jwp_cp1256.dat"
+#include "data/code-page-1256.inc"
 }};
 constexpr std::array<char32_t, 128> kCodePage1257 = {{
-#include "jwp_cp1257.dat"
+#include "data/code-page-1257.inc"
 }};
 constexpr std::array<char32_t, 128> kCodePage1258 = {{
-#include "jwp_cp1258.dat"
+#include "data/code-page-1258.inc"
 }};
 
 const std::array<char32_t, 128>* table_for(

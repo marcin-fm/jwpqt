@@ -137,10 +137,13 @@ qt_add_resources(jwpqt_qt_ui handbook_assets
     "${PROJECT_SOURCE_DIR}/docs/handbook/installation.md"
     "${PROJECT_SOURCE_DIR}/docs/handbook/about.md"
 )
-set_source_files_properties("${PROJECT_SOURCE_DIR}/gnugpl.txt" PROPERTIES QT_RESOURCE_ALIAS "gnugpl.txt")
-set_source_files_properties("${PROJECT_SOURCE_DIR}/_cpright.txt" PROPERTIES QT_RESOURCE_ALIAS "_cpright.txt")
+set_source_files_properties("${PROJECT_SOURCE_DIR}/docs/legal/gnugpl.txt"
+  PROPERTIES QT_RESOURCE_ALIAS "gnugpl.txt")
+set_source_files_properties("${PROJECT_SOURCE_DIR}/docs/legal/original-notices.txt"
+  PROPERTIES QT_RESOURCE_ALIAS "_cpright.txt")
 qt_add_resources(jwpqt_qt_ui notice_assets PREFIX "/jwpqt/help"
-  FILES "${PROJECT_SOURCE_DIR}/gnugpl.txt" "${PROJECT_SOURCE_DIR}/_cpright.txt")
+  FILES "${PROJECT_SOURCE_DIR}/docs/legal/gnugpl.txt"
+        "${PROJECT_SOURCE_DIR}/docs/legal/original-notices.txt")
 
 qt_add_resources(jwpqt_qt_ui toolbar_assets
   PREFIX "/jwpqt"
@@ -184,7 +187,7 @@ qt_add_resources(jwpqt_qt_ui toolbar_assets
         "${PROJECT_SOURCE_DIR}/assets/icons/skip-diagram.svg"
         "${PROJECT_SOURCE_DIR}/assets/icons/four-corner-diagram.svg"
         "${PROJECT_SOURCE_DIR}/assets/icons/jwpqt.svg"
-        "${PROJECT_SOURCE_DIR}/hsradicals.bmp"
+        "${PROJECT_SOURCE_DIR}/assets/data/spahn-radicals.bmp"
 )
 
 if(EMSCRIPTEN)
@@ -272,9 +275,10 @@ if(EMSCRIPTEN)
   install(FILES "${PROJECT_SOURCE_DIR}/assets/fonts/NotoSansJP-OFL.txt"
           DESTINATION "licenses")
   install(FILES
-    "${PROJECT_SOURCE_DIR}/gnugpl.txt"
-    "${PROJECT_SOURCE_DIR}/_cpright.txt"
+    "${PROJECT_SOURCE_DIR}/docs/legal/gnugpl.txt"
     DESTINATION "licenses")
+  install(FILES "${PROJECT_SOURCE_DIR}/docs/legal/original-notices.txt"
+          DESTINATION "licenses" RENAME "_cpright.txt")
 else()
   install(TARGETS jwpqt
     BUNDLE DESTINATION "."

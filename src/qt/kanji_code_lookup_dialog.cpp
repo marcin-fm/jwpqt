@@ -607,7 +607,9 @@ void KanjiCodeLookupDialog::update_artwork() {
     refresh_icons(bushu_radicals_, radical_sheet_, Qt::UserRole + 1);
     refresh_icons(stroke_bushu_radicals_, radical_sheet_, Qt::UserRole + 1);
   }
-  refresh_icons(spahn_radicals_, QPixmap(QStringLiteral(":/jwpqt/hsradicals.bmp")), Qt::UserRole + 2);
+  refresh_icons(spahn_radicals_,
+                QPixmap(QStringLiteral(":/jwpqt/assets/data/spahn-radicals.bmp")),
+                Qt::UserRole + 2);
 }
 
 bool KanjiCodeLookupDialog::search_current() {
@@ -664,7 +666,7 @@ void KanjiCodeLookupDialog::populate_spahn_choices() {
   if (strokes == 0) return;
   const auto choices = core::kanji_spahn_choices(
       static_cast<std::uint8_t>(strokes < 0 ? 0 : strokes), spahn_variants_->isChecked());
-  const QPixmap sheet(QStringLiteral(":/jwpqt/hsradicals.bmp"));
+  const QPixmap sheet(QStringLiteral(":/jwpqt/assets/data/spahn-radicals.bmp"));
   for (const auto& choice : choices) {
     const QPixmap icon = sheet.copy(0, choice.sprite_index * 16, 16, 16);
     const QString code = QStringLiteral("%1%2").arg(choice.radical_strokes)

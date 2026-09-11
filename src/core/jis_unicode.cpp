@@ -6,7 +6,7 @@
 #include <cstddef>
 
 // These mappings and their ordering are retained from Glenn Rosenthal's
-// JWPxp jwp_jisc.cpp, jwp_ukan.dat, and jwp_umis.dat.
+// JWPxp sources preserved by the jwpxp-1.67 tag.
 
 namespace jwpqt::core {
 namespace {
@@ -14,11 +14,11 @@ namespace {
 constexpr std::size_t kCellsPerRow = 94;
 
 constexpr std::array<char32_t, 6398> kKanjiUnicode = {{
-#include "jwp_ukan.dat"
+#include "data/jis-kanji-table.inc"
 }};
 
 constexpr std::array<char32_t, 220> kMiscUnicode = {{
-#include "jwp_umis.dat"
+#include "data/jis-misc-table.inc"
 }};
 
 std::optional<char32_t> mapped_value(char32_t value) noexcept {
