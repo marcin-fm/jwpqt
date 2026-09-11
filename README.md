@@ -918,8 +918,9 @@ enable the option only when that is wanted.
 
 Character Table places its code fields beside the full character grid. Lookup
 results use horizontal character strips with Information, Insert and Copy
-actions. Bushu, Stroke/Bushu, SKIP, Spahn-Hadamitzky, Four Corner and Index Lookup
-share a tabbed window. Graphical radical selectors and responsive SKIP/Four Corner
+actions. Radical, Stroke Count, Bushu, Stroke/Bushu, SKIP, Spahn-Hadamitzky,
+Four Corner and Index Lookup share one tabbed window. Graphical radical selectors
+and responsive SKIP/Four Corner
 legends, Clear and debounced Auto Search are available where applicable. Index
 Lookup supports the 21 recovered dictionary/reference types, limited by the
 loaded metadata; its volume field is enabled only for the relevant indexes.
@@ -931,8 +932,10 @@ strokes and radical strokes use light ink on dark paper and stroke-count heading
 stay readable. Switching back restores the original light artwork without
 changing queries, selections or results.
 
-Radical Lookup links the recovered variant groups, seeds the current JIS kanji
-and extracts radicals from the first clipboard character. A quick stroke count
+The Radical tab links the recovered variant groups, seeds the current JIS kanji
+and extracts radicals from the first clipboard character. The Stroke Count tab
+searches the same bounded stroke catalog without requiring a radical selection.
+A quick stroke count
 supports Exact, +/- 1 and +/- 2 alongside the explicit range controls. Its
 arrows cycle Any, the selected-radical stroke estimate, through 30 and back to
 Any; the estimate is a bounded stepping hint, not an automatic filter. Invalid

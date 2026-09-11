@@ -25,6 +25,7 @@
 
 #include "jwpqt/core/kanji_info.h"
 #include "kanji_code_lookup_dialog.h"
+#include "kanji_lookup_dialog.h"
 #include "kanji_reading_lookup_dialog.h"
 #include "text_bridge.h"
 #include "vector_artwork.h"
@@ -134,6 +135,84 @@ jwpqt::core::KanjiInfoDatabase database(std::uint32_t flags = 0x28U) {
   append_u16(bytes, 640U);
   bytes.push_back('\0');
   return jwpqt::core::KanjiInfoDatabase::parse(bytes);
+}
+
+jwpqt::core::KanjiLookupLists lookup_lists(
+    const std::vector<std::vector<jwpqt::core::JisCode>>& groups) {
+  std::string bytes(groups.size() * 4U, '\0');
+  std::size_t offset = bytes.size();
+  for (std::size_t index = 0; index < groups.size(); ++index) {
+    put_u16(bytes, index * 4U, static_cast<std::uint16_t>(offset));
+    put_u16(bytes, index * 4U + 2U,
+            static_cast<std::uint16_t>(groups[index].size()));
+    for (const auto code : groups[index]) append_u16(bytes, code);
+    offset = bytes.size();
+  }
+  return jwpqt::core::KanjiLookupLists::parse(bytes, groups.size());
+}
+
+void test_radical_and_stroke_tabs() {
+  using namespace jwpqt;
+  std::vector<std::vector<core::JisCode>> radical_groups(
+      core::kRadicalListGroups);
+  radical_groups[0] = {0x3021U};
+  std::vector<std::vector<core::JisCode>> stroke_groups(
+      core::kStrokeListGroups);
+  stroke_groups[2] = {0x3021U};
+  const auto radicals = lookup_lists(radical_groups);
+  const auto strokes = lookup_lists(stroke_groups);
+  const auto source = database();
+  std::vector<core::JisCode> inserted;
+  core::JisCode shown = 0;
+  qt::KanjiCodeLookupDialog dialog(
+      source, [&](const auto& codes) { inserted = codes; },
+      [&](core::JisCode code) { shown = code; }, nullptr, QPixmap{},
+      &radicals, &strokes);
+  const auto* tabs = dialog.findChild<QTabWidget*>();
+  require(tabs && tabs->count() == 8 && tabs->tabText(6) == "Radical" &&
+              tabs->tabText(7) == "Stroke Count",
+          "Radical and Stroke Count are not first-class lookup tabs");
+
+  dialog.select_radical_mode();
+  auto* radical = dynamic_cast<qt::KanjiLookupDialog*>(
+      dialog.findChild<QWidget*>(QStringLiteral("kanjiRadicalLookupPage")));
+  require(radical && tabs->currentWidget() == radical,
+          "Radical mode did not select its shared lookup tab");
+  radical->set_selected_radicals({0});
+  require(dialog.search_radical() &&
+              radical->result_codes() ==
+                  std::vector<core::JisCode>{0x3021U},
+          "Radical tab did not run the bounded radical lookup");
+  radical->findChild<QPushButton*>(
+      QStringLiteral("kanjiRadicalLookupInsert"))->click();
+  radical->findChild<QPushButton*>(
+      QStringLiteral("kanjiRadicalLookupInfo"))->click();
+  require(inserted == std::vector<core::JisCode>{0x3021U} &&
+              shown == 0x3021U,
+          "Radical tab lost shared result callbacks");
+
+  dialog.select_stroke_mode();
+  auto* stroke = dynamic_cast<qt::KanjiLookupDialog*>(
+      dialog.findChild<QWidget*>(QStringLiteral("kanjiStrokeLookupPage")));
+  require(stroke && tabs->currentWidget() == stroke,
+          "Stroke Count mode did not select its shared lookup tab");
+  stroke->set_stroke_range(3, 3);
+  require(dialog.search_stroke() &&
+              stroke->result_codes() ==
+                  std::vector<core::JisCode>{0x3021U},
+          "Stroke Count tab did not run the bounded stroke lookup");
+
+  int automatic_changes = 0;
+  dialog.set_auto_search_handler([&](bool automatic) {
+    ++automatic_changes;
+    require(!automatic, "Embedded Auto Search published the wrong value");
+  });
+  radical->findChild<QCheckBox*>(
+      QStringLiteral("kanjiRadicalLookupAutoSearch"))->click();
+  require(automatic_changes == 1 &&
+              !stroke->findChild<QCheckBox*>(
+                  QStringLiteral("kanjiStrokeLookupAutoSearch"))->isChecked(),
+          "Embedded lookup Auto Search did not synchronize once");
 }
 
 void test_dialog() {
@@ -717,5 +796,6 @@ int main(int argc, char* argv[]) {
   test_result_keys_and_bushu_steps();
   test_artwork_palette_changes();
   test_preference_callbacks();
+  test_radical_and_stroke_tabs();
   return EXIT_SUCCESS;
 }

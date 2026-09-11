@@ -363,9 +363,12 @@ void test_integration(const QString& directory) {
   radical_action->trigger();
   QApplication::processEvents();
   auto* radical_dialog = dynamic_cast<jwpqt::qt::KanjiLookupDialog*>(
-      window.findChild<QDialog*>(QStringLiteral("kanjiLookupDialog")));
-  require(radical_dialog != nullptr,
-           "Radical lookup action did not open its dialog");
+      code_dialog->findChild<QWidget*>(
+          QStringLiteral("kanjiRadicalLookupPage")));
+  require(radical_dialog != nullptr &&
+              code_dialog->findChild<QTabWidget*>()->currentWidget() ==
+                  radical_dialog,
+          "Radical lookup action did not select its shared tab");
   require(!radical_dialog->selected_radicals().empty() &&
               *window.current_jwp_document() == before_radical_open && undo->isEnabled() == before_radical_undo,
           "Opening radical lookup did not seed the current kanji without editing its document");
@@ -375,9 +378,10 @@ void test_integration(const QString& directory) {
                   std::vector<jwpqt::core::JisCode>{0x3021U},
           "Integrated radical lookup returned wrong results");
   auto* radical_results = radical_dialog->findChild<QListWidget*>(
-      QStringLiteral("kanjiLookupResults"));
+      QStringLiteral("kanjiRadicalLookupResults"));
   radical_results->item(0)->setSelected(true);
-  radical_dialog->findChild<QPushButton*>(QStringLiteral("kanjiLookupInsert"))
+  radical_dialog->findChild<QPushButton*>(
+      QStringLiteral("kanjiRadicalLookupInsert"))
       ->click();
   require(window.current_jwp_document()->paragraphs[0].text.size() == 4,
           "Radical lookup insertion did not mutate the JWP document");
@@ -391,13 +395,17 @@ void test_integration(const QString& directory) {
   const auto before_lookup = unicode->toPlainText();
   for (auto* lookup_action : {skip_action, four_corner_action, bushu_action,
                              stroke_bushu_action, spahn_action, index_action,
-                             reading_action, radical_action, count_action})
+                             reading_action, radical_action,
+                             window.findChild<QAction*>(
+                                 QStringLiteral("strokeCountLookupAction")),
+                             count_action})
     require(lookup_action->isEnabled(), "Unicode text disabled an available lookup action");
   code_results->item(0)->setSelected(true);
   for (auto* button : {
            code_dialog->findChild<QPushButton*>(QStringLiteral("kanjiCodeInsert")),
            reading_dialog->findChild<QPushButton*>(QStringLiteral("kanjiReadingInsert")),
-           radical_dialog->findChild<QPushButton*>(QStringLiteral("kanjiLookupInsert")),
+            radical_dialog->findChild<QPushButton*>(
+                QStringLiteral("kanjiRadicalLookupInsert")),
            count_dialog->findChild<QPushButton*>(QStringLiteral("kanjiCountInsert"))}) {
     QTextCursor selected = unicode->textCursor();
     selected.setPosition(2); selected.setPosition(3, QTextCursor::KeepAnchor);
@@ -422,14 +430,15 @@ void test_integration(const QString& directory) {
           "Could not initialize lookup resources for Unicode-only editing");
   for (const char* name : {"skipLookupAction", "fourCornerLookupAction", "bushuLookupAction",
                            "strokeBushuLookupAction", "spahnLookupAction", "indexLookupAction",
-                           "kanjiReadingLookupAction", "radicalLookupAction", "jisTableAction"}) {
+                           "kanjiReadingLookupAction", "radicalLookupAction",
+                           "strokeCountLookupAction", "jisTableAction"}) {
     auto* lookup_action = unicode_lookup.findChild<QAction*>(QString::fromLatin1(name));
     require(lookup_action != nullptr && lookup_action->isEnabled(),
             "A fresh Unicode document disabled lookup");
     lookup_action->trigger();
   }
   for (const char* name : {"kanjiCodeLookupDialog", "kanjiReadingLookupDialog",
-                           "kanjiLookupDialog", "jisTableDialog"})
+                           "jisTableDialog"})
     require(unicode_lookup.findChild<QDialog*>(QString::fromLatin1(name)) != nullptr,
             "A lookup command did not open in Unicode-only editing");
   require(window.activate_document(0), "Could not restore original metadata fixture");
@@ -440,8 +449,8 @@ void test_integration(const QString& directory) {
               directory + QStringLiteral("/missing-radicals.bmp"),
               jwpqt::qt::OpenMode::kNonInteractive) &&
               window.has_kanji_lookup() &&
-              window.findChild<QDialog*>(QStringLiteral("kanjiLookupDialog")) ==
-                  radical_dialog,
+              window.findChild<QDialog*>(
+                  QStringLiteral("kanjiCodeLookupDialog")) == code_dialog,
           "Malformed radical reload discarded working lookup state");
 
   write_bytes(info_path, QByteArray("bad"));
@@ -615,8 +624,10 @@ void test_lookup_preferences(const QString& directory) {
   const auto original = *window.current_jwp_document();
   window.findChild<QAction*>("radicalLookupAction")->trigger();
   window.findChild<QAction*>("skipLookupAction")->trigger();
-  auto* radial = dynamic_cast<qt::KanjiLookupDialog*>(window.findChild<QDialog*>("kanjiLookupDialog"));
   auto* code = dynamic_cast<qt::KanjiCodeLookupDialog*>(window.findChild<QDialog*>("kanjiCodeLookupDialog"));
+  auto* radial = code ? dynamic_cast<qt::KanjiLookupDialog*>(
+                            code->findChild<QWidget*>("kanjiRadicalLookupPage"))
+                      : nullptr;
   require(radial && code, "Lookup windows did not open");
   auto* miscodes = code->findChild<QCheckBox*>("skipMisclassifications");
   require(miscodes && !miscodes->isEnabled() && miscodes->isChecked() &&
@@ -682,7 +693,8 @@ void test_lookup_preferences(const QString& directory) {
   reading_flexible->click();
   require(!window.application_settings().flexible_kun && window.application_settings().reading_type == 2,
           "Reading control changes were not remembered");
-  auto* radial_auto = radial->findChild<QCheckBox*>("kanjiLookupAutoSearch");
+  auto* radial_auto = radial->findChild<QCheckBox*>(
+      "kanjiRadicalLookupAutoSearch");
   auto* code_auto = code->findChild<QCheckBox*>("kanjiCodeAutoSearch");
   require(radial_auto && code_auto && !radial_auto->isChecked() && !code_auto->isChecked(),
           "New lookup did not adopt saved Auto preference");
@@ -692,10 +704,12 @@ void test_lookup_preferences(const QString& directory) {
   code_auto->setChecked(false);
   require(!window.application_settings().automatic_kanji_lookup && !radial_auto->isChecked(),
           "Code Auto did not update radical state");
-  require(!radial->findChild<QTimer*>("kanjiLookupSearchTimer")->isActive(),
+  require(!radial->findChild<QTimer*>(
+               "kanjiRadicalLookupSearchTimer")->isActive(),
           "Disabling shared Auto left a pending radical search");
   require(radial->search(), "Could not populate saved preference fixture");
-  auto* list = radial->findChild<QListWidget*>("kanjiLookupResults");
+  auto* list = radial->findChild<QListWidget*>(
+      "kanjiRadicalLookupResults");
   const auto values = radial->result_codes();
   const auto row = list->currentRow();
   auto next = window.application_settings();

@@ -110,7 +110,6 @@
 #include "kanji_count_dialog.h"
 #include "kanji_info_dialog.h"
 #include "kanji_info_options_dialog.h"
-#include "kanji_lookup_dialog.h"
 #include "kanji_reading_lookup_dialog.h"
 #include "kanji_color_settings.h"
 #include "page_layout_dialog.h"
@@ -1674,8 +1673,6 @@ bool MainWindow::apply_application_settings(const ApplicationSettings& settings,
       }
       if (edict_lookup_options_) *edict_lookup_options_ = application_settings_.dictionary;
       if (edict_lookup_dialog_) edict_lookup_dialog_->set_options(application_settings_.dictionary);
-      if (kanji_lookup_dialog_) kanji_lookup_dialog_->set_lookup_options(
-          application_settings_.automatic_kanji_lookup, application_settings_.rare_kanji_last);
       if (kanji_code_lookup_dialog_) kanji_code_lookup_dialog_->set_automatic_search(
           application_settings_.automatic_kanji_lookup);
       if (kanji_code_lookup_dialog_) kanji_code_lookup_dialog_->set_search_preferences(
@@ -1685,7 +1682,8 @@ bool MainWindow::apply_application_settings(const ApplicationSettings& settings,
           application_settings_.flexible_kun, application_settings_.partial_meanings, application_settings_.reading_type);
       if (kanji_code_lookup_dialog_) kanji_code_lookup_dialog_->set_radical_preferences(
           application_settings_.reduce_radical_choices, application_settings_.deemphasize_rare_radicals);
-      if (kanji_lookup_dialog_) kanji_lookup_dialog_->set_deemphasize_radicals(application_settings_.deemphasize_rare_radicals);
+      if (kanji_code_lookup_dialog_) kanji_code_lookup_dialog_->set_radical_lookup_options(
+          application_settings_.automatic_kanji_lookup, application_settings_.rare_kanji_last);
       // Font/layout signals must not be interpreted as edits in any open tab.
       application_font_warnings_ = set_japanese_fonts(*this, application_settings_,
           QFileInfo(application_settings_path_).path());
@@ -2222,7 +2220,6 @@ MainWindow::~MainWindow() {
   delete kanji_count_dialog_;
   delete kanji_code_lookup_dialog_;
   delete kanji_reading_lookup_dialog_;
-  delete kanji_lookup_dialog_;
 }
 
 void MainWindow::changeEvent(QEvent* event) {
@@ -2306,8 +2303,6 @@ bool MainWindow::load_kanji_info(const QString& path, OpenMode mode) {
     kanji_code_lookup_dialog_ = nullptr;
     delete kanji_reading_lookup_dialog_;
     kanji_reading_lookup_dialog_ = nullptr;
-    delete kanji_lookup_dialog_;
-    kanji_lookup_dialog_ = nullptr;
     delete kanji_count_dialog_;
     kanji_count_dialog_ = nullptr;
     for (auto* dialog : findChildren<QDialog*>(QStringLiteral("kanjiInfoDialog"),
@@ -2364,8 +2359,8 @@ bool MainWindow::load_kanji_lookup(const QString& radical_path,
             "The radical sprite sheet is invalid");
       }
     }
-    delete kanji_lookup_dialog_;
-    kanji_lookup_dialog_ = nullptr;
+    delete kanji_code_lookup_dialog_;
+    kanji_code_lookup_dialog_ = nullptr;
     radical_lists_ = std::move(radical_candidate);
     stroke_lists_ = std::move(stroke_candidate);
     radical_sheet_ = std::move(sheet);
@@ -3388,6 +3383,14 @@ void MainWindow::create_actions() {
   connect(kanji_lookup_action_, &QAction::triggered, this,
           [this] { show_kanji_lookup_dialog(); });
 
+  stroke_count_lookup_action_ =
+      tools_menu->addAction(tr("Stroke &Count Lookup"));
+  stroke_count_lookup_action_->setObjectName(
+      QStringLiteral("strokeCountLookupAction"));
+  connect(stroke_count_lookup_action_, &QAction::triggered, this, [this] {
+    show_kanji_code_lookup_dialog(KanjiCodeLookupMode::kStrokeCount);
+  });
+
   tools_menu->addSeparator();
   kanji_color_options_action_ =
       tools_menu->addAction(tr("Kanji Color &Options..."));
@@ -3574,6 +3577,7 @@ void MainWindow::create_actions() {
     editor_actions_.append(action);
   };
   for (auto* action : {edict_lookup_action_, kanji_lookup_action_,
+                       stroke_count_lookup_action_,
                        bushu_lookup_action_, stroke_bushu_lookup_action_,
                        skip_lookup_action_, spahn_lookup_action_,
                        four_corner_lookup_action_, kanji_reading_lookup_action_,
@@ -4191,6 +4195,10 @@ void MainWindow::update_kanji_lookup_action() {
   if (kanji_lookup_action_ != nullptr) {
     kanji_lookup_action_->setEnabled(has_kanji_lookup() &&
                                      !conversion_active());
+  }
+  if (stroke_count_lookup_action_ != nullptr) {
+    stroke_count_lookup_action_->setEnabled(has_kanji_lookup() &&
+                                            !conversion_active());
   }
 }
 
@@ -5808,6 +5816,12 @@ void MainWindow::show_kanji_code_lookup_dialog(KanjiCodeLookupMode mode) {
       case KanjiCodeLookupMode::kIndex:
         dialog.select_index_mode();
         break;
+      case KanjiCodeLookupMode::kRadical:
+        dialog.select_radical_mode();
+        break;
+      case KanjiCodeLookupMode::kStrokeCount:
+        dialog.select_stroke_mode();
+        break;
     }
   };
   if (kanji_code_lookup_dialog_ != nullptr) {
@@ -5826,7 +5840,7 @@ void MainWindow::show_kanji_code_lookup_dialog(KanjiCodeLookupMode mode) {
         }
       },
       [this](core::JisCode code) { show_kanji_info_code(code); }, this,
-      radical_sheet_);
+      radical_sheet_, radical_lists_.get(), stroke_lists_.get());
   select_mode(*dialog);
   dialog->set_automatic_search(application_settings_.automatic_kanji_lookup);
   dialog->set_search_preferences(application_settings_.bushu_nelson, application_settings_.bushu_classical,
@@ -5838,11 +5852,12 @@ void MainWindow::show_kanji_code_lookup_dialog(KanjiCodeLookupMode mode) {
     application_settings_.index_type = index;
   });
   dialog->set_radical_preferences(application_settings_.reduce_radical_choices, application_settings_.deemphasize_rare_radicals);
+  dialog->set_radical_lookup_options(
+      application_settings_.automatic_kanji_lookup,
+      application_settings_.rare_kanji_last);
   dialog->set_variants_handler([this](bool reduce) { application_settings_.reduce_radical_choices = reduce; });
   dialog->set_auto_search_handler([this](bool automatic) {
     application_settings_.automatic_kanji_lookup = automatic;
-    if (kanji_lookup_dialog_) kanji_lookup_dialog_->set_lookup_options(
-        automatic, application_settings_.rare_kanji_last);
   });
   dialog->setAttribute(Qt::WA_DeleteOnClose);
   connect(dialog, &QObject::destroyed, this,
@@ -5896,39 +5911,10 @@ void MainWindow::show_kanji_lookup_dialog(
     statusBar()->showMessage(tr("Radical lookup is not available"), 3000);
     return;
   }
-  if (kanji_lookup_dialog_ != nullptr) {
-    kanji_lookup_dialog_->show();
-    kanji_lookup_dialog_->raise();
-    kanji_lookup_dialog_->activateWindow();
-    if (requested_seed && *requested_seed >= 0x3000) {
-      (void)kanji_lookup_dialog_->select_kanji(*requested_seed);
-    }
-    return;
-  }
   const auto seed = requested_seed ? requested_seed : jwp_character_target();
-  auto* dialog = new KanjiLookupDialog(
-      *radical_lists_, *stroke_lists_, *kanji_info_database_, radical_sheet_,
-      [this](const std::vector<core::JisCode>& codes) {
-        if (!insert_edict_text(core::decode_jwp_text(codes))) {
-          throw std::runtime_error(
-              "Could not insert radical lookup results into the document");
-        }
-      },
-      [this](core::JisCode code) { show_kanji_info_code(code); }, this);
-  dialog->set_lookup_options(application_settings_.automatic_kanji_lookup,
-                             application_settings_.rare_kanji_last);
-  dialog->set_deemphasize_radicals(application_settings_.deemphasize_rare_radicals);
-  dialog->set_auto_search_handler([this](bool automatic) {
-    application_settings_.automatic_kanji_lookup = automatic;
-    if (kanji_code_lookup_dialog_) kanji_code_lookup_dialog_->set_automatic_search(automatic);
-  });
-  dialog->setAttribute(Qt::WA_DeleteOnClose);
-  connect(dialog, &QObject::destroyed, this,
-          [this] { kanji_lookup_dialog_ = nullptr; });
-  kanji_lookup_dialog_ = dialog;
-  const QPointer<KanjiLookupDialog> shown(dialog);
-  dialog->show();
-  if (shown && seed && *seed >= 0x3000) (void)shown->select_kanji(*seed);
+  show_kanji_code_lookup_dialog(KanjiCodeLookupMode::kRadical);
+  if (kanji_code_lookup_dialog_ && seed && *seed >= 0x3000)
+    (void)kanji_code_lookup_dialog_->select_radical_character(*seed);
 }
 
 std::optional<core::JisCode> MainWindow::jwp_character_target() const {

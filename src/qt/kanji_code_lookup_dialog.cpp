@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "kanji_code_lookup_dialog.h"
+#include "kanji_lookup_dialog.h"
 #include "kanji_lookup_names.h"
 #include "auxiliary_find.h"
 #include "kanji_result_keys.h"
@@ -94,7 +95,9 @@ core::KanjiNumericRange spin_range(const QSpinBox& spin,
 
 KanjiCodeLookupDialog::KanjiCodeLookupDialog(
     const core::KanjiInfoDatabase& information, InsertHandler insert_handler,
-    InfoHandler info_handler, QWidget* parent, QPixmap radical_sheet)
+    InfoHandler info_handler, QWidget* parent, QPixmap radical_sheet,
+    const core::KanjiLookupLists* radical_lists,
+    const core::KanjiLookupLists* stroke_lists)
     : QDialog(parent),
       information_(information),
       insert_handler_(std::move(insert_handler)),
@@ -413,14 +416,27 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
     if (check != automatic) connect(check, &QCheckBox::toggled, this, schedule_search);
   }
   connect(automatic, &QCheckBox::toggled, this, [this, schedule_search](bool checked) {
+    if (radical_lookup_page_)
+      radical_lookup_page_->set_lookup_options(checked, rare_last_);
+    if (stroke_lookup_page_)
+      stroke_lookup_page_->set_lookup_options(checked, rare_last_);
     const QPointer<KanjiCodeLookupDialog> self(this);
     const auto handler = auto_search_handler_;
     if (handler) handler(checked);
     if (self && automatic_->isChecked() == checked) schedule_search();
   });
-  connect(tabs_, &QTabWidget::currentChanged, this, [this, automatic](int index) {
+  connect(tabs_, &QTabWidget::currentChanged, this,
+          [this, automatic, search_button, clear_button](int index) {
     search_timer_->stop();
-    automatic->setVisible(index != 5);
+    const bool embedded_lookup = index >= 6;
+    automatic->setVisible(!embedded_lookup && index != 5);
+    search_button->setVisible(!embedded_lookup);
+    clear_button->setVisible(!embedded_lookup);
+    results_->setVisible(!embedded_lookup);
+    status_->setVisible(!embedded_lookup);
+    copy_button_->setVisible(!embedded_lookup);
+    insert_button_->setVisible(!embedded_lookup);
+    info_button_->setVisible(!embedded_lookup);
   });
   connect(bushu_radicals_, &QListWidget::itemClicked, this, [this](QListWidgetItem* item) {
     if (item->data(Qt::UserRole).isValid()) bushu_radical_->setValue(item->data(Qt::UserRole).toInt());
@@ -522,6 +538,26 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
       if (handler) handler(!check->isChecked());
     });
   }
+
+  if (radical_lists != nullptr && stroke_lists != nullptr) {
+    radical_lookup_page_ = new KanjiLookupDialog(
+        *radical_lists, *stroke_lists, information_, radical_sheet_,
+        insert_handler_, info_handler_, tabs_, KanjiLookupPageMode::kRadical,
+        true);
+    stroke_lookup_page_ = new KanjiLookupDialog(
+        *radical_lists, *stroke_lists, information_, QPixmap{},
+        insert_handler_, info_handler_, tabs_,
+        KanjiLookupPageMode::kStrokeCount, true);
+    const auto changed = [this](bool automatic_search) {
+      set_automatic_search(automatic_search);
+      const auto handler = auto_search_handler_;
+      if (handler) handler(automatic_search);
+    };
+    radical_lookup_page_->set_auto_search_handler(changed);
+    stroke_lookup_page_->set_auto_search_handler(changed);
+    tabs_->addTab(radical_lookup_page_, tr("Radical"));
+    tabs_->addTab(stroke_lookup_page_, tr("Stroke Count"));
+  }
 }
 
 void KanjiCodeLookupDialog::set_radical_preferences(bool reduce, bool deemphasize) {
@@ -539,6 +575,14 @@ void KanjiCodeLookupDialog::set_radical_preferences(bool reduce, bool deemphasiz
   }
   deemphasize_radicals_ = deemphasize;
   update_artwork();
+  if (radical_lookup_page_)
+    radical_lookup_page_->set_deemphasize_radicals(deemphasize);
+}
+
+void KanjiCodeLookupDialog::set_radical_lookup_options(bool automatic,
+                                                       bool rare_last) {
+  rare_last_ = rare_last;
+  set_automatic_search(automatic);
 }
 
 void KanjiCodeLookupDialog::set_search_preferences(bool nelson, bool classical, bool miscodes, int index_type) {
@@ -564,6 +608,10 @@ void KanjiCodeLookupDialog::set_automatic_search(bool automatic) {
   const QSignalBlocker blocker(automatic_);
   automatic_->setChecked(automatic);
   if (!automatic) search_timer_->stop();
+  if (radical_lookup_page_)
+    radical_lookup_page_->set_lookup_options(automatic, rare_last_);
+  if (stroke_lookup_page_)
+    stroke_lookup_page_->set_lookup_options(automatic, rare_last_);
 }
 
 void KanjiCodeLookupDialog::set_auto_search_handler(std::function<void(bool)> handler) {
@@ -621,6 +669,8 @@ bool KanjiCodeLookupDialog::search_current() {
     case 3: return search_spahn();
     case 4: return search_stroke_bushu();
     case 5: return search_index();
+    case 6: return search_radical();
+    case 7: return search_stroke();
   }
   return false;
 }
@@ -652,6 +702,12 @@ void KanjiCodeLookupDialog::clear_current() {
       index_volume_->setValue(0);
       index_value_->setFocus();
       break;
+    case 6:
+      if (radical_lookup_page_) radical_lookup_page_->clear();
+      return;
+    case 7:
+      if (stroke_lookup_page_) stroke_lookup_page_->clear();
+      return;
   }
   search_timer_->stop();
   results_->clear();
@@ -752,6 +808,28 @@ void KanjiCodeLookupDialog::select_stroke_bushu_mode() {
 }
 
 void KanjiCodeLookupDialog::select_index_mode() { tabs_->setCurrentIndex(5); }
+
+void KanjiCodeLookupDialog::select_radical_mode() {
+  if (radical_lookup_page_) tabs_->setCurrentWidget(radical_lookup_page_);
+}
+
+void KanjiCodeLookupDialog::select_stroke_mode() {
+  if (stroke_lookup_page_) tabs_->setCurrentWidget(stroke_lookup_page_);
+}
+
+bool KanjiCodeLookupDialog::select_radical_character(core::JisCode code) {
+  if (!radical_lookup_page_) return false;
+  select_radical_mode();
+  return radical_lookup_page_->select_kanji(code);
+}
+
+bool KanjiCodeLookupDialog::search_radical() {
+  return radical_lookup_page_ != nullptr && radical_lookup_page_->search();
+}
+
+bool KanjiCodeLookupDialog::search_stroke() {
+  return stroke_lookup_page_ != nullptr && stroke_lookup_page_->search();
+}
 
 void KanjiCodeLookupDialog::set_index_query(const core::KanjiIndexQuery& query) {
   const int type = static_cast<int>(query.type);

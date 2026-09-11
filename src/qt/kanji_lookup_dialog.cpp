@@ -66,11 +66,14 @@ KanjiLookupDialog::KanjiLookupDialog(
     const core::KanjiLookupLists& radical_lists,
     const core::KanjiLookupLists& stroke_lists,
     const core::KanjiInfoDatabase& information, QPixmap radical_sheet,
-    InsertHandler insert_handler, InfoHandler info_handler, QWidget* parent)
+    InsertHandler insert_handler, InfoHandler info_handler, QWidget* parent,
+    KanjiLookupPageMode page_mode, bool embedded)
     : QDialog(parent),
       radical_lists_(radical_lists),
       stroke_lists_(stroke_lists),
       information_(information),
+      page_mode_(page_mode),
+      embedded_(embedded),
       insert_handler_(std::move(insert_handler)),
       info_handler_(std::move(info_handler)),
       radical_sheet_(std::move(radical_sheet)),
@@ -86,10 +89,17 @@ KanjiLookupDialog::KanjiLookupDialog(
       copy_button_(new QPushButton(tr("&Copy"), this)),
       insert_button_(new QPushButton(tr("&Insert"), this)),
       info_button_(new QPushButton(tr("&Information"), this)) {
-  setObjectName(QStringLiteral("kanjiLookupDialog"));
-  setWindowTitle(tr("Radical and Stroke Lookup"));
+  if (embedded_) setWindowFlags(Qt::Widget);
+  setObjectName(embedded_
+                    ? (page_mode_ == KanjiLookupPageMode::kRadical
+                           ? QStringLiteral("kanjiRadicalLookupPage")
+                           : QStringLiteral("kanjiStrokeLookupPage"))
+                    : QStringLiteral("kanjiLookupDialog"));
+  setWindowTitle(page_mode_ == KanjiLookupPageMode::kRadical
+                     ? tr("Radical Lookup")
+                     : tr("Stroke Count Lookup"));
   setModal(false);
-  resize(900, 600);
+  if (!embedded_) resize(900, 600);
 
   auto* outer = new QVBoxLayout(this);
   auto* radical_group = new QGroupBox(tr("Radicals"), this);
@@ -99,20 +109,24 @@ KanjiLookupDialog::KanjiLookupDialog(
   auto* radical_widget = new QWidget(scroll);
   auto* radical_grid = new QGridLayout(radical_widget);
   radical_grid->setSpacing(0);
-  radical_buttons_.reserve(radical_lists_.group_count());
+  const std::size_t radical_count =
+      page_mode_ == KanjiLookupPageMode::kRadical
+          ? radical_lists_.group_count()
+          : 0U;
+  radical_buttons_.reserve(radical_count);
   const bool has_sheet = !radical_sheet_.isNull() &&
                          radical_sheet_.width() >= kRadicalSourceSize &&
                          radical_sheet_.height() >=
-                             static_cast<int>(radical_lists_.group_count()) *
-                                 kRadicalSourceSize;
+                             static_cast<int>(radical_count) *
+                                  kRadicalSourceSize;
   std::vector<std::size_t> stroke_starts;
-  if (radical_lists_.group_count() == 241) {
+  if (radical_count == 241) {
     for (std::uint8_t strokes = 1; strokes <= core::kMaximumBushuRadicalStrokes; ++strokes)
       stroke_starts.push_back(core::kanji_bushu_choices(strokes, true).front().sprite_index);
   }
   std::size_t next_heading = 0;
   int cell = 0;
-  for (std::size_t index = 0; index < radical_lists_.group_count(); ++index) {
+  for (std::size_t index = 0; index < radical_count; ++index) {
     if (next_heading < stroke_starts.size() && stroke_starts[next_heading] == index) {
       auto* heading = new QLabel(QString::number(++next_heading), radical_widget);
       heading->setObjectName(QStringLiteral("radicalStrokeHeader%1").arg(next_heading));
@@ -150,6 +164,7 @@ KanjiLookupDialog::KanjiLookupDialog(
   }
   scroll->setWidget(radical_widget);
   radical_outer->addWidget(scroll);
+  radical_group->setVisible(page_mode_ == KanjiLookupPageMode::kRadical);
 
   auto* quick_controls = new QHBoxLayout;
   stroke_count_->setObjectName(QStringLiteral("kanjiLookupStrokeCount"));
@@ -171,6 +186,7 @@ KanjiLookupDialog::KanjiLookupDialog(
   quick_controls->addWidget(stroke_estimate_, 1);
   auto* from_clipboard = new QPushButton(tr("From &Clipboard"), this);
   from_clipboard->setObjectName(QStringLiteral("kanjiLookupFromClipboard"));
+  from_clipboard->setVisible(page_mode_ == KanjiLookupPageMode::kRadical);
   quick_controls->addWidget(from_clipboard);
 
   auto* controls = new QHBoxLayout;
@@ -217,10 +233,30 @@ KanjiLookupDialog::KanjiLookupDialog(
   status_->setObjectName(QStringLiteral("kanjiLookupStatus"));
   outer->addWidget(status_);
 
-  auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, this);
-  copy_button_->setObjectName(QStringLiteral("kanjiLookupCopy"));
-  insert_button_->setObjectName(QStringLiteral("kanjiLookupInsert"));
-  info_button_->setObjectName(QStringLiteral("kanjiLookupInfo"));
+  auto* buttons = new QDialogButtonBox(
+      embedded_ ? QDialogButtonBox::NoButton : QDialogButtonBox::Close, this);
+  const QString object_prefix =
+      embedded_ ? (page_mode_ == KanjiLookupPageMode::kRadical
+                        ? QStringLiteral("kanjiRadicalLookup")
+                        : QStringLiteral("kanjiStrokeLookup"))
+                : QStringLiteral("kanjiLookup");
+  if (embedded_) {
+    stroke_count_->setObjectName(object_prefix + QStringLiteral("StrokeCount"));
+    tolerance_->setObjectName(object_prefix + QStringLiteral("Tolerance"));
+    minimum_strokes_->setObjectName(object_prefix + QStringLiteral("MinimumStrokes"));
+    maximum_strokes_->setObjectName(object_prefix + QStringLiteral("MaximumStrokes"));
+    from_clipboard->setObjectName(object_prefix + QStringLiteral("FromClipboard"));
+    search_button->setObjectName(object_prefix + QStringLiteral("Search"));
+    automatic_->setObjectName(object_prefix + QStringLiteral("AutoSearch"));
+    any_strokes->setObjectName(object_prefix + QStringLiteral("AnyStrokes"));
+    clear_button->setObjectName(object_prefix + QStringLiteral("Clear"));
+    search_timer_->setObjectName(object_prefix + QStringLiteral("SearchTimer"));
+  }
+  results_->setObjectName(object_prefix + QStringLiteral("Results"));
+  status_->setObjectName(object_prefix + QStringLiteral("Status"));
+  copy_button_->setObjectName(object_prefix + QStringLiteral("Copy"));
+  insert_button_->setObjectName(object_prefix + QStringLiteral("Insert"));
+  info_button_->setObjectName(object_prefix + QStringLiteral("Info"));
   buttons->addButton(search_button, QDialogButtonBox::ActionRole);
   buttons->addButton(clear_button, QDialogButtonBox::ActionRole);
   buttons->addButton(info_button_, QDialogButtonBox::ActionRole);
@@ -237,6 +273,8 @@ KanjiLookupDialog::KanjiLookupDialog(
             if (search() && self && results_->count()) results_->setFocus();
           });
   search_timer_->setObjectName(QStringLiteral("kanjiLookupSearchTimer"));
+  if (embedded_)
+    search_timer_->setObjectName(object_prefix + QStringLiteral("SearchTimer"));
   search_timer_->setSingleShot(true);
   search_timer_->setInterval(150);
   connect(search_timer_, &QTimer::timeout, this, [this, automatic] {
@@ -283,15 +321,10 @@ KanjiLookupDialog::KanjiLookupDialog(
     else (void)select_kanji(*code);
   });
   connect(any_strokes, &QPushButton::clicked, this, [this] { set_stroke_range(1, 30); });
-  connect(clear_button, &QPushButton::clicked, this, [this] {
-    set_selected_radicals({});
-    set_stroke_range(1, 30);
-    search_timer_->stop();
-    results_->clear();
-    status_->clear();
-    update_result_actions();
-  });
-  connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+  connect(clear_button, &QPushButton::clicked, this,
+          [this] { clear(); });
+  if (!embedded_)
+    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
   connect(results_, &QListWidget::itemSelectionChanged, this,
           [this] { update_result_actions(); });
   connect(results_, &QListWidget::itemDoubleClicked, this,
@@ -308,6 +341,15 @@ KanjiLookupDialog::KanjiLookupDialog(
   new KanjiResultKeys(results_, insert_button_, info_button_, copy_button_, this);
   auto* find = new AuxiliaryFind(results_, {}, false);
   find->set_result_insertion(insert_button_);
+}
+
+void KanjiLookupDialog::clear() {
+  set_selected_radicals({});
+  set_stroke_range(1, 30);
+  search_timer_->stop();
+  results_->clear();
+  status_->clear();
+  update_result_actions();
 }
 
 void KanjiLookupDialog::set_lookup_options(bool automatic, bool rare_last) {

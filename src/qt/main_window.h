@@ -76,7 +76,6 @@ class JisTableDialog;
 class JwpEditor;
 class KanjiCodeLookupDialog;
 class KanjiCountDialog;
-class KanjiLookupDialog;
 class KanjiReadingLookupDialog;
 class WnnUserDictionaryDialog;
 class WindowGeometry;
@@ -93,6 +92,8 @@ enum class KanjiCodeLookupMode {
   kSpahn,
   kStrokeBushu,
   kIndex,
+  kRadical,
+  kStrokeCount,
 };
 
 struct SearchRequest {
@@ -541,6 +542,7 @@ class MainWindow : public QMainWindow {
   QAction* kanji_reading_lookup_action_ = nullptr;
   QAction* index_lookup_action_ = nullptr;
   QAction* kanji_lookup_action_ = nullptr;
+  QAction* stroke_count_lookup_action_ = nullptr;
   QAction* format_file_action_ = nullptr;
   QAction* format_paragraph_action_ = nullptr;
   QAction* page_layout_action_ = nullptr;
@@ -592,7 +594,6 @@ class MainWindow : public QMainWindow {
   std::unique_ptr<core::KanjiLookupLists> radical_lists_;
   std::unique_ptr<core::KanjiLookupLists> stroke_lists_;
   QPixmap radical_sheet_;
-  KanjiLookupDialog* kanji_lookup_dialog_ = nullptr;
   QString search_text_;
   QString replacement_text_;
   core::JwpSearchOptions search_options_;

@@ -20,8 +20,8 @@ unapplied because this application supports independent viewers.
 
 ## Lookup Tools
 
-Native tools include graphical Radical, Bushu, Stroke/Bushu and Spahn selectors;
-SKIP and Four Corner helpers; reading/meaning lookup; code and Index Lookup;
+Native tools include graphical Radical, Stroke Count, Bushu, Stroke/Bushu and
+Spahn selectors; SKIP and Four Corner helpers; reading/meaning lookup; code and Index Lookup;
 and the JIS character table. Installed data determines which indexes are
 available. Clear and automatic search retain sensible pending-query boundaries.
 The SKIP and Four Corner legends are responsive interface widgets that paint
@@ -30,17 +30,22 @@ scale. They switch from dark ink in light themes to light ink on dark surfaces
 without a fixed intermediate pixmap. Radical and Spahn glyph sheets remain the
 original raster resources for now.
 
-Radical Lookup links the recovered equivalent radical variants. Opening it
+Radical, Stroke Count, Bushu, Stroke/Bushu, SKIP, Spahn, Four Corner and Index
+share one modeless tabbed window. The Radical tab links the recovered equivalent
+radical variants. Opening it
 seeds the current JIS kanji, or use From Clipboard to extract the first kanji's
 radicals. Invalid or unavailable characters leave the current query intact.
 The stroke-count arrows cycle through Any (zero), the selected-radical stroke
 estimate, up to 30, then Any again. The estimate is only a stepping hint, not
 an automatic filter or a guaranteed character count; counts can also be typed.
 Choose Exact, +/- 1 or +/- 2, or edit the explicit minimum/maximum range.
+The Stroke Count tab applies an inclusive stroke range without requiring a
+radical selection. It is a native extension requested for direct access to the
+same recovered stroke catalog; the original Stroke/Bushu tab remains distinct.
 Clear resets all of these controls and cancels pending search. With automatic
 search disabled, changed criteria clear stale results until Search is pressed.
 Options > Kanji Lookup saves Automatic Lookup and Rare Kanji Last, including in
-projects. Auto is shared by the radical and code lookup windows in the current
+projects. Auto is shared by every tab in the lookup window in the current
 workspace. Applying preferences preserves current results and selection and does
 not start a search; Rare Kanji Last affects the next radical search. Reading and
 Index remain explicit searches, retaining the last report until successful Search.

@@ -24,6 +24,8 @@ class QToolButton;
 
 namespace jwpqt::qt {
 
+enum class KanjiLookupPageMode { kRadical, kStrokeCount };
+
 class KanjiLookupDialog : public QDialog {
  public:
   using InsertHandler = std::function<void(const std::vector<core::JisCode>&)>;
@@ -33,7 +35,10 @@ class KanjiLookupDialog : public QDialog {
                     const core::KanjiLookupLists& stroke_lists,
                     const core::KanjiInfoDatabase& information,
                     QPixmap radical_sheet, InsertHandler insert_handler,
-                    InfoHandler info_handler, QWidget* parent = nullptr);
+                    InfoHandler info_handler, QWidget* parent = nullptr,
+                    KanjiLookupPageMode page_mode =
+                        KanjiLookupPageMode::kRadical,
+                    bool embedded = false);
 
   void set_selected_radicals(const std::vector<std::size_t>& radicals);
   std::vector<std::size_t> selected_radicals() const;
@@ -46,6 +51,7 @@ class KanjiLookupDialog : public QDialog {
     update_artwork();
   }
   void set_auto_search_handler(std::function<void(bool)> handler);
+  void clear();
   bool search();
   std::vector<core::JisCode> result_codes() const;
 
@@ -67,6 +73,8 @@ class KanjiLookupDialog : public QDialog {
   const core::KanjiLookupLists& radical_lists_;
   const core::KanjiLookupLists& stroke_lists_;
   const core::KanjiInfoDatabase& information_;
+  KanjiLookupPageMode page_mode_;
+  bool embedded_;
   InsertHandler insert_handler_;
   InfoHandler info_handler_;
   std::function<void(bool)> auto_search_handler_;
