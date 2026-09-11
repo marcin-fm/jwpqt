@@ -1,8 +1,9 @@
 # Porting jwpqt
 
-jwpqt is replacing the JWPxp 1.67 Win32 application incrementally. The five
-recovered JWPce/JWPxp release commits and their tags remain the historical base;
-native Linux work begins after `jwpxp-1.67`.
+jwpqt is the audited native Linux port of the JWPxp 1.67 Win32 application. It
+was developed in incremental, tested slices. The five recovered JWPce/JWPxp
+release commits and their tags remain the historical base; native Linux work
+begins after `jwpxp-1.67`.
 
 ## Boundaries
 
@@ -17,7 +18,7 @@ That representation remains explicit at compatibility boundaries. Unicode is
 used for the native UI, not as an untested replacement for dictionary keys or
 legacy file structures.
 
-## Completed slices
+## Implementation history
 
 1. `980db33` adds the Qt 6 application shell, a strict UTF-8 core, atomic file
    replacement through `QSaveFile`, and a basic open/edit/save path.

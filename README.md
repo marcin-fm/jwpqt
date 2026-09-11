@@ -3,10 +3,20 @@
 jwpqt is a native Linux port of JWPxp. It continues the recovered JWPce/JWPxp
 release history while replacing the Win32 application layer with Qt 6.
 
-The port is intentionally incremental. The historical sources remain at the
-repository root as the behavior and format reference. New portable code lives
-under `src/core`; Qt-specific application code lives under `src/qt`. See
-[`PORTING.md`](PORTING.md) for the extraction boundaries and roadmap.
+The native port covers the recovered JWPxp 1.67 desktop command, dialog,
+accelerator, document-format, settings, printing, help and installation
+inventory. The historical sources remain at the repository root as the behavior
+and format reference. Portable code lives under `src/core`; Qt-specific
+application code lives under `src/qt`. See [`PORTING.md`](PORTING.md) for the
+extraction boundaries and implementation history.
+
+Platform-specific source behavior is replaced or excluded explicitly rather
+than emulated: CMake/desktop/MIME installation replaces Windows registry setup,
+the Linux desktop owns system input-method state, PDF verification replaces
+physical-printer testing by project policy, and obsolete Win32 memory/font-cache
+knobs are not exposed. Exact Win32 raster rounding and identical placement on
+every desktop are not claimed; native output and Openbox/X11 behavior are tested
+directly at normal and double scale.
 
 ## Build
 
