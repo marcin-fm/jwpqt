@@ -1839,6 +1839,20 @@ void MainWindow::configure_application_settings(bool dictionary_page) {
       if (dialog) dialog->reject();
     });
   });
+#ifdef Q_OS_WASM
+  connect(dialog, &QDialog::finished, dialog, [self, dialog](int result) {
+    if (self && self->application_settings_dialog_ == dialog)
+      self->application_settings_dialog_.clear();
+    if (result == QDialog::Accepted && self && dialog) {
+      const auto settings = dialog->settings();
+      QTimer::singleShot(0, self, [self, settings] {
+        if (self) self->apply_application_settings(settings, OpenMode::kInteractive);
+      });
+    }
+    if (dialog) dialog->deleteLater();
+  });
+  dialog->open();
+#else
   const int result = dialog->exec();
   if (self) self->application_settings_dialog_.clear();
   if (!dialog) return;
@@ -1850,6 +1864,7 @@ void MainWindow::configure_application_settings(bool dictionary_page) {
   delete dialog.data();
   if (result == QDialog::Accepted)
     apply_application_settings(settings, OpenMode::kInteractive);
+#endif
 }
 
 const core::QueryHistories& MainWindow::query_histories() const noexcept { return *query_histories_; }

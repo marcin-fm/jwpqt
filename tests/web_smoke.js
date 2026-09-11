@@ -81,6 +81,34 @@ async function main() {
     }
 
     await page.mouse.click(300, 160);
+    await page.evaluate(() => {
+      window.__jwpqtOriginalCanvas =
+        document.querySelector("#qt-shadow-container")?.shadowRoot?.querySelector("canvas") ??
+        document.querySelector("canvas");
+    });
+    const baseCanvas = await canvas.screenshot();
+    for (const closeKey of ["Escape", "Enter"]) {
+      await page.keyboard.press("Alt+t");
+      await page.waitForTimeout(100);
+      await page.keyboard.press("Enter");
+      await page.waitForTimeout(300);
+      const optionsCanvas = await canvas.screenshot();
+      if (optionsCanvas.equals(baseCanvas)) {
+        throw new Error("Options did not open in the Web application");
+      }
+      await page.keyboard.press(closeKey);
+      await page.waitForTimeout(500);
+      const canvasSurvived = await page.evaluate(() => {
+        const currentCanvas =
+          document.querySelector("#qt-shadow-container")?.shadowRoot?.querySelector("canvas") ??
+          document.querySelector("canvas");
+        return window.__jwpqtOriginalCanvas === currentCanvas && currentCanvas?.isConnected === true;
+      });
+      if (!canvasSurvived) {
+        throw new Error(`Web canvas was destroyed after closing Options with ${closeKey}`);
+      }
+    }
+
     await page.keyboard.press("Control+O");
     const picker = page.locator("#jwpqt-open-file");
     await picker.waitFor({ state: "attached" });
