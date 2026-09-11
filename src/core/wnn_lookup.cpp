@@ -29,12 +29,15 @@ enum class LookupPass {
 
 struct JwpTextHash {
   std::size_t operator()(const JwpText& text) const noexcept {
-    std::size_t hash = 0xcbf29ce484222325ULL;
+    std::uint64_t hash = UINT64_C(0xcbf29ce484222325);
     for (const JisCode code : text) {
-      hash ^= static_cast<std::size_t>(code);
-      hash *= 0x100000001b3ULL;
+      hash ^= static_cast<std::uint64_t>(code);
+      hash *= UINT64_C(0x100000001b3);
     }
-    return hash;
+    if constexpr (sizeof(std::size_t) < sizeof(hash)) {
+      hash ^= hash >> 32U;
+    }
+    return static_cast<std::size_t>(hash);
   }
 };
 

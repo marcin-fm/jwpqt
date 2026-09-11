@@ -1,7 +1,8 @@
 # jwpqt
 
-jwpqt is a native Linux port of JWPxp. It continues the recovered JWPce/JWPxp
-release history while replacing the Win32 application layer with Qt 6.
+jwpqt is a native Qt 6 port of JWPxp for Linux, Windows, macOS, and WebAssembly.
+It continues the recovered JWPce/JWPxp release history while replacing the
+Win32 application layer with portable core code and a Qt application layer.
 
 The native port covers the recovered JWPxp 1.67 desktop command, dialog,
 accelerator, document-format, settings, printing, help and installation
@@ -11,12 +12,12 @@ application code lives under `src/qt`. See [`PORTING.md`](PORTING.md) for the
 extraction boundaries and implementation history.
 
 Platform-specific source behavior is replaced or excluded explicitly rather
-than emulated: CMake/desktop/MIME installation replaces Windows registry setup,
-the Linux desktop owns system input-method state, PDF verification replaces
-physical-printer testing by project policy, and obsolete Win32 memory/font-cache
-knobs are not exposed. Exact Win32 raster rounding and identical placement on
-every desktop are not claimed; native output and Openbox/X11 behavior are tested
-directly at normal and double scale.
+than emulated: CMake/CPack replaces Windows registry setup, the host desktop owns
+system input-method state, PDF verification replaces physical-printer testing
+by project policy, and obsolete Win32 memory/font-cache knobs are not exposed.
+Exact Win32 raster rounding and identical placement on every desktop are not
+claimed; native output and Linux Openbox/X11 behavior are tested directly at
+normal and double scale.
 
 ## Build
 
@@ -39,6 +40,27 @@ page content, not just file signatures. It is not an application runtime depende
 Installed-delivery tests also require `desktop-file-validate`, `update-mime-database`
 and CPack. They stage and extract packages under the build directory, without root
 installation or access to the user's configuration.
+
+## Platform Builds
+
+The `Build all ports` GitHub Actions workflow builds Linux, Windows, macOS, and
+WebAssembly artifacts on demand and for tags matching `v*`. Tagged runs also
+publish the artifacts to a GitHub release. Linux produces a TGZ, Windows a ZIP,
+macOS a DMG, and Web a static-site TGZ. Windows and macOS packages use their
+native application icons and CMake's Qt deployment support.
+
+The separate `Publish Web port` workflow builds and tests the WebAssembly port
+for every push to `master` and on demand, then deploys it to GitHub Pages. The
+deployed site includes a matching corresponding-source archive under
+`downloads/`. Both workflows use Qt 6.8.3; Web uses the matching single-threaded
+Qt WebAssembly package and Emscripten 3.1.56.
+
+The Web port keeps the same Qt interface. Open uploads one local document and
+Save downloads the encoded result; browser-owned working copies, preferences,
+and optional named-session references persist in IndexedDB. JPR workspaces and
+printing are unavailable in a browser because browser uploads do not provide a
+stable referenced-files workspace and Qt WebAssembly has no PrintSupport. The
+Web build embeds Noto Sans JP for Japanese canvas text and includes its OFL.
 
 Run the editor, optionally opening documents and projects in order:
 
@@ -71,7 +93,7 @@ nice cpack --config /srv/tmp/jwpqt-build/release/CPackConfig.cmake -B /srv/tmp/j
 nice cpack --config /srv/tmp/jwpqt-build/release/CPackSourceConfig.cmake -B /srv/tmp/jwpqt-build/packages
 ```
 
-The binary TGZ contains `bin/jwpqt`, the handbook, retained licenses, a desktop
+The Linux binary TGZ contains `bin/jwpqt`, the handbook, retained licenses, a desktop
 entry, scalable SVG application icon and JWP/JPR MIME definitions. Extract it into a private
 prefix and run its executable from any working directory. CMake also supports
 `cmake --install BUILD --prefix PREFIX` and DESTDIR staging. Desktop registration
@@ -79,8 +101,8 @@ does not force a default application; put the executable on PATH and refresh
 desktop/MIME caches using the distribution's normal tools. Removing a private
 prefix must not remove separate user configuration or documents.
 
-This is a dynamically linked Linux package, not an AppImage or a universal
-binary. It requires a compatible architecture, system Qt 6 Widgets/PrintSupport/Svg,
+The Linux archive is dynamically linked, not an AppImage or a universal binary.
+It requires a compatible architecture, system Qt 6 Widgets/PrintSupport/Svg,
 standard C++ libraries and Japanese fonts. Supply matching source and retained
 notices when redistributing binaries under the GPL. Source archives omit Git and
 local assistant metadata. Neither package adds optional dictionary corpora;

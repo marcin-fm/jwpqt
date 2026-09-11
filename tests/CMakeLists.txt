@@ -1,31 +1,39 @@
 find_package(Qt6 REQUIRED COMPONENTS Test)
 
+function(jwpqt_enable_test_warnings target)
+  if(MSVC)
+    target_compile_options(${target} PRIVATE /W4 /permissive-)
+  else()
+    target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
+  endif()
+endfunction()
+
 add_executable(jwpqt_dictionary_highlight_tests dictionary_highlight_test.cpp)
 target_link_libraries(jwpqt_dictionary_highlight_tests PRIVATE jwpqt_qt_ui)
-target_compile_options(jwpqt_dictionary_highlight_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_dictionary_highlight_tests)
 add_test(NAME qt_dictionary_highlight COMMAND jwpqt_dictionary_highlight_tests)
 set_tests_properties(qt_dictionary_highlight PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;TMPDIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 90)
 
 add_executable(jwpqt_color_integration_tests color_integration_test.cpp)
 target_link_libraries(jwpqt_color_integration_tests PRIVATE jwpqt_qt_ui)
-target_compile_options(jwpqt_color_integration_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_color_integration_tests)
 add_test(NAME qt_color_integration COMMAND jwpqt_color_integration_tests)
 set_tests_properties(qt_color_integration PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;TMPDIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 90)
 add_executable(jwpqt_default_page_tests default_page_test.cpp)
 target_link_libraries(jwpqt_default_page_tests PRIVATE jwpqt_qt_ui)
-target_compile_options(jwpqt_default_page_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_default_page_tests)
 add_test(NAME qt_default_page COMMAND jwpqt_default_page_tests)
 set_tests_properties(qt_default_page PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;TMPDIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 90)
 
 add_executable(jwpqt_session_tests session_test.cpp)
 target_link_libraries(jwpqt_session_tests PRIVATE jwpqt_qt_ui)
-target_compile_options(jwpqt_session_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_session_tests)
 add_dependencies(jwpqt_session_tests jwpqt)
 add_test(NAME qt_session COMMAND jwpqt_session_tests $<TARGET_FILE:jwpqt>)
 set_tests_properties(qt_session PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;TMPDIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 90)
 add_executable(jwpqt_window_geometry_tests window_geometry_test.cpp)
 target_link_libraries(jwpqt_window_geometry_tests PRIVATE jwpqt_qt_ui)
-target_compile_options(jwpqt_window_geometry_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_window_geometry_tests)
 add_test(NAME qt_window_geometry COMMAND jwpqt_window_geometry_tests)
 set_tests_properties(qt_window_geometry PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;TMPDIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 90)
 
@@ -35,47 +43,47 @@ add_executable(jwpqt_core_tests
 
 add_executable(jwpqt_print_format_tests print_format_test.cpp)
 target_link_libraries(jwpqt_print_format_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_print_format_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_print_format_tests)
 add_test(NAME core_print_format COMMAND jwpqt_print_format_tests)
 
 add_executable(jwpqt_line_relaxation_tests line_relaxation_test.cpp)
 target_link_libraries(jwpqt_line_relaxation_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_line_relaxation_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_line_relaxation_tests)
 add_test(NAME core_line_relaxation COMMAND jwpqt_line_relaxation_tests)
 
 add_executable(jwpqt_jwp_word_selection_tests jwp_word_selection_test.cpp)
 target_link_libraries(jwpqt_jwp_word_selection_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_jwp_word_selection_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_jwp_word_selection_tests)
 add_test(NAME core_jwp_word_selection COMMAND jwpqt_jwp_word_selection_tests)
 
 add_executable(jwpqt_jwp_clipboard_tests jwp_clipboard_test.cpp)
 target_link_libraries(jwpqt_jwp_clipboard_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_jwp_clipboard_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_jwp_clipboard_tests)
 add_test(NAME core_jwp_clipboard COMMAND jwpqt_jwp_clipboard_tests)
 
 add_executable(jwpqt_clipboard_mime_tests clipboard_mime_test.cpp)
 target_link_libraries(jwpqt_clipboard_mime_tests PRIVATE jwpqt_qt_support Qt6::Core)
-target_compile_options(jwpqt_clipboard_mime_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_clipboard_mime_tests)
 add_test(NAME qt_clipboard_mime COMMAND jwpqt_clipboard_mime_tests)
 add_executable(jwpqt_ascii_font_tests ascii_font_test.cpp)
 target_link_libraries(jwpqt_ascii_font_tests PRIVATE jwpqt_qt_ui)
-target_compile_options(jwpqt_ascii_font_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_ascii_font_tests)
 add_test(NAME qt_ascii_font COMMAND jwpqt_ascii_font_tests)
 set_tests_properties(qt_ascii_font PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;TMPDIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 90)
 add_executable(jwpqt_raster_font_tests raster_font_test.cpp)
 target_link_libraries(jwpqt_raster_font_tests PRIVATE jwpqt_qt_ui)
-target_compile_options(jwpqt_raster_font_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_raster_font_tests)
 add_test(NAME qt_raster_font COMMAND jwpqt_raster_font_tests)
 set_tests_properties(qt_raster_font PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;TMPDIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 90)
 
 target_link_libraries(jwpqt_core_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_core_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_core_tests)
 
 add_executable(jwpqt_byte_io_tests
   byte_io_test.cpp
 )
 target_link_libraries(jwpqt_byte_io_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_byte_io_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_byte_io_tests)
 
 add_executable(jwpqt_edict_dictionary_tests
   edict_dictionary_test.cpp
@@ -95,87 +103,87 @@ add_executable(jwpqt_qt_io_tests
   qt_file_io_test.cpp
 )
 target_link_libraries(jwpqt_qt_io_tests PRIVATE jwpqt_qt_support)
-target_compile_options(jwpqt_qt_io_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_qt_io_tests)
 
 add_executable(jwpqt_recent_files_tests recent_files_test.cpp)
 target_link_libraries(jwpqt_recent_files_tests PRIVATE jwpqt_qt_support)
-target_compile_options(jwpqt_recent_files_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_recent_files_tests)
 add_test(NAME qt_recent_files COMMAND jwpqt_recent_files_tests)
 
 add_executable(jwpqt_query_history_io_tests query_history_io_test.cpp)
 target_link_libraries(jwpqt_query_history_io_tests PRIVATE jwpqt_qt_support)
-target_compile_options(jwpqt_query_history_io_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_query_history_io_tests)
 add_test(NAME qt_query_history_io COMMAND jwpqt_query_history_io_tests)
 
 add_executable(jwpqt_query_history_window_tests query_history_window_test.cpp)
 target_link_libraries(jwpqt_query_history_window_tests PRIVATE jwpqt_qt_ui)
-target_compile_options(jwpqt_query_history_window_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_query_history_window_tests)
 add_test(NAME qt_query_history_window COMMAND jwpqt_query_history_window_tests)
 set_tests_properties(qt_query_history_window PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 90)
 
 add_executable(jwpqt_find_replace_tests find_replace_test.cpp)
 target_link_libraries(jwpqt_find_replace_tests PRIVATE jwpqt_qt_ui)
-target_compile_options(jwpqt_find_replace_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_find_replace_tests)
 add_test(NAME qt_find_replace COMMAND jwpqt_find_replace_tests)
 set_tests_properties(qt_find_replace PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 90)
 add_executable(jwpqt_auxiliary_find_tests auxiliary_find_test.cpp)
 target_link_libraries(jwpqt_auxiliary_find_tests PRIVATE jwpqt_qt_ui)
-target_compile_options(jwpqt_auxiliary_find_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_auxiliary_find_tests)
 add_test(NAME qt_auxiliary_find COMMAND jwpqt_auxiliary_find_tests)
 set_tests_properties(qt_auxiliary_find PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;TMPDIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 90)
 
 add_executable(jwpqt_font_rendering_tests font_rendering_test.cpp)
 target_link_libraries(jwpqt_font_rendering_tests PRIVATE jwpqt_qt_ui)
-target_compile_options(jwpqt_font_rendering_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_font_rendering_tests)
 add_test(NAME qt_font_rendering COMMAND jwpqt_font_rendering_tests)
 set_tests_properties(qt_font_rendering PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;TMPDIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 90)
 
 add_executable(jwpqt_unicode_search_tests unicode_search_test.cpp)
 target_link_libraries(jwpqt_unicode_search_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_unicode_search_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_unicode_search_tests)
 add_test(NAME core_unicode_search COMMAND jwpqt_unicode_search_tests)
 
 add_executable(jwpqt_category_exclusion_tests category_exclusion_test.cpp)
 target_link_libraries(jwpqt_category_exclusion_tests PRIVATE jwpqt_qt_ui)
-target_compile_options(jwpqt_category_exclusion_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_category_exclusion_tests)
 add_test(NAME qt_category_exclusion COMMAND jwpqt_category_exclusion_tests)
 set_tests_properties(qt_category_exclusion PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 90)
 
 add_executable(jwpqt_application_settings_tests application_settings_test.cpp)
 target_link_libraries(jwpqt_application_settings_tests PRIVATE jwpqt_qt_support)
-target_compile_options(jwpqt_application_settings_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_application_settings_tests)
 add_test(NAME qt_application_settings COMMAND jwpqt_application_settings_tests)
 
 add_executable(jwpqt_project_workspace_tests project_workspace_test.cpp)
 target_link_libraries(jwpqt_project_workspace_tests PRIVATE jwpqt_qt_support)
-target_compile_options(jwpqt_project_workspace_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_project_workspace_tests)
 add_test(NAME qt_project_workspace COMMAND jwpqt_project_workspace_tests)
 
 add_executable(jwpqt_project_window_tests project_window_test.cpp)
 add_dependencies(jwpqt_project_window_tests jwpqt)
 target_link_libraries(jwpqt_project_window_tests PRIVATE jwpqt_qt_ui)
-target_compile_options(jwpqt_project_window_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_project_window_tests)
 add_test(NAME qt_project_window COMMAND jwpqt_project_window_tests $<TARGET_FILE:jwpqt>)
 set_tests_properties(qt_project_window PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 
 add_executable(jwpqt_query_history_tests query_history_test.cpp)
 target_link_libraries(jwpqt_query_history_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_query_history_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_query_history_tests)
 add_test(NAME core_query_history COMMAND jwpqt_query_history_tests)
 
 add_executable(jwpqt_query_history_file_tests query_history_file_test.cpp)
 target_link_libraries(jwpqt_query_history_file_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_query_history_file_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_query_history_file_tests)
 add_test(NAME core_query_history_file COMMAND jwpqt_query_history_file_tests)
 
 add_executable(jwpqt_edict_sort_tests edict_sort_test.cpp)
 target_link_libraries(jwpqt_edict_sort_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_edict_sort_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_edict_sort_tests)
 add_test(NAME core_edict_sort COMMAND jwpqt_edict_sort_tests)
 
 add_executable(jwpqt_edict_presentation_tests edict_presentation_test.cpp)
 target_link_libraries(jwpqt_edict_presentation_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_edict_presentation_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_edict_presentation_tests)
 add_test(NAME core_edict_presentation COMMAND jwpqt_edict_presentation_tests)
 
 add_executable(jwpqt_edict_resource_search_tests
@@ -198,7 +206,7 @@ add_executable(jwpqt_main_window_tests
   main_window_test.cpp
 )
 target_link_libraries(jwpqt_main_window_tests PRIVATE jwpqt_qt_ui Qt6::Test)
-target_compile_options(jwpqt_main_window_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_main_window_tests)
 
 add_executable(jwpqt_wnn_user_dictionary_dialog_tests
   wnn_user_dictionary_dialog_test.cpp
@@ -212,114 +220,114 @@ add_executable(jwpqt_jis_encoding_tests
   jis_encoding_test.cpp
 )
 target_link_libraries(jwpqt_jis_encoding_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_jis_encoding_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_jis_encoding_tests)
 
 add_executable(jwpqt_jis_unicode_tests
   jis_unicode_test.cpp
 )
 target_link_libraries(jwpqt_jis_unicode_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_jis_unicode_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_jis_unicode_tests)
 
 add_executable(jwpqt_jis_text_tests
   jis_text_test.cpp
 )
 target_link_libraries(jwpqt_jis_text_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_jis_text_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_jis_text_tests)
 
 add_executable(jwpqt_kana_input_tests
   kana_input_test.cpp
 )
 target_link_libraries(jwpqt_kana_input_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_kana_input_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_kana_input_tests)
 
 add_executable(jwpqt_romaji_conversion_tests romaji_conversion_test.cpp)
 target_link_libraries(jwpqt_romaji_conversion_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_romaji_conversion_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_romaji_conversion_tests)
 add_test(NAME core_romaji_conversion COMMAND jwpqt_romaji_conversion_tests)
 
 add_executable(jwpqt_wnn_dictionary_tests
   wnn_dictionary_test.cpp
 )
 target_link_libraries(jwpqt_wnn_dictionary_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_wnn_dictionary_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_wnn_dictionary_tests)
 
 add_executable(jwpqt_wnn_lookup_tests
   wnn_lookup_test.cpp
 )
 target_link_libraries(jwpqt_wnn_lookup_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_wnn_lookup_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_wnn_lookup_tests)
 
 add_executable(jwpqt_wnn_preferences_tests
   wnn_preferences_test.cpp
 )
 target_link_libraries(jwpqt_wnn_preferences_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_wnn_preferences_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_wnn_preferences_tests)
 
 add_executable(jwpqt_jwp_document_tests
   jwp_document_test.cpp
 )
 target_link_libraries(jwpqt_jwp_document_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_jwp_document_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_jwp_document_tests)
 
 add_executable(jwpqt_jwp_text_codec_tests
   jwp_text_codec_test.cpp
 )
 target_link_libraries(jwpqt_jwp_text_codec_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_jwp_text_codec_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_jwp_text_codec_tests)
 
 add_executable(jwpqt_jwp_document_model_tests
   jwp_document_model_test.cpp
 )
 target_link_libraries(jwpqt_jwp_document_model_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_jwp_document_model_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_jwp_document_model_tests)
 
 add_executable(jwpqt_jwp_document_history_tests
   jwp_document_history_test.cpp
 )
 target_link_libraries(jwpqt_jwp_document_history_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_jwp_document_history_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_jwp_document_history_tests)
 
 add_executable(jwpqt_jwp_plain_text_tests
   jwp_plain_text_test.cpp
 )
 target_link_libraries(jwpqt_jwp_plain_text_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_jwp_plain_text_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_jwp_plain_text_tests)
 
 add_executable(jwpqt_jwp_search_tests
   jwp_search_test.cpp
 )
 target_link_libraries(jwpqt_jwp_search_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_jwp_search_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_jwp_search_tests)
 
 add_executable(jwpqt_plain_text_change_tests
   plain_text_change_test.cpp
 )
 target_link_libraries(jwpqt_plain_text_change_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_plain_text_change_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_plain_text_change_tests)
 
 add_executable(jwpqt_legacy_text_tests
   legacy_text_test.cpp
 )
 target_link_libraries(jwpqt_legacy_text_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_legacy_text_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_legacy_text_tests)
 
 add_executable(jwpqt_legacy_code_page_tests
   legacy_code_page_test.cpp
 )
 target_link_libraries(jwpqt_legacy_code_page_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_legacy_code_page_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_legacy_code_page_tests)
 
 add_executable(jwpqt_text_file_tests
   text_file_test.cpp
 )
 target_link_libraries(jwpqt_text_file_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_text_file_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_text_file_tests)
 
 add_executable(jwpqt_text_detection_tests
   text_detection_test.cpp
 )
 target_link_libraries(jwpqt_text_detection_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_text_detection_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_text_detection_tests)
 
 add_test(NAME core_utf8 COMMAND jwpqt_core_tests)
 
@@ -327,19 +335,19 @@ add_executable(jwpqt_utf7_tests
   utf7_test.cpp
 )
 target_link_libraries(jwpqt_utf7_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_utf7_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_utf7_tests)
 add_test(NAME core_utf7 COMMAND jwpqt_utf7_tests)
 
 add_executable(jwpqt_utf16_tests utf16_test.cpp)
 target_link_libraries(jwpqt_utf16_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_utf16_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_utf16_tests)
 add_test(NAME core_utf16 COMMAND jwpqt_utf16_tests)
 
 add_executable(jwpqt_jfc_text_tests
   jfc_text_test.cpp
 )
 target_link_libraries(jwpqt_jfc_text_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_jfc_text_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_jfc_text_tests)
 add_test(NAME core_jfc_text COMMAND jwpqt_jfc_text_tests)
 
 add_test(NAME core_byte_io COMMAND jwpqt_byte_io_tests)
@@ -377,7 +385,7 @@ add_executable(jwpqt_jis_table_tests
   jis_table_test.cpp
 )
 target_link_libraries(jwpqt_jis_table_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_jis_table_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_jis_table_tests)
 add_test(NAME core_jis_table COMMAND jwpqt_jis_table_tests)
 add_executable(jwpqt_kanji_bushu_selector_tests
   kanji_bushu_selector_test.cpp
@@ -393,7 +401,7 @@ add_executable(jwpqt_kanji_color_tests
   kanji_color_test.cpp
 )
 target_link_libraries(jwpqt_kanji_color_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_kanji_color_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_kanji_color_tests)
 add_test(NAME core_kanji_color COMMAND jwpqt_kanji_color_tests)
 
 add_executable(jwpqt_kanji_info_tests
@@ -440,14 +448,14 @@ add_executable(jwpqt_kanji_color_list_tests
   kanji_color_list_test.cpp
 )
 target_link_libraries(jwpqt_kanji_color_list_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_kanji_color_list_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_kanji_color_list_tests)
 add_test(NAME core_kanji_color_list COMMAND jwpqt_kanji_color_list_tests)
 
 add_executable(jwpqt_kanji_count_tests
   kanji_count_test.cpp
 )
 target_link_libraries(jwpqt_kanji_count_tests PRIVATE jwpqt_core)
-target_compile_options(jwpqt_kanji_count_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_kanji_count_tests)
 add_test(NAME core_kanji_count COMMAND jwpqt_kanji_count_tests)
 add_test(NAME core_kana_input COMMAND jwpqt_kana_input_tests)
 add_test(NAME core_wnn_dictionary COMMAND jwpqt_wnn_dictionary_tests)
@@ -613,7 +621,7 @@ add_test(NAME qt_kanji_color_settings COMMAND jwpqt_kanji_color_settings_tests)
 add_test(NAME qt_main_window COMMAND jwpqt_main_window_tests)
 add_executable(jwpqt_runtime_environment_tests runtime_environment_test.cpp)
 target_link_libraries(jwpqt_runtime_environment_tests PRIVATE jwpqt_qt_ui)
-target_compile_options(jwpqt_runtime_environment_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_runtime_environment_tests)
 add_dependencies(jwpqt_runtime_environment_tests jwpqt)
 add_test(NAME qt_runtime_environment
   COMMAND jwpqt_runtime_environment_tests $<TARGET_FILE:jwpqt>)
@@ -626,7 +634,7 @@ add_executable(jwpqt_jwp_editor_tests
   jwp_editor_test.cpp
 )
 target_link_libraries(jwpqt_jwp_editor_tests PRIVATE jwpqt_qt_ui)
-target_compile_options(jwpqt_jwp_editor_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_jwp_editor_tests)
 add_test(NAME qt_jwp_editor COMMAND jwpqt_jwp_editor_tests)
 add_executable(jwpqt_kanji_info_dialog_tests
   kanji_info_dialog_test.cpp
@@ -660,7 +668,7 @@ add_executable(jwpqt_kanji_count_dialog_tests
   kanji_count_dialog_test.cpp
 )
 target_link_libraries(jwpqt_kanji_count_dialog_tests PRIVATE jwpqt_qt_ui)
-target_compile_options(jwpqt_kanji_count_dialog_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_kanji_count_dialog_tests)
 add_test(NAME qt_kanji_count_dialog COMMAND jwpqt_kanji_count_dialog_tests)
 
 add_executable(jwpqt_page_layout_dialog_tests
@@ -888,11 +896,11 @@ add_test(NAME native_delivery COMMAND "${CMAKE_COMMAND}" "-DBUILD=${CMAKE_BINARY
 set_tests_properties(native_delivery PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
 add_executable(jwpqt_toolbar_tests toolbar_test.cpp)
 target_link_libraries(jwpqt_toolbar_tests PRIVATE jwpqt_qt_ui)
-target_compile_options(jwpqt_toolbar_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_toolbar_tests)
 add_test(NAME qt_toolbar COMMAND jwpqt_toolbar_tests)
 set_tests_properties(qt_toolbar PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 90)
 add_executable(jwpqt_edict_registry_dialog_tests edict_registry_dialog_test.cpp)
 target_link_libraries(jwpqt_edict_registry_dialog_tests PRIVATE jwpqt_qt_ui)
-target_compile_options(jwpqt_edict_registry_dialog_tests PRIVATE -Wall -Wextra -Wpedantic)
+jwpqt_enable_test_warnings(jwpqt_edict_registry_dialog_tests)
 add_test(NAME qt_edict_registry_dialog COMMAND jwpqt_edict_registry_dialog_tests)
 set_tests_properties(qt_edict_registry_dialog PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;TMPDIR=${CMAKE_CURRENT_BINARY_DIR}" TIMEOUT 90)

@@ -1,7 +1,8 @@
 # jwpqt Handbook
 
-jwpqt is a native Linux Japanese word processor, ported from JWPxp 1.67 and
-JWPce. It uses Qt 6, not Wine. The recovered user-visible commands have native
+jwpqt is a native Qt 6 Japanese word processor for Linux, Windows, macOS, and
+WebAssembly, ported from JWPxp 1.67 and JWPce. It uses Qt 6, not Wine. The
+recovered user-visible commands have native
 implementations or documented platform replacements and source-justified
 exclusions. This handbook describes their native behavior and those explicit
 platform differences.

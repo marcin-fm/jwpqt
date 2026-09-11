@@ -299,8 +299,10 @@ class MainWindow : public QMainWindow {
   prompt_for_paragraph_format(const core::JwpParagraphFormat& initial);
   virtual std::optional<core::JwpDocument> prompt_for_page_layout(
       const core::JwpDocument& initial);
+#ifndef Q_OS_WASM
   virtual bool prompt_for_print(QPrinter& printer);
   virtual bool prompt_for_printer_setup(QPrinter& printer);
+#endif
   virtual bool prompt_to_revert(const QString& path);
   virtual bool prompt_to_delete(const QString& path);
   virtual std::optional<core::KanjiColorPolicy>
@@ -394,6 +396,12 @@ class MainWindow : public QMainWindow {
   bool query_history_error(const QString& action, const std::exception& error, OpenMode mode);
   core::LegacyCodePage default_jwp_code_page() const noexcept;
   void open_document();
+#ifdef Q_OS_WASM
+  void open_web_document();
+  QString new_web_document_path(const QString& suggested_name) const;
+  bool is_web_document_path(const QString& path) const;
+  void download_web_document(const QString& path) const;
+#endif
   bool open_project_dialog(const QString& path = {});
   void save_project_dialog();
   bool save_document();

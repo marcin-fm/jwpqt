@@ -15,6 +15,14 @@ order through the same format detection, project and duplicate-file policies as
 menu Open. An unreadable file reports its error without preventing later files
 in the same drop from opening. Directories and nonlocal URLs are not accepted.
 
+In the Web port, Open uses the browser file picker and stages one uploaded file
+in the application's persistent browser storage before running the same bounded
+format detection. Save and Save As atomically update that working copy and then
+download the exact encoded bytes. The browser profile persists through IndexedDB;
+clearing site data removes those working copies and settings. Browser JPR Open
+and Save are disabled because an uploaded project cannot retain stable access to
+all referenced local files. Upload and download are each limited to 64 MiB.
+
 Closing the last tab normally asks whether to exit. No keeps a clean unnamed
 Japanese document; it does not restore edits you already chose to discard.
 Display And Files settings can disable this confirmation or make the window

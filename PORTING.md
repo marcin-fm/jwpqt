@@ -1,9 +1,9 @@
 # Porting jwpqt
 
-jwpqt is the audited native Linux port of the JWPxp 1.67 Win32 application. It
+jwpqt is the audited native Qt 6 port of the JWPxp 1.67 Win32 application. It
 was developed in incremental, tested slices. The five recovered JWPce/JWPxp
-release commits and their tags remain the historical base; native Linux work
-begins after `jwpxp-1.67`.
+release commits and their tags remain the historical base; native port work
+begins after `jwpxp-1.67` and now targets Linux, Windows, macOS, and WebAssembly.
 
 ## Boundaries
 
@@ -381,7 +381,16 @@ requires a separate fixture-backed change rather than silent substitution.
 
 The recovered main-menu command inventory and configuration surface now have
 tested native implementations or source-justified platform replacements and
-exclusions. Linux delivery replaces the Windows registry installer, the embedded
-handbook replaces WinHelp, and Linux MIME formats replace Windows clipboard IDs.
-The command-inventory regression and complete CTest suites guard that boundary;
-newly recovered behavior still requires an independent fixture-backed change.
+exclusions. CMake/CPack delivery replaces the Windows registry installer, the
+embedded handbook replaces WinHelp, and portable Qt MIME formats replace private
+Windows clipboard IDs. Desktop targets share the same Qt Widgets application;
+the WebAssembly target replaces local path ownership with explicit browser
+upload/download and persistent IndexedDB storage, and excludes JPR workspaces
+and printing where browser/Qt platform contracts cannot support them.
+
+GitHub Actions build all four ports on demand and for `v*` tags. A separate
+workflow publishes the tested Web static site and matching corresponding source
+to GitHub Pages from `master`. The command-inventory regression, Linux CTest
+suites, hosted platform builds, and repository-owned browser smoke guard this
+boundary; newly recovered behavior still requires an independent fixture-backed
+change.

@@ -1,4 +1,8 @@
-find_package(Qt6 REQUIRED COMPONENTS PrintSupport Svg Widgets)
+set(jwpqt_qt_components Svg Widgets)
+if(NOT EMSCRIPTEN)
+  list(APPEND jwpqt_qt_components PrintSupport)
+endif()
+find_package(Qt6 REQUIRED COMPONENTS ${jwpqt_qt_components})
 
 add_library(jwpqt_qt_support STATIC
   application_settings.cpp
@@ -39,14 +43,17 @@ target_link_libraries(jwpqt_qt_support
     Qt6::Core
 )
 
-target_compile_options(jwpqt_qt_support
-  PRIVATE
-    -Wall
-    -Wextra
-    -Wpedantic
-)
+if(MSVC)
+  target_compile_options(jwpqt_qt_support PRIVATE /W4 /permissive-)
+else()
+  target_compile_options(jwpqt_qt_support PRIVATE -Wall -Wextra -Wpedantic)
+endif()
 
-add_library(jwpqt_qt_ui STATIC
+if(EMSCRIPTEN)
+  target_compile_options(jwpqt_qt_support PRIVATE -fexceptions)
+endif()
+
+set(jwpqt_qt_ui_sources
   window_geometry.cpp
   window_geometry.h
   help_window.cpp
@@ -100,13 +107,20 @@ add_library(jwpqt_qt_ui STATIC
   vector_artwork.h
   page_layout_dialog.cpp
   page_layout_dialog.h
-  print_document.cpp
   jwp_text_drawing.cpp
   jwp_text_drawing.h
-  print_document.h
   wnn_user_dictionary_dialog.cpp
   wnn_user_dictionary_dialog.h
 )
+
+if(NOT EMSCRIPTEN)
+  list(APPEND jwpqt_qt_ui_sources
+    print_document.cpp
+    print_document.h
+  )
+endif()
+
+add_library(jwpqt_qt_ui STATIC ${jwpqt_qt_ui_sources})
 
 target_compile_definitions(jwpqt_qt_ui PUBLIC JWPQT_VERSION="${PROJECT_VERSION}")
 qt_add_resources(jwpqt_qt_ui handbook_assets
@@ -173,26 +187,106 @@ qt_add_resources(jwpqt_qt_ui toolbar_assets
         "${PROJECT_SOURCE_DIR}/hsradicals.bmp"
 )
 
+if(EMSCRIPTEN)
+  qt_add_resources(jwpqt_qt_ui web_font_assets
+    PREFIX "/jwpqt"
+    BASE "${PROJECT_SOURCE_DIR}"
+    FILES "${PROJECT_SOURCE_DIR}/assets/fonts/NotoSansJP-wght.ttf"
+  )
+endif()
+
 target_link_libraries(jwpqt_qt_ui
   PUBLIC
     jwpqt_qt_support
-    Qt6::PrintSupport
     Qt6::Svg
     Qt6::Widgets
 )
+if(NOT EMSCRIPTEN)
+  target_link_libraries(jwpqt_qt_ui PUBLIC Qt6::PrintSupport)
+endif()
 
-target_compile_options(jwpqt_qt_ui
-  PRIVATE
-    -Wall
-    -Wextra
-    -Wpedantic
-)
+if(MSVC)
+  target_compile_options(jwpqt_qt_ui PRIVATE /W4 /permissive-)
+else()
+  target_compile_options(jwpqt_qt_ui PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+if(EMSCRIPTEN)
+  target_compile_options(jwpqt_qt_ui PRIVATE -fexceptions)
+endif()
 
 qt_add_executable(jwpqt
+  WIN32
+  MACOSX_BUNDLE
   main.cpp
 )
 
-target_link_libraries(jwpqt PRIVATE jwpqt_qt_ui)
-target_compile_options(jwpqt PRIVATE -Wall -Wextra -Wpedantic)
+if(WIN32)
+  configure_file("${PROJECT_SOURCE_DIR}/packaging/jwpqt.rc.in"
+                 "${CMAKE_CURRENT_BINARY_DIR}/jwpqt.rc" @ONLY)
+  target_sources(jwpqt PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/jwpqt.rc")
+elseif(APPLE AND NOT EMSCRIPTEN)
+  set_source_files_properties("${PROJECT_SOURCE_DIR}/packaging/jwpqt.icns"
+    PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+  target_sources(jwpqt PRIVATE "${PROJECT_SOURCE_DIR}/packaging/jwpqt.icns")
+endif()
 
-install(TARGETS jwpqt RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+target_link_libraries(jwpqt PRIVATE jwpqt_qt_ui)
+if(MSVC)
+  target_compile_options(jwpqt PRIVATE /W4 /permissive-)
+else()
+  target_compile_options(jwpqt PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+if(EMSCRIPTEN)
+  target_compile_options(jwpqt PRIVATE -fexceptions)
+  target_link_options(jwpqt PRIVATE
+    -fexceptions
+    "SHELL:-sASYNCIFY"
+    "SHELL:-sDISABLE_EXCEPTION_CATCHING=0"
+    "SHELL:-sALLOW_MEMORY_GROWTH=1"
+    "SHELL:-lidbfs.js"
+    -Os
+  )
+endif()
+
+set_target_properties(jwpqt PROPERTIES
+  MACOSX_BUNDLE_BUNDLE_NAME "JWPqt"
+  MACOSX_BUNDLE_GUI_IDENTIFIER "org.jwpqt.JWPqt"
+  MACOSX_BUNDLE_ICON_FILE "jwpqt.icns"
+  MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+  MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+)
+
+if(EMSCRIPTEN)
+  install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/jwpqt.js"
+    "${CMAKE_CURRENT_BINARY_DIR}/jwpqt.wasm"
+    "${CMAKE_CURRENT_BINARY_DIR}/qtloader.js"
+    DESTINATION "."
+  )
+  install(FILES "${CMAKE_CURRENT_BINARY_DIR}/jwpqt.html"
+          DESTINATION "." RENAME "index.html")
+  install(FILES "${PROJECT_SOURCE_DIR}/assets/icons/jwpqt.svg"
+          DESTINATION "." RENAME "qtlogo.svg")
+  install(FILES "${PROJECT_SOURCE_DIR}/assets/fonts/NotoSansJP-OFL.txt"
+          DESTINATION "licenses")
+  install(FILES
+    "${PROJECT_SOURCE_DIR}/gnugpl.txt"
+    "${PROJECT_SOURCE_DIR}/_cpright.txt"
+    DESTINATION "licenses")
+else()
+  install(TARGETS jwpqt
+    BUNDLE DESTINATION "."
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+  )
+endif()
+
+if((WIN32 OR APPLE) AND NOT EMSCRIPTEN)
+  qt_generate_deploy_app_script(
+    TARGET jwpqt
+    OUTPUT_SCRIPT jwpqt_deploy_script
+    NO_UNSUPPORTED_PLATFORM_ERROR
+  )
+  install(SCRIPT "${jwpqt_deploy_script}")
+endif()

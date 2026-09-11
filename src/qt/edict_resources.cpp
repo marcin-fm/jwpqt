@@ -7,17 +7,21 @@
 #include <array>
 #include <cerrno>
 #include <cstring>
-#include <fcntl.h>
 #include <limits>
 #include <new>
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <sys/stat.h>
-#include <unistd.h>
 
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
+
+#if defined(Q_OS_UNIX) && !defined(Q_OS_WASM)
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 #include "jwpqt/core/legacy_code_page.h"
 #include "text_bridge.h"
@@ -31,6 +35,7 @@ std::runtime_error resource_error(const QString& action, const QString& path,
       QStringLiteral("%1 %2: %3").arg(action, path, detail).toUtf8().toStdString());
 }
 
+#if defined(Q_OS_UNIX) && !defined(Q_OS_WASM)
 class FileDescriptor {
  public:
   explicit FileDescriptor(int value) : value_(value) {}
@@ -52,6 +57,7 @@ class FileDescriptor {
 QString system_error(int error) {
   return QString::fromLocal8Bit(std::strerror(error));
 }
+#endif
 
 std::string read_bounded_file(const QString& path, std::size_t limit) {
   if (limit == 0 ||
@@ -59,6 +65,7 @@ std::string read_bounded_file(const QString& path, std::size_t limit) {
     throw std::runtime_error("Dictionary file byte limit is invalid");
   }
 
+#if defined(Q_OS_UNIX) && !defined(Q_OS_WASM)
   const QByteArray native_path = QFile::encodeName(path);
   const int descriptor =
       ::open(native_path.constData(), O_RDONLY | O_CLOEXEC | O_NONBLOCK);
@@ -106,6 +113,54 @@ std::string read_bounded_file(const QString& path, std::size_t limit) {
     }
   }
   return bytes;
+#else
+  const QFileInfo before(path);
+  if (!before.exists()) {
+    throw resource_error(QStringLiteral("Could not open"), path,
+                         QStringLiteral("file does not exist"));
+  }
+  if (!before.isFile()) {
+    throw resource_error(QStringLiteral("Could not read"), path,
+                         QStringLiteral("path is not a regular file"));
+  }
+  if (before.size() < 0 || static_cast<quint64>(before.size()) > limit) {
+    throw resource_error(QStringLiteral("Could not read"), path,
+                         QStringLiteral("file exceeds its byte limit"));
+  }
+
+  QFile input(path);
+  if (!input.open(QIODevice::ReadOnly)) {
+    throw resource_error(QStringLiteral("Could not open"), path,
+                         input.errorString());
+  }
+  if (input.isSequential()) {
+    throw resource_error(QStringLiteral("Could not read"), path,
+                         QStringLiteral("path is not a regular file"));
+  }
+
+  std::string bytes;
+  bytes.reserve(std::min<std::size_t>(limit, 64U * 1024U));
+  std::array<char, 64U * 1024U> buffer{};
+  while (true) {
+    const std::size_t remaining = limit - bytes.size();
+    const qint64 request = static_cast<qint64>(
+        std::min<std::size_t>(remaining + 1, buffer.size()));
+    const qint64 size = input.read(buffer.data(), request);
+    if (size < 0) {
+      throw resource_error(QStringLiteral("Could not read"), path,
+                           input.errorString());
+    }
+    if (size == 0) {
+      break;
+    }
+    bytes.append(buffer.data(), static_cast<std::size_t>(size));
+    if (bytes.size() > limit) {
+      throw resource_error(QStringLiteral("Could not read"), path,
+                           QStringLiteral("file exceeds its byte limit"));
+    }
+  }
+  return bytes;
+#endif
 }
 
 QString decode_ansi_field(std::u16string_view field,

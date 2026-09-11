@@ -1,6 +1,7 @@
 # About jwpqt
 
-jwpqt is a native Qt 6 Linux port of JWPxp 1.67, descended from JWPce and JWP.
+jwpqt is a native Qt 6 port of JWPxp 1.67 for Linux, Windows, macOS, and
+WebAssembly, descended from JWPce and JWP.
 Its recovered user-visible command and configuration surfaces have been audited;
 each command has a tested native implementation or a documented platform
 replacement or exclusion.
@@ -31,8 +32,8 @@ not included in the native package and are never downloaded automatically.
 Help > Runtime Resources and `--resource-report` provide local diagnostics.
 Do not publish private document text, history files, user dictionaries or paths
 without reviewing them first. Windows Install is replaced by CMake/CPack and
-desktop/MIME integration, WinHelp by this embedded handbook, and Windows
-clipboard formats by equivalent Linux MIME formats. The Qt screen line breaker
+native desktop/Web delivery, WinHelp by this embedded handbook, and private
+Windows clipboard formats by portable Qt MIME formats. The Qt screen line breaker
 can group adjacent closing marks before per-character formatting; the portable
 planner and PDF renderer still permit only the first mark to hang, while the
 screen preserves exact document text rather than inserting hidden characters.

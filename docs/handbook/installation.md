@@ -3,13 +3,22 @@
 The Linux package contains the native executable, offline handbook, desktop
 entry, icons, MIME definitions and original license notices. It does not bundle
 Qt libraries or optional dictionary datasets. Install system Qt 6 Widgets,
-PrintSupport and Svg plus a Japanese font such as Noto Sans CJK JP. A binary archive is
-for a compatible Linux architecture and library ABI, not a universal AppImage.
+PrintSupport and Svg plus a Japanese font such as Noto Sans CJK JP. A binary
+archive is for a compatible Linux architecture and library ABI, not a universal
+AppImage. The release workflow also builds a Windows ZIP with Qt runtime files,
+a macOS DMG application bundle, and a WebAssembly static-site archive.
+
+The Web build embeds Noto Sans JP because WebAssembly cannot use arbitrary host
+fonts. It includes the font's OFL, the program GPL, original notices, and a
+matching source archive. GitHub Pages receives the same tested site from
+`master`. Optional dictionaries and metadata are never bundled by any port.
 
 ## Paths
 
 Default configuration and user data use Qt's application locations, normally
-~/.config/jwpqt/jwpqt and ~/.local/share/jwpqt/jwpqt on Linux. Use
+~/.config/jwpqt/jwpqt and ~/.local/share/jwpqt/jwpqt on Linux. Windows and macOS
+use their Qt standard application locations. The Web port uses browser IndexedDB
+through an IDBFS-backed profile. Use
 `jwpqt --resource-report` to see the actual resolved paths. Application-only
 overrides avoid changing desktop theme configuration:
 
@@ -50,12 +59,18 @@ The editor and this handbook do not require optional data.
 ## Installing and Removing
 
 CMake supports `cmake --install BUILD --prefix PREFIX`, including DESTDIR staging.
-The TGZ binary package can be extracted into a private prefix and run as
+The Linux TGZ can be extracted into a private prefix and run as
 PREFIX/bin/jwpqt from any working directory. For desktop launch, install its
 share/applications, share/icons and share/mime entries into corresponding XDG
 locations, ensuring jwpqt is on PATH; refresh the desktop/MIME caches with your
 distribution's normal tools. Installing a file type does not force a default
 application. The application never registers itself in a Windows registry.
+
+The Windows ZIP and macOS DMG are produced by their native hosted runners and
+carry platform-native application icons. The Web archive is a static site:
+serve or deploy its root without renaming `index.html`, `jwpqt.js`, `jwpqt.wasm`,
+`qtloader.js`, or `qtlogo.svg`. GitHub Pages deployment is automated by
+`.github/workflows/pages.yml`.
 
 Build a binary TGZ with `cpack --config BUILD/CPackConfig.cmake`. Generate its
 matching source archive with `cpack --config BUILD/CPackSourceConfig.cmake` from

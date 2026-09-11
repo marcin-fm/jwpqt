@@ -7,6 +7,13 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
+#ifdef Q_OS_WASM
+#include <QFile>
+#include <QFont>
+#include <QFontDatabase>
+#include <QStatusBar>
+#include <emscripten.h>
+#endif
 #include <QStandardPaths>
 #include <QTextStream>
 #include <QTimer>
@@ -15,12 +22,53 @@
 #include "main_window.h"
 #include "vector_artwork.h"
 
+#ifdef Q_OS_WASM
+EM_ASYNC_JS(int, jwpqt_sync_web_storage, (int populate), {
+  try {
+    const root = '/jwpqt-persist';
+    if (!FS.analyzePath(root).exists) FS.mkdir(root);
+    if (!Module.jwpqtStorageMounted) {
+      FS.mount(IDBFS, {}, root);
+      Module.jwpqtStorageMounted = true;
+    }
+    return await new Promise((resolve) => {
+      FS.syncfs(!!populate, (error) => {
+        if (!error) {
+          FS.mkdirTree(root + '/config');
+          FS.mkdirTree(root + '/data');
+        }
+        resolve(error ? 1 : 0);
+      });
+    });
+  } catch (error) {
+    console.error('JWPqt browser storage:', error);
+    return 1;
+  }
+});
+#endif
+
 int main(int argc, char* argv[]) {
+#ifdef Q_OS_WASM
+  qputenv("XDG_CONFIG_HOME", QByteArrayLiteral("/jwpqt-persist/config"));
+  qputenv("XDG_DATA_HOME", QByteArrayLiteral("/jwpqt-persist/data"));
+  const bool web_storage_available = jwpqt_sync_web_storage(1) == 0;
+#endif
   QApplication application(argc, argv);
   QCoreApplication::setApplicationName(QStringLiteral("jwpqt"));
   QCoreApplication::setApplicationVersion(QStringLiteral(JWPQT_VERSION));
   QCoreApplication::setOrganizationName(QStringLiteral("jwpqt"));
   QApplication::setDesktopFileName(QStringLiteral("jwpqt"));
+#ifdef Q_OS_WASM
+  QFile web_font(QStringLiteral(":/jwpqt/assets/fonts/NotoSansJP-wght.ttf"));
+  if (web_font.open(QIODevice::ReadOnly)) {
+    const int font_id = QFontDatabase::addApplicationFontFromData(web_font.readAll());
+    const QStringList families = QFontDatabase::applicationFontFamilies(font_id);
+    if (!families.isEmpty()) {
+      application.setFont(QFont(families.constFirst()));
+    }
+  }
+  QTimer web_storage_timer;
+#endif
   application.setWindowIcon(
       jwpqt::qt::svg_icon(QStringLiteral(":/jwpqt/assets/icons/jwpqt.svg")));
 
@@ -100,6 +148,13 @@ int main(int argc, char* argv[]) {
   }
 
   jwpqt::qt::MainWindow window;
+#ifdef Q_OS_WASM
+  if (!web_storage_available) {
+    window.statusBar()->showMessage(
+        QObject::tr("Browser storage is unavailable; settings and documents are temporary"),
+        8000);
+  }
+#endif
   const jwpqt::qt::OpenMode interaction_mode =
       parser.isSet(smoke_test) || parser.isSet(resource_report_option)
           ? jwpqt::qt::OpenMode::kNonInteractive
@@ -176,6 +231,17 @@ int main(int argc, char* argv[]) {
   }
   window.load_previous_session(config.filePath(QStringLiteral("last-session.jpr")), !parser.isSet(resource_report_option));
   if (!window.session_warning().isEmpty()) QTextStream(stderr) << window.session_warning() << '\n';
+#ifdef Q_OS_WASM
+  const auto persist_web_state = [&window] {
+    if (window.application_settings().reload_previous_files)
+      (void)window.save_previous_session();
+    (void)jwpqt_sync_web_storage(0);
+  };
+  QObject::connect(&web_storage_timer, &QTimer::timeout, persist_web_state);
+  web_storage_timer.start(5000);
+  QObject::connect(&application, &QCoreApplication::aboutToQuit,
+                   persist_web_state);
+#endif
   bool opened_argument = false;
   for (const QString& path : positional_arguments) {
     jwpqt::qt::ProjectOpenOptions project_options;

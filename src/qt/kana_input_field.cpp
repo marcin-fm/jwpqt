@@ -199,11 +199,37 @@ bool KanaInputField::eventFilter(QObject* watched, QEvent* event) {
   }
   if (edit_->isReadOnly()) return QWidget::eventFilter(watched, event);
   if (event->type() == QEvent::InputMethod) {
-    composer_.discard();
     auto* input = static_cast<QInputMethodEvent*>(event);
     const bool selection_attribute = std::any_of(
         input->attributes().begin(), input->attributes().end(),
         [](const auto& attribute) { return attribute.type == QInputMethodEvent::Selection; });
+#ifdef Q_OS_WASM
+    const QString committed = input->commitString();
+    if (!inserting_ && input->preeditString().isEmpty() && committed.size() == 1 &&
+        input->replacementStart() == 0 && input->replacementLength() == 0 &&
+        !selection_attribute && committed.front().unicode() >= 0x20U &&
+        committed.front().unicode() <= 0x7eU && mode_ != InputMode::kAscii) {
+      const char value = static_cast<char>(committed.front().unicode());
+      if (mode_ == InputMode::kKanji) {
+        bool old_katakana = false;
+        for (auto* owner = parentWidget(); owner; owner = owner->parentWidget()) {
+          const auto setting = owner->property("jwpqtOldKatakanaInput");
+          if (setting.isValid()) {
+            old_katakana = setting.toBool();
+            break;
+          }
+        }
+        composer_.set_old_katakana_input(old_katakana);
+        insert_events(composer_.push_ascii(value));
+      } else {
+        const auto code = core::ascii_to_jascii(value, true);
+        if (code) insert_text(to_qstring(core::decode_jwp_text({*code})));
+      }
+      input->accept();
+      return true;
+    }
+#endif
+    composer_.discard();
     if (!inserting_ && overwrite_mode() && !input->commitString().isEmpty() &&
         !edit_->hasSelectedText() && input->replacementStart() == 0 &&
         input->replacementLength() == 0 && !selection_attribute) {

@@ -19,6 +19,7 @@
 #include <cmath>
 #include <cstdint>
 #include <exception>
+#include <functional>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -43,7 +44,6 @@
 #include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
-#include <QFileInfo>
 #include <QFormLayout>
 #include <QFontDatabase>
 #include <QFontMetricsF>
@@ -51,6 +51,7 @@
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QInputDialog>
+#include <QInputMethodEvent>
 #include <QKeyEvent>
 #include <QKeySequence>
 #include <QLabel>
@@ -62,12 +63,8 @@
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QPalette>
-#include <QPageSetupDialog>
 #include <QPageSize>
-#include <QPrintDialog>
-#include <QPrintPreviewWidget>
 #include <QProgressDialog>
-#include <QPrinter>
 #include <QPointer>
 #include <QTextEdit>
 #include <QToolButton>
@@ -80,6 +77,7 @@
 #include <QSettings>
 #include <QSignalBlocker>
 #include <QSpinBox>
+#include <QStandardPaths>
 #include <QStatusBar>
 #include <QStringList>
 #include <QStyle>
@@ -90,6 +88,7 @@
 #include <QTextEdit>
 #include <QToolBar>
 #include <QUrl>
+#include <QUuid>
 #include <QVBoxLayout>
 #include <QWheelEvent>
 #include <QWindow>
@@ -115,7 +114,14 @@
 #include "kanji_reading_lookup_dialog.h"
 #include "kanji_color_settings.h"
 #include "page_layout_dialog.h"
+#ifndef Q_OS_WASM
+#include <QPageSetupDialog>
+#include <QPrintDialog>
+#include <QPrintPreviewWidget>
+#include <QPrinter>
+
 #include "print_document.h"
+#endif
 #include "jwpqt/core/byte_io.h"
 #include "jwpqt/core/jis_table.h"
 #include "jwpqt/core/jis_unicode.h"
@@ -129,6 +135,79 @@
 #include "jwpqt/core/text_detection.h"
 #include "text_bridge.h"
 #include "wnn_user_dictionary_dialog.h"
+
+#ifdef Q_OS_WASM
+#include <emscripten.h>
+
+namespace {
+std::function<void(QString, QByteArray, int)> web_file_receiver;
+}
+
+extern "C" EMSCRIPTEN_KEEPALIVE void jwpqt_receive_browser_file(
+    const char* name, const unsigned char* data, int size) {
+  if (!web_file_receiver) return;
+  auto receiver = std::move(web_file_receiver);
+  web_file_receiver = {};
+  const QByteArray bytes = size >= 0
+                               ? QByteArray(reinterpret_cast<const char*>(data), size)
+                               : QByteArray{};
+  receiver(QString::fromUtf8(name ? name : ""), bytes, size);
+}
+
+EM_JS(void, jwpqt_choose_browser_file, (), {
+  let input = document.getElementById('jwpqt-open-file');
+  if (!input) {
+    input = document.createElement('input');
+    input.id = 'jwpqt-open-file';
+    input.type = 'file';
+    input.accept = '.jce,.jwp,.jfc,.txt,.utf,.utf8,.utf16,.euc,.sjis,.jis';
+    input.style.position = 'fixed';
+    input.style.left = '-10000px';
+    input.style.opacity = '0';
+    document.body.appendChild(input);
+  }
+  input.value = String();
+  input.onchange = async () => {
+    if (!input.files || input.files.length === 0) return;
+    const file = input.files[0];
+    const nameSize = lengthBytesUTF8(file.name) + 1;
+    const name = _malloc(nameSize);
+    stringToUTF8(file.name, name, nameSize);
+    if (file.size > 64 * 1024 * 1024) {
+      _jwpqt_receive_browser_file(name, 0, -1);
+      _free(name);
+      return;
+    }
+    try {
+      const contents = new Uint8Array(await file.arrayBuffer());
+      const data = contents.length ? _malloc(contents.length) : 0;
+      if (contents.length) HEAPU8.set(contents, data);
+      _jwpqt_receive_browser_file(name, data, contents.length);
+      if (data) _free(data);
+    } catch (error) {
+      console.error('Could not read selected JWPqt file', error);
+      _jwpqt_receive_browser_file(name, 0, -2);
+    }
+    _free(name);
+  };
+  input.click();
+});
+
+EM_JS(void, jwpqt_download_browser_file,
+      (const char* name, const unsigned char* data, int size), {
+  const bytes = HEAPU8.slice(data, data + size);
+  const blob = new Blob([bytes], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = UTF8ToString(name);
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+});
+#endif
 
 namespace jwpqt::qt {
 namespace {
@@ -276,12 +355,14 @@ QString jwp_save_filter(const QString& path) {
              : jce_filter();
 }
 
+#ifndef Q_OS_WASM
 QString with_jwp_default_extension(QString path, const QString& filter) {
   if (!QFileInfo(path).suffix().isEmpty()) return path;
   if (filter == jce_filter()) return path + QStringLiteral(".jce");
   if (filter == jwp_filter()) return path + QStringLiteral(".jwp");
   return path;
 }
+#endif
 
 QString project_filter() { return MainWindow::tr("JWP projects (*.jpr)"); }
 
@@ -500,7 +581,11 @@ MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
       document_tabs_(new QTabWidget(this)),
       conversion_candidates_(new QListWidget(this)),
+#ifndef Q_OS_WASM
       printer_(std::make_shared<QPrinter>(QPrinter::HighResolution)),
+#else
+      printer_(nullptr),
+#endif
       encoding_label_(new QLabel(this)),
       undo_action_(nullptr),
       redo_action_(nullptr),
@@ -2856,21 +2941,44 @@ void MainWindow::create_actions() {
   auto* save_project_action = file_menu->addAction(tr("Save Project..."));
   save_project_action->setObjectName(QStringLiteral("saveProjectAction"));
   connect(save_project_action, &QAction::triggered, this, &MainWindow::save_project_dialog);
+#ifdef Q_OS_WASM
+  for (QAction* action : {open_project_action, save_project_action}) {
+    action->setEnabled(false);
+    action->setToolTip(
+        tr("Projects are unavailable in web browsers because referenced files cannot be bundled with a browser download"));
+  }
+#endif
   file_menu->addSeparator();
   print_action_ = file_menu->addAction(tr("&Print..."));
   print_action_->setObjectName(QStringLiteral("printAction"));
   print_action_->setShortcuts(
       {QKeySequence::Print, QKeySequence(Qt::ALT | Qt::Key_P)});
+#ifndef Q_OS_WASM
   connect(print_action_, &QAction::triggered, this,
           [this] { print_current_document(); });
+#else
+  print_action_->setEnabled(false);
+  print_action_->setToolTip(tr("Printing is not available in web browsers"));
+#endif
   auto* preview = file_menu->addAction(tr("Print Pre&view..."));
   preview->setObjectName(QStringLiteral("printPreviewAction"));
+#ifndef Q_OS_WASM
   connect(preview, &QAction::triggered, this, [this] { print_current_document(true); });
+#else
+  preview->setEnabled(false);
+  preview->setToolTip(tr("Printing is not available in web browsers"));
+#endif
 
   printer_setup_action_ = file_menu->addAction(tr("Printer Set&up..."));
   printer_setup_action_->setObjectName(QStringLiteral("printerSetupAction"));
+#ifndef Q_OS_WASM
   connect(printer_setup_action_, &QAction::triggered, this,
           [this] { setup_printer(); });
+#else
+  printer_setup_action_->setEnabled(false);
+  printer_setup_action_->setToolTip(
+      tr("Printer setup is not available in web browsers"));
+#endif
 
   file_menu->addSeparator();
   auto* recent_files_menu = file_menu->addMenu(tr("Recent &Files"));
@@ -3837,7 +3945,11 @@ std::optional<int> MainWindow::document_line_width(
   if (application_settings_.line_width_mode == LineWidthMode::kFixed)
     return application_settings_.fixed_line_width;
 
+#ifndef Q_OS_WASM
   const QSizeF page = printer_->pageLayout().pageSize().size(QPageSize::Point);
+#else
+  const QSizeF page = QPageSize(QPageSize::A4).size(QPageSize::Point);
+#endif
   const qreal page_width = document.landscape
       ? std::max(page.width(), page.height())
       : std::min(page.width(), page.height());
@@ -3847,10 +3959,16 @@ std::optional<int> MainWindow::document_line_width(
   const QFont font = japanese_print_font(
       state.editor_->font(), application_settings_.print_font,
       QFileInfo(state.current_path_).absolutePath());
+#ifndef Q_OS_WASM
   const QFontMetricsF metrics(font, printer_.get());
+  const qreal dpi = static_cast<qreal>(printer_->logicalDpiX());
+#else
+  const QFontMetricsF metrics(font);
+  const QScreen* screen = QGuiApplication::primaryScreen();
+  const qreal dpi = screen ? screen->logicalDotsPerInchX() : 96.0;
+#endif
   const qreal cell_width =
-      metrics.horizontalAdvance(QChar(0x65e5)) * 72.0 /
-      static_cast<qreal>(printer_->logicalDpiX());
+      metrics.horizontalAdvance(QChar(0x65e5)) * 72.0 / dpi;
   if (!std::isfinite(body_width) || !std::isfinite(cell_width) ||
       body_width <= 0.0 || cell_width <= 0.0)
     return 1;
@@ -3962,8 +4080,13 @@ void MainWindow::update_conversion_actions() {
   previous_candidate_action_->setEnabled(active);
   next_candidate_action_->setEnabled(active);
   accept_candidate_action_->setEnabled(active);
+#ifdef Q_OS_WASM
+  print_action_->setEnabled(false);
+  printer_setup_action_->setEnabled(false);
+#else
   print_action_->setEnabled(!active);
   printer_setup_action_->setEnabled(!active);
+#endif
   user_dictionary_action_->setEnabled(!active && wnn_resources_ != nullptr);
   const bool has_paragraphs = document_->jwp_document_.has_value() &&
                               document_->jwp_document_->paragraph_count() != 0;
@@ -5171,6 +5294,47 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
       }
       return true;
     }
+  }
+  if (watched == document_->editor_ && document_->jwp_document_.has_value() &&
+      !conversion_active() && !document_->editor_->isReadOnly() &&
+      event->type() == QEvent::InputMethod) {
+#ifdef Q_OS_WASM
+    auto* input = static_cast<QInputMethodEvent*>(event);
+    const bool selection_attribute = std::any_of(
+        input->attributes().begin(), input->attributes().end(),
+        [](const auto& attribute) {
+          return attribute.type == QInputMethodEvent::Selection;
+        });
+    const QString committed = input->commitString();
+    if (input->preeditString().isEmpty() && committed.size() == 1 &&
+        input->replacementStart() == 0 && input->replacementLength() == 0 &&
+        !selection_attribute && committed.front().unicode() >= 0x20U &&
+        committed.front().unicode() <= 0x7eU &&
+        document_->input_mode_ != InputMode::kAscii) {
+      const char value = static_cast<char>(committed.front().unicode());
+      if (document_->input_mode_ == InputMode::kJascii) {
+        if (const auto code = core::ascii_to_jascii(value, true)) {
+          document_->editor_->insert_composed_text(
+              core::decode_jwp_text({*code}, document_->jwp_code_page_));
+        }
+      } else {
+        try {
+          document_->kana_input_.set_old_katakana_input(
+              application_settings_.old_katakana_input);
+          apply_kana_input_events(document_->kana_input_.push_ascii(value));
+        } catch (const std::exception& error) {
+          document_->kana_input_.discard();
+          statusBar()->showMessage(
+              tr("Could not compose kana: %1")
+                  .arg(QString::fromUtf8(error.what())),
+              5000);
+        }
+        update_conversion_actions();
+      }
+      input->accept();
+      return true;
+    }
+#endif
   }
   if (watched != document_->editor_ || !document_->jwp_document_.has_value() ||
       conversion_active() || document_->editor_->isReadOnly()) {
@@ -6613,6 +6777,10 @@ void MainWindow::new_document() {
 }
 
 void MainWindow::open_document() {
+#ifdef Q_OS_WASM
+  open_web_document();
+  return;
+#else
   QString selected_filter = all_files_filter();
   const QString path = QFileDialog::getOpenFileName(
       this, tr("Open document"), QString(), file_filters() + QStringLiteral(";;") + project_filter(), &selected_filter);
@@ -6635,7 +6803,102 @@ void MainWindow::open_document() {
   } else {
     open_path_detected(path, OpenMode::kInteractive, true);
   }
+#endif
 }
+
+#ifdef Q_OS_WASM
+QString MainWindow::new_web_document_path(const QString& suggested_name) const {
+  QString name = QFileInfo(suggested_name).fileName();
+  if (name.isEmpty()) name = QStringLiteral("untitled.jce");
+  const QString directory =
+      QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
+          .filePath(QStringLiteral("browser-documents/%1")
+                        .arg(QUuid::createUuid().toString(QUuid::WithoutBraces)));
+  if (!QDir().mkpath(directory)) {
+    throw std::runtime_error("Could not create persistent browser document storage");
+  }
+  return QDir(directory).filePath(name);
+}
+
+bool MainWindow::is_web_document_path(const QString& path) const {
+  const QString root =
+      QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation))
+          .filePath(QStringLiteral("browser-documents"));
+  return !path.isEmpty() &&
+         (path == root || path.startsWith(root + QDir::separator()));
+}
+
+void MainWindow::download_web_document(const QString& path) const {
+  QFile file(path);
+  if (!file.open(QIODevice::ReadOnly)) {
+    throw std::runtime_error(
+        QStringLiteral("Could not read browser document for download: %1")
+            .arg(file.errorString())
+            .toStdString());
+  }
+  constexpr qint64 kMaximumDownloadBytes = 64LL * 1024LL * 1024LL;
+  if (file.size() < 0 || file.size() > kMaximumDownloadBytes) {
+    throw std::runtime_error("Browser document exceeds the 64 MiB download limit");
+  }
+  const QByteArray bytes = file.readAll();
+  const QByteArray name = QFileInfo(path).fileName().toUtf8();
+  jwpqt_download_browser_file(name.constData(),
+                              reinterpret_cast<const unsigned char*>(bytes.constData()),
+                              static_cast<int>(bytes.size()));
+}
+
+void MainWindow::open_web_document() {
+  const QPointer<MainWindow> owner(this);
+  web_file_receiver = [owner](const QString& name, const QByteArray& bytes,
+                              int status) {
+    if (!owner || name.isEmpty()) return;
+    QTimer::singleShot(0, owner, [owner, name, bytes, status]() {
+      if (!owner) return;
+      if (status == -1) {
+        owner->statusBar()->showMessage(
+            owner->tr("Browser document exceeds the 64 MiB upload limit"), 5000);
+        return;
+      }
+      if (status < 0) {
+        owner->statusBar()->showMessage(
+            owner->tr("The browser could not read the selected document"), 5000);
+        return;
+      }
+      if (QFileInfo(name).suffix().compare(QStringLiteral("jpr"),
+                                           Qt::CaseInsensitive) == 0) {
+        owner->statusBar()->showMessage(
+            owner->tr("Projects cannot be opened in a web browser; upload the documents individually"),
+            6000);
+        return;
+      }
+      QString path;
+      try {
+        path = owner->new_web_document_path(name);
+        QFile file(path);
+        if (!file.open(QIODevice::WriteOnly) ||
+            file.write(bytes) != bytes.size() || !file.flush()) {
+          throw std::runtime_error(
+              owner->tr("Could not store the uploaded browser document: %1")
+                  .arg(file.errorString())
+                  .toStdString());
+        }
+        file.close();
+        if (!owner || !owner->open_path_detected(
+                          path, OpenMode::kInteractive, true)) {
+          QFile::remove(path);
+        }
+      } catch (const std::exception& error) {
+        if (!path.isEmpty()) QFile::remove(path);
+        if (owner) {
+          owner->show_error(owner->tr("Could not open browser document"), error);
+        }
+      }
+    });
+  };
+  statusBar()->showMessage(tr("Choose a document from the browser file picker"), 3000);
+  jwpqt_choose_browser_file();
+}
+#endif
 
 bool MainWindow::open_project_dialog(const QString& selected_path) {
   const auto path = selected_path.isEmpty() ? QFileDialog::getOpenFileName(
@@ -7116,7 +7379,37 @@ bool MainWindow::save_document_as(bool export_copy) {
   }
   QString selected_filter = document_->jwp_format_ ? jwp_save_filter(document_->current_path_)
                                                     : encoding_filter(document_->encoding_);
-  QString path = QFileDialog::getSaveFileName(
+  QString path;
+#ifdef Q_OS_WASM
+  QStringList filters = file_filters().split(QStringLiteral(";;"));
+  filters.removeAll(all_files_filter());
+  bool accepted = false;
+  selected_filter = QInputDialog::getItem(
+      this, export_copy ? tr("Export document copy") : tr("Save document"),
+      tr("File format:"), filters,
+      std::max(0, filters.indexOf(selected_filter)), false, &accepted);
+  if (!accepted || selected_filter.isEmpty()) return false;
+
+  QString base_name = QFileInfo(document_->current_path_).completeBaseName();
+  if (base_name.isEmpty()) base_name = tr("untitled");
+  QString extension = QStringLiteral("txt");
+  if (selected_filter == jce_filter()) extension = QStringLiteral("jce");
+  else if (selected_filter == jwp_filter()) extension = QStringLiteral("jwp");
+  else if (selected_filter == encoding_filter(core::TextEncoding::kJfc))
+    extension = QStringLiteral("jfc");
+  else if (selected_filter == encoding_filter(core::TextEncoding::kEucJp))
+    extension = QStringLiteral("euc");
+  else if (selected_filter == encoding_filter(core::TextEncoding::kShiftJis))
+    extension = QStringLiteral("sjis");
+  else if (selected_filter == encoding_filter(core::TextEncoding::kNewJis))
+    extension = QStringLiteral("jis");
+  else if (selected_filter == encoding_filter(core::TextEncoding::kOldJis))
+    extension = QStringLiteral("old");
+  else if (selected_filter == encoding_filter(core::TextEncoding::kNecJis))
+    extension = QStringLiteral("nec");
+  path = new_web_document_path(QStringLiteral("%1.%2").arg(base_name, extension));
+#else
+  path = QFileDialog::getSaveFileName(
       this, export_copy ? tr("Export document copy") : tr("Save document"),
       export_copy ? QString() : document_->current_path_, file_filters(),
       &selected_filter);
@@ -7124,6 +7417,7 @@ bool MainWindow::save_document_as(bool export_copy) {
     return false;
   }
   path = with_jwp_default_extension(path, selected_filter);
+#endif
   std::optional<core::TextEncoding> encoding;
   if (!is_jwp_filter(selected_filter)) {
     encoding = encoding_from_filter(selected_filter);
@@ -7242,6 +7536,9 @@ bool MainWindow::save_as_path(const QString& path,
         (export_copy ? tr("Exported %1 as %2") : tr("Saved %1 as %2"))
             .arg(path, encoding ? encoding_name(*encoding) : tr("JWP")), 3000);
     if (!export_copy) record_recent_document(*document_);
+#ifdef Q_OS_WASM
+    if (is_web_document_path(path)) download_web_document(path);
+#endif
     return true;
   } catch (const std::exception& error) {
     if (mode == OpenMode::kInteractive) {
@@ -7573,6 +7870,7 @@ std::optional<core::JwpDocument> MainWindow::prompt_for_page_layout(
   return dialog->document();
 }
 
+#ifndef Q_OS_WASM
 bool MainWindow::prompt_for_print(QPrinter& printer) {
   QPointer<QPrintDialog> dialog = new QPrintDialog(&printer, this);
   dialog->setOption(QAbstractPrintDialog::PrintSelection,
@@ -7590,6 +7888,7 @@ bool MainWindow::prompt_for_printer_setup(QPrinter& printer) {
   delete dialog;
   return answer == QDialog::Accepted;
 }
+#endif
 
 std::optional<core::KanjiColorPolicy>
 MainWindow::prompt_for_kanji_color_policy(
@@ -7904,6 +8203,11 @@ bool MainWindow::apply_page_layout(const core::JwpDocument& requested) {
 }
 
 void MainWindow::print_current_document(bool preview) {
+#ifdef Q_OS_WASM
+  Q_UNUSED(preview);
+  statusBar()->showMessage(tr("Printing is not available in web browsers"),
+                           5000);
+#else
   if (print_busy_) return;
   const QPointer<MainWindow> self(this);
   print_busy_ = true;
@@ -8004,9 +8308,14 @@ void MainWindow::print_current_document(bool preview) {
             .arg(QString::fromUtf8(error.what())),
         5000);
   }
+#endif
 }
 
 void MainWindow::setup_printer() {
+#ifdef Q_OS_WASM
+  statusBar()->showMessage(
+      tr("Printer setup is not available in web browsers"), 5000);
+#else
   if (print_busy_) return;
   const QPointer<MainWindow> self(this);
   print_busy_ = true;
@@ -8037,6 +8346,7 @@ void MainWindow::setup_printer() {
             .arg(QString::fromUtf8(error.what())),
         5000);
   }
+#endif
 }
 
 void MainWindow::configure_kanji_colors() {

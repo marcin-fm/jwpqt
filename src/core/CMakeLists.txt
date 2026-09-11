@@ -69,11 +69,18 @@ target_include_directories(jwpqt_core
     ${PROJECT_SOURCE_DIR}
 )
 
-target_compile_options(jwpqt_core
-  PRIVATE
+if(MSVC)
+  target_compile_options(jwpqt_core PRIVATE /W4 /permissive-)
+else()
+  target_compile_options(jwpqt_core PRIVATE
     -Wall
     -Wextra
     -Wpedantic
     -Wconversion
     -Wsign-conversion
-)
+  )
+endif()
+
+if(EMSCRIPTEN)
+  target_compile_options(jwpqt_core PRIVATE -fexceptions)
+endif()
