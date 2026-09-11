@@ -774,7 +774,9 @@ void test_toolbar(const QString& root) {
       for (int y = 0; y < icon.height(); ++y) {
         for (int x = 0; x < icon.width(); ++x) {
           const QColor pixel = icon.pixelColor(x, y);
-          if (pixel == ink) ++visible_ink;
+          if (pixel.alpha() > 0 && pixel.red() == ink.red() &&
+              pixel.green() == ink.green() && pixel.blue() == ink.blue())
+            ++visible_ink;
           if (pixel.alpha() == 0) ++transparent;
         }
       }
