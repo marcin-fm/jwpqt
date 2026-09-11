@@ -45,6 +45,14 @@ int opaque_pixels(const QImage& image, const QRect& region) {
   return count;
 }
 
+int transparent_pixels(const QImage& image) {
+  int count = 0;
+  for (int y = 0; y < image.height(); ++y)
+    for (int x = 0; x < image.width(); ++x)
+      if (image.pixelColor(x, y).alpha() == 0) ++count;
+  return count;
+}
+
 bool contains_opaque_color(const QImage& image, const QColor& color) {
   for (int y = 0; y < image.height(); ++y)
     for (int x = 0; x < image.width(); ++x)
@@ -487,7 +495,7 @@ void test_artwork_palette_changes() {
     const QImage corner = dialog.findChild<QLabel*>(QStringLiteral("fourCornerLegend"))->pixmap().toImage();
     require(skip.size() == QSize(236, 96) && corner.size() == QSize(320, 120),
             "Vector lookup artwork has the wrong logical size");
-    require(skip.pixelColor(0, 0).alpha() == 0 && corner.pixelColor(0, 0).alpha() == 0,
+    require(transparent_pixels(skip) > 100 && transparent_pixels(corner) > 100,
             "Vector lookup artwork painted an opaque paper background");
     const QColor artwork_ink = dark ? palette.color(QPalette::Text) : QColor(Qt::black);
     require(contains_opaque_color(skip, artwork_ink) &&
