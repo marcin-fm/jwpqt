@@ -3,6 +3,8 @@
 #include "toolbar_dialog.h"
 #include "project_workspace.h"
 #include "jwp_editor.h"
+#include <algorithm>
+#include <array>
 #include <QApplication>
 #include <QAction>
 #include <QCheckBox>
@@ -36,6 +38,13 @@ template<class F> void reject(F function) {
 }
 void settings() {
   qt::ApplicationSettings config;
+  const std::array<std::uint8_t, 39> source_default{{
+      0,1,2,3,0,5,0,11,12,13,0,6,7,0,14,15,16,0,8,9,10,18,0,19,28,34,29,0,
+      20,21,22,23,24,25,26,27,0,33,36}};
+  require(config.toolbar.count == static_cast<int>(source_default.size()) &&
+              std::equal(source_default.begin(), source_default.end(),
+                         config.toolbar.buttons.begin()),
+          "Native toolbar did not use the recovered source default");
   const auto encoded = qt::write_application_settings(config);
   require(qt::write_application_settings(qt::read_application_settings(encoded)) == encoded, "Default toolbar drifted");
   for (int id = 0; id <= 36; ++id) {
@@ -77,7 +86,9 @@ void window() {
   qt::MainWindow window; window.show(); QApplication::processEvents();
   auto* bar = child<QToolBar>(window, "mainToolBar");
   const auto initial = bar->actions();
-  require(initial.size() == 37, "Native default order changed");
+  require(initial.size() == 39 && initial.front()->isSeparator() &&
+              initial.back() == child<QAction>(window, "applicationOptionsAction"),
+          "Native default omitted the source separator or Options command");
   auto* editor = window.active_editor(); require(editor, "Editor missing");
   editor->insertPlainText(QStringLiteral("before"));
   auto text = editor->toPlainText();
@@ -177,7 +188,7 @@ void window() {
     for (int i = selected->count(); i > 1; --i) { selected->setCurrentRow(0); remove->click(); }
     require(selected->count() == 1 && !remove->isEnabled(), "Empty toolbar did not preserve a slot");
     child<QPushButton>(*dialog, "toolbarReset")->click();
-    require(child<QListWidget>(*dialog, "toolbarSelected")->count() == 37, "Reset Layout did not restore defaults");
+    require(child<QListWidget>(*dialog, "toolbarSelected")->count() == 39, "Reset Layout did not restore defaults");
     child<QDialogButtonBox>(*dialog, "")->button(QDialogButtonBox::Ok)->click();
   });
   child<QAction>(window, "customizeToolbarAction")->trigger();
@@ -186,7 +197,8 @@ void window() {
     confirmation->button(QMessageBox::Yes)->click();
   });
   child<QAction>(window, "defaultSettingsAction")->trigger();
-  require(window.application_settings().toolbar.buttons[99] == 255 && bar->actions().size() == 37,
+  require(window.application_settings().toolbar.buttons[99] == 255 && bar->actions().size() == 39 &&
+              bar->actions().back() == child<QAction>(window, "applicationOptionsAction"),
           "Defaults lost the inactive toolbar tail");
   qt::MainWindow native;
   const auto original_native = *native.current_jwp_document();

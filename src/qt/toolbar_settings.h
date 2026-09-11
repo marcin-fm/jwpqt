@@ -16,9 +16,9 @@ inline constexpr std::array<const char*, 37> kToolbarCommands{{
     "kanjiCountAction", "makeKanjiColorListAction", "formatFileAction", "formatParagraphAction",
     "pageLayoutAction", "edictLookupAction", "userDictionaryAction", "applicationOptionsAction"}};
 struct ToolbarSettings {
-  std::array<std::uint8_t, 100> buttons{{1,2,3,0,5,0,11,12,13,0,6,7,0,14,15,16,0,
-      8,9,10,18,0,19,28,34,29,0,20,21,22,23,24,25,26,27,0,33}};
-  int count = 37;
+  std::array<std::uint8_t, 100> buttons{{0,1,2,3,0,5,0,11,12,13,0,6,7,0,14,15,16,0,
+      8,9,10,18,0,19,28,34,29,0,20,21,22,23,24,25,26,27,0,33,36}};
+  int count = 39;
   int area = 0; // top, bottom, left, right
   int icon_size = 16;
   int text_style = 0; // icons, beside, below, text only

@@ -607,7 +607,7 @@ void test_toolbar(const QString& root) {
       "bushuLookupAction", "strokeBushuLookupAction", "skipLookupAction",
       "spahnLookupAction", "fourCornerLookupAction", "kanjiReadingLookupAction",
       "indexLookupAction",
-      "pageLayoutAction"};
+      "pageLayoutAction", "applicationOptionsAction"};
   QStringList actual;
   int separators = 0;
   for (QAction* action : toolbar->actions()) {
@@ -627,7 +627,7 @@ void test_toolbar(const QString& root) {
                 (!button->icon().isNull() || !button->text().isEmpty()),
             QStringLiteral("Toolbar did not reuse a labeled menu action: ") + action->objectName());
   }
-  require(actual == expected && separators == 8,
+  require(actual == expected && separators == 9,
           QStringLiteral("Toolbar order does not match the supported legacy groups"));
   const auto button = [&](const char* name) {
     QAction* action = window.findChild<QAction*>(QString::fromLatin1(name));
