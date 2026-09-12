@@ -253,6 +253,26 @@ if(EMSCRIPTEN)
     "SHELL:-lidbfs.js"
     -Os
   )
+  if(JWPQT_BUNDLE_LEGACY_DATA)
+    foreach(index RANGE 0 7)
+      list(GET JWPQT_LEGACY_DATA_FILES ${index} source)
+      list(GET JWPQT_LEGACY_DATA_NAMES ${index} name)
+      target_link_options(jwpqt PRIVATE
+        "SHELL:--preload-file ${source}@/jwpqt-data/${name}")
+    endforeach()
+  endif()
+endif()
+
+if(JWPQT_BUNDLE_LEGACY_DATA AND NOT EMSCRIPTEN)
+  foreach(index RANGE 0 7)
+    list(GET JWPQT_LEGACY_DATA_FILES ${index} source)
+    list(GET JWPQT_LEGACY_DATA_NAMES ${index} name)
+    add_custom_command(TARGET jwpqt POST_BUILD
+      COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:jwpqt>/data"
+      COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+              "${source}" "$<TARGET_FILE_DIR:jwpqt>/data/${name}"
+      VERBATIM)
+  endforeach()
 endif()
 
 set_target_properties(jwpqt PROPERTIES
@@ -270,6 +290,9 @@ if(EMSCRIPTEN)
     "${CMAKE_CURRENT_BINARY_DIR}/qtloader.js"
     DESTINATION "."
   )
+  if(JWPQT_BUNDLE_LEGACY_DATA)
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/jwpqt.data" DESTINATION ".")
+  endif()
   install(FILES "${CMAKE_CURRENT_BINARY_DIR}/jwpqt.html"
           DESTINATION "." RENAME "index.html")
   install(FILES "${PROJECT_SOURCE_DIR}/assets/icons/jwpqt.svg"
@@ -286,6 +309,19 @@ else()
     BUNDLE DESTINATION "."
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
   )
+  if(JWPQT_BUNDLE_LEGACY_DATA)
+    if(APPLE)
+      set(jwpqt_data_destination "jwpqt.app/Contents/Resources/data")
+    else()
+      set(jwpqt_data_destination "${CMAKE_INSTALL_DATADIR}/jwpqt/data")
+    endif()
+    foreach(index RANGE 0 7)
+      list(GET JWPQT_LEGACY_DATA_FILES ${index} source)
+      list(GET JWPQT_LEGACY_DATA_NAMES ${index} name)
+      install(FILES "${source}" DESTINATION "${jwpqt_data_destination}"
+              RENAME "${name}")
+    endforeach()
+  endif()
 endif()
 
 if((WIN32 OR APPLE) AND NOT EMSCRIPTEN)

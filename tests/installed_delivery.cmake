@@ -15,7 +15,11 @@ endfunction()
 run("${CMAKE_COMMAND}" --install "${BUILD}" --prefix "${root}/installed")
 foreach(path bin/jwpqt share/applications/jwpqt.desktop share/icons/hicolor/scalable/apps/jwpqt.svg
              share/mime/packages/jwpqt-mime.xml share/doc/jwpqt/handbook/start.md
-             share/doc/jwpqt/handbook/gnugpl.txt share/doc/jwpqt/handbook/_cpright.txt)
+             share/doc/jwpqt/handbook/gnugpl.txt share/doc/jwpqt/handbook/_cpright.txt
+             share/jwpqt/data/edict share/jwpqt/data/edict.jdx
+             share/jwpqt/data/enamdict share/jwpqt/data/enamdict.jdx
+             share/jwpqt/data/kanjinfo.dat share/jwpqt/data/radical.dat
+             share/jwpqt/data/stroke.dat share/jwpqt/data/radicals.bmp)
   if(NOT EXISTS "${root}/installed/${path}")
     message(FATAL_ERROR "Missing installed file: ${path}")
   endif()
@@ -33,9 +37,23 @@ foreach(required "*.jce" "*.jwp" "\\147\\046\\002\\102")
     message(FATAL_ERROR "Installed JWP MIME definition is missing ${required}")
   endif()
 endforeach()
-run("${CMAKE_COMMAND}" -E env QT_QPA_PLATFORM=offscreen
+execute_process(COMMAND "${CMAKE_COMMAND}" -E env QT_QPA_PLATFORM=offscreen
     "${root}/installed/bin/jwpqt" --resource-report
-    --config-dir "${root}/config" --user-data-dir "${root}/data")
+    --config-dir "${root}/config" --user-data-dir "${root}/data"
+    WORKING_DIRECTORY "${root}" RESULT_VARIABLE result
+    OUTPUT_VARIABLE resource_report ERROR_VARIABLE errors TIMEOUT 90)
+if(NOT result STREQUAL "0")
+  message(FATAL_ERROR "Installed resource report failed:\n${resource_report}\n${errors}")
+endif()
+foreach(required "Kanji information: loaded (6398 characters)"
+                 "Radical/stroke lookup: loaded" "Radical graphics: loaded"
+                 "Word dictionaries: 2 loaded" "EDICT: 110425 records"
+                 "ENAMDICT: 483691 records")
+  string(FIND "${resource_report}" "${required}" found)
+  if(found EQUAL -1)
+    message(FATAL_ERROR "Installed resource report is missing ${required}:\n${resource_report}")
+  endif()
+endforeach()
 if(EXISTS "${root}/config/query-history.bin" OR EXISTS "${root}/config/jwpqt.cfg")
   message(FATAL_ERROR "Installed resource report wrote user state")
 endif()
@@ -50,9 +68,19 @@ if(NOT count EQUAL 1)
 endif()
 list(GET archives 0 archive)
 execute_process(COMMAND "${CMAKE_COMMAND}" -E tar tf "${archive}" OUTPUT_VARIABLE listing RESULT_VARIABLE result)
-if(NOT result STREQUAL "0" OR listing MATCHES "(wnn\\.dat|wnn\\.dix|kanjinfo\\.dat|enamdict|edict\\.jdx|/\\.serena/|/\\.git/)")
-  message(FATAL_ERROR "Archive failed inspection or includes non-deliverable resources: ${listing}")
+if(NOT result STREQUAL "0" OR listing MATCHES "(/\\.serena/|/\\.git/)")
+  message(FATAL_ERROR "Archive failed inspection or includes private metadata: ${listing}")
 endif()
+foreach(required "/share/jwpqt/data/edict" "/share/jwpqt/data/edict.jdx"
+                 "/share/jwpqt/data/enamdict" "/share/jwpqt/data/enamdict.jdx"
+                 "/share/jwpqt/data/kanjinfo.dat" "/share/jwpqt/data/radical.dat"
+                 "/share/jwpqt/data/stroke.dat" "/share/jwpqt/data/radicals.bmp"
+                 "/share/doc/jwpqt/handbook/_cpright.txt")
+  string(FIND "${listing}" "${required}" found)
+  if(found EQUAL -1)
+    message(FATAL_ERROR "Native archive is missing ${required}")
+  endif()
+endforeach()
 execute_process(COMMAND "${CMAKE_COMMAND}" -E tar xzf "${archive}"
                 WORKING_DIRECTORY "${root}/unpacked" RESULT_VARIABLE result)
 if(NOT result STREQUAL "0")

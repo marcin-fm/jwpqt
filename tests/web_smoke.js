@@ -7,6 +7,7 @@ const site = path.resolve(process.argv[2] || "site");
 const requiredFiles = [
   "index.html",
   "jwpqt.js",
+  "jwpqt.data",
   "jwpqt.wasm",
   "qtloader.js",
   "qtlogo.svg",

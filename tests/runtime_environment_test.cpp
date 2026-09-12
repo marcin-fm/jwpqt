@@ -86,7 +86,8 @@ void test_runtime_paths(const QString& executable, const QString& root) {
   const QStringList options{QStringLiteral("--config-dir"), config,
                             QStringLiteral("--user-data-dir"), personal,
                             QStringLiteral("--resource-report")};
-  auto run = [&](const QStringList& arguments, int expected) {
+  auto run = [&](const QStringList& arguments, int expected,
+                 bool use_packaged_data = false) {
     QProcess process;
     auto environment = QProcessEnvironment::systemEnvironment();
     environment.insert(QStringLiteral("QT_QPA_PLATFORM"),
@@ -94,9 +95,13 @@ void test_runtime_paths(const QString& executable, const QString& root) {
     environment.insert(QStringLiteral("XDG_CONFIG_HOME"), desktop);
     environment.insert(QStringLiteral("XDG_DATA_HOME"),
                        root + QStringLiteral("/desktop data"));
+    if (!use_packaged_data) {
+      environment.insert(QStringLiteral("JWPQT_DISABLE_PACKAGED_DATA"),
+                         QStringLiteral("1"));
+    }
     process.setProcessEnvironment(environment);
     process.start(executable, arguments);
-    require(process.waitForFinished(10000),
+    require(process.waitForFinished(use_packaged_data ? 30000 : 10000),
             QStringLiteral("Application did not finish: ") + process.errorString());
     const QString output = QString::fromUtf8(process.readAllStandardOutput()) +
                            QString::fromUtf8(process.readAllStandardError());
@@ -106,12 +111,17 @@ void test_runtime_paths(const QString& executable, const QString& root) {
     return output;
   };
 
-  const QString missing = run(options, 0);
+  const QString missing = run(options, 0, true);
   require(missing.contains(QStringLiteral("Configuration directory: ") + config) &&
               missing.contains(QStringLiteral("WNN conversion: loaded (25496 records)")) &&
               missing.contains(personal + QStringLiteral("/user.sel")) &&
               missing.contains(personal + QStringLiteral("/user.cnv")) &&
-              missing.contains(QStringLiteral("Kanji information: unavailable")) &&
+               missing.contains(QStringLiteral("Kanji information: loaded (6398 characters)")) &&
+               missing.contains(QStringLiteral("Radical/stroke lookup: loaded")) &&
+               missing.contains(QStringLiteral("Radical graphics: loaded")) &&
+               missing.contains(QStringLiteral("Word dictionaries: 2 loaded")) &&
+               missing.contains(QStringLiteral("EDICT: 110425 records")) &&
+               missing.contains(QStringLiteral("ENAMDICT: 483691 records")) &&
               missing.contains(QStringLiteral("Native resource bounds: 32 MiB kanji information, 256 MiB dictionary data, 128 MiB dictionary indexes")) &&
               missing.contains(QStringLiteral("ParagraphMemory_BlockSize, DictionaryBuffer_Size, Cache_KanjiInfoFile")) &&
               missing.contains(QStringLiteral("Qt platform/style: offscreen")),
@@ -164,9 +174,9 @@ void test_runtime_paths(const QString& executable, const QString& root) {
   auto startup_options = options;
   startup_options.removeAll(QStringLiteral("--resource-report"));
   startup_options.append(QStringLiteral("--smoke-test"));
-  require(run(startup_options, 0).contains(QStringLiteral("Startup dictionary requested but no searchable dictionary")) &&
+  require(!run(startup_options, 0, true).contains(QStringLiteral("Startup dictionary requested but no searchable dictionary")) &&
               !QFile::exists(queries),
-          QStringLiteral("Smoke shutdown used last-file confirmation or hid unavailable startup resources"));
+          QStringLiteral("Smoke shutdown used last-file confirmation or rejected packaged dictionaries"));
   require(preferences_file.remove(), QStringLiteral("Could not remove startup settings fixture"));
   write_file(queries, QByteArray("corrupt query history"));
   QFile query_file(queries);
@@ -291,6 +301,8 @@ void test_multiple_startup_paths(const QString& executable,
                        fixture_root + QStringLiteral("/desktop"));
     environment.insert(QStringLiteral("XDG_DATA_HOME"),
                        fixture_root + QStringLiteral("/desktop data"));
+    environment.insert(QStringLiteral("JWPQT_DISABLE_PACKAGED_DATA"),
+                       QStringLiteral("1"));
     process.setProcessEnvironment(environment);
     process.setWorkingDirectory(fixture_root);
     QStringList arguments{QStringLiteral("--smoke-test"),

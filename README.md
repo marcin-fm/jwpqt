@@ -94,9 +94,11 @@ nice cpack --config /srv/tmp/jwpqt-build/release/CPackConfig.cmake -B /srv/tmp/j
 nice cpack --config /srv/tmp/jwpqt-build/release/CPackSourceConfig.cmake -B /srv/tmp/jwpqt-build/packages
 ```
 
-The Linux binary TGZ contains `bin/jwpqt`, the handbook, retained licenses, a desktop
-entry, scalable SVG application icon and JWP/JPR MIME definitions. Extract it into a private
-prefix and run its executable from any working directory. CMake also supports
+The normal Linux binary TGZ is a noncommercial-data edition containing `bin/jwpqt`,
+the handbook, retained licenses, a desktop entry, scalable SVG application icon,
+JWP/JPR MIME definitions and the original JWPce lookup datasets under
+`share/jwpqt/data`. Extract it into a private prefix and run its executable from
+any working directory. CMake also supports
 `cmake --install BUILD --prefix PREFIX` and DESTDIR staging. Desktop registration
 does not force a default application; put the executable on PATH and refresh
 desktop/MIME caches using the distribution's normal tools. Removing a private
@@ -107,9 +109,11 @@ It requires a compatible architecture, system Qt 6 Widgets/PrintSupport/Svg,
 standard C++ libraries and Japanese fonts. Supply matching source and retained
 notices when redistributing binaries under the GPL. Source archives omit Git and
 local assistant metadata. Every build embeds the redistributable WNN system
-dictionary; optional EDICT/kanji-information corpora retain their separate
-acquisition and license conditions. The installed handbook explains paths,
-provisioning and uninstallation.
+dictionary. Normal artifacts also carry EDICT, ENAMDICT and kanji/radical/stroke
+data as separate unmodified payloads under their original noncommercial and
+permission terms; those files are not GPL. Configure with
+`-DJWPQT_BUNDLE_LEGACY_DATA=OFF` for a data-free edition. The installed handbook
+explains paths, licensing and uninstallation.
 
 ## Runtime data
 
@@ -125,11 +129,13 @@ configuration paths and could suppress resource errors. It is not accepted as
 an ambiguous positional alias. Use the explicit native directory options above;
 resource failures remain visible in Runtime Resources.
 
-Place `dict.cfg`, its configured dictionaries/indexes, `kanjinfo.dat`,
-`radical.dat`, `stroke.dat`, and `radicals.bmp` in the configuration directory.
-The built-in WNN dictionary is used when neither `wnn.dix` nor `wnn.dat` is
-present there. If either external WNN file is present, both are required;
-`--wnn-data-dir` can select and require a different WNN directory.
+Normal builds automatically discover their packaged EDICT, ENAMDICT,
+`kanjinfo.dat`, `radical.dat`, `stroke.dat`, and `radicals.bmp`. A configuration
+directory containing `dict.cfg` or any explicit kanji resource overrides the
+packaged fallback; incomplete or malformed overrides fail visibly rather than
+mixing datasets. The built-in WNN dictionary is used when neither `wnn.dix` nor
+`wnn.dat` is present there. If either external WNN file is present, both are
+required; `--wnn-data-dir` can select and require a different WNN directory.
 
 The following Bash example reuses the separately acquired research data on this
 development machine. It does not download data, execute Windows programs, or
@@ -156,10 +162,11 @@ replace an existing registry or user dictionary. Run it from the repository:
 )
 ```
 
-The original `JWPxp.dic` is a supported binary registry and already names
+The provisioning example is mainly useful for a data-free build or an explicit
+replacement dataset. The original `JWPxp.dic` is a supported binary registry and already names
 `user.dct`; it does not need to be rewritten as a text file. The dictionaries
-have separate licenses from the program: retain `_cpright.txt` and review the
-individual notices before redistributing any data.
+have separate licenses from the program: retain `_cpright.txt`, distribute them
+without financial return where required, and review every individual notice.
 
 **Tools > Manage Dictionaries** (also available inside lookup) provides staged
 add/edit/remove/reorder, search flags, EUC/UTF-8/mixed and name/classical roles,

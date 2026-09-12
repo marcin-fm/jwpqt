@@ -47,6 +47,42 @@ EM_ASYNC_JS(int, jwpqt_sync_web_storage, (int populate), {
 });
 #endif
 
+namespace {
+
+bool path_exists_or_is_link(const QString& path) {
+  const QFileInfo info(path);
+  return info.exists() || info.isSymLink();
+}
+
+QString packaged_data_directory() {
+  if (qEnvironmentVariableIsSet("JWPQT_DISABLE_PACKAGED_DATA")) return {};
+#ifdef Q_OS_WASM
+  return QDir(QStringLiteral("/jwpqt-data")).exists()
+             ? QStringLiteral("/jwpqt-data")
+             : QString{};
+#else
+  const QDir application_directory(QCoreApplication::applicationDirPath());
+  const QStringList candidates{
+      application_directory.filePath(QStringLiteral("data")),
+      application_directory.filePath(QStringLiteral("../share/jwpqt/data")),
+      application_directory.filePath(QStringLiteral("../Resources/data"))};
+  for (const auto& candidate : candidates) {
+    if (QFileInfo(QDir(candidate).filePath(QStringLiteral("kanjinfo.dat"))).isFile())
+      return QDir::cleanPath(candidate);
+  }
+  return {};
+#endif
+}
+
+QString configured_or_packaged(const QDir& config, const QString& packaged,
+                               const QString& name) {
+  const QString configured = config.filePath(name);
+  if (path_exists_or_is_link(configured) || packaged.isEmpty()) return configured;
+  return QDir(packaged).filePath(name);
+}
+
+}  // namespace
+
 int main(int argc, char* argv[]) {
 #ifdef Q_OS_WASM
   qputenv("XDG_CONFIG_HOME", QByteArrayLiteral("/jwpqt-persist/config"));
@@ -74,7 +110,7 @@ int main(int argc, char* argv[]) {
 
   QCommandLineParser parser;
   parser.setApplicationDescription(
-      QStringLiteral("Native Linux port of JWPxp"));
+      QStringLiteral("Native Qt port of JWPxp"));
   parser.addHelpOption();
   parser.addVersionOption();
   const QCommandLineOption smoke_test(
@@ -173,6 +209,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
   const QDir config(config_directory);
+  const QString packaged_data = packaged_data_directory();
   if (!window.load_application_settings(config.filePath(QStringLiteral("jwpqt.cfg")))) {
     QTextStream(stderr) << window.application_settings_warning() << '\n';
   }
@@ -191,19 +228,30 @@ int main(int argc, char* argv[]) {
     return 1;
   }
   if (!window.load_edict_configuration(
-          config.filePath(QStringLiteral("dict.cfg")), interaction_mode)) {
+          config.filePath(QStringLiteral("dict.cfg")), interaction_mode,
+          packaged_data)) {
     QTextStream(stderr) << "Could not load the dictionary configuration.\n";
     return 1;
   }
   if (!window.load_kanji_info(
-          config.filePath(QStringLiteral("kanjinfo.dat")), interaction_mode)) {
+          configured_or_packaged(config, packaged_data,
+                                 QStringLiteral("kanjinfo.dat")),
+          interaction_mode)) {
     QTextStream(stderr) << "Could not load the kanji information database.\n";
     return 1;
   }
+  const bool configured_lookup =
+      path_exists_or_is_link(config.filePath(QStringLiteral("radical.dat"))) ||
+      path_exists_or_is_link(config.filePath(QStringLiteral("stroke.dat"))) ||
+      path_exists_or_is_link(config.filePath(QStringLiteral("radicals.bmp")));
+  const QString lookup_directory =
+      configured_lookup || packaged_data.isEmpty() ? config.absolutePath()
+                                                   : packaged_data;
   if (!window.load_kanji_lookup(
-          config.filePath(QStringLiteral("radical.dat")),
-          config.filePath(QStringLiteral("stroke.dat")),
-          config.filePath(QStringLiteral("radicals.bmp")), interaction_mode)) {
+          QDir(lookup_directory).filePath(QStringLiteral("radical.dat")),
+          QDir(lookup_directory).filePath(QStringLiteral("stroke.dat")),
+          QDir(lookup_directory).filePath(QStringLiteral("radicals.bmp")),
+          interaction_mode)) {
     QTextStream(stderr) << "Could not load the radical lookup data.\n";
     return 1;
   }

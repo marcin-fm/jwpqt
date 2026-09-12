@@ -461,6 +461,28 @@ std::size_t ensure_edict_user_entry(core::EdictRegistry& registry) {
   return registry.entries.size() - 1;
 }
 
+core::EdictRegistry packaged_edict_registry(const QString& directory) {
+  core::EdictRegistry registry;
+  auto add = [&](const char16_t* label, const QString& name,
+                 core::EdictRegistryNames names, bool quiet) {
+    core::EdictRegistryEntry entry;
+    entry.label = label;
+    entry.path = QDir(directory).filePath(name).toStdU16String();
+    entry.encoding = core::EdictRegistryEncoding::kEucJp;
+    entry.names = names;
+    entry.indexed = true;
+    entry.searched = true;
+    entry.keep = true;
+    entry.quiet = quiet;
+    registry.entries.push_back(std::move(entry));
+  };
+  add(u"EDICT", QStringLiteral("edict"), core::EdictRegistryNames::kNone,
+      false);
+  add(u"ENAMDICT", QStringLiteral("enamdict"),
+      core::EdictRegistryNames::kNamesOnly, true);
+  return registry;
+}
+
 QString resolve_registry_path(const QString& path,
                               const QString& config_directory) {
   if (path.isEmpty()) {
@@ -2390,10 +2412,16 @@ bool MainWindow::has_kanji_lookup() const noexcept {
 }
 
 bool MainWindow::load_edict_configuration(const QString& registry_path,
-                                          OpenMode mode) {
+                                          OpenMode mode,
+                                          const QString& packaged_data_directory) {
   if (edict_registry_path_.isEmpty()) edict_registry_path_ = absolute_document_path(registry_path);
   try {
-    return configure_edict_registry(registry_path, read_edict_registry_snapshot(registry_path).registry,
+    const QFileInfo registry_file(registry_path);
+    const bool configured = registry_file.exists() || registry_file.isSymLink();
+    auto registry = configured || packaged_data_directory.isEmpty()
+                        ? read_edict_registry_snapshot(registry_path).registry
+                        : packaged_edict_registry(packaged_data_directory);
+    return configure_edict_registry(registry_path, std::move(registry),
                                     nullptr, true, mode);
   } catch (const std::exception& error) {
     if (mode == OpenMode::kInteractive) show_error(tr("Could not load dictionary configuration"), error);
@@ -2504,6 +2532,10 @@ void MainWindow::manage_edict_registry() {
     if (!self || path.isEmpty()) return;
     auto snapshot = read_edict_registry_snapshot(path);
     auto registry = snapshot.registry;
+    if (!snapshot.source && edict_resources_ &&
+        document_path_identity(path) == document_path_identity(edict_registry_path_)) {
+      registry = edict_resources_->registry;
+    }
     if (registry.wire_encoding == core::EdictRegistryWireEncoding::kAnsiBytes) {
       QStringList pages;
       for (int page = 1250; page <= 1258; ++page) pages << QString::number(page);

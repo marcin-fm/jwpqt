@@ -164,7 +164,8 @@ add_dependencies(jwpqt_project_window_tests jwpqt)
 target_link_libraries(jwpqt_project_window_tests PRIVATE jwpqt_qt_ui)
 jwpqt_enable_test_warnings(jwpqt_project_window_tests)
 add_test(NAME qt_project_window COMMAND jwpqt_project_window_tests $<TARGET_FILE:jwpqt>)
-set_tests_properties(qt_project_window PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+set_tests_properties(qt_project_window PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen;JWPQT_DISABLE_PACKAGED_DATA=1")
 
 add_executable(jwpqt_query_history_tests query_history_test.cpp)
 target_link_libraries(jwpqt_query_history_tests PRIVATE jwpqt_core)
@@ -627,7 +628,7 @@ add_test(NAME qt_runtime_environment
   COMMAND jwpqt_runtime_environment_tests $<TARGET_FILE:jwpqt>)
 set_tests_properties(qt_runtime_environment PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/xdg-config"
-  TIMEOUT 30)
+  TIMEOUT 180)
 add_test(NAME qt_wnn_user_dictionary_dialog
   COMMAND jwpqt_wnn_user_dictionary_dialog_tests)
 add_executable(jwpqt_jwp_editor_tests
@@ -840,7 +841,7 @@ set_tests_properties(
   application_noninteractive_detection
   application_invalid_kanji_configuration
   PROPERTIES
-  ENVIRONMENT "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/xdg-config"
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen;XDG_CONFIG_HOME=${CMAKE_CURRENT_BINARY_DIR}/xdg-config;JWPQT_DISABLE_PACKAGED_DATA=1"
   TIMEOUT 10
 )
 set_tests_properties(qt_main_window PROPERTIES

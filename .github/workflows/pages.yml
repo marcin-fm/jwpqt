@@ -65,6 +65,7 @@ jobs:
           cp build/jwpqt-*-Source.tar.gz site/downloads/
           test -s site/index.html
           test -s site/jwpqt.js
+          test -s site/jwpqt.data
           test -s site/jwpqt.wasm
           test -s site/qtloader.js
           test -s site/qtlogo.svg

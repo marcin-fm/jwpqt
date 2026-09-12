@@ -141,6 +141,7 @@ jobs:
           cp build/jwpqt-*-Source.tar.gz site/downloads/
           test -s site/index.html
           test -s site/jwpqt.js
+          test -s site/jwpqt.data
           test -s site/jwpqt.wasm
           test -s site/qtloader.js
           test -s site/qtlogo.svg
@@ -156,12 +157,12 @@ jobs:
 
       - name: Package WebAssembly port
         working-directory: site
-        run: cmake -E tar czf "$GITHUB_WORKSPACE/jwpqt-0.1.0-WebAssembly.tar.gz" --format=gnutar .
+        run: cmake -E tar czf "$GITHUB_WORKSPACE/JWPqt-0.1.0-WebAssembly-Noncommercial-Data.tar.gz" --format=gnutar .
 
       - uses: actions/upload-artifact@v4
         with:
-          name: jwpqt-web
-          path: jwpqt-0.1.0-WebAssembly.tar.gz
+          name: jwpqt-web-noncommercial-data
+          path: JWPqt-0.1.0-WebAssembly-Noncommercial-Data.tar.gz
           if-no-files-found: error
 
   release:

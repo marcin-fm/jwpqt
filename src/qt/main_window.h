@@ -246,7 +246,8 @@ class MainWindow : public QMainWindow {
       OpenMode mode = OpenMode::kInteractive);
   bool load_edict_configuration(
       const QString& registry_path,
-      OpenMode mode = OpenMode::kInteractive);
+      OpenMode mode = OpenMode::kInteractive,
+      const QString& packaged_data_directory = QString{});
   bool save_edict_configuration(const QString& registry_path, core::EdictRegistry registry,
       const std::optional<std::string>& expected_source, bool allow_unavailable = false,
       OpenMode mode = OpenMode::kNonInteractive);
