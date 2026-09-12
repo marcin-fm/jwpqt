@@ -74,6 +74,14 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
     form->addRow(box);
     booleans.push_back({box, member});
   };
+  auto* color_scheme = new QComboBox(display);
+  color_scheme->setObjectName(QStringLiteral("settingsColorScheme"));
+  color_scheme->addItem(tr("System"), static_cast<int>(ColorSchemePreference::kSystem));
+  color_scheme->addItem(tr("Light"), static_cast<int>(ColorSchemePreference::kLight));
+  color_scheme->addItem(tr("Dark"), static_cast<int>(ColorSchemePreference::kDark));
+  color_scheme->setCurrentIndex(color_scheme->findData(
+      static_cast<int>(settings_.color_scheme)));
+  form->addRow(tr("Color scheme"), color_scheme);
   add_boolean("settingsToolbar", tr("Show toolbar"), &ApplicationSettings::show_toolbar);
   add_boolean("settingsStatusBar", tr("Show status bar"), &ApplicationSettings::show_status_bar);
   add_boolean("settingsKanjiBar", tr("Show conversion candidate bar"), &ApplicationSettings::show_kanji_bar);
@@ -647,7 +655,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   connect(buttons, &QDialogButtonBox::accepted, this,
           [this, booleans, font_controls, dictionary_controls, code_page, history_size, conversion_choices, undo_levels, categories,
            print_family, print_size, print_auto, print_justify, ascii_family, print_patterns, print_positions, original_patterns,
-            index_type, reading_type, duplicate_open, clipboard_import,
+             index_type, reading_type, duplicate_open, color_scheme, clipboard_import,
             clipboard_export, auto_scroll_speed, default_margins, metric_units,
             line_width_mode, fixed_line_width, relax_punctuation,
             relax_small_kana,
@@ -685,6 +693,7 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
     next.maximum_undo_levels = undo_levels->value();
     next.auto_scroll_speed = auto_scroll_speed->value();
     next.duplicate_open = static_cast<DuplicateOpenBehavior>(duplicate_open->currentData().toInt());
+    next.color_scheme = static_cast<ColorSchemePreference>(color_scheme->currentData().toInt());
     next.clipboard_import = static_cast<ClipboardTextFormat>(
         clipboard_import->currentData().toInt());
     next.clipboard_export = static_cast<ClipboardTextFormat>(

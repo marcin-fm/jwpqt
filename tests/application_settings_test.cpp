@@ -156,6 +156,29 @@ void test_duplicate_open_settings() {
   rejects([&] { (void)write_application_settings(invalid); });
 }
 
+void test_color_scheme_settings() {
+  using namespace jwpqt::qt;
+  const auto defaults = read_application_settings("");
+  require(defaults.color_scheme == ColorSchemePreference::kSystem,
+          "Color-scheme default is not System");
+  for (int value = 0; value <= 2; ++value) {
+    const auto settings = read_application_settings(
+        "Jwpqt_ColorScheme=" + std::to_string(value));
+    const auto expected = static_cast<ColorSchemePreference>(value);
+    const auto encoded = write_application_settings(settings);
+    require(settings.color_scheme == expected &&
+                read_application_settings(encoded).color_scheme == expected &&
+                write_application_settings(read_application_settings(encoded)) == encoded,
+            "Color-scheme setting did not round-trip");
+  }
+  for (const auto* invalid : {"Jwpqt_ColorScheme=-1", "Jwpqt_ColorScheme=3",
+                              "Jwpqt_ColorScheme=bad\nJwpqt_ColorScheme=1"})
+    rejects([&] { (void)read_application_settings(invalid); });
+  auto invalid = defaults;
+  invalid.color_scheme = static_cast<ColorSchemePreference>(3);
+  rejects([&] { (void)write_application_settings(invalid); });
+}
+
 void test_clipboard_settings() {
   using namespace jwpqt::qt;
   const auto defaults = read_application_settings("");
@@ -506,6 +529,7 @@ int main(int argc, char** argv) {
     test_history_settings();
     test_conversion_choice_settings();
     test_duplicate_open_settings();
+    test_color_scheme_settings();
     test_clipboard_settings();
     test_autoscroll_settings();
     test_metric_unit_settings();

@@ -11,6 +11,13 @@ Every Options page scrolls within the window, so controls remain reachable on
 small or high-DPI desktops. Closing the owning workspace also closes an active
 Options dialog without applying its staged values.
 
+Color scheme offers System, Light and Dark. System follows the desktop Qt color
+scheme; the WebAssembly port follows the browser's `prefers-color-scheme` media
+query and updates immediately when it changes. Light and Dark are persistent
+overrides and ignore later system changes until System is selected again.
+Changing this setting recolors the interface and vector artwork without editing
+documents, accepting a conversion or changing Undo history.
+
 Settings are stored in jwpqt.cfg. Japanese System/Edit/List/KanjiBar/File/Big/Table
 and Bitmap fonts are not desktop menu fonts. Missing families inherit the parent
 role, including its size; the stored unavailable name and a diagnostic remain.

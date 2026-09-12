@@ -19,6 +19,7 @@
 #include <QTimer>
 
 #include "jwpqt/core/text_file.h"
+#include "application_theme.h"
 #include "main_window.h"
 #include "vector_artwork.h"
 
@@ -94,6 +95,7 @@ int main(int argc, char* argv[]) {
   QCoreApplication::setApplicationVersion(QStringLiteral(JWPQT_VERSION));
   QCoreApplication::setOrganizationName(QStringLiteral("jwpqt"));
   QApplication::setDesktopFileName(QStringLiteral("jwpqt"));
+  jwpqt::qt::initialize_application_theme();
 #ifdef Q_OS_WASM
   QFile web_font(QStringLiteral(":/jwpqt/assets/fonts/NotoSansJP-wght.ttf"));
   if (web_font.open(QIODevice::ReadOnly)) {

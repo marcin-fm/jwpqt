@@ -59,6 +59,7 @@ async function main() {
   const address = server.address();
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  await page.emulateMedia({ colorScheme: "dark" });
   const errors = [];
   page.on("console", (message) => {
     if (message.type() === "error" && message.text() !== "unwind") {
@@ -76,6 +77,19 @@ async function main() {
     const canvas = page.locator("canvas").first();
     await canvas.waitFor({ state: "visible", timeout: 30000 });
     await page.waitForTimeout(1000);
+    const waitForScheme = async (expected) => {
+      for (let attempt = 0; attempt < 40; ++attempt) {
+        const scheme = await page.evaluate(() => document.documentElement.dataset.jwpqtColorScheme);
+        if (scheme === expected) return;
+        await page.waitForTimeout(50);
+      }
+      throw new Error(`Web color scheme did not become ${expected}`);
+    };
+    await waitForScheme("dark");
+    await page.emulateMedia({ colorScheme: "light" });
+    await waitForScheme("light");
+    await page.emulateMedia({ colorScheme: "dark" });
+    await waitForScheme("dark");
     const bounds = await canvas.boundingBox();
     if (!bounds || bounds.width < 800 || bounds.height < 500) {
       throw new Error(`Web canvas is not full-sized: ${JSON.stringify(bounds)}`);

@@ -33,6 +33,7 @@
 #include <QMimeData>
 #include <QMouseEvent>
 #include <QPageLayout>
+#include <QPalette>
 #include <QPushButton>
 #include <QPrinter>
 #include <QSettings>
@@ -4210,13 +4211,21 @@ void test_application_settings_workflow(const QString& directory) {
   settings.save_recent_files = false;
   settings.save_settings_on_exit = false;
   settings.translation_code_page = 1251;
+  settings.color_scheme = ColorSchemePreference::kDark;
   require(window.apply_application_settings(settings), "Could not apply native font/settings options");
+  require(qApp->palette().color(QPalette::Window).lightness() <
+              qApp->palette().color(QPalette::WindowText).lightness(),
+          "Applying settings did not change the application palette");
+  QApplication::processEvents();
+  require(window.palette().color(QPalette::Window).lightness() <
+              window.palette().color(QPalette::WindowText).lightness(),
+          "Applying settings did not activate the dark color scheme");
   require(window.active_editor() == unicode && unicode->toPlainText() == unicode_text &&
           window.document_modified() && unicode->document()->isUndoAvailable() &&
           native->font().pixelSize() == 24 && unicode->font().pixelSize() == 24 &&
           native->textCursor().anchor() == 1 && native->textCursor().position() == 2 &&
-          existing_query.edit()->font().pixelSize() == 18 &&
-          unicode->verticalScrollBarPolicy() == Qt::ScrollBarAlwaysOff &&
+           existing_query.edit()->font().pixelSize() == 18 &&
+           unicode->verticalScrollBarPolicy() == Qt::ScrollBarAlwaysOff &&
           window.findChild<QToolBar*>(QStringLiteral("mainToolBar"))->isHidden() && window.statusBar()->isHidden(),
           "Applying fonts lost editor state or failed to update existing widgets");
   auto* candidates = window.findChild<QListWidget*>(QStringLiteral("conversionCandidates"));
@@ -4319,8 +4328,9 @@ void test_application_settings_workflow(const QString& directory) {
   require(window.apply_application_settings(accepted), "Could not restore preferences after import test");
   find_action(window, "saveSettingsAction")->trigger();
   require(read_application_settings_file(settings_path).fonts[file_role].size == 26 &&
-          read_bytes(settings_path).contains("Future_Option = untouched"),
-          "Save Settings changed destination after an import or lost retained fields");
+           read_application_settings_file(settings_path).color_scheme == ColorSchemePreference::kDark &&
+           read_bytes(settings_path).contains("Future_Option = untouched"),
+           "Save Settings changed destination after an import or lost retained fields");
 
   const auto before = write_application_settings(window.application_settings());
   auto invalid = window.application_settings();
@@ -4335,6 +4345,9 @@ void test_application_settings_workflow(const QString& directory) {
           "Settings overwrote their own open document");
   require(read_bytes(history_path) == history_before && !window.recent_documents().empty(),
           "Disabling recent-file persistence wrote history or disabled the in-memory list");
+  auto system_theme = window.application_settings();
+  system_theme.color_scheme = ColorSchemePreference::kSystem;
+  require(window.apply_application_settings(system_theme), "Could not restore the system color scheme");
 }
 
 void test_application_settings_preview(const QString& directory) {

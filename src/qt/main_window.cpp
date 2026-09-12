@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "main_window.h"
+
+#include "application_theme.h"
 #include "rare_kanji_delegate.h"
 #include "window_geometry.h"
 #include "session_io.h"
@@ -1669,6 +1671,7 @@ bool MainWindow::apply_application_settings(const ApplicationSettings& settings,
         wnn_resources_->preferences.resize(
             static_cast<std::size_t>(next.conversion_choices));
       application_settings_ = std::move(next);
+      set_application_color_scheme(application_settings_.color_scheme);
       for (const auto& state : documents_)
         state->editor_->set_selection_autoscroll(
             application_settings_.auto_scroll,

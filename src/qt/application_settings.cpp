@@ -269,6 +269,11 @@ ApplicationSettings read_application_settings(std::string_view text,
         result.duplicate_open = static_cast<DuplicateOpenBehavior>(
             core::parse_jwp_setting_integer(entry.value, 0, 2));
       }
+      if (name.empty() && core::JwpConfigurationKey{"Jwpqt_ColorScheme", ""}.matches(entry.name)) {
+        name = "Jwpqt_ColorScheme";
+        result.color_scheme = static_cast<ColorSchemePreference>(
+            core::parse_jwp_setting_integer(entry.value, 0, 2));
+      }
       if (name.empty() && core::JwpConfigurationKey{"AutoScroll_Speed", "scroll_speed"}.matches(entry.name)) {
         name = "AutoScroll_Speed";
         result.auto_scroll_speed = static_cast<int>(
@@ -401,6 +406,9 @@ std::string write_application_settings(const ApplicationSettings& settings) {
   if (settings.duplicate_open < DuplicateOpenBehavior::kOpenAnother ||
       settings.duplicate_open > DuplicateOpenBehavior::kPrompt)
     throw core::JwpConfigurationError("Unknown duplicate-open behavior");
+  if (settings.color_scheme < ColorSchemePreference::kSystem ||
+      settings.color_scheme > ColorSchemePreference::kDark)
+    throw core::JwpConfigurationError("Unknown color scheme preference");
   if (settings.line_width_mode < LineWidthMode::kDynamic ||
       settings.line_width_mode > LineWidthMode::kPrinter)
     throw core::JwpConfigurationError("Unknown document line-width mode");
@@ -505,6 +513,8 @@ std::string write_application_settings(const ApplicationSettings& settings) {
   updates.push_back({{"AutoScroll_Speed", "scroll_speed"}, std::to_string(settings.auto_scroll_speed)});
   updates.push_back({{"DoubleOpenBehavior", "double_open"},
                      std::to_string(static_cast<int>(settings.duplicate_open))});
+  updates.push_back({{"Jwpqt_ColorScheme", ""},
+                     std::to_string(static_cast<int>(settings.color_scheme))});
   updates.push_back({{"LineWidth_Mode", "width_mode"},
                      std::to_string(static_cast<int>(settings.line_width_mode))});
   updates.push_back({{"LineWidth_Fixed", "char_width"},

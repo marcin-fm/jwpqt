@@ -154,6 +154,13 @@ target_link_libraries(jwpqt_application_settings_tests PRIVATE jwpqt_qt_support)
 jwpqt_enable_test_warnings(jwpqt_application_settings_tests)
 add_test(NAME qt_application_settings COMMAND jwpqt_application_settings_tests)
 
+add_executable(jwpqt_application_theme_tests application_theme_test.cpp)
+target_link_libraries(jwpqt_application_theme_tests PRIVATE jwpqt_qt_ui)
+jwpqt_enable_test_warnings(jwpqt_application_theme_tests)
+add_test(NAME qt_application_theme COMMAND jwpqt_application_theme_tests)
+set_tests_properties(qt_application_theme PROPERTIES
+  ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 10)
+
 add_executable(jwpqt_project_workspace_tests project_workspace_test.cpp)
 target_link_libraries(jwpqt_project_workspace_tests PRIVATE jwpqt_qt_support)
 jwpqt_enable_test_warnings(jwpqt_project_workspace_tests)

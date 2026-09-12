@@ -54,6 +54,8 @@ if(EMSCRIPTEN)
 endif()
 
 set(jwpqt_qt_ui_sources
+  application_theme.cpp
+  application_theme.h
   window_geometry.cpp
   window_geometry.h
   help_window.cpp

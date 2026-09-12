@@ -284,6 +284,10 @@ or the explicit project API options. Recent project entries reopen as projects.
 font inheritance, toolbar/status/candidate visibility, scrollbar policies,
 candidate-bar position, default JWP code page, dictionary search policies and
 exit/recent-file/query-history persistence and history capacity.
+The Color scheme choice defaults to **System**. In WebAssembly that follows the
+browser's `prefers-color-scheme` setting, including live changes; **Light** and
+**Dark** are persistent overrides. Desktop builds also accept the overrides
+while System continues to follow Qt's platform scheme.
 Desktop menu fonts are unchanged. Character Table stays at 16 logical pixels;
 the large character fits its available pane as the window is resized. Unavailable
 font families inherit their parent role's family and size, with their original
