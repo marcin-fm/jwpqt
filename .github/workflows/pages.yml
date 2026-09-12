@@ -62,7 +62,7 @@ jobs:
           cmake --install build --prefix "$GITHUB_WORKSPACE/site"
           cmake --build build --target package_source --parallel 2
           mkdir -p site/downloads
-          cp build/jwpqt-*-Source.tar.gz site/downloads/
+          cp build/jwpqt-*-Source-Noncommercial-Data.tar.gz site/downloads/
           test -s site/index.html
           test -s site/jwpqt.js
           test -s site/jwpqt.data
@@ -72,7 +72,8 @@ jobs:
           test -s site/licenses/NotoSansJP-OFL.txt
           test -s site/licenses/gnugpl.txt
           test -s site/licenses/_cpright.txt
-          test -s site/downloads/jwpqt-*-Source.tar.gz
+          test -s site/share/doc/jwpqt/RELEASE_NOTES.md
+          test -s site/downloads/jwpqt-*-Source-Noncommercial-Data.tar.gz
 
       - name: Smoke test WebAssembly port
         env:

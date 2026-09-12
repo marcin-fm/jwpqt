@@ -14,6 +14,7 @@ const requiredFiles = [
   "licenses/NotoSansJP-OFL.txt",
   "licenses/_cpright.txt",
   "licenses/gnugpl.txt",
+  "share/doc/jwpqt/RELEASE_NOTES.md",
 ];
 
 for (const relativePath of requiredFiles) {

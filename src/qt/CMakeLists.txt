@@ -124,7 +124,7 @@ endif()
 
 add_library(jwpqt_qt_ui STATIC ${jwpqt_qt_ui_sources})
 
-target_compile_definitions(jwpqt_qt_ui PUBLIC JWPQT_VERSION="${PROJECT_VERSION}")
+target_compile_definitions(jwpqt_qt_ui PUBLIC JWPQT_VERSION="${JWPQT_RELEASE_VERSION}")
 qt_add_resources(jwpqt_qt_ui handbook_assets
   PREFIX "/jwpqt/help"
   BASE "${PROJECT_SOURCE_DIR}/docs/handbook"
@@ -281,7 +281,7 @@ set_target_properties(jwpqt PROPERTIES
   MACOSX_BUNDLE_BUNDLE_NAME "JWPqt"
   MACOSX_BUNDLE_GUI_IDENTIFIER "org.jwpqt.JWPqt"
   MACOSX_BUNDLE_ICON_FILE "jwpqt.icns"
-  MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+  MACOSX_BUNDLE_SHORT_VERSION_STRING "${JWPQT_RELEASE_VERSION}"
   MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
 )
 

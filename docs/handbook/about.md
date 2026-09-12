@@ -22,10 +22,12 @@ specific to third-party components. Those original notices are not replaced by
 this summary.
 
 Qt is dynamically linked and separately licensed; consult the license supplied
-with your distribution's Qt packages. Optional WNN, EDICT, KANJIDIC-derived,
-SKIP, frequency and radical/stroke data have their own notices and conditions.
-Their inclusion in an old archive does not make them GPL program data. They are
-not included in the native package and are never downloaded automatically.
+with your distribution's Qt packages. WNN, EDICT, KANJIDIC-derived, SKIP,
+frequency and radical/stroke data have their own notices and conditions. Normal
+2.00 packages carry the original lookup payloads as separate, unmodified files
+under those terms; their inclusion does not make them GPL program data.
+Data-free builds omit the restricted payloads, and nothing is downloaded
+automatically.
 
 ## Support and Diagnostics
 

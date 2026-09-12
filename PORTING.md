@@ -1,7 +1,7 @@
 # Porting jwpqt
 
-jwpqt is the audited native Qt 6 port of the JWPxp 1.67 Win32 application. It
-was developed in incremental, tested slices. The five recovered JWPce/JWPxp
+jwpqt 2.00 is the audited native Qt 6 port of the JWPxp 1.67 Win32 application.
+It was developed in incremental, tested slices. The six recovered JWPce/JWPxp
 release commits and their tags remain the historical base; native port work
 begins after `jwpxp-1.67` and now targets Linux, Windows, macOS, and WebAssembly.
 
@@ -27,72 +27,72 @@ git archive --format=tar.gz --output=/srv/tmp/jwpxp-1.67.tar.gz jwpxp-1.67
 
 ## Implementation history
 
-1. `980db33` adds the Qt 6 application shell, a strict UTF-8 core, atomic file
+1. `47368ee59` adds the Qt 6 application shell, a strict UTF-8 core, atomic file
    replacement through `QSaveFile`, and a basic open/edit/save path.
-2. `4a50fbe` extracts reversible JIS X 0208 pair transformations for EUC-JP
+2. `a3c268690` extracts reversible JIS X 0208 pair transformations for EUC-JP
    and Shift-JIS from the legacy conversion code.
-3. `3d9a5f1` maps the 6,892-character legacy JIS repertoire to and from Unicode
+3. `79be4daf0` maps the 6,892-character legacy JIS repertoire to and from Unicode
    using the recovered JWP mapping data and canonical duplicate ordering.
-4. `883bd41` adds strict full-text EUC-JP and Shift-JIS codecs over those
+4. `82b5b4fd7` adds strict full-text EUC-JP and Shift-JIS codecs over those
    primitives.
-5. `b1fa787` parses and canonically writes the portable B1, B2, and J1.20 JWP
+5. `4422cc060` parses and canonically writes the portable B1, B2, and J1.20 JWP
    document containers.
-6. `9e9ce3e` maps the recovered CP1250 through CP1258 extension tables.
-7. `c7fcf41` bridges complete JWP text-token streams to and from Unicode while
+6. `60aa74c07` maps the recovered CP1250 through CP1258 extension tables.
+7. `c1cfcf03d` bridges complete JWP text-token streams to and from Unicode while
    preserving legacy canonicalization.
-8. `ce1ac01` adds checked paragraph/document mutation with the legacy split,
+8. `2b482cbb1` adds checked paragraph/document mutation with the legacy split,
    join, formatting, and hard-page-break semantics.
-9. `e8d9236` adds bounded document transactions, undo/redo, caret restoration,
+9. `c907dd0c2` adds bounded document transactions, undo/redo, caret restoration,
    and legacy typing/deletion coalescing.
-10. `95e2937` adds paragraph-local forward/backward search, legacy ASCII/JASCII
+10. `a7ea317ea` adds paragraph-local forward/backward search, legacy ASCII/JASCII
     comparison, and strongly exception-safe replacement.
-11. `b44feb9` maps flat Unicode edits to checked paragraph mutations while
+11. `f07b4552e` maps flat Unicode edits to checked paragraph mutations while
     preserving formatting and protecting structural hard page breaks.
-12. `984829a` adds atomic native file I/O for complete JWP containers.
-13. `74d39dc` names and parses the recovered CP1250 through CP1258 tables.
-14. `8258437` opens, edits, and saves JWP documents in the native Qt window
+12. `b34e665af` adds atomic native file I/O for complete JWP containers.
+13. `d89e1b8a3` names and parses the recovered CP1250 through CP1258 tables.
+14. `f937e994f` opens, edits, and saves JWP documents in the native Qt window
     while preserving metadata, paragraph formatting, and hard page breaks. Its
     explicit code-page selector can be set before a file is opened.
-15. `4c5d529` exposes Find, Find Next, and Find Previous for both plain text and
+15. `3471bcc2a` exposes Find, Find Next, and Find Previous for both plain text and
     JWP documents, including legacy ASCII/JASCII comparison and bounded wrap.
-16. `748d9fb` enumerates non-overlapping document matches independently of
+16. `e981d3337` enumerates non-overlapping document matches independently of
     cursor direction and wrapping for deterministic whole-document operations.
-17. `dbf1599` exposes Replace Next and Replace All natively. JWP
+17. `98bb426d9` exposes Replace Next and Replace All natively. JWP
     replacements preserve structure and metadata, and each accepted occurrence
     remains independently undoable as in JWPxp.
-18. `1ef8e06` routes JWP edits through portable transaction history.
+18. `484e16882` routes JWP edits through portable transaction history.
     Undo and redo restore the complete JWP document and caret, consecutive
     typing/deletion coalesces, Replace All retains one entry per occurrence,
     saves retain history, and both menu and context-menu actions use it.
-19. `2f56f44` extracts the recovered desktop romaji-to-kana state machine,
+19. `a1ddf2f2b` extracts the recovered desktop romaji-to-kana state machine,
     including direct, compound, symbol, case, pending, and consonant behavior.
-20. `07c0f82` parses and validates the recovered WNN index/data wire formats
+20. `3a7c387b8` parses and validates the recovered WNN index/data wire formats
     without native-ABI assumptions or bundled dictionary payloads.
-21. `1de61c1` reproduces ordered WNN exact, special-stem, and conjugated
+21. `6e01bb98f` reproduces ordered WNN exact, special-stem, and conjugated
     candidate lookup, suffix attachment, extension checks, and stable duplicate
     removal over the portable dictionary model.
-22. `90e1393` parses and writes the recovered 8-byte `user.sel` records,
+22. `9b3a49966` parses and writes the recovered 8-byte `user.sel` records,
     restores valid candidate offsets, and reproduces the fixed-capacity learning
     and eviction behavior without native structs.
-23. `3e6ccc4` optionally loads `user.sel`, preserves partial legacy files
+23. `192b03b7f` optionally loads `user.sel`, preserves partial legacy files
     through the portable parser, and atomically replaces changed preferences
     without clearing dirty state on failure.
-24. `44de037` starts WNN conversion from stored preferences, repairs stale
+24. `7ec0cf80f` starts WNN conversion from stored preferences, repairs stale
     offsets, wraps candidate cycling in both directions, learns choices, and
     terminates explicitly through accept or cancel.
-25. `15d485e` replaces selected JWP kana with WNN candidates, tracks
+25. `fa653cefa` replaces selected JWP kana with WNN candidates, tracks
     variable-length selections and caret direction, groups all cycling into one
     undo entry, and rolls back safely on controller failure.
-26. `967dd64` makes the native Qt window load explicit WNN resources, convert
+26. `b63eaf95f` makes the native Qt window load explicit WNN resources, convert
     same-paragraph JWP selections, cycle candidates with Space or Shift+Space,
     accept the displayed candidate with Enter or Escape, and atomically persist
     learned preferences under an explicit or XDG user-data path.
-27. `733d955` makes the native JWP editor expose an explicit Kana Input mode
+27. `74ace15ee` makes the native JWP editor expose an explicit Kana Input mode
     that sends
     printable desktop romaji through the portable composer, inserts recovered
     hiragana and katakana tokens through synchronized document history, and
     resolves or discards pending composition at command and document boundaries.
-28. `580ad62` makes the portable WNN session reproduce automatic conversion
+28. `7240eed1b` makes the portable WNN session reproduce automatic conversion
     policy: wait while
     a complete key can grow, convert a terminal complete key, or back off to the
     longest valid prefix. Prepared prefix transactions retain a caret after the
@@ -395,7 +395,7 @@ the WebAssembly target replaces local path ownership with explicit browser
 upload/download and persistent IndexedDB storage, and excludes JPR workspaces
 and printing where browser/Qt platform contracts cannot support them.
 
-GitHub Actions build all four ports on demand and for `v*` tags. A separate
+GitHub Actions build all four ports on demand and for `v*` release tags. A separate
 workflow publishes the tested Web static site and matching corresponding source
 to GitHub Pages from `master`. The command-inventory regression, Linux CTest
 suites, hosted platform builds, and repository-owned browser smoke guard this

@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(jwpqt VERSION 0.1.0 LANGUAGES CXX)
+project(jwpqt VERSION 2.0.0 LANGUAGES CXX)
+
+set(JWPQT_RELEASE_VERSION "2.00")
 
 if(WIN32)
   enable_language(RC)
@@ -48,6 +50,13 @@ if(JWPQT_BUNDLE_LEGACY_DATA)
   endforeach()
 endif()
 
+set(jwpqt_package_suffix "")
+if(JWPQT_BUNDLE_LEGACY_DATA)
+  set(jwpqt_package_suffix "-noncommercial-data")
+endif()
+set(JWPQT_PACKAGE_FILE_NAME
+    "jwpqt-${JWPQT_RELEASE_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}${jwpqt_package_suffix}")
+
 add_subdirectory(src/core)
 add_subdirectory(src/qt)
 
@@ -56,7 +65,8 @@ if(BUILD_TESTING)
 endif()
 
 install(DIRECTORY docs/handbook/ DESTINATION "${CMAKE_INSTALL_DOCDIR}/handbook")
-install(FILES README.md PORTING.md DESTINATION "${CMAKE_INSTALL_DOCDIR}")
+install(FILES README.md PORTING.md RELEASE_NOTES.md
+        DESTINATION "${CMAKE_INSTALL_DOCDIR}")
 install(FILES docs/legal/gnugpl.txt DESTINATION "${CMAKE_INSTALL_DOCDIR}/handbook")
 install(FILES docs/legal/original-notices.txt
         DESTINATION "${CMAKE_INSTALL_DOCDIR}/handbook" RENAME "_cpright.txt")
@@ -75,7 +85,7 @@ if(JWPQT_BUNDLE_LEGACY_DATA)
 else()
   set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Native Qt Japanese word processor")
 endif()
-set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_VERSION "${JWPQT_RELEASE_VERSION}")
 set(CPACK_RESOURCE_FILE_LICENSE "${PROJECT_SOURCE_DIR}/docs/legal/gnugpl.txt")
 if(WIN32)
   set(CPACK_GENERATOR "ZIP")
@@ -84,16 +94,16 @@ elseif(APPLE)
 else()
   set(CPACK_GENERATOR "TGZ")
 endif()
-set(jwpqt_package_suffix "")
-if(JWPQT_BUNDLE_LEGACY_DATA)
-  set(jwpqt_package_suffix "-noncommercial-data")
-endif()
-set(CPACK_PACKAGE_FILE_NAME
-    "jwpqt-${PROJECT_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}${jwpqt_package_suffix}")
+set(CPACK_PACKAGE_FILE_NAME "${JWPQT_PACKAGE_FILE_NAME}")
 set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY ON)
 set(CPACK_PACKAGING_INSTALL_PREFIX "/")
 set(CPACK_SOURCE_GENERATOR "TGZ")
-set(CPACK_SOURCE_PACKAGE_FILE_NAME "jwpqt-${PROJECT_VERSION}-Source")
+if(JWPQT_BUNDLE_LEGACY_DATA)
+  set(CPACK_SOURCE_PACKAGE_FILE_NAME
+      "jwpqt-${JWPQT_RELEASE_VERSION}-Source-Noncommercial-Data")
+else()
+  set(CPACK_SOURCE_PACKAGE_FILE_NAME "jwpqt-${JWPQT_RELEASE_VERSION}-Source")
+endif()
 set(CPACK_SOURCE_IGNORE_FILES "/[.]git/;/[.]serena/;/[.]local/;/[.]playwright-mcp/;/node_modules/;/_CPack_Packages/;/CMakeFiles/;CMakeCache[.]txt$;[.]swp$;~$")
 if(NOT JWPQT_BUNDLE_LEGACY_DATA)
   list(APPEND CPACK_SOURCE_IGNORE_FILES

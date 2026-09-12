@@ -9,6 +9,9 @@ on:
 permissions:
   contents: write
 
+env:
+  JWPQT_RELEASE_VERSION: "2.00"
+
 jobs:
   desktop:
     name: ${{ matrix.name }}
@@ -35,6 +38,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Validate release tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: test "$GITHUB_REF_NAME" = "v${JWPQT_RELEASE_VERSION}"
 
       - uses: actions/setup-python@v5
         with:
@@ -97,6 +105,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate release tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: test "$GITHUB_REF_NAME" = "v${JWPQT_RELEASE_VERSION}"
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -138,7 +150,7 @@ jobs:
           cmake --install build --prefix "$GITHUB_WORKSPACE/site"
           cmake --build build --target package_source --parallel 2
           mkdir -p site/downloads
-          cp build/jwpqt-*-Source.tar.gz site/downloads/
+          cp build/jwpqt-*-Source-Noncommercial-Data.tar.gz site/downloads/
           test -s site/index.html
           test -s site/jwpqt.js
           test -s site/jwpqt.data
@@ -148,7 +160,8 @@ jobs:
           test -s site/licenses/NotoSansJP-OFL.txt
           test -s site/licenses/gnugpl.txt
           test -s site/licenses/_cpright.txt
-          test -s site/downloads/jwpqt-*-Source.tar.gz
+          test -s site/share/doc/jwpqt/RELEASE_NOTES.md
+          test -s site/downloads/jwpqt-*-Source-Noncommercial-Data.tar.gz
 
       - name: Smoke test WebAssembly port
         env:
@@ -157,12 +170,12 @@ jobs:
 
       - name: Package WebAssembly port
         working-directory: site
-        run: cmake -E tar czf "$GITHUB_WORKSPACE/JWPqt-0.1.0-WebAssembly-Noncommercial-Data.tar.gz" --format=gnutar .
+        run: cmake -E tar czf "$GITHUB_WORKSPACE/JWPqt-${JWPQT_RELEASE_VERSION}-WebAssembly-Noncommercial-Data.tar.gz" --format=gnutar .
 
       - uses: actions/upload-artifact@v4
         with:
           name: jwpqt-web-noncommercial-data
-          path: JWPqt-0.1.0-WebAssembly-Noncommercial-Data.tar.gz
+          path: JWPqt-${{ env.JWPQT_RELEASE_VERSION }}-WebAssembly-Noncommercial-Data.tar.gz
           if-no-files-found: error
 
   release:
@@ -171,6 +184,8 @@ jobs:
     needs: [desktop, web]
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -178,4 +193,4 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: artifacts/**/*
-          generate_release_notes: true
+          body_path: RELEASE_NOTES.md

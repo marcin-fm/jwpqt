@@ -4,6 +4,9 @@ jwpqt is a native Qt 6 port of JWPxp for Linux, Windows, macOS, and WebAssembly.
 It continues the recovered JWPce/JWPxp release history while replacing the
 Win32 application layer with portable core code and a Qt application layer.
 
+Current release: **2.00**. See [`RELEASE_NOTES.md`](RELEASE_NOTES.md) for
+package names, compatibility notes, platform limitations, and verification.
+
 The native port covers the recovered JWPxp 1.67 desktop command, dialog,
 accelerator, document-format, settings, printing, help and installation
 inventory. The complete historical tree is preserved by the `jwpxp-1.67` tag,
@@ -45,7 +48,7 @@ installation or access to the user's configuration.
 ## Platform Builds
 
 The `Build all ports` GitHub Actions workflow builds Linux, Windows, macOS, and
-WebAssembly artifacts on demand and for tags matching `v*`. Tagged runs also
+WebAssembly artifacts on demand and for `v*` release tags. Tagged runs also
 publish the artifacts to a GitHub release. Linux produces a TGZ, Windows a ZIP,
 macOS a DMG, and Web a static-site TGZ. Windows and macOS packages use their
 native application icons and CMake's Qt deployment support.

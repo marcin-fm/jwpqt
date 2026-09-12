@@ -900,6 +900,8 @@ target_link_libraries(jwpqt_help_window_tests PRIVATE jwpqt_qt_ui)
 add_test(NAME qt_help_window COMMAND jwpqt_help_window_tests)
 set_tests_properties(qt_help_window PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 90)
 add_test(NAME native_delivery COMMAND "${CMAKE_COMMAND}" "-DBUILD=${CMAKE_BINARY_DIR}"
+  "-DRELEASE_VERSION=${JWPQT_RELEASE_VERSION}"
+  "-DPACKAGE_FILE_NAME=${JWPQT_PACKAGE_FILE_NAME}"
   -P "${CMAKE_CURRENT_SOURCE_DIR}/installed_delivery.cmake")
 set_tests_properties(native_delivery PROPERTIES TIMEOUT 180 RUN_SERIAL TRUE)
 add_executable(jwpqt_toolbar_tests toolbar_test.cpp)

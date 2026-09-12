@@ -14,8 +14,9 @@ function(run)
 endfunction()
 run("${CMAKE_COMMAND}" --install "${BUILD}" --prefix "${root}/installed")
 foreach(path bin/jwpqt share/applications/jwpqt.desktop share/icons/hicolor/scalable/apps/jwpqt.svg
-             share/mime/packages/jwpqt-mime.xml share/doc/jwpqt/handbook/start.md
-             share/doc/jwpqt/handbook/gnugpl.txt share/doc/jwpqt/handbook/_cpright.txt
+              share/mime/packages/jwpqt-mime.xml share/doc/jwpqt/handbook/start.md
+              share/doc/jwpqt/handbook/gnugpl.txt share/doc/jwpqt/handbook/_cpright.txt
+              share/doc/jwpqt/RELEASE_NOTES.md
              share/jwpqt/data/edict share/jwpqt/data/edict.jdx
              share/jwpqt/data/enamdict share/jwpqt/data/enamdict.jdx
              share/jwpqt/data/kanjinfo.dat share/jwpqt/data/radical.dat
@@ -24,6 +25,13 @@ foreach(path bin/jwpqt share/applications/jwpqt.desktop share/icons/hicolor/scal
     message(FATAL_ERROR "Missing installed file: ${path}")
   endif()
 endforeach()
+execute_process(COMMAND "${CMAKE_COMMAND}" -E env QT_QPA_PLATFORM=offscreen
+                "${root}/installed/bin/jwpqt" --version
+                RESULT_VARIABLE result OUTPUT_VARIABLE version_output ERROR_VARIABLE errors TIMEOUT 30)
+string(STRIP "${version_output}" version_output)
+if(NOT result STREQUAL "0" OR NOT version_output STREQUAL "jwpqt ${RELEASE_VERSION}")
+  message(FATAL_ERROR "Installed executable has the wrong version:\n${version_output}\n${errors}")
+endif()
 file(READ "${root}/installed/share/icons/hicolor/scalable/apps/jwpqt.svg" icon_contents)
 if(NOT icon_contents MATCHES "<svg[^>]*viewBox=\"0 0 64 64\"")
   message(FATAL_ERROR "Installed application icon is not the scalable SVG artwork")
@@ -67,6 +75,10 @@ if(NOT count EQUAL 1)
   message(FATAL_ERROR "Expected one native archive")
 endif()
 list(GET archives 0 archive)
+get_filename_component(archive_name "${archive}" NAME)
+if(NOT archive_name STREQUAL "${PACKAGE_FILE_NAME}.tar.gz")
+  message(FATAL_ERROR "Native archive has the wrong release name: ${archive_name}")
+endif()
 execute_process(COMMAND "${CMAKE_COMMAND}" -E tar tf "${archive}" OUTPUT_VARIABLE listing RESULT_VARIABLE result)
 if(NOT result STREQUAL "0" OR listing MATCHES "(/\\.serena/|/\\.git/)")
   message(FATAL_ERROR "Archive failed inspection or includes private metadata: ${listing}")
@@ -74,8 +86,9 @@ endif()
 foreach(required "/share/jwpqt/data/edict" "/share/jwpqt/data/edict.jdx"
                  "/share/jwpqt/data/enamdict" "/share/jwpqt/data/enamdict.jdx"
                  "/share/jwpqt/data/kanjinfo.dat" "/share/jwpqt/data/radical.dat"
-                 "/share/jwpqt/data/stroke.dat" "/share/jwpqt/data/radicals.bmp"
-                 "/share/doc/jwpqt/handbook/_cpright.txt")
+                  "/share/jwpqt/data/stroke.dat" "/share/jwpqt/data/radicals.bmp"
+                  "/share/doc/jwpqt/handbook/_cpright.txt"
+                  "/share/doc/jwpqt/RELEASE_NOTES.md")
   string(FIND "${listing}" "${required}" found)
   if(found EQUAL -1)
     message(FATAL_ERROR "Native archive is missing ${required}")
@@ -92,6 +105,13 @@ if(NOT count EQUAL 1)
   message(FATAL_ERROR "Archive layout is not relocatable")
 endif()
 list(GET packaged 0 binary)
+execute_process(COMMAND "${CMAKE_COMMAND}" -E env QT_QPA_PLATFORM=offscreen
+                "${binary}" --version RESULT_VARIABLE result
+                OUTPUT_VARIABLE version_output ERROR_VARIABLE errors TIMEOUT 30)
+string(STRIP "${version_output}" version_output)
+if(NOT result STREQUAL "0" OR NOT version_output STREQUAL "jwpqt ${RELEASE_VERSION}")
+  message(FATAL_ERROR "Packaged executable has the wrong version:\n${version_output}\n${errors}")
+endif()
 run("${CMAKE_COMMAND}" -E env QT_QPA_PLATFORM=offscreen
     "${binary}" --handbook --smoke-test --config-dir "${root}/config" --user-data-dir "${root}/data")
 run("${CPACK}" --config "${BUILD}/CPackSourceConfig.cmake" -G TGZ -B "${root}/source")
@@ -107,7 +127,8 @@ if(NOT result STREQUAL "0" OR listing MATCHES "/[.](git|serena)/")
   message(FATAL_ERROR "Source archive failed inspection or includes private metadata")
 endif()
 foreach(required "/CMakeLists.txt" "/src/qt/help_window.cpp" "/src/core/jwp_document.cpp"
-                 "/docs/handbook/start.md" "/docs/legal/gnugpl.txt"
+                  "/RELEASE_NOTES.md"
+                  "/docs/handbook/start.md" "/docs/legal/gnugpl.txt"
                  "/docs/legal/original-notices.txt")
   string(FIND "${listing}" "${required}" found)
   if(found EQUAL -1)
