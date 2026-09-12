@@ -1,0 +1,11 @@
+# Color Kanji
+
+Kanji color is a display policy for JWP-format documents. It applies a non-document foreground overlay: it does not rewrite text, paragraph formatting, selection, modified state, or undo history. This lets you use a known-kanji or course list as a visual aid while retaining ordinary editing. The overlay refreshes after relevant edits, history operations, conversion, formatting, and code-page changes. Plain Unicode documents do not receive this JWP-specific overlay.
+
+Open **Tools > Kanji Color Options** to choose whether list membership colors no characters, list **members**, or list **nonmembers**. Set the list color, and independently choose whether uncommon kanji are colored and which uncommon color to use. List coloring has precedence: when it applies to a character, the configured list color wins; otherwise uncommon coloring applies to JIS kanji in the native uncommon range. Characters outside the supported list range are not falsely treated as members.
+
+The color list itself is separate external state, normally `colkanji.lst` in the native configuration location. An absent list is a valid empty list. Malformed, truncated, non-EUC, or out-of-range list files are reported rather than partly loaded. Native list updates prepare the new display state and atomically persist the complete canonical list before publishing it, so a failed write does not silently leave screen state and disk state inconsistent.
+
+The color policy is persisted as one validated record with list mode, list color, uncommon toggle, and uncommon color. JWPqt does not coerce a damaged record field-by-field. Color choices also follow the native palette and printing/clipboard behavior where those options explicitly request persistent kanji foregrounds; selection and conversion highlights are not made part of the stored document text.
+
+Use **Make Kanji Color List**, **Append Document to Kanji Color List**, **Add or Remove Kanji**, **View Kanji Color List**, and **Clear Kanji Color List** to manage membership. They are unavailable while a WNN conversion is active; operations that consume the current JWP document finish pending kana as required. The list workflows are detailed in [Creating and Clearing a Kanji List](help:IDH_KANJI_KANJILIST). Count Kanji can filter or summarize by the same list; see [Count Kanji](help:IDH_KANJI_COUNTKANJI).

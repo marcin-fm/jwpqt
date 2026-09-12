@@ -87,6 +87,7 @@ PageLayoutDialog::PageLayoutDialog(const core::JwpDocument& document,
 
   auto* outer = new QVBoxLayout(this);
   auto* tabs = new QTabWidget(this);
+  tabs->setObjectName(QStringLiteral("pageLayoutTabs"));
   auto* margins_page = new QWidget(tabs);
   auto* margins_layout = new QFormLayout(margins_page);
   const std::array<QString, 4> margin_labels{tr("Left"), tr("Right"),
@@ -180,8 +181,17 @@ PageLayoutDialog::PageLayoutDialog(const core::JwpDocument& document,
   auto* help = buttons->button(QDialogButtonBox::Help);
   help->setObjectName(QStringLiteral("pageLayoutHelp"));
   outer->addWidget(buttons);
-  connect(help, &QPushButton::clicked, this, [this] {
-    HelpWindow::open_owner_topic(this, QStringLiteral("printing.md"));
+  const auto help_topic = [tabs] {
+    const QStringList topics = {
+        QStringLiteral("IDH_PRINT_MARGINS"), QStringLiteral("IDH_PRINT_HEADERS"),
+        QStringLiteral("IDH_PRINT_SUMMARY")};
+    return topics.value(tabs->currentIndex(), QStringLiteral("IDH_PRINT_LAYOUT"));
+  };
+  setProperty("jwpqtHelpTopic", help_topic());
+  connect(tabs, &QTabWidget::currentChanged, this,
+          [this, help_topic](int) { setProperty("jwpqtHelpTopic", help_topic()); });
+  connect(help, &QPushButton::clicked, this, [this, help_topic] {
+    HelpWindow::open_owner_topic(this, help_topic());
   });
   connect(buttons, &QDialogButtonBox::accepted, this, [this] {
     if (apply_changes()) accept();

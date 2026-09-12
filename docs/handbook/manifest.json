@@ -1,0 +1,1024 @@
+{
+  "version": 1,
+  "legacy_title": "Help for JWPce 1.42",
+  "legacy_source_sha256": "436f07a67fa27dcdedd67f95c81d9ce5e169aba4d8e2594e80cf92dcb7c4ba3d",
+  "legacy_contract_sha256": "133122ebeb22bfb3b8476a9a48066e83856b4bc3409fbdd06fcd67a3da9ee79e",
+  "release": "JWPqt 2.00",
+  "topic_count": 125,
+  "chapters": [
+    "Introduction",
+    "Installation",
+    "JWPce Interface",
+    "Entering Text",
+    "Basic Editing",
+    "Working with Kanji",
+    "Dictionary",
+    "Working with Files",
+    "Printing",
+    "Options and Settings",
+    "Fonts",
+    "Support"
+  ],
+  "topics": [
+    {
+      "id": "IDH_INTRO_WHATISJWPCE",
+      "legacy_id": "IDH_INTRO_WHATISJWPCE",
+      "chapter": "Introduction",
+      "title": "What is JWPce?",
+      "legacy_title": "What is JWPce?",
+      "file": "topics/idh_intro_whatisjwpce.md"
+    },
+    {
+      "id": "IDH_INTRO_WHO",
+      "legacy_id": "IDH_INTRO_WHO",
+      "chapter": "Introduction",
+      "title": "Who Should/Should not Consider Using JWPce",
+      "legacy_title": "Who Should/Should not Consider Using JWPce",
+      "file": "topics/idh_intro_who.md"
+    },
+    {
+      "id": "IDH_INTRO_HISTORY",
+      "legacy_id": "IDH_INTRO_HISTORY",
+      "chapter": "Introduction",
+      "title": "Historical Development",
+      "legacy_title": "Historical Development",
+      "file": "topics/idh_intro_history.md"
+    },
+    {
+      "id": "IDH_INTRO_GNU",
+      "legacy_id": "IDH_INTRO_GNU",
+      "chapter": "Introduction",
+      "title": "The GNU General Public License",
+      "legacy_title": "The GNU General Public License",
+      "file": "topics/idh_intro_gnu.md"
+    },
+    {
+      "id": "IDH_INTRO_DISCLAIMERS",
+      "legacy_id": "IDH_INTRO_DISCLAIMERS",
+      "chapter": "Introduction",
+      "title": "Disclaimers",
+      "legacy_title": "Disclaimers",
+      "file": "topics/idh_intro_disclaimers.md"
+    },
+    {
+      "id": "IDH_INTRO_ACKNOWLEGEMENTS",
+      "legacy_id": "IDH_INTRO_ACKNOWLEGEMENTS",
+      "chapter": "Introduction",
+      "title": "Acknowledgments",
+      "legacy_title": "Acknowledgments",
+      "file": "topics/idh_intro_acknowlegements.md"
+    },
+    {
+      "id": "IDH_INTRO_FEATURES",
+      "legacy_id": "IDH_INTRO_FEATURES",
+      "chapter": "Introduction",
+      "title": "JWPce Features",
+      "legacy_title": "JWPce Features",
+      "file": "topics/idh_intro_features.md"
+    },
+    {
+      "id": "IDH_INTRO_COPYRIGHTS",
+      "legacy_id": "IDH_INTRO_COPYRIGHTS",
+      "chapter": "Introduction",
+      "title": "Copyrights and Trademarks",
+      "legacy_title": "Copyrights and Trademarks",
+      "file": "topics/idh_intro_copyrights.md"
+    },
+    {
+      "id": "IDH_INSTALL_INSTALL",
+      "legacy_id": "IDH_INSTALL_INSTALL",
+      "chapter": "Installation",
+      "title": "Installation",
+      "legacy_title": "Installation",
+      "file": "topics/idh_install_install.md"
+    },
+    {
+      "id": "IDH_INSTALL_JWP",
+      "legacy_id": "IDH_INSTALL_JWP",
+      "chapter": "Installation",
+      "title": "What if I already have JWP?",
+      "legacy_title": "What if I already have JWP?",
+      "file": "topics/idh_install_jwp.md"
+    },
+    {
+      "id": "IDH_INSTALL_UPDATE",
+      "legacy_id": "IDH_INSTALL_UPDATE",
+      "chapter": "Installation",
+      "title": "Updating JWPce",
+      "legacy_title": "Updating JWPce",
+      "file": "topics/idh_install_update.md"
+    },
+    {
+      "id": "IDH_INSTALL_NETWORK",
+      "legacy_id": "IDH_INSTALL_NETWORK",
+      "chapter": "Installation",
+      "title": "Network or Multi-configuration Installation",
+      "legacy_title": "Network or Multi-configuration Installation",
+      "file": "topics/idh_install_network.md"
+    },
+    {
+      "id": "IDH_INSTALL_LANGUAGE",
+      "legacy_id": "IDH_INSTALL_LANGUAGE",
+      "chapter": "Installation",
+      "title": "International Support",
+      "legacy_title": "International Support",
+      "file": "topics/idh_install_language.md"
+    },
+    {
+      "id": "IDH_INSTALL_CONTENTS",
+      "legacy_id": "IDH_INSTALL_CONTENTS",
+      "chapter": "Installation",
+      "title": "What Should be in the Distribution?",
+      "legacy_title": "What Should be in the Distribution?",
+      "file": "topics/idh_install_contents.md"
+    },
+    {
+      "id": "IDH_INSTALL_MORE",
+      "legacy_id": "IDH_INSTALL_MORE",
+      "chapter": "Installation",
+      "title": "More About Installation",
+      "legacy_title": "More About Installation",
+      "file": "topics/idh_install_more.md"
+    },
+    {
+      "id": "IDH_INSTALL_ADVANCED",
+      "legacy_id": "IDH_INSTALL_ADVANCED",
+      "chapter": "Installation",
+      "title": "Advanced Install Dialog",
+      "legacy_title": "Advanced Install Dialog",
+      "file": "topics/idh_install_advanced.md"
+    },
+    {
+      "id": "IDH_INSTALL_CHECK",
+      "legacy_id": "IDH_INSTALL_CHECK",
+      "chapter": "Installation",
+      "title": "How to Disable or Enable the Auto-Install Check",
+      "legacy_title": "How to Disable or Enable the Auto-Install Check",
+      "file": "topics/idh_install_check.md"
+    },
+    {
+      "id": "IDH_INSTALL_CE",
+      "legacy_id": "IDH_INSTALL_CE",
+      "chapter": "Installation",
+      "title": "Windows CE",
+      "legacy_title": "Windows CE",
+      "file": "topics/idh_install_ce.md"
+    },
+    {
+      "id": "IDH_INSTALL_REMOVE",
+      "legacy_id": "IDH_INSTALL_REMOVE",
+      "chapter": "Installation",
+      "title": "Removing JWPce",
+      "legacy_title": "Removing JWPce",
+      "file": "topics/idh_install_remove.md"
+    },
+    {
+      "id": "IDH_INTERFACE_MAIN",
+      "legacy_id": "IDH_INTERFACE_MAIN",
+      "chapter": "JWPce Interface",
+      "title": "Main Display",
+      "legacy_title": "Main Display",
+      "file": "topics/idh_interface_main.md"
+    },
+    {
+      "id": "IDH_INTERFACE_SWMD",
+      "legacy_id": "IDH_INTERFACE_SWMD",
+      "chapter": "JWPce Interface",
+      "title": "Single-Window Multi-Document",
+      "legacy_title": "Single-Window Multi-Document",
+      "file": "topics/idh_interface_swmd.md"
+    },
+    {
+      "id": "IDH_INTERFACE_POINTER",
+      "legacy_id": "IDH_INTERFACE_POINTER",
+      "chapter": "JWPce Interface",
+      "title": "Pointers and Alt+tap",
+      "legacy_title": "Pointers and Alt+tap",
+      "file": "topics/idh_interface_pointer.md"
+    },
+    {
+      "id": "IDH_INTERFACE_DIALOG",
+      "legacy_id": "IDH_INTERFACE_DIALOG",
+      "chapter": "JWPce Interface",
+      "title": "Dialog Boxes",
+      "legacy_title": "Dialog Boxes",
+      "file": "topics/idh_interface_dialog.md"
+    },
+    {
+      "id": "IDH_INTERFACE_HELP",
+      "legacy_id": "IDH_INTERFACE_HELP",
+      "chapter": "JWPce Interface",
+      "title": "Help",
+      "legacy_title": "Help",
+      "file": "topics/idh_interface_help.md"
+    },
+    {
+      "id": "IDH_INTERFACE_JEDIT",
+      "legacy_id": "IDH_INTERFACE_JEDIT",
+      "chapter": "JWPce Interface",
+      "title": "Japanese Edit Controls",
+      "legacy_title": "Japanese Edit Controls",
+      "file": "topics/idh_interface_jedit.md"
+    },
+    {
+      "id": "IDH_INTERFACE_JLIST",
+      "legacy_id": "IDH_INTERFACE_JLIST",
+      "chapter": "JWPce Interface",
+      "title": "Japanese List Controls",
+      "legacy_title": "Japanese List Controls",
+      "file": "topics/idh_interface_jlist.md"
+    },
+    {
+      "id": "IDH_INTERFACE_EDITLIST",
+      "legacy_id": "IDH_INTERFACE_EDITLIST",
+      "chapter": "JWPce Interface",
+      "title": "Edit-List Controls",
+      "legacy_title": "Edit-List Controls",
+      "file": "topics/idh_interface_editlist.md"
+    },
+    {
+      "id": "IDH_INTERFACE_COLOR",
+      "legacy_id": "IDH_INTERFACE_COLOR",
+      "chapter": "JWPce Interface",
+      "title": "Choose Color Dialog Box (Windows CE)",
+      "legacy_title": "Choose Color Dialog Box (Windows CE)",
+      "file": "topics/idh_interface_color.md"
+    },
+    {
+      "id": "IDH_TEXT_EDITMODES",
+      "legacy_id": "IDH_TEXT_EDITMODES",
+      "chapter": "Entering Text",
+      "title": "Edit Modes",
+      "legacy_title": "Edit Modes",
+      "file": "topics/idh_text_editmodes.md"
+    },
+    {
+      "id": "IDH_TEXT_INPUTMODES",
+      "legacy_id": "IDH_TEXT_INPUTMODES",
+      "chapter": "Entering Text",
+      "title": "Input Modes",
+      "legacy_title": "Input Modes",
+      "file": "topics/idh_text_inputmodes.md"
+    },
+    {
+      "id": "IDH_TEXT_HIRAGANA",
+      "legacy_id": "IDH_TEXT_HIRAGANA",
+      "chapter": "Entering Text",
+      "title": "Entering Hiragana",
+      "legacy_title": "Entering Hiragana",
+      "file": "topics/idh_text_hiragana.md"
+    },
+    {
+      "id": "IDH_TEXT_KATAKANA",
+      "legacy_id": "IDH_TEXT_KATAKANA",
+      "chapter": "Entering Text",
+      "title": "Entering Katakana",
+      "legacy_title": "Entering Katakana",
+      "file": "topics/idh_text_katakana.md"
+    },
+    {
+      "id": "IDH_TEXT_JISTABLE",
+      "legacy_id": "IDH_TEXT_JISTABLE",
+      "chapter": "Entering Text",
+      "title": "Using the JIS Table",
+      "legacy_title": "Using the JIS Table",
+      "file": "topics/idh_text_jistable.md"
+    },
+    {
+      "id": "IDH_TEXT_KANATABLE",
+      "legacy_id": "IDH_TEXT_KANATABLE",
+      "chapter": "Entering Text",
+      "title": "Kana Table (Legacy)",
+      "legacy_title": "Kana Table",
+      "file": "topics/idh_text_kanatable.md"
+    },
+    {
+      "id": "IDH_TEXT_EXPLICITKANJI",
+      "legacy_id": "IDH_TEXT_EXPLICITKANJI",
+      "chapter": "Entering Text",
+      "title": "Explicit Kanji Conversion",
+      "legacy_title": "Explicit Kanji Conversion",
+      "file": "topics/idh_text_explicitkanji.md"
+    },
+    {
+      "id": "IDH_TEXT_INLINEKANJI",
+      "legacy_id": "IDH_TEXT_INLINEKANJI",
+      "chapter": "Entering Text",
+      "title": "Inline Kanji Conversion",
+      "legacy_title": "Inline Kanji Conversion",
+      "file": "topics/idh_text_inlinekanji.md"
+    },
+    {
+      "id": "IDH_TEXT_USERKANJI",
+      "legacy_id": "IDH_TEXT_USERKANJI",
+      "chapter": "Entering Text",
+      "title": "User Kana to Kanji Conversions",
+      "legacy_title": "User Kana to Kanji Conversions",
+      "file": "topics/idh_text_userkanji.md"
+    },
+    {
+      "id": "IDH_TEXT_IME",
+      "legacy_id": "IDH_TEXT_IME",
+      "chapter": "Entering Text",
+      "title": "Working with Microsoft's Global IME",
+      "legacy_title": "Working with Microsoft's Global IME",
+      "file": "topics/idh_text_ime.md"
+    },
+    {
+      "id": "IDH_EDIT_MOVING",
+      "legacy_id": "IDH_EDIT_MOVING",
+      "chapter": "Basic Editing",
+      "title": "Moving Around the Document",
+      "legacy_title": "Moving Around the Document",
+      "file": "topics/idh_edit_moving.md"
+    },
+    {
+      "id": "IDH_EDIT_WIDTH",
+      "legacy_id": "IDH_EDIT_WIDTH",
+      "chapter": "Basic Editing",
+      "title": "Text Display and Line Width",
+      "legacy_title": "Text Display and Line Width",
+      "file": "topics/idh_edit_width.md"
+    },
+    {
+      "id": "IDH_EDIT_FORMAT",
+      "legacy_id": "IDH_EDIT_FORMAT",
+      "chapter": "Basic Editing",
+      "title": "Formatting Text",
+      "legacy_title": "Formatting Text",
+      "file": "topics/idh_edit_format.md"
+    },
+    {
+      "id": "IDH_EDIT_TAB",
+      "legacy_id": "IDH_EDIT_TAB",
+      "chapter": "Basic Editing",
+      "title": "Character Placement and the Tab Key",
+      "legacy_title": "Character Placement and the Tab Key",
+      "file": "topics/idh_edit_tab.md"
+    },
+    {
+      "id": "IDH_EDIT_PARAGRAPH",
+      "legacy_id": "IDH_EDIT_PARAGRAPH",
+      "chapter": "Basic Editing",
+      "title": "Formatting Paragraphs",
+      "legacy_title": "Formatting Paragraphs",
+      "file": "topics/idh_edit_paragraph.md"
+    },
+    {
+      "id": "IDH_EDIT_SPLITTING",
+      "legacy_id": "IDH_EDIT_SPLITTING",
+      "chapter": "Basic Editing",
+      "title": "New Paragraphs and Splitting Paragraphs",
+      "legacy_title": "New Paragraphs and Splitting Paragraphs",
+      "file": "topics/idh_edit_splitting.md"
+    },
+    {
+      "id": "IDH_EDIT_SELECTING",
+      "legacy_id": "IDH_EDIT_SELECTING",
+      "chapter": "Basic Editing",
+      "title": "Selecting Text",
+      "legacy_title": "Selecting Text",
+      "file": "topics/idh_edit_selecting.md"
+    },
+    {
+      "id": "IDH_EDIT_CLIPBOARD",
+      "legacy_id": "IDH_EDIT_CLIPBOARD",
+      "chapter": "Basic Editing",
+      "title": "Using the Clipboard",
+      "legacy_title": "Using the Clipboard",
+      "file": "topics/idh_edit_clipboard.md"
+    },
+    {
+      "id": "IDH_EDIT_ENCODING",
+      "legacy_id": "IDH_EDIT_ENCODING",
+      "chapter": "Basic Editing",
+      "title": "Clipboard Encoding",
+      "legacy_title": "Clipboard Encoding",
+      "file": "topics/idh_edit_encoding.md"
+    },
+    {
+      "id": "IDH_EDIT_UNDO",
+      "legacy_id": "IDH_EDIT_UNDO",
+      "chapter": "Basic Editing",
+      "title": "Undo and Redo",
+      "legacy_title": "Undo and Redo",
+      "file": "topics/idh_edit_undo.md"
+    },
+    {
+      "id": "IDH_EDIT_SEARCH",
+      "legacy_id": "IDH_EDIT_SEARCH",
+      "chapter": "Basic Editing",
+      "title": "Search and Replace",
+      "legacy_title": "Search and Replace",
+      "file": "topics/idh_edit_search.md"
+    },
+    {
+      "id": "IDH_KANJI_CHARINFO",
+      "legacy_id": "IDH_KANJI_CHARINFO",
+      "chapter": "Working with Kanji",
+      "title": "Character Information",
+      "legacy_title": "Character Information",
+      "file": "topics/idh_kanji_charinfo.md"
+    },
+    {
+      "id": "IDH_KANJI_KANJINFO",
+      "legacy_id": "IDH_KANJI_KANJINFO",
+      "chapter": "Working with Kanji",
+      "title": "Alternate kanjinfo.dat Files",
+      "legacy_title": "Alternate kanjinfo.dat Files",
+      "file": "topics/idh_kanji_kanjinfo.md"
+    },
+    {
+      "id": "IDH_KANJI_LOOKUP",
+      "legacy_id": "IDH_KANJI_LOOKUP",
+      "chapter": "Working with Kanji",
+      "title": "Finding Kanji",
+      "legacy_title": "Finding Kanji",
+      "file": "topics/idh_kanji_lookup.md"
+    },
+    {
+      "id": "IDH_KANJI_KANJINFODAT",
+      "legacy_id": "IDH_KANJI_KANJINFODAT",
+      "chapter": "Working with Kanji",
+      "title": "Working with kanjinfo.dat",
+      "legacy_title": "Working with kanjinfo.dat",
+      "file": "topics/idh_kanji_kanjinfodat.md"
+    },
+    {
+      "id": "IDH_KANJI_RADLOOKUP",
+      "legacy_id": "IDH_KANJI_RADLOOKUP",
+      "chapter": "Working with Kanji",
+      "title": "Radical Lookup",
+      "legacy_title": "Radical Lookup",
+      "file": "topics/idh_kanji_radlookup.md"
+    },
+    {
+      "id": "IDH_KANJI_BUSHULOOKUP",
+      "legacy_id": "IDH_KANJI_BUSHULOOKUP",
+      "chapter": "Working with Kanji",
+      "title": "Bushu Lookup",
+      "legacy_title": "Bushu Lookup",
+      "file": "topics/idh_kanji_bushulookup.md"
+    },
+    {
+      "id": "IDH_KANJI_BSLOOKUP",
+      "legacy_id": "IDH_KANJI_BSLOOKUP",
+      "chapter": "Working with Kanji",
+      "title": "Bushu/Stroke Lookup",
+      "legacy_title": "Bushu/Stroke Lookup",
+      "file": "topics/idh_kanji_bslookup.md"
+    },
+    {
+      "id": "IDH_KANJI_SKIPLOOKUP",
+      "legacy_id": "IDH_KANJI_SKIPLOOKUP",
+      "chapter": "Working with Kanji",
+      "title": "SKIP Lookup",
+      "legacy_title": "SKIP Lookup",
+      "file": "topics/idh_kanji_skiplookup.md"
+    },
+    {
+      "id": "IDH_KANJI_HSLOOKUP",
+      "legacy_id": "IDH_KANJI_HSLOOKUP",
+      "chapter": "Working with Kanji",
+      "title": "Hadamitzky/Span Lookup",
+      "legacy_title": "Hadamitzky/Span Lookup",
+      "file": "topics/idh_kanji_hslookup.md"
+    },
+    {
+      "id": "IDH_KANJI_FCLOOKUP",
+      "legacy_id": "IDH_KANJI_FCLOOKUP",
+      "chapter": "Working with Kanji",
+      "title": "Four Corners Lookup",
+      "legacy_title": "Four Corners Lookup",
+      "file": "topics/idh_kanji_fclookup.md"
+    },
+    {
+      "id": "IDH_KANJI_READLOOKUP",
+      "legacy_id": "IDH_KANJI_READLOOKUP",
+      "chapter": "Working with Kanji",
+      "title": "Reading Lookup",
+      "legacy_title": "Reading Lookup",
+      "file": "topics/idh_kanji_readlookup.md"
+    },
+    {
+      "id": "IDH_KANJI_INDEXLOOKUP",
+      "legacy_id": "IDH_KANJI_INDEXLOOKUP",
+      "chapter": "Working with Kanji",
+      "title": "Index Lookup",
+      "legacy_title": "Index Lookup",
+      "file": "topics/idh_kanji_indexlookup.md"
+    },
+    {
+      "id": "IDH_KANJI_JISTABLE",
+      "legacy_id": "IDH_KANJI_JISTABLE",
+      "chapter": "Working with Kanji",
+      "title": "JIS Character Table and Selecting Characters",
+      "legacy_title": "JIS Character Table and Selecting Characters",
+      "file": "topics/idh_kanji_jistable.md"
+    },
+    {
+      "id": "IDH_KANJI_COLORKANJI",
+      "legacy_id": "IDH_KANJI_COLORKANJI",
+      "chapter": "Working with Kanji",
+      "title": "Color Kanji",
+      "legacy_title": "Color Kanji",
+      "file": "topics/idh_kanji_colorkanji.md"
+    },
+    {
+      "id": "IDH_KANJI_KANJILIST",
+      "legacy_id": "IDH_KANJI_KANJILIST",
+      "chapter": "Working with Kanji",
+      "title": "Creating and Clearing a Kanji List",
+      "legacy_title": "Creating and Clearing a Kanji List",
+      "file": "topics/idh_kanji_kanjilist.md"
+    },
+    {
+      "id": "IDH_KANJI_COLOROPTIONS",
+      "legacy_id": "IDH_KANJI_COLOROPTIONS",
+      "chapter": "Working with Kanji",
+      "title": "Color-Kanji Options",
+      "legacy_title": "Color-Kanji Options",
+      "file": "topics/idh_kanji_coloroptions.md"
+    },
+    {
+      "id": "IDH_KANJI_COUNTKANJI",
+      "legacy_id": "IDH_KANJI_COUNTKANJI",
+      "chapter": "Working with Kanji",
+      "title": "Count Kanji",
+      "legacy_title": "Count Kanji",
+      "file": "topics/idh_kanji_countkanji.md"
+    },
+    {
+      "id": "IDH_DICT_GENERAL",
+      "legacy_id": "IDH_DICT_GENERAL",
+      "chapter": "Dictionary",
+      "title": "Dictionary Introduction",
+      "legacy_title": "Dictionary Introduction",
+      "file": "topics/idh_dict_general.md"
+    },
+    {
+      "id": "IDH_DICT_SEARCHFOR",
+      "legacy_id": "IDH_DICT_SEARCHFOR",
+      "chapter": "Dictionary",
+      "title": "What you can Search for",
+      "legacy_title": "What you can Search for",
+      "file": "topics/idh_dict_searchfor.md"
+    },
+    {
+      "id": "IDH_DICT_LIMITS",
+      "legacy_id": "IDH_DICT_LIMITS",
+      "chapter": "Dictionary",
+      "title": "Limiting the Search",
+      "legacy_title": "Limiting the Search",
+      "file": "topics/idh_dict_limits.md"
+    },
+    {
+      "id": "IDH_DICT_RESULTS",
+      "legacy_id": "IDH_DICT_RESULTS",
+      "chapter": "Dictionary",
+      "title": "Searching and Results",
+      "legacy_title": "Searching and Results",
+      "file": "topics/idh_dict_results.md"
+    },
+    {
+      "id": "IDH_DICT_CODES",
+      "legacy_id": "IDH_DICT_CODES",
+      "chapter": "Dictionary",
+      "title": "Dictionary Codes",
+      "legacy_title": "Dictionary Codes",
+      "file": "topics/idh_dict_codes.md"
+    },
+    {
+      "id": "IDH_DICT_ADVANCED",
+      "legacy_id": "IDH_DICT_ADVANCED",
+      "chapter": "Dictionary",
+      "title": "Advanced Dictionary Searches",
+      "legacy_title": "Advanced Dictionary Searches",
+      "file": "topics/idh_dict_advanced.md"
+    },
+    {
+      "id": "IDH_DICT_USERDICT",
+      "legacy_id": "IDH_DICT_USERDICT",
+      "chapter": "Dictionary",
+      "title": "User Dictionary",
+      "legacy_title": "User Dictionary",
+      "file": "topics/idh_dict_userdict.md"
+    },
+    {
+      "id": "IDH_DICT_USEREDIT",
+      "legacy_id": "IDH_DICT_USEREDIT",
+      "chapter": "Dictionary",
+      "title": "Adding or Editing Entries",
+      "legacy_title": "Adding or Editing Entries",
+      "file": "topics/idh_dict_useredit.md"
+    },
+    {
+      "id": "IDH_DICT_ADDEDICT",
+      "legacy_id": "IDH_DICT_ADDEDICT",
+      "chapter": "Dictionary",
+      "title": "Adding Entries to EDICT",
+      "legacy_title": "Adding Entries to EDICT",
+      "file": "topics/idh_dict_addedict.md"
+    },
+    {
+      "id": "IDH_DICT_OPTIONS",
+      "legacy_id": "IDH_DICT_OPTIONS",
+      "chapter": "Dictionary",
+      "title": "Dictionary Options",
+      "legacy_title": "Dictionary Options",
+      "file": "topics/idh_dict_options.md"
+    },
+    {
+      "id": "IDH_DICT_DICTIONARIES",
+      "legacy_id": "IDH_DICT_DICTIONARIES",
+      "chapter": "Dictionary",
+      "title": "Dictionaries",
+      "legacy_title": "Dictionaries",
+      "file": "topics/idh_dict_dictionaries.md"
+    },
+    {
+      "id": "IDH_DICT_ADDDICT",
+      "legacy_id": "IDH_DICT_ADDDICT",
+      "chapter": "Dictionary",
+      "title": "Adding or Editing Dictionaries",
+      "legacy_title": "Adding or Editing Dictionaries",
+      "file": "topics/idh_dict_adddict.md"
+    },
+    {
+      "id": "IDH_DICT_CLASSICAL",
+      "legacy_id": "IDH_DICT_CLASSICAL",
+      "chapter": "Dictionary",
+      "title": "The Classical Japanese Dictionary",
+      "legacy_title": "The Classical Japanese Dictionary",
+      "file": "topics/idh_dict_classical.md"
+    },
+    {
+      "id": "IDH_FILE_TYPES",
+      "legacy_id": "IDH_FILE_TYPES",
+      "chapter": "Working with Files",
+      "title": "File Types",
+      "legacy_title": "File Types",
+      "file": "topics/idh_file_types.md"
+    },
+    {
+      "id": "IDH_FILE_CONTENTS",
+      "legacy_id": "IDH_FILE_CONTENTS",
+      "chapter": "Working with Files",
+      "title": "What is saved with a JWPce File?",
+      "legacy_title": "What is saved with a JWPce File?",
+      "file": "topics/idh_file_contents.md"
+    },
+    {
+      "id": "IDH_FILE_ENCODING",
+      "legacy_id": "IDH_FILE_ENCODING",
+      "chapter": "Working with Files",
+      "title": "Japanese Encoding Systems",
+      "legacy_title": "Japanese Encoding Systems",
+      "file": "topics/idh_file_encoding.md"
+    },
+    {
+      "id": "IDH_FILE_CHANGE",
+      "legacy_id": "IDH_FILE_CHANGE",
+      "chapter": "Working with Files",
+      "title": "Changing the Current File",
+      "legacy_title": "Changing the Current File",
+      "file": "topics/idh_file_change.md"
+    },
+    {
+      "id": "IDH_FILE_NEW",
+      "legacy_id": "IDH_FILE_NEW",
+      "chapter": "Working with Files",
+      "title": "Creating a New File",
+      "legacy_title": "Creating a New File",
+      "file": "topics/idh_file_new.md"
+    },
+    {
+      "id": "IDH_FILE_OPEN",
+      "legacy_id": "IDH_FILE_OPEN",
+      "chapter": "Working with Files",
+      "title": "Opening an Existing File",
+      "legacy_title": "Opening an Existing File",
+      "file": "topics/idh_file_open.md"
+    },
+    {
+      "id": "IDH_FILE_DUPLICATE",
+      "legacy_id": "IDH_FILE_DUPLICATE",
+      "chapter": "Working with Files",
+      "title": "Duplicate Files",
+      "legacy_title": "Duplicate Files",
+      "file": "topics/idh_file_duplicate.md"
+    },
+    {
+      "id": "IDH_FILE_PROBLEMS",
+      "legacy_id": "IDH_FILE_PROBLEMS",
+      "chapter": "Working with Files",
+      "title": "Common Difficulties Opening Files",
+      "legacy_title": "Common Difficulties Opening Files",
+      "file": "topics/idh_file_problems.md"
+    },
+    {
+      "id": "IDH_FILE_REVERT",
+      "legacy_id": "IDH_FILE_REVERT",
+      "chapter": "Working with Files",
+      "title": "Opening the Same File Again",
+      "legacy_title": "Opening the Same File Again",
+      "file": "topics/idh_file_revert.md"
+    },
+    {
+      "id": "IDH_FILE_CLOSE",
+      "legacy_id": "IDH_FILE_CLOSE",
+      "chapter": "Working with Files",
+      "title": "Closing Files",
+      "legacy_title": "Closing Files",
+      "file": "topics/idh_file_close.md"
+    },
+    {
+      "id": "IDH_FILE_EXIT",
+      "legacy_id": "IDH_FILE_EXIT",
+      "chapter": "Working with Files",
+      "title": "The Exit Command",
+      "legacy_title": "The Exit Command",
+      "file": "topics/idh_file_exit.md"
+    },
+    {
+      "id": "IDH_FILE_SAVE",
+      "legacy_id": "IDH_FILE_SAVE",
+      "chapter": "Working with Files",
+      "title": "Saving Files",
+      "legacy_title": "Saving Files",
+      "file": "topics/idh_file_save.md"
+    },
+    {
+      "id": "IDH_FILE_BACKUP",
+      "legacy_id": "IDH_FILE_BACKUP",
+      "chapter": "Working with Files",
+      "title": "Backup Files",
+      "legacy_title": "Backup Files",
+      "file": "topics/idh_file_backup.md"
+    },
+    {
+      "id": "IDH_FILE_TEMP",
+      "legacy_id": "IDH_FILE_TEMP",
+      "chapter": "Working with Files",
+      "title": "Temporary Files and System Failures",
+      "legacy_title": "Temporary Files and System Failures",
+      "file": "topics/idh_file_temp.md"
+    },
+    {
+      "id": "IDH_FILE_DELETE",
+      "legacy_id": "IDH_FILE_DELETE",
+      "chapter": "Working with Files",
+      "title": "Deleting Files",
+      "legacy_title": "Deleting Files",
+      "file": "topics/idh_file_delete.md"
+    },
+    {
+      "id": "IDH_FILE_JFC",
+      "legacy_id": "IDH_FILE_JFC",
+      "chapter": "Working with Files",
+      "title": "JFC Files",
+      "legacy_title": "JFC Files",
+      "file": "topics/idh_file_jfc.md"
+    },
+    {
+      "id": "IDH_FILE_PROJECT",
+      "legacy_id": "IDH_FILE_PROJECT",
+      "chapter": "Working with Files",
+      "title": "Working with Projects",
+      "legacy_title": "Working with Projects",
+      "file": "topics/idh_file_project.md"
+    },
+    {
+      "id": "IDH_PRINT_GENERAL",
+      "legacy_id": "IDH_PRINT_GENERAL",
+      "chapter": "Printing",
+      "title": "Printing",
+      "legacy_title": "Printing",
+      "file": "topics/idh_print_general.md"
+    },
+    {
+      "id": "IDH_PRINT_PRINTING",
+      "legacy_id": "IDH_PRINT_PRINTING",
+      "chapter": "Printing",
+      "title": "Actually Printing Something",
+      "legacy_title": "Actually Printing Something",
+      "file": "topics/idh_print_printing.md"
+    },
+    {
+      "id": "IDH_PRINT_COLORKANJI",
+      "legacy_id": "IDH_PRINT_COLORKANJI",
+      "chapter": "Printing",
+      "title": "Printing and Color Kanji",
+      "legacy_title": "Printing and Color Kanji",
+      "file": "topics/idh_print_colorkanji.md"
+    },
+    {
+      "id": "IDH_PRINT_PAGEBREAK",
+      "legacy_id": "IDH_PRINT_PAGEBREAK",
+      "chapter": "Printing",
+      "title": "Page Breaks and Formatting",
+      "legacy_title": "Page Breaks and Formatting",
+      "file": "topics/idh_print_pagebreak.md"
+    },
+    {
+      "id": "IDH_PRINT_LAYOUT",
+      "legacy_id": "IDH_PRINT_LAYOUT",
+      "chapter": "Printing",
+      "title": "The Page Layout Dialog Box",
+      "legacy_title": "The Page Layout Dialog Box",
+      "file": "topics/idh_print_layout.md"
+    },
+    {
+      "id": "IDH_PRINT_MARGINS",
+      "legacy_id": "IDH_PRINT_MARGINS",
+      "chapter": "Printing",
+      "title": "Margins, Vertical Printing, and Paper Orientation",
+      "legacy_title": "Margins, Vertical Printing, and Paper Orientation",
+      "file": "topics/idh_print_margins.md"
+    },
+    {
+      "id": "IDH_PRINT_HEADERS",
+      "legacy_id": "IDH_PRINT_HEADERS",
+      "chapter": "Printing",
+      "title": "Headers and Footers (Page Numbering)",
+      "legacy_title": "Headers and Footers (Page Numbering)",
+      "file": "topics/idh_print_headers.md"
+    },
+    {
+      "id": "IDH_PRINT_HEADSTRINGS",
+      "legacy_id": "IDH_PRINT_HEADSTRINGS",
+      "chapter": "Printing",
+      "title": "The Header and Footer Strings",
+      "legacy_title": "The Header and Footer Strings",
+      "file": "topics/idh_print_headstrings.md"
+    },
+    {
+      "id": "IDH_PRINT_HEADEXAMPLE",
+      "legacy_id": "IDH_PRINT_HEADEXAMPLE",
+      "chapter": "Printing",
+      "title": "Header and Footer Example",
+      "legacy_title": "Header and Footer Example",
+      "file": "topics/idh_print_headexample.md"
+    },
+    {
+      "id": "IDH_PRINT_SUMMARY",
+      "legacy_id": "IDH_PRINT_SUMMARY",
+      "chapter": "Printing",
+      "title": "Document Summary",
+      "legacy_title": "Document Summary",
+      "file": "topics/idh_print_summary.md"
+    },
+    {
+      "id": "IDH_PRINT_DATETIME",
+      "legacy_id": "IDH_PRINT_DATETIME",
+      "chapter": "Printing",
+      "title": "Date and Time",
+      "legacy_title": "Date and Time",
+      "file": "topics/idh_print_datetime.md"
+    },
+    {
+      "id": "IDH_PRINT_ADVANCED",
+      "legacy_id": "IDH_PRINT_ADVANCED",
+      "chapter": "Printing",
+      "title": "Advanced Layout Options",
+      "legacy_title": "Advanced Layout Options",
+      "file": "topics/idh_print_advanced.md"
+    },
+    {
+      "id": "IDH_PRINT_OPTIONS",
+      "legacy_id": "IDH_PRINT_OPTIONS",
+      "chapter": "Printing",
+      "title": "Printing Options and Fonts",
+      "legacy_title": "Printing Options and Fonts",
+      "file": "topics/idh_print_options.md"
+    },
+    {
+      "id": "IDH_OPTIONS_INTRO",
+      "legacy_id": "IDH_OPTIONS_INTRO",
+      "chapter": "Options and Settings",
+      "title": "Introduction",
+      "legacy_title": "Introduction",
+      "file": "topics/idh_options_intro.md"
+    },
+    {
+      "id": "IDH_OPTIONS_GENERAL",
+      "legacy_id": "IDH_OPTIONS_GENERAL",
+      "chapter": "Options and Settings",
+      "title": "General Options",
+      "legacy_title": "General Options",
+      "file": "topics/idh_options_general.md"
+    },
+    {
+      "id": "IDH_OPTIONS_DISPLAY",
+      "legacy_id": "IDH_OPTIONS_DISPLAY",
+      "chapter": "Options and Settings",
+      "title": "Display Options",
+      "legacy_title": "Display Options",
+      "file": "topics/idh_options_display.md"
+    },
+    {
+      "id": "IDH_OPTIONS_FONT",
+      "legacy_id": "IDH_OPTIONS_FONT",
+      "chapter": "Options and Settings",
+      "title": "Font/Format Options",
+      "legacy_title": "Font/Format Options",
+      "file": "topics/idh_options_font.md"
+    },
+    {
+      "id": "IDH_OPTIONS_FILECLIPBOARD",
+      "legacy_id": "IDH_OPTIONS_FONT",
+      "chapter": "Options and Settings",
+      "title": "File/Clipboard Options",
+      "legacy_title": "File/Clipboard Options",
+      "file": "topics/idh_options_fileclipboard.md"
+    },
+    {
+      "id": "IDH_OPTIONS_MISC",
+      "legacy_id": "IDH_OPTIONS_MISC",
+      "chapter": "Options and Settings",
+      "title": "Miscellaneous Options",
+      "legacy_title": "Miscellaneous Options",
+      "file": "topics/idh_options_misc.md"
+    },
+    {
+      "id": "IDH_OPTIONS_ADVANCED",
+      "legacy_id": "IDH_OPTIONS_ADVANCED",
+      "chapter": "Options and Settings",
+      "title": "Advanced Options",
+      "legacy_title": "Advanced Options",
+      "file": "topics/idh_options_advanced.md"
+    },
+    {
+      "id": "IDH_OPTIONS_TOOLBAR",
+      "legacy_id": "IDH_OPTIONS_TOOLBAR",
+      "chapter": "Options and Settings",
+      "title": "Toolbar Customization",
+      "legacy_title": "Toolbar Customization",
+      "file": "topics/idh_options_toolbar.md"
+    },
+    {
+      "id": "IDH_FONTS_INTRO",
+      "legacy_id": "IDH_FONTS_INTRO",
+      "chapter": "Fonts",
+      "title": "Fonts Introduction",
+      "legacy_title": "Fonts Introduction",
+      "file": "topics/idh_fonts_intro.md"
+    },
+    {
+      "id": "IDH_FONTS_INSTALL",
+      "legacy_id": "IDH_FONTS_INSTALL",
+      "chapter": "Fonts",
+      "title": "Installing Additional Fonts",
+      "legacy_title": "Installing Additional Fonts",
+      "file": "topics/idh_fonts_install.md"
+    },
+    {
+      "id": "IDH_FONTS_ASCII",
+      "legacy_id": "IDH_FONTS_ASCII",
+      "chapter": "Fonts",
+      "title": "Choosing an ASCII Font",
+      "legacy_title": "Choosing an ASCII Font",
+      "file": "topics/idh_fonts_ascii.md"
+    },
+    {
+      "id": "IDH_FONTS_DISPLAY",
+      "legacy_id": "IDH_FONTS_DISPLAY",
+      "chapter": "Fonts",
+      "title": "Choosing a Japanese Display Font",
+      "legacy_title": "Choosing a Japanese Display Font",
+      "file": "topics/idh_fonts_display.md"
+    },
+    {
+      "id": "IDH_FONTS_PRINTER",
+      "legacy_id": "IDH_FONTS_PRINTER",
+      "chapter": "Fonts",
+      "title": "Choosing a Japanese Printer Font",
+      "legacy_title": "Choosing a Japanese Printer Font",
+      "file": "topics/idh_fonts_printer.md"
+    },
+    {
+      "id": "IDH_SUPPORT_GENERAL",
+      "legacy_id": "IDH_SUPPORT_GENERAL",
+      "chapter": "Support",
+      "title": "Support",
+      "legacy_title": "Support",
+      "file": "topics/idh_support_general.md"
+    },
+    {
+      "id": "IDH_SUPPORT_DICTIONARY",
+      "legacy_id": "IDH_SUPPORT_DICTIONARY",
+      "chapter": "Support",
+      "title": "Dictionary Support",
+      "legacy_title": "Dictionary Support",
+      "file": "topics/idh_support_dictionary.md"
+    },
+    {
+      "id": "IDH_SUPPORT_FUTURE",
+      "legacy_id": "IDH_SUPPORT_FUTURE",
+      "chapter": "Support",
+      "title": "Future Releases",
+      "legacy_title": "Future Releases",
+      "file": "topics/idh_support_future.md"
+    }
+  ]
+}

@@ -3584,7 +3584,9 @@ void MainWindow::create_actions() {
   connect(contents, &QAction::triggered, handbook, [handbook] { handbook->open_topic(); });
   auto* about = help_menu->addAction(tr("&About and Licenses..."));
   about->setObjectName(QStringLiteral("aboutAction"));
-  connect(about, &QAction::triggered, handbook, [handbook] { handbook->open_topic(QStringLiteral("about.md")); });
+  connect(about, &QAction::triggered, handbook, [handbook] {
+    handbook->open_topic(QStringLiteral("IDH_INTRO_COPYRIGHTS"));
+  });
   auto* about_qt = help_menu->addAction(tr("About &Qt..."));
   about_qt->setObjectName(QStringLiteral("aboutQtAction"));
   connect(about_qt, &QAction::triggered, qApp, &QApplication::aboutQt);

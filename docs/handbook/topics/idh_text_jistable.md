@@ -1,0 +1,9 @@
+# Using the JIS Table
+
+Open the JIS character table from the document context menu or the corresponding kanji tools command. It is a native Qt lookup tool, not a legacy Windows character-map control. It presents available JIS characters for inspection and insertion, allowing a character to be selected without first typing its reading. Installed data and the active document determine which related lookup functions are available.
+
+The table participates in the same destination rules as other lookup tools. Its chosen character can be inserted into either editing engine. Insertion replaces the active document's current selection as one undoable edit, preserves the destination encoding and Unicode characters, and does not redirect to the tab from which a lookup was opened. JWPqt refuses insertion into a read-only target, an active conversion preview, invalid Unicode, or a selection that would split a surrogate pair. Resolve a visible conversion before inserting.
+
+The document popup provides JIS Table alongside Dictionary, kanji lookup, Convert Selection, and an Input Mode submenu. These commands use the same application state as the main menus. The table therefore complements, rather than changes, the Kanji/ASCII/JASCII input selection described in [Input Modes](help:IDH_TEXT_INPUTMODES). Its output is text, not a special modal code entry.
+
+Use the table when the character is known visually or by its JIS position. Use Kanji mode or selected-romaji conversion for kana-oriented input, and the lookup tools for radical, stroke, reading, code, or index searches. If a character must be retained in a native document, ensure it is representable in JWP; switching into Japanese Editing rejects unsupported text rather than substituting another character. See [Kana Table](help:IDH_TEXT_KANATABLE) and [Using the Clipboard](help:IDH_EDIT_CLIPBOARD).

@@ -80,13 +80,15 @@ never reused for a later ordinary file.
 
 ## Help And Installation
 
-Help > Contents opens the embedded offline handbook. Search matches topic titles
-and text; Back/Forward, Contents and zoom controls support navigation. F1 routes
-the owning editor/dialog to its relevant topic. About includes original credits,
-GPL terms and data notices, and About Qt identifies the system toolkit. Help
-reuses its own window without changing document text or undo. Only whitelisted
-embedded pages and resources can load, never arbitrary local files or websites.
-`jwpqt --handbook` opens the same handbook at startup without optional datasets.
+Help > Contents opens the complete 125-topic JWPce help inventory, adapted as an
+embedded offline JWPqt handbook in the original 12-chapter order. Search matches
+topic IDs, chapters, titles and full text; all internal topic links are validated.
+Back/Forward, Contents and zoom controls support navigation. F1 routes the owning
+editor/dialog to its exact relevant topic. About includes original credits, GPL
+terms and data notices, and About Qt identifies the system toolkit. Help reuses
+its own window without changing document text or undo. Only whitelisted embedded
+pages and resources can load, never arbitrary local files or websites. `jwpqt
+--handbook` opens the same handbook at startup without optional datasets.
 
 Build an installable release and matching source archive:
 

@@ -14,8 +14,9 @@ function(run)
 endfunction()
 run("${CMAKE_COMMAND}" --install "${BUILD}" --prefix "${root}/installed")
 foreach(path bin/jwpqt share/applications/jwpqt.desktop share/icons/hicolor/scalable/apps/jwpqt.svg
-              share/mime/packages/jwpqt-mime.xml share/doc/jwpqt/handbook/start.md
-              share/doc/jwpqt/handbook/gnugpl.txt share/doc/jwpqt/handbook/_cpright.txt
+               share/mime/packages/jwpqt-mime.xml share/doc/jwpqt/handbook/start.md
+               share/doc/jwpqt/handbook/manifest.json
+               share/doc/jwpqt/handbook/gnugpl.txt share/doc/jwpqt/handbook/_cpright.txt
               share/doc/jwpqt/RELEASE_NOTES.md
              share/jwpqt/data/edict share/jwpqt/data/edict.jdx
              share/jwpqt/data/enamdict share/jwpqt/data/enamdict.jdx
@@ -25,6 +26,11 @@ foreach(path bin/jwpqt share/applications/jwpqt.desktop share/icons/hicolor/scal
     message(FATAL_ERROR "Missing installed file: ${path}")
   endif()
 endforeach()
+file(GLOB installed_help_topics "${root}/installed/share/doc/jwpqt/handbook/topics/*.md")
+list(LENGTH installed_help_topics installed_help_topic_count)
+if(NOT installed_help_topic_count EQUAL 125)
+  message(FATAL_ERROR "Installed handbook has ${installed_help_topic_count} topics instead of 125")
+endif()
 execute_process(COMMAND "${CMAKE_COMMAND}" -E env QT_QPA_PLATFORM=offscreen
                 "${root}/installed/bin/jwpqt" --version
                 RESULT_VARIABLE result OUTPUT_VARIABLE version_output ERROR_VARIABLE errors TIMEOUT 30)
@@ -87,8 +93,9 @@ foreach(required "/share/jwpqt/data/edict" "/share/jwpqt/data/edict.jdx"
                  "/share/jwpqt/data/enamdict" "/share/jwpqt/data/enamdict.jdx"
                  "/share/jwpqt/data/kanjinfo.dat" "/share/jwpqt/data/radical.dat"
                   "/share/jwpqt/data/stroke.dat" "/share/jwpqt/data/radicals.bmp"
-                  "/share/doc/jwpqt/handbook/_cpright.txt"
-                  "/share/doc/jwpqt/RELEASE_NOTES.md")
+                   "/share/doc/jwpqt/handbook/_cpright.txt"
+                   "/share/doc/jwpqt/handbook/manifest.json"
+                   "/share/doc/jwpqt/RELEASE_NOTES.md")
   string(FIND "${listing}" "${required}" found)
   if(found EQUAL -1)
     message(FATAL_ERROR "Native archive is missing ${required}")
@@ -105,6 +112,11 @@ if(NOT count EQUAL 1)
   message(FATAL_ERROR "Archive layout is not relocatable")
 endif()
 list(GET packaged 0 binary)
+file(GLOB packaged_help_topics "${root}/unpacked/*/share/doc/jwpqt/handbook/topics/*.md")
+list(LENGTH packaged_help_topics packaged_help_topic_count)
+if(NOT packaged_help_topic_count EQUAL 125)
+  message(FATAL_ERROR "Packaged handbook has ${packaged_help_topic_count} topics instead of 125")
+endif()
 execute_process(COMMAND "${CMAKE_COMMAND}" -E env QT_QPA_PLATFORM=offscreen
                 "${binary}" --version RESULT_VARIABLE result
                 OUTPUT_VARIABLE version_output ERROR_VARIABLE errors TIMEOUT 30)
@@ -127,14 +139,20 @@ if(NOT result STREQUAL "0" OR listing MATCHES "/[.](git|serena)/")
   message(FATAL_ERROR "Source archive failed inspection or includes private metadata")
 endif()
 foreach(required "/CMakeLists.txt" "/src/qt/help_window.cpp" "/src/core/jwp_document.cpp"
-                  "/RELEASE_NOTES.md"
-                  "/docs/handbook/start.md" "/docs/legal/gnugpl.txt"
+                   "/RELEASE_NOTES.md"
+                   "/docs/handbook/start.md" "/docs/handbook/manifest.json"
+                   "/docs/legal/gnugpl.txt"
                  "/docs/legal/original-notices.txt")
   string(FIND "${listing}" "${required}" found)
   if(found EQUAL -1)
     message(FATAL_ERROR "Corresponding source archive is missing ${required}")
   endif()
 endforeach()
+string(REGEX MATCHALL "/docs/handbook/topics/[^\n]+[.]md" source_help_topics "${listing}")
+list(LENGTH source_help_topics source_help_topic_count)
+if(NOT source_help_topic_count EQUAL 125)
+  message(FATAL_ERROR "Corresponding source has ${source_help_topic_count} handbook topics instead of 125")
+endif()
 foreach(forbidden "/jwpce.cpp" "/jwpce.sln" "/changes.txt" "/toolbar.bmp")
   string(FIND "${listing}" "${forbidden}" found)
   if(NOT found EQUAL -1)

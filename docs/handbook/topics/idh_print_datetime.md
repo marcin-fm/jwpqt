@@ -1,0 +1,9 @@
+# Date and Time
+
+Options > Printing defines the date pattern, time pattern, AM text, and PM text used by native print headers and footers. The default date pattern is `&y/&M/&D`, and the default time pattern is `&h:&N &A`. Patterns are application printing options, not fields limited to one document; a job captures its policies and one timestamp when it is prepared. Later option edits do not alter that already frozen Print or Preview job. See [Actually Printing Something](help:IDH_PRINT_PRINTING) and [Headers and Footers (Page Numbering)](help:IDH_PRINT_HEADERS).
+
+Within date/time patterns, `&Y` is the full year and `&y` the two-digit year. `&M`/`&m` produce the month, `&D`/`&d` the day, `&H` the 24-hour time hour, `&h` the 12-hour hour, `&N`/`&n` two-digit minutes, and `&A`/`&a` the literal AM/PM text. `&&` yields an ampersand. The recovered legacy rules intentionally use AM at noon and hour zero at midnight. Unknown patterns should not be assumed to become special values. See [The Header and Footer Strings](help:IDH_PRINT_HEADSTRINGS).
+
+Date/time patterns hold up to 19 JWP characters; AM and PM text each hold up to 9. If text is unavailable in the current code page, the dialog presents a read-only placeholder rather than silently rewriting it. These four pattern fields use the same K/A/J input and shared Insert/Overwrite policy as the document, beginning in ASCII mode because their defaults are substitution expressions. Unused legacy array cells remain preserved. See [Japanese Encoding Systems](help:IDH_FILE_ENCODING).
+
+Use `&D` and `&T` in a header/footer string to insert the configured patterns. The summary is separate: Title, Subject, Author, Keywords, and Comment use their own substitutions. Date/time output is part of the native desktop print/PDF renderer. JWPqt on WebAssembly cannot Print or Preview because Qt WebAssembly has no PrintSupport, so browser storage does not provide a date/time page-output facility.

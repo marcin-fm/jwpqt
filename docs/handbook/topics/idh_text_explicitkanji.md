@@ -1,0 +1,9 @@
+# Explicit Kanji Conversion
+
+Explicit conversion acts on text you select. Select printable ASCII romaji or tabs in one paragraph, then use **Convert Selection**, `F2`, or `Ctrl+>`. JWPqt stages the replay before replacing anything. Lowercase romaji becomes hiragana, uppercase syllables become katakana, and capitalized spans can use preferred loaded WNN candidates. The output remains selected in the original direction, and one Undo restores the complete original selection.
+
+The conversion has deliberate safeguards. The selected text must be printable ASCII or tabs, must remain within one paragraph, and may contain at most 65,535 input or output cells. Incomplete romaji, unsupported input, or an exceeded bound leaves the source untouched. Finish pending kana first. Overwrite mode does not consume text outside the selection. This lets explicit conversion be used safely when imported or typed ASCII needs to become Japanese text.
+
+In Japanese Editing with WNN data loaded, a second Convert on selected kana begins normal kana-to-kanji candidate selection. The horizontal candidate strip previews candidates without committing them. Click a candidate or use `Space`, `Shift+Space`, or Convert to cycle. `Enter` or `Escape` accepts the displayed candidate as one undoable conversion. `Shift+F2` or `Shift+F3` also finalizes the current or default candidate. `Ctrl+<` is the direct backward conversion command.
+
+`F3` is context-sensitive: it repeats Find Next if there is no selection, the selection is not kana, or the selected kana equals the previous search query; otherwise it converts backward. Use `F2` or `Ctrl+>` when the intent must be unambiguous. See [Inline Kanji Conversion](help:IDH_TEXT_INLINEKANJI), [User Kana to Kanji Conversions](help:IDH_TEXT_USERKANJI), and [Undo and Redo](help:IDH_EDIT_UNDO).

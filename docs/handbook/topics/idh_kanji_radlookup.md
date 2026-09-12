@@ -1,0 +1,11 @@
+# Radical Lookup
+
+Open **Tools > Radical Lookup** or press `F5`. This selects the **Radical** tab in the shared modeless Kanji Lookup window. Choose every visible radical component you can identify; the search intersects their recovered candidate groups. Equivalent recovered radical variants are linked, so selecting one selects its related form. The grid may show source glyphs, with numeric fallback only when its artwork resource is unavailable. It is also valid to leave all radicals unselected and search by stroke range alone.
+
+The tab offers a quick **Stroke count** control, **Exact**, **+/- 1**, and **+/- 2**, plus explicit **Strokes from** and **to** fields. The usable range is 1 through 30. **Any strokes** restores the full range. Arrow stepping cycles through Any, the selected-radical stroke estimate, the remaining values through 30, and Any again. The displayed estimate is only a navigation hint from selected radicals; it is neither an automatic filter nor a guaranteed total stroke count. Typed values and the explicit range remain authoritative.
+
+When the tab opens JWPqt can seed it from the current JIS kanji. **From Clipboard** extracts radicals from the first clipboard character only if that character has a JIS kanji mapping. An invalid, non-kanji, or unavailable character reports the problem and leaves the current criteria intact. This makes it useful to start from a similar character without losing a carefully prepared query.
+
+With automatic search on, changes are debounced before searching. With it off, changed criteria clear stale results until **Search** is selected. **Clear** deselects radicals, restores the unrestricted 1-30 range, stops pending search, and removes results. **Rare Kanji Last** applies to the next eligible radical search. **Deemphasize source rare radical choices** only dims fixed source choices; it never prevents selecting them.
+
+Use the shared result strip to inspect, insert, or copy matches. Enter inserts selected characters, `I`/`F23` opens information, and Shift+C copies all results. See [Finding Kanji](help:IDH_KANJI_LOOKUP) for the full result-key list, [Bushu Lookup](help:IDH_KANJI_BUSHULOOKUP) for dictionary-radical sorting, and [Count Kanji](help:IDH_KANJI_COUNTKANJI) to measure usage after you find a character.

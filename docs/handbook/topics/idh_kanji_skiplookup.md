@@ -1,0 +1,11 @@
+# SKIP Lookup
+
+Open **Tools > SKIP Lookup** with `Ctrl+Alt+S` to select the **SKIP** tab. SKIP, the System of Kanji Indexing by Patterns, classifies a character with three values: type, first value, and second value. The responsive diagram in the tab illustrates the types using the current application palette and scale. It is an aid to choosing the code; the search itself uses the installed kanji metadata.
+
+Enter any subset of **Type**, **First value**, and **Second value**. Each field has an **Any** state, so **Any** is a wildcard rather than a literal zero. The native range is type 0-4, first value 0-20, and second value 0-24. Choose precise values when known, or leave one or two fields Any to browse a partial classification. JWPqt compares entered values with the record's stored SKIP code and marks any alternate-code result clearly in its tooltip.
+
+Enable **Include miscodes** to include the metadata's recorded common alternative SKIP classifications. This is deliberately broader: it may help when your visual analysis is not the primary assignment, but it increases matches. The control is enabled only when the installed metadata contains SKIP cross-references. If the data has none, its tooltip explains this and the saved preference is retained without being applied. It does not synthesize common mistakes from a heuristic.
+
+Automatic search is shared with the other tabs. It schedules a query after field changes, while disabling it clears old results and leaves the revised query pending for **Search**. **Clear** changes the three fields back to Any and removes results; it does not discard the persisted miscoding preference. The ordinary result strip actions apply: select one character for Information; select one or more for Insert or Copy. Shift+C copies all results. The status line tells you the number displayed and identifies a result limit if one is reached.
+
+SKIP depends on `kanjinfo.dat`. Without compatible metadata, the tab cannot establish codes or alternate classifications and reports the missing data. Inspect a found character in [Character Information](help:IDH_KANJI_CHARINFO), where Halpern/SKIP and alternate SKIP references may be shown. For a shape-code alternative use [Four Corners Lookup](help:IDH_KANJI_FCLOOKUP); for a radical-and-stroke path use [Bushu/Stroke Lookup](help:IDH_KANJI_BSLOOKUP).

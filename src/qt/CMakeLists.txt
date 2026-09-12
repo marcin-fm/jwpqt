@@ -125,10 +125,13 @@ endif()
 add_library(jwpqt_qt_ui STATIC ${jwpqt_qt_ui_sources})
 
 target_compile_definitions(jwpqt_qt_ui PUBLIC JWPQT_VERSION="${JWPQT_RELEASE_VERSION}")
+file(GLOB JWPQT_HELP_TOPIC_FILES CONFIGURE_DEPENDS
+  "${PROJECT_SOURCE_DIR}/docs/handbook/topics/*.md")
 qt_add_resources(jwpqt_qt_ui handbook_assets
   PREFIX "/jwpqt/help"
   BASE "${PROJECT_SOURCE_DIR}/docs/handbook"
   FILES
+    "${PROJECT_SOURCE_DIR}/docs/handbook/manifest.json"
     "${PROJECT_SOURCE_DIR}/docs/handbook/start.md"
     "${PROJECT_SOURCE_DIR}/docs/handbook/files.md"
     "${PROJECT_SOURCE_DIR}/docs/handbook/editing.md"
@@ -138,6 +141,7 @@ qt_add_resources(jwpqt_qt_ui handbook_assets
     "${PROJECT_SOURCE_DIR}/docs/handbook/settings.md"
     "${PROJECT_SOURCE_DIR}/docs/handbook/installation.md"
     "${PROJECT_SOURCE_DIR}/docs/handbook/about.md"
+    ${JWPQT_HELP_TOPIC_FILES}
 )
 set_source_files_properties("${PROJECT_SOURCE_DIR}/docs/legal/gnugpl.txt"
   PROPERTIES QT_RESOURCE_ALIAS "gnugpl.txt")

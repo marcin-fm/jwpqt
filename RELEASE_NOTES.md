@@ -20,7 +20,7 @@ and WebAssembly.
   Index, Reading, and code-table workflows.
 - Native PDF printing and preview, horizontal and legacy vertical layout,
   headers/footers, page ranges, raster fonts, colors, and selection output.
-- Searchable offline handbook, responsive vector artwork, configurable themes,
+- Complete searchable 125-topic offline JWPce handbook, responsive vector artwork, configurable themes,
   toolbars, fonts, colors, layout, history, and source-compatible preferences.
 - GitHub Actions packages every port on demand and for release tags. The Web port
   is also built, smoke-tested, and published through GitHub Pages.

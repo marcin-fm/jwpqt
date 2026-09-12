@@ -6,7 +6,12 @@
 #include "page_layout_dialog.h"
 #include <QAction>
 #include <QApplication>
+#include <QCryptographicHash>
 #include <QDialog>
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
@@ -14,6 +19,8 @@
 #include <QMessageBox>
 #include <QPointer>
 #include <QPushButton>
+#include <QSet>
+#include <QTabWidget>
 #include <QTextBrowser>
 #include <QTextBlock>
 #include <QTextFragment>
@@ -44,10 +51,42 @@ int main(int argc, char** argv) {
     auto* browser = child<QTextBrowser>(*help, "helpText");
     auto* list = child<QListWidget>(*help, "helpTopics");
     auto* search = child<QLineEdit>(*help, "helpSearch");
-    require(list->count() == 11 && browser->toPlainText().contains(QStringLiteral("jwpqt Handbook")),
-            "Bundled contents or topic index missing");
+    QFile manifest(QStringLiteral(":/jwpqt/help/manifest.json"));
+    require(manifest.open(QIODevice::ReadOnly), "Handbook manifest is unavailable");
+    const auto manifest_root = QJsonDocument::fromJson(manifest.readAll()).object();
+    require(manifest_root.value(QStringLiteral("legacy_source_sha256")).toString() ==
+                QStringLiteral("436f07a67fa27dcdedd67f95c81d9ce5e169aba4d8e2594e80cf92dcb7c4ba3d"),
+            "Handbook legacy source identity changed");
+    QByteArray legacy_contract;
+    for (const auto& entry : manifest_root.value(QStringLiteral("topics")).toArray()) {
+      const auto topic = entry.toObject();
+      legacy_contract += topic.value(QStringLiteral("legacy_id")).toString().toUtf8();
+      legacy_contract += '\t';
+      legacy_contract += topic.value(QStringLiteral("legacy_title")).toString().toUtf8();
+      legacy_contract += '\n';
+    }
+    require(QString::fromLatin1(QCryptographicHash::hash(legacy_contract, QCryptographicHash::Sha256).toHex()) ==
+                manifest_root.value(QStringLiteral("legacy_contract_sha256")).toString(),
+            "Handbook legacy topic contract changed");
+    QSet<QString> topic_ids;
+    int chapter_count = 0;
+    int topic_count = 0;
     for (int i = 0; i < list->count(); ++i) {
-      help->open_topic(list->item(i)->data(Qt::UserRole).toString());
+      auto* item = list->item(i);
+      const QString file = item->data(Qt::UserRole).toString();
+      if (file.isEmpty()) {
+        ++chapter_count;
+        require(item->flags() == Qt::NoItemFlags && item->font().bold(),
+                "Handbook chapter heading is interactive or unstyled");
+        continue;
+      }
+      const QString id = item->data(Qt::UserRole + 1).toString();
+      require(id.startsWith(QStringLiteral("IDH_")) && !topic_ids.contains(id),
+              "Handbook topic ID is missing or duplicated");
+      require(!item->text().contains(QLatin1Char('\n')), "Handbook title contains article text");
+      topic_ids.insert(id);
+      ++topic_count;
+      help->open_topic(file);
       require(browser->toPlainText().size() > 250, "A shipped topic or license is empty");
       const QUrl source = browser->source();
       QStringList links;
@@ -57,15 +96,27 @@ int main(int argc, char** argv) {
           if (!link.isEmpty() && !links.contains(link)) links.push_back(link);
         }
       for (const auto& link : links) {
-        const QUrl target = source.resolved(QUrl(link));
-        browser->anchorClicked(target);
-        require(browser->source() == target && !browser->toPlainText().isEmpty(), "A shipped handbook link is broken");
+        browser->anchorClicked(QUrl(link));
+        require(browser->source().scheme() == QStringLiteral("qrc") &&
+                    browser->source().path().contains(QStringLiteral("/topics/")) &&
+                    !browser->toPlainText().isEmpty(),
+                "A shipped handbook link is broken");
+        help->open_topic(file);
       }
     }
+    require(chapter_count == 12 && topic_count == 125 && topic_ids.size() == 125,
+            "The complete legacy handbook topic inventory is missing");
+    require(topic_ids.contains(QStringLiteral("IDH_OPTIONS_FILECLIPBOARD")),
+            "The repaired legacy duplicate topic ID is missing");
+    help->open_topic(QStringLiteral("_cpright.txt"));
     require(browser->toPlainText().contains(QStringLiteral("Kyoto University")), "Original notices missing");
+    help->open_topic(QStringLiteral("gnugpl.txt"));
+    require(browser->toPlainText().contains(QStringLiteral("WITHOUT"), Qt::CaseInsensitive),
+            "GNU license text missing");
     child<QAction>(window, "aboutAction")->trigger();
-    require(browser->toPlainText().contains(QStringLiteral("WITHOUT"), Qt::CaseInsensitive) &&
-            browser->toPlainText().contains(QStringLiteral("Glenn Rosenthal")), "About credits/warranty missing");
+    require(browser->source().path().endsWith(QStringLiteral("idh_intro_copyrights.md")) &&
+                browser->toPlainText().contains(QStringLiteral("Glenn Rosenthal")),
+            "About credits topic missing");
     bool about_qt_seen = false;
     QTimer::singleShot(0, &app, [&] {
       auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
@@ -101,11 +152,11 @@ int main(int argc, char** argv) {
     require(jwpqt::qt::document_plain_text(*editor->document()) == original &&
                 editor->document()->availableUndoSteps() == undo,
             "Help or resource actions changed document content or undo");
-    help->open_topic(QStringLiteral("start.md"));
-    browser->anchorClicked(QUrl(QStringLiteral("editing.md")));
-    require(browser->source().path().endsWith(QStringLiteral("editing.md")), "Relative handbook link failed");
+    help->open_topic(QStringLiteral("IDH_INTRO_WHATISJWPCE"));
+    browser->anchorClicked(QUrl(QStringLiteral("help:IDH_EDIT_SEARCH")));
+    require(browser->source().path().endsWith(QStringLiteral("idh_edit_search.md")), "Topic-ID handbook link failed");
     child<QPushButton>(*help, "helpBack")->click();
-    require(browser->source().path().endsWith(QStringLiteral("start.md")), "Back navigation failed");
+    require(browser->source().path().endsWith(QStringLiteral("idh_intro_whatisjwpce.md")), "Back navigation failed");
     child<QPushButton>(*help, "helpForward")->click();
     const QUrl before = browser->source();
     for (const auto& url : {QStringLiteral("file:///etc/passwd"), QStringLiteral("https://example.com/"),
@@ -115,10 +166,18 @@ int main(int argc, char** argv) {
     }
     require(browser->document()->resource(QTextDocument::ImageResource, QUrl("file:///etc/passwd")).toByteArray().isEmpty(),
             "Help loaded an external embedded resource");
-    search->setText(QStringLiteral("first-page suppression"));
-    require(list->count() == 1, "Full-text handbook search failed");
+    search->setText(QStringLiteral("IDH_PRINT_HEADSTRINGS"));
+    int matching_topic = -1;
+    for (int i = 0; i < list->count(); ++i) {
+      if (list->item(i)->data(Qt::UserRole + 1).toString() == QStringLiteral("IDH_PRINT_HEADSTRINGS")) {
+        matching_topic = i;
+        break;
+      }
+    }
+    require(matching_topic >= 0, "Full-text handbook search failed");
+    list->setCurrentRow(matching_topic);
     search->returnPressed();
-    require(browser->source().path().endsWith(QStringLiteral("printing.md")), "Search activation failed");
+    require(browser->source().path().endsWith(QStringLiteral("idh_print_headstrings.md")), "Search activation failed");
     search->setText(QStringLiteral("no_such_topic_8297"));
     require(list->count() == 0, "No-match search showed unrelated topics");
     search->clear();
@@ -131,17 +190,42 @@ int main(int argc, char** argv) {
       require(shortcut.isAccepted(), "Context F1 did not own its shortcut");
       QKeyEvent key(QEvent::KeyPress, Qt::Key_F1, Qt::NoModifier);
       QApplication::sendEvent(&query, &key);
-      require(browser->source().path().endsWith(QStringLiteral("dictionary.md")), "Dictionary context help failed");
+      require(browser->source().path().endsWith(QStringLiteral("idh_dict_general.md")), "Dictionary context help failed");
+    }
+    for (const auto& context : {
+             std::pair{QStringLiteral("kanjiReadingLookupDialog"), QStringLiteral("idh_kanji_readlookup.md")},
+             std::pair{QStringLiteral("kanjiCountDialog"), QStringLiteral("idh_kanji_countkanji.md")},
+             std::pair{QStringLiteral("jisTableDialog"), QStringLiteral("idh_kanji_jistable.md")},
+             std::pair{QStringLiteral("edictRegistryDialog"), QStringLiteral("idh_dict_dictionaries.md")},
+             std::pair{QStringLiteral("edictUserDictionaryDialog"), QStringLiteral("idh_dict_useredit.md")},
+             std::pair{QStringLiteral("wnnUserDictionaryDialog"), QStringLiteral("idh_text_userkanji.md")}}) {
+      QDialog tool(&window);
+      tool.setObjectName(context.first);
+      QKeyEvent key(QEvent::KeyPress, Qt::Key_F1, Qt::NoModifier);
+      QApplication::sendEvent(&tool, &key);
+      require(browser->source().path().endsWith(context.second), "Exact dialog context help failed");
     }
     {
       jwpqt::qt::ApplicationSettingsDialog options(
           window.application_settings(), &window);
       options.show();
       QCoreApplication::processEvents();
-      child<QPushButton>(options, "applicationSettingsHelp")->click();
-      require(options.isVisible() &&
-                  browser->source().path().endsWith(QStringLiteral("settings.md")),
-              "Options Help did not preserve the dialog or open Settings");
+      auto* options_tabs = child<QTabWidget>(options, "applicationSettingsTabs");
+      const QStringList option_topics = {
+          QStringLiteral("idh_options_general.md"), QStringLiteral("idh_options_font.md"),
+          QStringLiteral("idh_dict_options.md"), QStringLiteral("idh_options_advanced.md"),
+          QStringLiteral("idh_print_layout.md"), QStringLiteral("idh_print_options.md"),
+          QStringLiteral("idh_kanji_lookup.md"), QStringLiteral("idh_options_display.md")};
+      for (int index = 0; index < option_topics.size(); ++index) {
+        options_tabs->setCurrentIndex(index);
+        child<QPushButton>(options, "applicationSettingsHelp")->click();
+        require(options.isVisible() && browser->source().path().endsWith(option_topics.at(index)),
+                "Options Help did not follow the active settings page");
+      }
+      QKeyEvent options_help(QEvent::KeyPress, Qt::Key_F1, Qt::NoModifier);
+      QApplication::sendEvent(&options, &options_help);
+      require(browser->source().path().endsWith(QStringLiteral("idh_options_display.md")),
+              "Options F1 did not follow the active settings page");
       options.reject();
       require(jwpqt::qt::document_plain_text(*editor->document()) == original &&
                   editor->document()->availableUndoSteps() == undo,
@@ -154,10 +238,20 @@ int main(int argc, char** argv) {
           *document, jwpqt::core::kDefaultLegacyCodePage, &window);
       layout.show();
       QCoreApplication::processEvents();
-      child<QPushButton>(layout, "pageLayoutHelp")->click();
-      require(layout.isVisible() &&
-                  browser->source().path().endsWith(QStringLiteral("printing.md")),
-              "Page Layout Help did not preserve the dialog or open Printing");
+      auto* layout_tabs = child<QTabWidget>(layout, "pageLayoutTabs");
+      const QStringList layout_topics = {
+          QStringLiteral("idh_print_margins.md"), QStringLiteral("idh_print_headers.md"),
+          QStringLiteral("idh_print_summary.md")};
+      for (int index = 0; index < layout_topics.size(); ++index) {
+        layout_tabs->setCurrentIndex(index);
+        child<QPushButton>(layout, "pageLayoutHelp")->click();
+        require(layout.isVisible() && browser->source().path().endsWith(layout_topics.at(index)),
+                "Page Layout Help did not follow the active page");
+      }
+      QKeyEvent layout_help(QEvent::KeyPress, Qt::Key_F1, Qt::NoModifier);
+      QApplication::sendEvent(&layout, &layout_help);
+      require(browser->source().path().endsWith(QStringLiteral("idh_print_summary.md")),
+              "Page Layout F1 did not follow the active page");
       layout.reject();
       require(jwpqt::qt::document_plain_text(*editor->document()) == original &&
                   editor->document()->availableUndoSteps() == undo,
@@ -200,7 +294,7 @@ int main(int argc, char** argv) {
       QKeyEvent key(QEvent::KeyPress, Qt::Key_F1, Qt::NoModifier);
       QApplication::sendEvent(&field, &key);
       auto* other_browser = child<QTextBrowser>(other, "helpText");
-      require(other_browser->source().path().endsWith(QStringLiteral("files.md")) && browser->source() == original_topic,
+      require(other_browser->source().path().endsWith(QStringLiteral("idh_file_types.md")) && browser->source() == original_topic,
               "Context help crossed workspace ownership or missed file commands");
     }
     QPointer<jwpqt::qt::MainWindow> disposable = new jwpqt::qt::MainWindow;
@@ -221,6 +315,6 @@ int main(int argc, char** argv) {
     child<QAction>(*resource_owner, "resourceStatusAction")->trigger();
     require(owned_resource_seen && !resource_owner,
             "Runtime Resources did not tolerate owner deletion");
-    std::cout << "Offline topics, licenses, About Qt, resources, search, navigation, context, isolation and lifetime passed\n";
+    std::cout << "All 125 offline topics, links, licenses, search, exact context, isolation and lifetime passed\n";
   } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

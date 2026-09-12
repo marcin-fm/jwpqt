@@ -1,0 +1,11 @@
+# Index Lookup
+
+Open **Tools > Index Lookup** with `Ctrl+Shift+I` to select **Index** in the shared lookup window. Index Lookup finds a character from a factual reference number rather than visual analysis. Select **Type of index**, enter the exact **Index**, enter **Volume** only when the chosen type needs it, then press **Search**. This tab remains an explicit search; editing fields retains the last report until a successful Search.
+
+The full recovered type list is: Modern Reader's Japanese-English Character Dictionary (Andrew Nelson); New Nelson (John Haig); New Japanese-English Character Dictionary (Jack Halpern); School grade; Morohashi full index; Morohashi volume/index; Halpern Kanji Learners' Dictionary; Spahn-Hadamitzky Kanji & Kana; Henshall; Gakken; Heisig; O'Neill Names; O'Neill Essential Kanji; De Roo; Frequency; Read/Write Japanese; Tuttle Kanji Cards; The Kanji Way; Kanji in Context; Japanese for Busy People; and Compact Kanji Guide. Installed metadata can expose only an initial subset. A saved unavailable type is retained but the combo visibly falls back instead of silently changing the preference.
+
+Index values are exact. Zero is a legitimate search value for an unrecorded/default value, not a wildcard. The input permits 0 through 65535 generally. **Volume** is disabled except for Morohashi volume/index and Japanese for Busy People. Morohashi accepts the required volume with its index; Busy People uses the two displayed numeric components. If a value cannot fit that reference's native range, JWPqt reports the invalid query rather than truncating it.
+
+The search draws its primary and extended reference values from `kanjinfo.dat`. A record that lacks an extended index does not match an invented zero. Use Character Information to check the displayed reference field and More Info cross-references. A data set without the relevant reference naturally cannot supply a reliable result.
+
+Result actions are the standard ones: select one for Information, or one or more for Insert/Copy; the active document receives insertion. **Clear** resets index and volume to zero, leaves the chosen type in place, removes results, and focuses Index. Continue with [Character Information](help:IDH_KANJI_CHARINFO), [Alternate kanjinfo.dat Files](help:IDH_KANJI_KANJINFO), and [Finding Kanji](help:IDH_KANJI_LOOKUP).

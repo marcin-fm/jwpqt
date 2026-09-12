@@ -426,8 +426,21 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
     if (self && automatic_->isChecked() == checked) schedule_search();
   });
   connect(tabs_, &QTabWidget::currentChanged, this,
-          [this, automatic, search_button, clear_button](int index) {
+           [this, automatic, search_button, clear_button](int index) {
     search_timer_->stop();
+    QString help_topic;
+    switch (index) {
+      case 0: help_topic = QStringLiteral("IDH_KANJI_SKIPLOOKUP"); break;
+      case 1: help_topic = QStringLiteral("IDH_KANJI_FCLOOKUP"); break;
+      case 2: help_topic = QStringLiteral("IDH_KANJI_BUSHULOOKUP"); break;
+      case 3: help_topic = QStringLiteral("IDH_KANJI_HSLOOKUP"); break;
+      case 4: help_topic = QStringLiteral("IDH_KANJI_BSLOOKUP"); break;
+      case 5: help_topic = QStringLiteral("IDH_KANJI_INDEXLOOKUP"); break;
+      case 6:
+      case 7: help_topic = QStringLiteral("IDH_KANJI_RADLOOKUP"); break;
+      default: help_topic = QStringLiteral("IDH_KANJI_LOOKUP"); break;
+    }
+    setProperty("jwpqtHelpTopic", help_topic);
     const bool embedded_lookup = index >= 6;
     automatic->setVisible(!embedded_lookup && index != 5);
     search_button->setVisible(!embedded_lookup);
@@ -438,6 +451,7 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
     insert_button_->setVisible(!embedded_lookup);
     info_button_->setVisible(!embedded_lookup);
   });
+  setProperty("jwpqtHelpTopic", QStringLiteral("IDH_KANJI_SKIPLOOKUP"));
   connect(bushu_radicals_, &QListWidget::itemClicked, this, [this](QListWidgetItem* item) {
     if (item->data(Qt::UserRole).isValid()) bushu_radical_->setValue(item->data(Qt::UserRole).toInt());
   });

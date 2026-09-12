@@ -15,6 +15,7 @@ const requiredFiles = [
   "licenses/_cpright.txt",
   "licenses/gnugpl.txt",
   "share/doc/jwpqt/RELEASE_NOTES.md",
+  "share/doc/jwpqt/handbook/manifest.json",
 ];
 
 for (const relativePath of requiredFiles) {
@@ -23,6 +24,16 @@ for (const relativePath of requiredFiles) {
   if (!stat.isFile() || stat.size === 0) {
     throw new Error(`Missing or empty Web artifact: ${relativePath}`);
   }
+}
+
+const handbookDirectory = path.join(site, "share/doc/jwpqt/handbook");
+const handbookTopics = fs.readdirSync(path.join(handbookDirectory, "topics"))
+    .filter((filename) => filename.endsWith(".md"));
+const handbookManifest = JSON.parse(
+    fs.readFileSync(path.join(handbookDirectory, "manifest.json"), "utf8"));
+if (handbookTopics.length !== 125 || handbookManifest.topic_count !== 125 ||
+    handbookManifest.topics.length !== 125) {
+  throw new Error("Incomplete Web handbook topic inventory");
 }
 
 const contentTypes = {

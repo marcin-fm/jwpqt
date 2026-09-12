@@ -1,0 +1,9 @@
+# Inline Kanji Conversion
+
+Inline conversion is the candidate process that occurs while Japanese text is being entered in Kanji mode. With WNN resources available, JWPqt tracks an automatic conversion range after its portable romaji composer produces kana. It waits while the reading can still be extended, then applies a terminal or longest-prefix candidate. Any unmatched suffix stays at the caret. This is native Qt desktop behavior implemented by JWPqt; it is not an invocation of a Windows IME.
+
+The current conversion is shown in the horizontal candidate strip below the editor. It is a preview rather than final text. Click a candidate to preview it, or use `Space`, `Shift+Space`, or Convert to cycle candidates. `Enter` and `Escape` accept the displayed candidate. Candidate acceptance is a single undoable conversion transaction, so Undo restores the source reading rather than partially reverting individual candidate movements.
+
+Operations that would invalidate the source must first settle the preview. Cursor keys, page movement, Tab, Home, End, and similar navigation accept an active WNN candidate before moving. `Return` accepts the candidate then inserts a paragraph. `Ctrl+Return` accepts it then inserts a structural hard page break. Changing Kanji/ASCII/JASCII mode also commits pending kana and accepts a displayed candidate. The conversion and following structural edit are separate Undo steps.
+
+Use explicit conversion for an existing selected reading: [Explicit Kanji Conversion](help:IDH_TEXT_EXPLICITKANJI). The optional **Ctrl+Up/Down conversion** policy is off by default; when enabled in **Options > Display and Files**, Ctrl+Up converts or cycles forward and Ctrl+Down cycles backward for selected text or a conversion range. Otherwise those keys scroll one display line. User conversions and learned choices contribute candidates but are stored separately. See [User Kana to Kanji Conversions](help:IDH_TEXT_USERKANJI).

@@ -1,0 +1,11 @@
+# JIS Character Table and Selecting Characters
+
+Open **Tools > JIS Table** or press `Ctrl+T`. JWPqt calls the resulting modeless window **Character Table**. It presents a 94-character JIS page as a six-by-sixteen grid, plus fields for JIS page, JIS, EUC-JP, Shift-JIS, and Unicode. The initial page and selection are hiragana `0x24` / `0x2421`, making the table useful for kana whose romaji entry you do not remember.
+
+Select a grid cell or change the **JIS page** field, which accepts hexadecimal pages from `0x21` through `0x74`. Selection updates all four code fields. Conversely, type a hexadecimal JIS, EUC-JP, Shift-JIS, or Unicode value and finish editing: if it denotes an assigned JIS character, the window changes page, selects the character, and synchronizes every code. The table therefore documents mappings rather than treating any arbitrary Unicode scalar as a JIS character. Invalid or unassigned input leaves the existing selection intact and reports, “The code is not an assigned JIS character.”
+
+The table includes assigned characters in the JIS repertoire represented by JWPqt: symbols and punctuation, JASCII, hiragana, katakana, Greek, Cyrillic, box drawing, Level I and Level II kanji. It is not a promise to display unassigned pages or to convert JIS X 0212 references into editable table entries. Character Information can still identify an X 0212 cross-reference when metadata records one.
+
+Use **Copy** to put the selected character on the clipboard, **Insert** to insert it into the current active document, and **Information** to open Character Information. Double-click a grid item also inserts it. All three buttons are unavailable until a valid table character is selected. The source-level actions use the editor's normal insertion path, so the document history remains available for Undo.
+
+The table is independent of `kanjinfo.dat`; JIS, EUC-JP, Shift-JIS, and Unicode mappings work without kanji metadata. Metadata only enriches the Character Information viewer. For a character whose JIS code you know, use this table rather than Index Lookup. See [Character Information](help:IDH_KANJI_CHARINFO), [Index Lookup](help:IDH_KANJI_INDEXLOOKUP), and [Finding Kanji](help:IDH_KANJI_LOOKUP).

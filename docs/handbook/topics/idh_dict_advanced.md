@@ -1,0 +1,13 @@
+# Advanced Dictionary Searches
+
+**Advanced** enables bounded adaptive deinflection, not wildcard syntax. It is designed for an inflected verb, an attached grammatical form, or a long kana run whose word break is uncertain. The engine first tries the submitted text, applies recovered grammatical rules to possible forms, and can then work through shorter useful portions. Direct matches and adaptive matches remain structured results, so ordinary boundaries, category exclusions, resource order, and result limits still apply.
+
+Advanced processing can produce plausible but false alternatives, especially if End With is off. Read earlier results as higher-probability candidates, then use the surrounding text to choose the intended sense. Enable **Always Search** to run adaptive work even after a direct match. Enable **Show All** to continue through all eligible shorter forms rather than stopping at the best successful length; this can return many extra candidates. Clear **I-adjectives** to suppress the i-adjective rules when their broad alternatives are not useful. These values persist even while Advanced itself is disabled.
+
+**Mark** separates direct and Advanced result groups when enabled. With priority sorting, direct priority entries lead the direct group and adaptive priority entries lead the Advanced group. The native presentation retains the equivalent Advanced separator policy without changing canonical Copy or Insert behavior. See [Searching and Results](help:IDH_DICT_RESULTS).
+
+Advanced is independent of pattern matching. Use `*`, `?`, `[`, and `]` only for a valid pattern as described in [What you can Search for](help:IDH_DICT_SEARCHFOR); do not enable Advanced merely to use them. Pattern-bearing, ASCII, and direct-hit cases gate contingent retry.
+
+**Contingent** is a separate source-style fallback. It retries an eligible exact Japanese search only after it fails, and requires both Begin With and End With. It retains its pattern, ASCII, name-filter, and work-limit safeguards. Hold Shift while invoking Search to force one contingent request without changing the saved preference; the forced request still respects validation. **Names** deliberately performs one inclusive name search without Advanced or Contingent retry and does not alter saved options.
+
+Optionally link Advanced to excluding personal and place names. When the link is enabled, a user action that enables Advanced excludes both categories; including either category disables Advanced. Imported settings are not silently normalized, and changing this or another control neither starts lookup nor clears the current result list. Configure the link and search behavior in [Dictionary Options](help:IDH_DICT_OPTIONS).

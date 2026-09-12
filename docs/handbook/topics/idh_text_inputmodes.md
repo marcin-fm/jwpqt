@@ -1,0 +1,9 @@
+# Input Modes
+
+Choose a typing mode from **Edit > Input Mode**. **Kanji** (`Ctrl+K`) composes desktop romaji into Japanese kana and can use WNN conversion. **ASCII** (`Ctrl+Alt+A`) inserts literal characters directly. **JASCII** (`Ctrl+J`) inserts the recovered full-width character mappings, including Western comma and period and a dash. The status-bar mode button cycles the three choices. `F4` switches Kanji and ASCII; from JASCII it switches to Kanji.
+
+Kanji input is not a separate operating-system IME. JWPqt's Qt editor receives ordinary desktop key input and applies its portable romaji composer in the active field. It tracks unfinished input at the caret, then exposes a conversion candidate strip when applicable. ASCII is useful for literal Latin input, while JASCII is for full-width source-style characters. Query fields in dictionary and Find/Replace windows have their own K, A, and J mode controls, so changing a query field does not change the main editor.
+
+Changing input mode commits pending kana and accepts a displayed conversion candidate. The choice is separate from **Japanese Editing**: native and unrestricted Unicode documents can use the input modes, although native conversion and formatting require the native engine. The preference that an explicit Convert returns a Japanese document to Kanji mode is in **Options > Display and Files** and is enabled by default. Turning it off retains ASCII or JASCII after explicit conversion; it does not accept an active preview.
+
+Input mode also differs from insert/overwrite. Press `Insert`, choose **Edit > Input Mode > Overwrite Mode**, or click `INS`/`OVR` in the status bar to choose document typing behavior. That switch is shared by tabs in the same window, is not saved in settings or projects, and does not itself commit pending kana. See [Edit Modes](help:IDH_TEXT_EDITMODES), [Entering Hiragana](help:IDH_TEXT_HIRAGANA), and [Formatting Text](help:IDH_EDIT_FORMAT).

@@ -646,10 +646,22 @@ ApplicationSettingsDialog::ApplicationSettingsDialog(const ApplicationSettings& 
   auto* help = buttons->button(QDialogButtonBox::Help);
   help->setObjectName(QStringLiteral("applicationSettingsHelp"));
   outer->addWidget(buttons);
+  const auto help_topic = [tabs] {
+    const QStringList topics = {
+        QStringLiteral("IDH_OPTIONS_GENERAL"), QStringLiteral("IDH_OPTIONS_FONT"),
+        QStringLiteral("IDH_DICT_OPTIONS"), QStringLiteral("IDH_OPTIONS_ADVANCED"),
+        QStringLiteral("IDH_PRINT_LAYOUT"), QStringLiteral("IDH_PRINT_OPTIONS"),
+        QStringLiteral("IDH_KANJI_LOOKUP"), QStringLiteral("IDH_OPTIONS_DISPLAY"),
+        QStringLiteral("IDH_OPTIONS_ADVANCED")};
+    return topics.value(tabs->currentIndex(), QStringLiteral("IDH_OPTIONS_INTRO"));
+  };
+  setProperty("jwpqtHelpTopic", help_topic());
+  connect(tabs, &QTabWidget::currentChanged, this,
+          [this, help_topic](int) { setProperty("jwpqtHelpTopic", help_topic()); });
   const QPointer<QWidget> guarded_help_owner(help_owner);
-  connect(help, &QPushButton::clicked, this, [this, guarded_help_owner] {
+  connect(help, &QPushButton::clicked, this, [this, guarded_help_owner, help_topic] {
     HelpWindow::open_owner_topic(guarded_help_owner ? guarded_help_owner.data() : this,
-                                 QStringLiteral("settings.md"));
+                                  help_topic());
   });
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
   connect(buttons, &QDialogButtonBox::accepted, this,

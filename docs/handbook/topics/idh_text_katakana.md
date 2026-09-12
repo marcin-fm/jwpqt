@@ -1,0 +1,9 @@
+# Entering Katakana
+
+Use **Kanji** input mode (`Ctrl+K`) for portable romaji composition. Uppercase syllables produce katakana while lowercase syllables produce hiragana. This makes mixed Japanese input possible without changing the document engine: type the intended uppercase syllable in a Kanji-mode field, then continue with ordinary input. ASCII mode inserts the typed letters literally; JASCII produces full-width mapped characters instead of katakana.
+
+JWPqt preserves the recovered handling of unfinished romaji. It does not send the conversion to a Windows IMM or replace the desktop input method. Pending input is resolved when changing modes, moving away, or performing an action that needs stable document text. The candidate strip can then offer WNN conversion for a katakana or hiragana reading where data supplies candidates. `Space`, `Shift+Space`, and Convert cycle a visible candidate; `Enter` or `Escape` commits it. Candidate acceptance is one native Undo transaction.
+
+**Options > Display and Files** includes **Old Katakana Vowel Handling**, which is off by default. Normally, a quote following a pending uppercase A, I, U, E, or O emits the katakana vowel and consumes the quote. With the old policy enabled, the original quote mapping is emitted too: apostrophe maps to the closing corner bracket and double quote maps to dakuten. The setting affects document input, Japanese query fields, and selected-romaji replay. It preserves pending input and applies on the next key; workspaces, settings, and projects retain the choice.
+
+Use selected-romaji conversion when text is already present: select one-paragraph printable ASCII/tabs, press `F2` or `Ctrl+>`, and uppercase syllables replay as selected katakana. Invalid or incomplete replay does not delete the source. See [Entering Hiragana](help:IDH_TEXT_HIRAGANA), [Input Modes](help:IDH_TEXT_INPUTMODES), and [User Kana to Kanji Conversions](help:IDH_TEXT_USERKANJI).
