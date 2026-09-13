@@ -658,13 +658,13 @@ target_link_libraries(jwpqt_kanji_info_integration_tests PRIVATE jwpqt_qt_ui)
 target_compile_options(jwpqt_kanji_info_integration_tests
   PRIVATE -Wall -Wextra -Wpedantic)
 add_test(NAME qt_kanji_info_integration COMMAND jwpqt_kanji_info_integration_tests)
-add_executable(jwpqt_kanji_lookup_dialog_tests
-  kanji_lookup_dialog_test.cpp
+add_executable(jwpqt_kanji_lookup_page_tests
+  kanji_lookup_page_test.cpp
 )
-target_link_libraries(jwpqt_kanji_lookup_dialog_tests PRIVATE jwpqt_qt_ui)
-target_compile_options(jwpqt_kanji_lookup_dialog_tests
+target_link_libraries(jwpqt_kanji_lookup_page_tests PRIVATE jwpqt_qt_ui)
+target_compile_options(jwpqt_kanji_lookup_page_tests
   PRIVATE -Wall -Wextra -Wpedantic)
-add_test(NAME qt_kanji_lookup_dialog COMMAND jwpqt_kanji_lookup_dialog_tests)
+add_test(NAME qt_kanji_lookup_page COMMAND jwpqt_kanji_lookup_page_tests)
 add_executable(jwpqt_kanji_code_lookup_dialog_tests
   kanji_code_lookup_dialog_test.cpp
 )
@@ -879,7 +879,7 @@ set_tests_properties(qt_kanji_info_integration PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
   TIMEOUT 10
 )
-set_tests_properties(qt_kanji_lookup_dialog PROPERTIES
+set_tests_properties(qt_kanji_lookup_page PROPERTIES
   ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
   TIMEOUT 10
 )

@@ -31,8 +31,10 @@ without a fixed intermediate pixmap. Radical and Spahn glyph sheets remain the
 original raster resources for now.
 
 Radical, Stroke Count, Bushu, Stroke/Bushu, SKIP, Spahn, Four Corner and Index
-share one modeless tabbed window. The Radical tab links the recovered equivalent
-radical variants. Opening it
+share one modeless tabbed window. A single result strip and action row remain
+above every tab; each tab contains only its search criteria. The Radical tab
+therefore begins with Stroke count, followed by its range and radical grid. It
+links the recovered equivalent radical variants. Opening it
 seeds the current JIS kanji, or use From Clipboard to extract the first kanji's
 radicals. Invalid or unavailable characters leave the current query intact.
 The stroke-count arrows cycle through Any (zero), the selected-radical stroke

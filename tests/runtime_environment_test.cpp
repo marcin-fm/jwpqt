@@ -49,7 +49,7 @@
 #include "edict_lookup_dialog.h"
 #include "kanji_info_dialog.h"
 #include "kanji_code_lookup_dialog.h"
-#include "kanji_lookup_dialog.h"
+#include "kanji_lookup_page.h"
 #include "kanji_reading_lookup_dialog.h"
 #include "jis_table_dialog.h"
 #include "edict_resources.h"
@@ -1210,7 +1210,7 @@ void test_real_resources(const QString& root, const QString& source,
   open("radicalLookupAction");
   auto* codes = dynamic_cast<jwpqt::qt::KanjiCodeLookupDialog*>(
       window.findChild<QDialog*>(QStringLiteral("kanjiCodeLookupDialog")));
-  auto* radical = codes ? dynamic_cast<jwpqt::qt::KanjiLookupDialog*>(
+  auto* radical = codes ? dynamic_cast<jwpqt::qt::KanjiLookupPage*>(
                               codes->findChild<QWidget*>(
                                   QStringLiteral("kanjiRadicalLookupPage")))
                         : nullptr;
@@ -1221,10 +1221,14 @@ void test_real_resources(const QString& root, const QString& source,
   require(claw != bushu_choices.end(), QStringLiteral("Recovered claw radical is missing"));
   radical->set_selected_radicals({claw->sprite_index});
   radical->set_stroke_range(13, 13);
-  require(radical->search(), QStringLiteral("Real radical search failed"));
-  const auto radical_results = radical->result_codes();
-  require(std::find(radical_results.begin(), radical_results.end(), 0x3026) != radical_results.end(),
-          QStringLiteral("Real radical search did not find Love"));
+  require(codes->search_radical(), QStringLiteral("Real radical search failed"));
+  const auto contains_love = [codes] {
+    const auto& results = codes->results();
+    return std::any_of(results.begin(), results.end(),
+                       [](const auto& result) { return result.code == 0x3026; });
+  };
+  require(contains_love(),
+           QStringLiteral("Real radical search did not find Love"));
   const auto before_radical_query = editor->document()->toRawText();
   QApplication::clipboard()->setText(QStringLiteral("\u611b"));
   radical->findChild<QPushButton*>(
@@ -1234,28 +1238,25 @@ void test_real_resources(const QString& root, const QString& source,
       QStringLiteral("kanjiRadicalLookupStrokeCount"))->setValue(12);
   radical->findChild<QComboBox*>(
       QStringLiteral("kanjiRadicalLookupTolerance"))->setCurrentIndex(1);
-  require(radical->search(), QStringLiteral("Real tolerant radical search failed"));
-  const auto tolerant_results = radical->result_codes();
-  require(std::find(tolerant_results.begin(), tolerant_results.end(), 0x3026) != tolerant_results.end() &&
-              editor->document()->toRawText() == before_radical_query,
-          QStringLiteral("Real extraction/tolerance lost Love or changed the source document"));
-  capture(radical, QStringLiteral("lookup-radical"));
+  require(codes->search_radical(), QStringLiteral("Real tolerant radical search failed"));
+  require(contains_love() &&
+               editor->document()->toRawText() == before_radical_query,
+           QStringLiteral("Real extraction/tolerance lost Love or changed the source document"));
+  capture(codes, QStringLiteral("lookup-radical"));
 
   open("strokeCountLookupAction");
-  auto* stroke = codes ? dynamic_cast<jwpqt::qt::KanjiLookupDialog*>(
+  auto* stroke = codes ? dynamic_cast<jwpqt::qt::KanjiLookupPage*>(
                              codes->findChild<QWidget*>(
                                  QStringLiteral("kanjiStrokeLookupPage")))
                        : nullptr;
   require(stroke != nullptr &&
-              codes->findChild<QTabWidget*>()->currentWidget() == stroke,
-          QStringLiteral("Real Stroke Count tab did not open"));
+               codes->findChild<QTabWidget*>()->currentWidget() == stroke,
+           QStringLiteral("Real Stroke Count tab did not open"));
   stroke->set_stroke_range(13, 13);
-  require(stroke->search(), QStringLiteral("Real Stroke Count search failed"));
-  const auto stroke_results = stroke->result_codes();
-  require(std::find(stroke_results.begin(), stroke_results.end(), 0x3026) !=
-              stroke_results.end(),
-          QStringLiteral("Real Stroke Count search did not find Love"));
-  capture(stroke, QStringLiteral("lookup-stroke-count"));
+  require(codes->search_stroke(), QStringLiteral("Real Stroke Count search failed"));
+  require(contains_love(),
+           QStringLiteral("Real Stroke Count search did not find Love"));
+  capture(codes, QStringLiteral("lookup-stroke-count"));
 
   open("bushuLookupAction");
   require(codes != nullptr, QStringLiteral("Real code lookup dialog did not open"));

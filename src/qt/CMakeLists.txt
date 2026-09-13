@@ -93,8 +93,8 @@ set(jwpqt_qt_ui_sources
   kanji_info_dialog.h
   kanji_info_options_dialog.cpp
   kanji_info_options_dialog.h
-  kanji_lookup_dialog.cpp
-  kanji_lookup_dialog.h
+  kanji_lookup_page.cpp
+  kanji_lookup_page.h
   kanji_result_keys.h
   kanji_reading_lookup_dialog.cpp
   kanji_reading_lookup_dialog.h

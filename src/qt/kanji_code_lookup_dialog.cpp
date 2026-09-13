@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "kanji_code_lookup_dialog.h"
-#include "kanji_lookup_dialog.h"
+#include "kanji_lookup_page.h"
 #include "kanji_lookup_names.h"
 #include "auxiliary_find.h"
 #include "kanji_result_keys.h"
@@ -416,17 +416,13 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
     if (check != automatic) connect(check, &QCheckBox::toggled, this, schedule_search);
   }
   connect(automatic, &QCheckBox::toggled, this, [this, schedule_search](bool checked) {
-    if (radical_lookup_page_)
-      radical_lookup_page_->set_lookup_options(checked, rare_last_);
-    if (stroke_lookup_page_)
-      stroke_lookup_page_->set_lookup_options(checked, rare_last_);
     const QPointer<KanjiCodeLookupDialog> self(this);
     const auto handler = auto_search_handler_;
     if (handler) handler(checked);
     if (self && automatic_->isChecked() == checked) schedule_search();
   });
   connect(tabs_, &QTabWidget::currentChanged, this,
-           [this, automatic, search_button, clear_button](int index) {
+           [this, automatic](int index) {
     search_timer_->stop();
     QString help_topic;
     switch (index) {
@@ -441,15 +437,7 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
       default: help_topic = QStringLiteral("IDH_KANJI_LOOKUP"); break;
     }
     setProperty("jwpqtHelpTopic", help_topic);
-    const bool embedded_lookup = index >= 6;
-    automatic->setVisible(!embedded_lookup && index != 5);
-    search_button->setVisible(!embedded_lookup);
-    clear_button->setVisible(!embedded_lookup);
-    results_->setVisible(!embedded_lookup);
-    status_->setVisible(!embedded_lookup);
-    copy_button_->setVisible(!embedded_lookup);
-    insert_button_->setVisible(!embedded_lookup);
-    info_button_->setVisible(!embedded_lookup);
+    automatic->setVisible(index != 5);
   });
   setProperty("jwpqtHelpTopic", QStringLiteral("IDH_KANJI_SKIPLOOKUP"));
   connect(bushu_radicals_, &QListWidget::itemClicked, this, [this](QListWidgetItem* item) {
@@ -554,21 +542,21 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
   }
 
   if (radical_lists != nullptr && stroke_lists != nullptr) {
-    radical_lookup_page_ = new KanjiLookupDialog(
+    radical_lookup_page_ = new KanjiLookupPage(
         *radical_lists, *stroke_lists, information_, radical_sheet_,
-        insert_handler_, info_handler_, tabs_, KanjiLookupPageMode::kRadical,
-        true);
-    stroke_lookup_page_ = new KanjiLookupDialog(
+        KanjiLookupPageMode::kRadical, tabs_);
+    stroke_lookup_page_ = new KanjiLookupPage(
         *radical_lists, *stroke_lists, information_, QPixmap{},
-        insert_handler_, info_handler_, tabs_,
-        KanjiLookupPageMode::kStrokeCount, true);
-    const auto changed = [this](bool automatic_search) {
-      set_automatic_search(automatic_search);
-      const auto handler = auto_search_handler_;
-      if (handler) handler(automatic_search);
+        KanjiLookupPageMode::kStrokeCount, tabs_);
+    const auto changed = [schedule_search] { schedule_search(); };
+    const auto error = [this](const QString& message) {
+      search_timer_->stop();
+      status_->setText(message);
     };
-    radical_lookup_page_->set_auto_search_handler(changed);
-    stroke_lookup_page_->set_auto_search_handler(changed);
+    radical_lookup_page_->set_change_handler(changed);
+    stroke_lookup_page_->set_change_handler(changed);
+    radical_lookup_page_->set_error_handler(error);
+    stroke_lookup_page_->set_error_handler(error);
     tabs_->addTab(radical_lookup_page_, tr("Radical"));
     tabs_->addTab(stroke_lookup_page_, tr("Stroke Count"));
   }
@@ -622,10 +610,6 @@ void KanjiCodeLookupDialog::set_automatic_search(bool automatic) {
   const QSignalBlocker blocker(automatic_);
   automatic_->setChecked(automatic);
   if (!automatic) search_timer_->stop();
-  if (radical_lookup_page_)
-    radical_lookup_page_->set_lookup_options(automatic, rare_last_);
-  if (stroke_lookup_page_)
-    stroke_lookup_page_->set_lookup_options(automatic, rare_last_);
 }
 
 void KanjiCodeLookupDialog::set_auto_search_handler(std::function<void(bool)> handler) {
@@ -718,10 +702,10 @@ void KanjiCodeLookupDialog::clear_current() {
       break;
     case 6:
       if (radical_lookup_page_) radical_lookup_page_->clear();
-      return;
+      break;
     case 7:
       if (stroke_lookup_page_) stroke_lookup_page_->clear();
-      return;
+      break;
   }
   search_timer_->stop();
   results_->clear();
@@ -838,11 +822,27 @@ bool KanjiCodeLookupDialog::select_radical_character(core::JisCode code) {
 }
 
 bool KanjiCodeLookupDialog::search_radical() {
-  return radical_lookup_page_ != nullptr && radical_lookup_page_->search();
+  if (!radical_lookup_page_) return false;
+  try {
+    return publish(radical_lookup_page_->search(rare_last_));
+  } catch (const std::exception& error) {
+    status_->setText(QString::fromUtf8(error.what()));
+  } catch (...) {
+    status_->setText(tr("Radical lookup failed"));
+  }
+  return false;
 }
 
 bool KanjiCodeLookupDialog::search_stroke() {
-  return stroke_lookup_page_ != nullptr && stroke_lookup_page_->search();
+  if (!stroke_lookup_page_) return false;
+  try {
+    return publish(stroke_lookup_page_->search(rare_last_));
+  } catch (const std::exception& error) {
+    status_->setText(QString::fromUtf8(error.what()));
+  } catch (...) {
+    status_->setText(tr("Stroke Count lookup failed"));
+  }
+  return false;
 }
 
 void KanjiCodeLookupDialog::set_index_query(const core::KanjiIndexQuery& query) {
@@ -1005,6 +1005,38 @@ bool KanjiCodeLookupDialog::publish(core::KanjiCodeSearchReport report) {
     item->setToolTip(value.tooltip);
     item->setData(Qt::UserRole, value.match.code);
     item->setData(Qt::UserRole + 1, value.match.alternate);
+  }
+  if (results_->count() != 0) results_->setCurrentRow(0);
+  status_->setText(report.truncated
+                       ? tr("%1 matches shown (result limit reached)")
+                             .arg(results_->count())
+                       : tr("%1 matches").arg(results_->count()));
+  update_actions();
+  return true;
+}
+
+bool KanjiCodeLookupDialog::publish(core::KanjiLookupReport report) {
+  search_timer_->stop();
+  struct Rendered {
+    QString text;
+    QString tooltip;
+    core::KanjiLookupResult result;
+  };
+  std::vector<Rendered> rendered;
+  rendered.reserve(report.results.size());
+  for (const core::KanjiLookupResult& result : report.results) {
+    const std::u32string decoded = core::decode_jwp_text({result.code});
+    if (decoded.size() != 1)
+      throw core::KanjiInfoError("Kanji lookup result cannot be displayed");
+    rendered.push_back({to_qstring(decoded),
+                        tr("%1 strokes").arg(result.strokes), result});
+  }
+  results_->clear();
+  for (const Rendered& value : rendered) {
+    auto* item = new QListWidgetItem(value.text, results_);
+    item->setToolTip(value.tooltip);
+    item->setData(Qt::UserRole, value.result.code);
+    item->setData(Qt::UserRole + 1, false);
   }
   if (results_->count() != 0) results_->setCurrentRow(0);
   status_->setText(report.truncated

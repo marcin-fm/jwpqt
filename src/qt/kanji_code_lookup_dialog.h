@@ -24,7 +24,7 @@ class QTimer;
 
 namespace jwpqt::qt {
 
-class KanjiLookupDialog;
+class KanjiLookupPage;
 
 class KanjiCodeLookupDialog : public QDialog {
  public:
@@ -78,6 +78,7 @@ class KanjiCodeLookupDialog : public QDialog {
  private:
   void update_artwork();
   bool publish(core::KanjiCodeSearchReport report);
+  bool publish(core::KanjiLookupReport report);
   std::vector<core::JisCode> selected_codes() const;
   void update_actions();
   void copy_results();
@@ -127,8 +128,8 @@ class KanjiCodeLookupDialog : public QDialog {
   QSpinBox* index_volume_;
   QTimer* search_timer_;
   QPixmap radical_sheet_;
-  KanjiLookupDialog* radical_lookup_page_ = nullptr;
-  KanjiLookupDialog* stroke_lookup_page_ = nullptr;
+  KanjiLookupPage* radical_lookup_page_ = nullptr;
+  KanjiLookupPage* stroke_lookup_page_ = nullptr;
   QListWidget* results_;
   QLabel* status_;
   QPushButton* copy_button_;

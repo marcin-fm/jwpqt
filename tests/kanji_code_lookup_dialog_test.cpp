@@ -25,7 +25,7 @@
 
 #include "jwpqt/core/kanji_info.h"
 #include "kanji_code_lookup_dialog.h"
-#include "kanji_lookup_dialog.h"
+#include "kanji_lookup_page.h"
 #include "kanji_reading_lookup_dialog.h"
 #include "text_bridge.h"
 #include "vector_artwork.h"
@@ -170,49 +170,97 @@ void test_radical_and_stroke_tabs() {
       &radicals, &strokes);
   const auto* tabs = dialog.findChild<QTabWidget*>();
   require(tabs && tabs->count() == 8 && tabs->tabText(6) == "Radical" &&
-              tabs->tabText(7) == "Stroke Count",
-          "Radical and Stroke Count are not first-class lookup tabs");
+               tabs->tabText(7) == "Stroke Count",
+           "Radical and Stroke Count are not first-class lookup tabs");
+  dialog.show();
+  QApplication::processEvents();
+  auto* results =
+      dialog.findChild<QListWidget*>(QStringLiteral("kanjiCodeResults"));
+  auto* insert =
+      dialog.findChild<QPushButton*>(QStringLiteral("kanjiCodeInsert"));
+  auto* information =
+      dialog.findChild<QPushButton*>(QStringLiteral("kanjiCodeInfo"));
+  auto* automatic =
+      dialog.findChild<QCheckBox*>(QStringLiteral("kanjiCodeAutoSearch"));
+  auto* search =
+      dialog.findChild<QPushButton*>(QStringLiteral("kanjiCodeSearch"));
+  auto* clear =
+      dialog.findChild<QPushButton*>(QStringLiteral("kanjiCodeClear"));
 
   dialog.select_radical_mode();
-  auto* radical = dynamic_cast<qt::KanjiLookupDialog*>(
+  auto* radical = dynamic_cast<qt::KanjiLookupPage*>(
       dialog.findChild<QWidget*>(QStringLiteral("kanjiRadicalLookupPage")));
   require(radical && tabs->currentWidget() == radical,
           "Radical mode did not select its shared lookup tab");
   radical->set_selected_radicals({0});
   require(dialog.search_radical() &&
-              radical->result_codes() ==
-                  std::vector<core::JisCode>{0x3021U},
-          "Radical tab did not run the bounded radical lookup");
-  radical->findChild<QPushButton*>(
-      QStringLiteral("kanjiRadicalLookupInsert"))->click();
-  radical->findChild<QPushButton*>(
-      QStringLiteral("kanjiRadicalLookupInfo"))->click();
+               dialog.results().size() == 1 &&
+               dialog.results()[0].code == 0x3021U && results &&
+                results->isVisible() && insert && insert->isVisible() &&
+                information && information->isVisible(),
+            "Radical tab did not run the bounded radical lookup");
+  auto* stroke_count = radical->findChild<QSpinBox*>(
+      QStringLiteral("kanjiRadicalLookupStrokeCount"));
+  const int tabs_top = tabs->mapTo(&dialog, QPoint{}).y();
+  require(search && clear &&
+              dialog.findChildren<QListWidget*>(
+                  QStringLiteral("kanjiCodeResults")).size() == 1 &&
+              radical->findChild<QListWidget*>(
+                  QStringLiteral("kanjiRadicalLookupResults")) == nullptr &&
+              radical->findChild<QPushButton*>(
+                  QStringLiteral("kanjiRadicalLookupSearch")) == nullptr &&
+              results->mapTo(&dialog, QPoint{}).y() + results->height() <
+                  tabs_top &&
+              search->mapTo(&dialog, QPoint{}).y() + search->height() <
+                  tabs_top &&
+              stroke_count &&
+              stroke_count->mapTo(&dialog, QPoint{}).y() > tabs_top,
+          "Radical tab duplicated result controls or did not begin at Stroke count");
+  require(dialog.grab().save(QStringLiteral("lookup-radical-unified-light.png")),
+          "Could not save the unified Radical layout acceptance image");
+  insert->click();
+  information->click();
   require(inserted == std::vector<core::JisCode>{0x3021U} &&
               shown == 0x3021U,
           "Radical tab lost shared result callbacks");
 
   dialog.select_stroke_mode();
-  auto* stroke = dynamic_cast<qt::KanjiLookupDialog*>(
+  auto* stroke = dynamic_cast<qt::KanjiLookupPage*>(
       dialog.findChild<QWidget*>(QStringLiteral("kanjiStrokeLookupPage")));
   require(stroke && tabs->currentWidget() == stroke,
           "Stroke Count mode did not select its shared lookup tab");
   stroke->set_stroke_range(3, 3);
   require(dialog.search_stroke() &&
-              stroke->result_codes() ==
-                  std::vector<core::JisCode>{0x3021U},
-          "Stroke Count tab did not run the bounded stroke lookup");
+               dialog.results().size() == 1 &&
+               dialog.results()[0].code == 0x3021U &&
+               results->item(0)->toolTip() == QStringLiteral("3 strokes"),
+           "Stroke Count tab did not run the bounded stroke lookup");
 
   int automatic_changes = 0;
   dialog.set_auto_search_handler([&](bool automatic) {
     ++automatic_changes;
-    require(!automatic, "Embedded Auto Search published the wrong value");
+    require(!automatic, "Shared Auto Search published the wrong value");
   });
-  radical->findChild<QCheckBox*>(
-      QStringLiteral("kanjiRadicalLookupAutoSearch"))->click();
-  require(automatic_changes == 1 &&
-              !stroke->findChild<QCheckBox*>(
-                  QStringLiteral("kanjiStrokeLookupAutoSearch"))->isChecked(),
-          "Embedded lookup Auto Search did not synchronize once");
+  require(automatic && automatic->isChecked(),
+          "Shared Auto Search is not visible on Radical and Stroke tabs");
+  automatic->click();
+  require(automatic_changes == 1 && !automatic->isChecked(),
+          "Shared lookup Auto Search did not publish once");
+
+  QPalette dark = dialog.palette();
+  dark.setColor(QPalette::Window, QColor(35, 38, 41));
+  dark.setColor(QPalette::Base, QColor(24, 27, 29));
+  dark.setColor(QPalette::Text, QColor(236, 236, 236));
+  dark.setColor(QPalette::WindowText, QColor(236, 236, 236));
+  dark.setColor(QPalette::Button, QColor(66, 69, 73));
+  dark.setColor(QPalette::ButtonText, QColor(236, 236, 236));
+  dark.setColor(QPalette::Highlight, QColor(64, 112, 170));
+  dark.setColor(QPalette::HighlightedText, QColor(Qt::white));
+  dialog.setPalette(dark);
+  dialog.select_radical_mode();
+  QApplication::processEvents();
+  require(dialog.grab().save(QStringLiteral("lookup-radical-unified-dark.png")),
+          "Could not save the dark unified Radical layout acceptance image");
 }
 
 void test_dialog() {

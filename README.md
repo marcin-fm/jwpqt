@@ -935,8 +935,10 @@ enable the option only when that is wanted.
 Character Table places its code fields beside the full character grid. Lookup
 results use horizontal character strips with Information, Insert and Copy
 actions. Radical, Stroke Count, Bushu, Stroke/Bushu, SKIP, Spahn-Hadamitzky,
-Four Corner and Index Lookup share one tabbed window. Graphical radical selectors
-and responsive SKIP/Four Corner
+Four Corner and Index Lookup share one tabbed window, one result strip and one
+Search/Clear/Information/Insert/Copy action row above the tabs. Each tab contains
+criteria only; the Radical tab begins directly with Stroke count and the radical
+grid. Graphical radical selectors and responsive SKIP/Four Corner
 legends, Clear and debounced Auto Search are available where applicable. Index
 Lookup supports the 21 recovered dictionary/reference types, limited by the
 loaded metadata; its volume field is enabled only for the relevant indexes.
