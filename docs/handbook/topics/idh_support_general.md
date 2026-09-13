@@ -1,6 +1,6 @@
 # Support
 
-JWPqt 2.03 is a native Qt 6 continuation of JWPxp 1.67, descended from JWPce and JWP. Its recovered user-visible command and configuration surface has been audited: a command has either a tested native implementation or a documented platform replacement or exclusion. The running version is available in About status information and through `jwpqt --version`. Help > Contents opens the embedded offline handbook; F1 routes owning editors and dialogs to relevant topics without loading arbitrary local files or websites.
+JWPqt 2.04 is a native Qt 6 continuation of JWPxp 1.67, descended from JWPce and JWP. Its recovered user-visible command and configuration surface has been audited: a command has either a tested native implementation or a documented platform replacement or exclusion. The running version is available in About status information and through `jwpqt --version`. Help > Contents opens the embedded offline handbook; F1 routes owning editors and dialogs to relevant topics without loading arbitrary local files or websites.
 
 For local diagnostics, use **Help > Runtime Resources** or `jwpqt --resource-report`. They show loaded sources, failed resources, and skipped invalid records. A zero report exit status does not certify that every optional resource is available. Do not publish private document text, history archives, user dictionaries, or paths without reviewing them first. The editor and handbook can run without optional lookup data, while a partial WNN pair or corrupt required configuration is an error.
 

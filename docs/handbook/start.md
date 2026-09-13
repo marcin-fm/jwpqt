@@ -1,4 +1,4 @@
-# JWPqt 2.03 Handbook
+# JWPqt 2.04 Handbook
 
 This offline handbook ports the complete 125-topic JWPce help inventory to the
 native Qt 6 application. It preserves the original organization while replacing

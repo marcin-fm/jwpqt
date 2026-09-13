@@ -1,22 +1,20 @@
-# JWPqt 2.03
+# JWPqt 2.04
 
 Release date: 2026-09-13
 
-JWPqt 2.03 contains the complete native application and help parity
+JWPqt 2.04 contains the complete native application and help parity
 with JWPxp 1.67. It preserves JWP/JCE compatibility boundaries while replacing
 the Win32 application layer with portable C++ and native Qt implementations for
 Linux, Windows, macOS, and WebAssembly.
 
-## Changes Since 2.02
+## Changes Since 2.03
 
-- Unified Radical and Stroke Count with the shared Kanji Code Lookup result strip,
-  action row, status, and automatic-search state. Their tabs now contain only the
-  relevant criteria, with Radical beginning directly at Stroke count.
-- Made the word-selection interaction regression independent of deferred Qt
-  formatting revisions, while continuing to verify native document content,
-  dirty state, and portable undo history.
-- Fit Bushu stroke headings to actual platform font metrics, retaining the compact
-  no-scroll grid without clipping two-digit labels on hosted Linux runners.
+- Let only the Bushu stroke-heading cells expand to their measured platform-font
+  width when a readable label cannot fit the compact 26-pixel radical cell. The
+  grid remains scroll-free while two-digit headings stay unclipped.
+- Made the unsaved WNN/EDICT exit regression independent of Windows' pending
+  last-window-closed event. The test still exercises real Save, Discard, and
+  Cancel prompts and verifies their persistent effects.
 
 ## Highlights
 
@@ -38,11 +36,11 @@ Linux, Windows, macOS, and WebAssembly.
 
 ## Packages
 
-- Linux: `jwpqt-2.03-Linux-<architecture>-noncommercial-data.tar.gz`
-- Windows: `jwpqt-2.03-Windows-<architecture>-noncommercial-data.zip`
-- macOS: `jwpqt-2.03-Darwin-<architecture>-noncommercial-data.dmg`
-- WebAssembly: `JWPqt-2.03-WebAssembly-Noncommercial-Data.tar.gz`
-- Corresponding source: `jwpqt-2.03-Source-Noncommercial-Data.tar.gz`
+- Linux: `jwpqt-2.04-Linux-<architecture>-noncommercial-data.tar.gz`
+- Windows: `jwpqt-2.04-Windows-<architecture>-noncommercial-data.zip`
+- macOS: `jwpqt-2.04-Darwin-<architecture>-noncommercial-data.dmg`
+- WebAssembly: `JWPqt-2.04-WebAssembly-Noncommercial-Data.tar.gz`
+- Corresponding source: `jwpqt-2.04-Source-Noncommercial-Data.tar.gz`
 
 The normal packages include the original JWPce/JWPxp EDICT, ENAMDICT,
 KANJIDIC-derived, radical, stroke, and related lookup payloads as separate,
@@ -63,7 +61,7 @@ must not be sold or relicensed as GPL. Configure with
   lookup data. Partial or corrupt explicit overrides fail rather than silently
   mixing unrelated resources.
 - The complete recovered JWPce/JWPxp source lineage is preserved by the release
-  tags through `jwpxp-1.67`; native 2.03 development follows that history.
+  tags through `jwpxp-1.67`; native 2.04 development follows that history.
 
 ## Platform Notes
 

@@ -4,7 +4,7 @@ jwpqt is a native Qt 6 port of JWPxp for Linux, Windows, macOS, and WebAssembly.
 It continues the recovered JWPce/JWPxp release history while replacing the
 Win32 application layer with portable core code and a Qt application layer.
 
-Current release: **2.03**. See [`RELEASE_NOTES.md`](RELEASE_NOTES.md) for
+Current release: **2.04**. See [`RELEASE_NOTES.md`](RELEASE_NOTES.md) for
 package names, compatibility notes, platform limitations, and verification.
 
 The native port covers the recovered JWPxp 1.67 desktop command, dialog,
