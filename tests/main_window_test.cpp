@@ -7146,6 +7146,17 @@ void test_edict_user_dictionary_integration(const QString& directory) {
 }
 
 void test_unsaved_user_dictionary_exit(const QString& directory) {
+  // This test closes multiple independent windows in one QApplication.
+  struct QuitOnLastWindowClosedGuard {
+    bool previous = QApplication::quitOnLastWindowClosed();
+    QuitOnLastWindowClosedGuard() {
+      QApplication::setQuitOnLastWindowClosed(false);
+    }
+    ~QuitOnLastWindowClosedGuard() {
+      QApplication::setQuitOnLastWindowClosed(previous);
+    }
+  } quit_guard;
+
   const WnnFixture fixture = write_wnn_fixture(directory);
   const QString wnn_path = directory + QStringLiteral("/exit-user.cnv");
   const auto wnn_entry = jwpqt::core::make_wnn_user_entry(
@@ -7234,6 +7245,7 @@ void test_unsaved_user_dictionary_exit(const QString& directory) {
               saved_wnn->entries() ==
                   std::vector<jwpqt::core::WnnUserEntry>{wnn_entry},
           "Application exit did not persist WNN dictionary changes");
+  QApplication::processEvents();
 
   const QString edict_directory =
       directory + QStringLiteral("/edict-exit");
