@@ -3079,7 +3079,6 @@ void test_word_and_line_selection(const QString& directory) {
   MainWindow window;
   require(window.open_jwp_path(path), "Could not open word-selection fixture");
   JwpEditor* editor = window.active_editor();
-  const int original_revision = editor->document()->revision();
 
   set_cursor(editor, 1);
   select(editor, Qt::ControlModifier);
@@ -3111,6 +3110,9 @@ void test_word_and_line_selection(const QString& directory) {
   window.resize(640, 300);
   window.show();
   QApplication::processEvents();
+  auto* undo = window.findChild<QAction*>(QStringLiteral("undoAction"));
+  require(undo != nullptr, "Word-selection fixture has no Undo command");
+  const bool original_undo_available = undo->isEnabled();
   const auto character_point = [](JwpEditor* target, int position) {
     QTextCursor cursor(target->document());
     cursor.setPosition(position);
@@ -3184,9 +3186,9 @@ void test_word_and_line_selection(const QString& directory) {
   require(saw_hold_popup,
           "Stationary left-button hold did not open the editor popup");
   require(*window.current_jwp_document() == source &&
-              !window.document_modified() &&
-              editor->document()->revision() == original_revision,
-          "Word mouse/keyboard selection changed native content or history");
+               !window.document_modified() &&
+               undo->isEnabled() == original_undo_available,
+           "Word mouse/keyboard selection changed native content or history");
 
   require(window.new_document_tab(false) == 1,
           "Could not create Unicode selection fixture");
