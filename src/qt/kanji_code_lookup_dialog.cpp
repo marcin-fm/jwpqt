@@ -48,7 +48,12 @@ constexpr int kBushuHeadingMaximumPixels = 16;
 constexpr int kBushuHeadingMinimumPixels = 10;
 constexpr int kBushuHeadingHorizontalPadding = 6;
 
-QFont bushu_heading_font(const QFont& base) {
+struct BushuHeadingStyle {
+  QFont font;
+  int cell_width = kBushuCellWidth;
+};
+
+BushuHeadingStyle bushu_heading_style(const QFont& base) {
   QFont font = base;
   font.setBold(true);
   for (int pixels = kBushuHeadingMaximumPixels;
@@ -62,9 +67,16 @@ QFont bushu_heading_font(const QFont& base) {
                         metrics.horizontalAdvance(QString::number(strokes)));
     }
     if (widest + kBushuHeadingHorizontalPadding <= kBushuCellWidth)
-      return font;
+      return {font, kBushuCellWidth};
   }
-  return font;
+  const QFontMetrics metrics(font);
+  int widest = 0;
+  for (int strokes = 1;
+       strokes <= core::kMaximumBushuRadicalStrokes; ++strokes) {
+    widest = std::max(widest,
+                      metrics.horizontalAdvance(QString::number(strokes)));
+  }
+  return {font, widest + kBushuHeadingHorizontalPadding};
 }
 
 class BushuStrokeSpin final : public QSpinBox {
@@ -223,23 +235,27 @@ KanjiCodeLookupDialog::KanjiCodeLookupDialog(
   bushu_radicals_->setMovement(QListView::Static);
   const bool has_bushu_sheet = radical_sheet_.width() >= 16 && radical_sheet_.height() >= 241 * 16;
   bushu_radicals_->setIconSize(QSize(16, 16));
+  const BushuHeadingStyle heading_style =
+      bushu_heading_style(bushu_radicals_->font());
   bushu_radicals_->setGridSize(
-      has_bushu_sheet ? QSize(kBushuCellWidth, 26) : QSize(36, 32));
+      has_bushu_sheet ? QSize() : QSize(36, 32));
   bushu_radicals_->setMinimumHeight(has_bushu_sheet ? 9 * 26 + 2 * bushu_radicals_->frameWidth() : 170);
   bushu_radicals_->setStyleSheet(QStringLiteral(
       "QListWidget::item:selected { background: palette(highlight); color: palette(highlighted-text); }"));
-  const QFont heading_font = bushu_heading_font(bushu_radicals_->font());
   for (std::uint8_t strokes = 1; strokes <= core::kMaximumBushuRadicalStrokes; ++strokes) {
     auto* heading = new QListWidgetItem(QString::number(strokes), bushu_radicals_);
     heading->setFlags(Qt::ItemIsEnabled);
     heading->setBackground(Qt::white);
     heading->setForeground(QColor(176, 0, 32));
-    heading->setFont(heading_font);
+    heading->setFont(heading_style.font);
+    if (has_bushu_sheet)
+      heading->setSizeHint(QSize(heading_style.cell_width, 26));
     for (const auto& choice : core::kanji_bushu_choices(strokes, true)) {
       const QPixmap icon = has_bushu_sheet
           ? radical_sheet_.copy(0, choice.sprite_index * 16, 16, 16) : QPixmap{};
       auto* item = new QListWidgetItem(QIcon(icon), icon.isNull()
           ? QString::number(choice.bushu) : QString(), bushu_radicals_);
+      if (has_bushu_sheet) item->setSizeHint(QSize(kBushuCellWidth, 26));
       item->setData(Qt::UserRole, choice.bushu);
       item->setData(Qt::UserRole + 1, choice.sprite_index);
       item->setData(Qt::UserRole + 2, strokes);

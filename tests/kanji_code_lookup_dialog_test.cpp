@@ -409,8 +409,8 @@ void test_graphical_controls_and_automatic_search() {
   sheet.fill(Qt::white);
   const QFont original_font = QApplication::font();
   QFont wide_font = original_font;
-  wide_font.setLetterSpacing(QFont::AbsoluteSpacing, 2.0);
-  wide_font.setStretch(125);
+  wide_font.setLetterSpacing(QFont::AbsoluteSpacing, 4.0);
+  wide_font.setStretch(150);
   QApplication::setFont(wide_font);
   {
     jwpqt::qt::KanjiCodeLookupDialog compact(source, {}, {}, nullptr, sheet);
@@ -428,11 +428,13 @@ void test_graphical_controls_and_automatic_search() {
       const auto* item = compact_grid->item(i);
       if (item->data(Qt::UserRole).isValid()) continue;
       require(QFontMetrics(item->font()).horizontalAdvance(item->text()) + 6 <=
-                  compact_grid->gridSize().width(),
+                  item->sizeHint().width(),
               "A two-digit Bushu stroke heading is clipped");
       reduced = reduced || item->font().pixelSize() < 16;
     }
     require(reduced, "Wide-font Bushu headings did not adapt");
+    require(compact_grid->item(0)->sizeHint().width() > 26,
+            "Wide-font Bushu headings did not expand their grid cells");
   }
   QApplication::setFont(original_font);
   jwpqt::qt::KanjiCodeLookupDialog dialog(source, {}, {});
