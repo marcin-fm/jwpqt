@@ -1,6 +1,6 @@
 # Windows CE
 
-Windows CE and PocketPC are not supported JWPqt 2.01 targets. JWPce's CE build existed for constrained handheld hardware and therefore had dedicated processor binaries, small-screen dialogs, Pocket Internet Explorer help, limited clipboard behavior, and unavailable printing or network-startup features. None of that platform layer is emulated by the native Qt port.
+Windows CE and PocketPC are not supported JWPqt 2.02 targets. JWPce's CE build existed for constrained handheld hardware and therefore had dedicated processor binaries, small-screen dialogs, Pocket Internet Explorer help, limited clipboard behavior, and unavailable printing or network-startup features. None of that platform layer is emulated by the native Qt port.
 
 The supported targets are Linux, Windows, macOS, and WebAssembly. Desktop ports share the Qt Widgets application. The WebAssembly port is the source-justified modern portable/browser counterpart for limited local ownership: it retains the Qt interface, embeds Japanese text support, uploads a local file through the browser, downloads saved output, and stores preferences and optional named-session references in IndexedDB.
 

@@ -1,6 +1,6 @@
 # Porting jwpqt
 
-jwpqt 2.01 is the audited native Qt 6 port of the JWPxp 1.67 Win32 application.
+jwpqt 2.02 is the audited native Qt 6 port of the JWPxp 1.67 Win32 application.
 It was developed in incremental, tested slices. The six recovered JWPce/JWPxp
 release commits and their tags remain the historical base; native port work
 begins after `jwpxp-1.67` and now targets Linux, Windows, macOS, and WebAssembly.

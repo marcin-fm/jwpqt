@@ -1,21 +1,21 @@
-# JWPqt 2.01
+# JWPqt 2.02
 
 Release date: 2026-09-13
 
-JWPqt 2.01 is the first release with complete native application and help parity
+JWPqt 2.02 contains the complete native application and help parity
 with JWPxp 1.67. It preserves JWP/JCE compatibility boundaries while replacing
 the Win32 application layer with portable C++ and native Qt implementations for
 Linux, Windows, macOS, and WebAssembly.
 
-## Changes Since 2.00
+## Changes Since 2.01
 
-- Replaced the abbreviated handbook with all 125 recovered JWPce topics in their
-  original 12-chapter order. Every internal reference is live, search covers the
-  complete text, and F1 routes editors, dialogs, Options pages, Page Layout pages,
-  and all eight kanji lookup tabs to exact topics.
-- Made hosted builds reproducible across Linux and Windows: byte-exact lookup data
-  is protected from checkout newline conversion, CI installs its declared Noto CJK
-  and Poppler dependencies, and tests use the host's portable temporary directory.
+- Fixed WebAssembly context-menu crashes by removing nested synchronous menu event
+  loops and recurring Asyncify-backed storage flushes from the Qt event path. The
+  browser smoke test now traverses the menu while persistence fires, then verifies
+  the editor and exact Japanese upload/input/download round trip remain live.
+- Made MSVC compile every target as UTF-8 and replaced non-ASCII character literals
+  with encoding-independent Unicode escapes, fixing the Windows reading-search
+  build failure.
 
 ## Highlights
 
@@ -37,11 +37,11 @@ Linux, Windows, macOS, and WebAssembly.
 
 ## Packages
 
-- Linux: `jwpqt-2.01-Linux-<architecture>-noncommercial-data.tar.gz`
-- Windows: `jwpqt-2.01-Windows-<architecture>-noncommercial-data.zip`
-- macOS: `jwpqt-2.01-Darwin-<architecture>-noncommercial-data.dmg`
-- WebAssembly: `JWPqt-2.01-WebAssembly-Noncommercial-Data.tar.gz`
-- Corresponding source: `jwpqt-2.01-Source-Noncommercial-Data.tar.gz`
+- Linux: `jwpqt-2.02-Linux-<architecture>-noncommercial-data.tar.gz`
+- Windows: `jwpqt-2.02-Windows-<architecture>-noncommercial-data.zip`
+- macOS: `jwpqt-2.02-Darwin-<architecture>-noncommercial-data.dmg`
+- WebAssembly: `JWPqt-2.02-WebAssembly-Noncommercial-Data.tar.gz`
+- Corresponding source: `jwpqt-2.02-Source-Noncommercial-Data.tar.gz`
 
 The normal packages include the original JWPce/JWPxp EDICT, ENAMDICT,
 KANJIDIC-derived, radical, stroke, and related lookup payloads as separate,
@@ -62,7 +62,7 @@ must not be sold or relicensed as GPL. Configure with
   lookup data. Partial or corrupt explicit overrides fail rather than silently
   mixing unrelated resources.
 - The complete recovered JWPce/JWPxp source lineage is preserved by the release
-  tags through `jwpxp-1.67`; native 2.01 development follows that history.
+  tags through `jwpxp-1.67`; native 2.02 development follows that history.
 
 ## Platform Notes
 

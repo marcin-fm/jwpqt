@@ -8,7 +8,7 @@ system Qt 6 Widgets, PrintSupport and Svg plus a Japanese font such as Noto Sans
 archive is for a compatible Linux architecture and library ABI, not a universal
 AppImage. The release workflow also builds a Windows ZIP with Qt runtime files,
 a macOS DMG application bundle, and a WebAssembly static-site archive.
-See the installed `RELEASE_NOTES.md` for the 2.01 artifact names and upgrade
+See the installed `RELEASE_NOTES.md` for the 2.02 artifact names and upgrade
 notes.
 
 The Web build embeds Noto Sans JP because WebAssembly cannot use arbitrary host
