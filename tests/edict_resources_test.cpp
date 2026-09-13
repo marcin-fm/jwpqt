@@ -373,7 +373,7 @@ void test_classical_record_recovery(const QString& directory) {
 
 int main(int argc, char** argv) {
   QCoreApplication application(argc, argv);
-  QTemporaryDir temporary_directory(QStringLiteral("/srv/tmp/jwpqt-test-XXXXXX"));
+  QTemporaryDir temporary_directory(QDir::tempPath() + QStringLiteral("/jwpqt-test-XXXXXX"));
   require(temporary_directory.isValid(), "Could not create temporary directory");
 
   test_index_path_derivation();

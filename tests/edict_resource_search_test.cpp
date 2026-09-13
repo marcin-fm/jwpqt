@@ -290,7 +290,7 @@ void test_search_plan_flags_span_resources(const QString& directory) {
 }  // namespace
 
 int main() {
-  QTemporaryDir temporary(QStringLiteral("/srv/tmp/jwpqt-edict-search-XXXXXX"));
+  QTemporaryDir temporary(QDir::tempPath() + QStringLiteral("/jwpqt-edict-search-XXXXXX"));
   require(temporary.isValid(), "Could not create resource search directory");
   test_ordered_linear_resources(temporary.path());
   test_names_only_pseudo_passes(temporary.path());

@@ -980,7 +980,7 @@ void test_character_context(const QString& directory) {
 
 int main(int argc, char* argv[]) {
   QApplication application(argc, argv);
-  QTemporaryDir directory(QStringLiteral("/srv/tmp/jwpqt-kanji-ui-XXXXXX"));
+  QTemporaryDir directory(QDir::tempPath() + QStringLiteral("/jwpqt-kanji-ui-XXXXXX"));
   require(directory.isValid(), "Could not create kanji integration directory");
   test_integration(directory.path());
   test_lookup_preferences(directory.path());

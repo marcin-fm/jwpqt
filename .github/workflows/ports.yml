@@ -55,7 +55,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y desktop-file-utils libgl1-mesa-dev libxcb-cursor0 shared-mime-info
+          sudo apt-get install -y desktop-file-utils fonts-noto-cjk libgl1-mesa-dev libxcb-cursor0 poppler-utils shared-mime-info
 
       - name: Configure MSVC
         if: runner.os == 'Windows'

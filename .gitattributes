@@ -1,0 +1,9 @@
+assets/data/** -text
+_cpright.txt -text
+docs/legal/original-notices.txt -text
+*.bmp -text
+*.dat -text
+*.dix -text
+*.f00 -text
+*.icns -text
+*.ico -text

@@ -720,7 +720,7 @@ void test_window_workflow(const QString& directory) {
 
 int main(int argc, char* argv[]) {
   QApplication application(argc, argv);
-  QTemporaryDir directory(QStringLiteral("/srv/tmp/jwpqt-print-XXXXXX"));
+  QTemporaryDir directory(QDir::tempPath() + QStringLiteral("/jwpqt-print-XXXXXX"));
   require(directory.isValid(), "Could not create print test directory");
   test_pdf_print(directory.path());
   test_invalid_layout();

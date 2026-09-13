@@ -152,7 +152,7 @@ void test_write_failure(const QString& directory) {
 
 int main(int argc, char* argv[]) {
   QCoreApplication application(argc, argv);
-  QTemporaryDir directory(QStringLiteral("/srv/tmp/jwpqt-kanji-settings-XXXXXX"));
+  QTemporaryDir directory(QDir::tempPath() + QStringLiteral("/jwpqt-kanji-settings-XXXXXX"));
   if (!directory.isValid()) {
     std::cerr << "Could not create temporary settings directory\n";
     return 1;
