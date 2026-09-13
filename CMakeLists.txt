@@ -57,6 +57,10 @@ endif()
 set(JWPQT_PACKAGE_FILE_NAME
     "jwpqt-${JWPQT_RELEASE_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}${jwpqt_package_suffix}")
 
+if(MSVC)
+  add_compile_options(/utf-8)
+endif()
+
 add_subdirectory(src/core)
 add_subdirectory(src/qt)
 

@@ -168,10 +168,10 @@ std::optional<JisCode> unicode_to_jis_x0208(char32_t code_point) noexcept {
   }
 
   if (code_point == U'\u0401') {
-    return 0x2727;
+    return static_cast<JisCode>(0x2727);
   }
   if (code_point == U'\u0451') {
-    return 0x2757;
+    return static_cast<JisCode>(0x2757);
   }
   if (code_point >= U'\u0410' && code_point <= U'\u044f') {
     if (code_point <= U'\u0415') {

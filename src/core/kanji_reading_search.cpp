@@ -82,23 +82,28 @@ std::u32string normalize_ascii_query(const KanjiReadingQuery& query) {
     if (number == 0 || number == 4) return vowel;
     switch (vowel) {
       case U'a': {
-        constexpr std::array<char32_t, 4> values{U'a', U'á', U'â', U'à'};
+        constexpr std::array<char32_t, 4> values{
+            U'a', U'\u00e1', U'\u00e2', U'\u00e0'};
         return values[number];
       }
       case U'e': {
-        constexpr std::array<char32_t, 4> values{U'e', U'é', U'ê', U'è'};
+        constexpr std::array<char32_t, 4> values{
+            U'e', U'\u00e9', U'\u00ea', U'\u00e8'};
         return values[number];
       }
       case U'i': {
-        constexpr std::array<char32_t, 4> values{U'i', U'í', U'î', U'ì'};
+        constexpr std::array<char32_t, 4> values{
+            U'i', U'\u00ed', U'\u00ee', U'\u00ec'};
         return values[number];
       }
       case U'o': {
-        constexpr std::array<char32_t, 4> values{U'o', U'ó', U'ô', U'ò'};
+        constexpr std::array<char32_t, 4> values{
+            U'o', U'\u00f3', U'\u00f4', U'\u00f2'};
         return values[number];
       }
       case U'u': {
-        constexpr std::array<char32_t, 4> values{U'u', U'ú', U'û', U'ù'};
+        constexpr std::array<char32_t, 4> values{
+            U'u', U'\u00fa', U'\u00fb', U'\u00f9'};
         return values[number];
       }
       default:
@@ -129,11 +134,11 @@ std::vector<std::uint8_t> reading_bytes(std::u32string_view text) {
   bool in_okurigana = false;
   bool mark_okurigana = false;
   for (const char32_t value : text) {
-    if (value == U'-' || value == U'ー' || value == U'―') {
+    if (value == U'-' || value == U'\u30fc' || value == U'\u2015') {
       result.push_back(0x1fU);
       continue;
     }
-    if (value == U'(' || value == U'（') {
+    if (value == U'(' || value == U'\uff08') {
       if (in_okurigana) {
         throw KanjiInfoError("Kanji reading has nested okurigana markers");
       }
@@ -141,7 +146,7 @@ std::vector<std::uint8_t> reading_bytes(std::u32string_view text) {
       mark_okurigana = true;
       continue;
     }
-    if (value == U')' || value == U'）') {
+    if (value == U')' || value == U'\uff09') {
       if (!in_okurigana || mark_okurigana) {
         throw KanjiInfoError("Kanji reading has an empty okurigana marker");
       }
