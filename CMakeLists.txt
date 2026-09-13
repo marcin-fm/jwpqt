@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(jwpqt VERSION 2.0.2 LANGUAGES CXX)
+project(jwpqt VERSION 2.0.3 LANGUAGES CXX)
 
-set(JWPQT_RELEASE_VERSION "2.02")
+set(JWPQT_RELEASE_VERSION "2.03")
 
 if(WIN32)
   enable_language(RC)

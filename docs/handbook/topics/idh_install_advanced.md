@@ -1,6 +1,6 @@
 # Advanced Install Dialog
 
-JWPqt 2.02 has no Advanced Install dialog. The legacy dialog controlled Windows registry file associations, desktop shortcuts, and Start menu entries from within JWPce. That mechanism is obsolete in the native port because CMake/CPack and the target operating system own installation and desktop integration.
+JWPqt 2.03 has no Advanced Install dialog. The legacy dialog controlled Windows registry file associations, desktop shortcuts, and Start menu entries from within JWPce. That mechanism is obsolete in the native port because CMake/CPack and the target operating system own installation and desktop integration.
 
 On Linux, package or private-prefix installation can place the supplied desktop entry, icon, and MIME XML in the usual XDG locations. Refresh desktop and MIME caches using the distribution's normal tools after installation. Put `jwpqt` on PATH when the desktop entry requires it. The MIME definitions identify JWP/JPR content, but do not forcibly set JWPqt as the default application. Change defaults only through the host desktop's standard association controls.
 

@@ -1,6 +1,6 @@
 # What is JWPce?
 
-JWPqt 2.02 is the native Qt 6 continuation of the JWPce and JWPxp Japanese word-processor lineage. It runs as one application on Linux, Windows, macOS, and WebAssembly; it is not a Wine wrapper and does not run the old Windows executable. Its purpose remains practical Japanese reading and writing, especially where a document editor, Japanese input, dictionary search, and kanji reference tools should work together.
+JWPqt 2.03 is the native Qt 6 continuation of the JWPce and JWPxp Japanese word-processor lineage. It runs as one application on Linux, Windows, macOS, and WebAssembly; it is not a Wine wrapper and does not run the old Windows executable. Its purpose remains practical Japanese reading and writing, especially where a document editor, Japanese input, dictionary search, and kanji reference tools should work together.
 
 Create a Japanese document to use the original JWP-compatible editing model, paragraph formatting, hard page breaks, and JWP/JCE saving. Create a plain-text document when a conventional Unicode text file is more appropriate. Both can use Japanese input; turn off Japanese Editing only when a plain-text document needs characters outside the original JWP repertoire. Storage format and editing mode are separate decisions.
 
