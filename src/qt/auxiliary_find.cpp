@@ -324,8 +324,14 @@ bool AuxiliaryFind::eventFilter(QObject* object, QEvent* event) {
       menu->addSeparator();
       for (auto* action : insert_actions_) menu->addAction(action);
     }
+#ifdef Q_OS_WASM
+    menu->setAttribute(Qt::WA_DeleteOnClose);
+    menu->popup(context->globalPos());
+#else
     menu->exec(context->globalPos());
-    delete menu.data(); return true;
+    delete menu.data();
+#endif
+    return true;
   }
   return false;
 }

@@ -136,6 +136,34 @@ async function main() {
       }
     }
 
+    await page.mouse.click(300, 160, { button: "right" });
+    await page.waitForTimeout(250);
+    const contextMenuCanvas = await canvas.screenshot();
+    if (contextMenuCanvas.equals(baseCanvas)) {
+      throw new Error("Editor context menu did not open in the Web application");
+    }
+    for (let cycle = 0; cycle < 14; ++cycle) {
+      for (let y = 180; y <= 620; y += 40) {
+        await page.mouse.move(360, y);
+        await page.waitForTimeout(35);
+      }
+    }
+    for (let depth = 0; depth < 3; ++depth) {
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(100);
+    }
+    await page.mouse.click(1100, 680);
+    await page.waitForTimeout(500);
+    const contextCanvasSurvived = await page.evaluate(() => {
+      const currentCanvas =
+        document.querySelector("#qt-shadow-container")?.shadowRoot?.querySelector("canvas") ??
+        document.querySelector("canvas");
+      return window.__jwpqtOriginalCanvas === currentCanvas && currentCanvas?.isConnected === true;
+    });
+    if (!contextCanvasSurvived) {
+      throw new Error("Web canvas was destroyed while traversing the editor context menu");
+    }
+
     await page.keyboard.press("Control+O");
     const picker = page.locator("#jwpqt-open-file");
     await picker.waitFor({ state: "attached" });

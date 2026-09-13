@@ -118,7 +118,16 @@ void show_character_context_menu(
   const QPoint location = keyboard
       ? editor.viewport()->mapToGlobal(editor.cursorRect().center())
       : event.globalPos();
+#ifdef Q_OS_WASM
+  if (target && show_information) {
+    QObject::connect(information, &QAction::triggered, menu.get(),
+                     [target, show_information] { show_information(*target); });
+  }
+  menu->setAttribute(Qt::WA_DeleteOnClose);
+  menu.release()->popup(location);
+#else
   if (menu->exec(location) == information && target && show_information) show_information(*target);
+#endif
 }
 
 }  // namespace jwpqt::qt

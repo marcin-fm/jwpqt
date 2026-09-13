@@ -24,7 +24,7 @@
 #include "vector_artwork.h"
 
 #ifdef Q_OS_WASM
-EM_ASYNC_JS(int, jwpqt_sync_web_storage, (int populate), {
+EM_ASYNC_JS(int, jwpqt_populate_web_storage, (), {
   try {
     const root = '/jwpqt-persist';
     if (!FS.analyzePath(root).exists) FS.mkdir(root);
@@ -33,7 +33,7 @@ EM_ASYNC_JS(int, jwpqt_sync_web_storage, (int populate), {
       Module.jwpqtStorageMounted = true;
     }
     return await new Promise((resolve) => {
-      FS.syncfs(!!populate, (error) => {
+      FS.syncfs(true, (error) => {
         if (!error) {
           FS.mkdirTree(root + '/config');
           FS.mkdirTree(root + '/data');
@@ -45,6 +45,23 @@ EM_ASYNC_JS(int, jwpqt_sync_web_storage, (int populate), {
     console.error('JWPqt browser storage:', error);
     return 1;
   }
+});
+
+EM_JS(void, jwpqt_schedule_web_storage_sync, (), {
+  if (!Module.jwpqtStorageMounted) return;
+  Module.jwpqtStorageSyncQueued = true;
+  if (Module.jwpqtStorageSyncInFlight) return;
+
+  const sync = () => {
+    Module.jwpqtStorageSyncQueued = false;
+    Module.jwpqtStorageSyncInFlight = true;
+    FS.syncfs(false, (error) => {
+      Module.jwpqtStorageSyncInFlight = false;
+      if (error) console.error('JWPqt browser storage:', error);
+      if (Module.jwpqtStorageSyncQueued) sync();
+    });
+  };
+  sync();
 });
 #endif
 
@@ -88,7 +105,7 @@ int main(int argc, char* argv[]) {
 #ifdef Q_OS_WASM
   qputenv("XDG_CONFIG_HOME", QByteArrayLiteral("/jwpqt-persist/config"));
   qputenv("XDG_DATA_HOME", QByteArrayLiteral("/jwpqt-persist/data"));
-  const bool web_storage_available = jwpqt_sync_web_storage(1) == 0;
+  const bool web_storage_available = jwpqt_populate_web_storage() == 0;
 #endif
   QApplication application(argc, argv);
   QCoreApplication::setApplicationName(QStringLiteral("jwpqt"));
@@ -290,7 +307,7 @@ int main(int argc, char* argv[]) {
   const auto persist_web_state = [&window] {
     if (window.application_settings().reload_previous_files)
       (void)window.save_previous_session();
-    (void)jwpqt_sync_web_storage(0);
+    jwpqt_schedule_web_storage_sync();
   };
   QObject::connect(&web_storage_timer, &QTimer::timeout, persist_web_state);
   web_storage_timer.start(5000);
