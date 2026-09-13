@@ -1,6 +1,6 @@
 # Introduction
 
-JWPqt 2.00 keeps the familiar purpose of the legacy Options dialog while making its behavior explicit for a native Qt 6 application. Open **Tools > Options** to stage preferences for the application. Nothing becomes effective until you accept the dialog; Cancel leaves the live configuration unchanged. Help from the dialog opens the relevant embedded handbook topic and does not accept or discard staged work. Every Options page scrolls, so its controls remain available on small or high-DPI displays.
+JWPqt 2.01 keeps the familiar purpose of the legacy Options dialog while making its behavior explicit for a native Qt 6 application. Open **Tools > Options** to stage preferences for the application. Nothing becomes effective until you accept the dialog; Cancel leaves the live configuration unchanged. Help from the dialog opens the relevant embedded handbook topic and does not accept or discard staged work. Every Options page scrolls, so its controls remain available on small or high-DPI displays.
 
 The native configuration is stored as `jwpqt.cfg` in the application configuration directory. Its normal location is chosen by Qt for the host platform; use `--config-dir` only when an application-specific override is intended. **Save Settings** writes the supported preference subset by atomic replacement. Optional save-on-exit uses the same safe write path. Invalid values are not applied, a corrupt startup file is not silently overwritten, and a settings save cannot overwrite a file currently open as a document.
 

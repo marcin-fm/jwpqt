@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 env:
-  JWPQT_RELEASE_VERSION: "2.00"
+  JWPQT_RELEASE_VERSION: "2.01"
 
 jobs:
   desktop:
